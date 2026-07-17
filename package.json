@@ -1,0 +1,21 @@
+{
+  "name": "dredge-ai-workspace",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "scripts": {
+    "dev:user": "pnpm --filter user-web dev",
+    "dev:admin": "pnpm --filter admin-web dev",
+    "dev": "concurrently -n user,admin -c cyan,magenta \"pnpm dev:user\" \"pnpm dev:admin\"",
+    "build:user": "pnpm --filter user-web build",
+    "build:admin": "pnpm --filter admin-web build",
+    "build": "pnpm build:user && pnpm build:admin",
+    "preview:user": "pnpm --filter user-web preview",
+    "preview:admin": "pnpm --filter admin-web preview",
+    "typecheck": "pnpm --filter user-web typecheck && pnpm --filter admin-web typecheck"
+  },
+  "devDependencies": {
+    "concurrently": "^9.1.0"
+  },
+  "packageManager": "pnpm@9.1.4"
+}

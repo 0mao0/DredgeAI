@@ -1,0 +1,3 @@
+packages:
+  - 'user-web'
+  - 'admin-web'
