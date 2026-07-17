@@ -256,7 +256,7 @@ UnoCSS preset 配置中将上述 token 映射为原子类，例如 `text-primary
 
 ## 6. 路由设计
 
-### 6.1 user-web (端口 5173)
+### 6.1 user-web (端口 5373)
 
 | 路径 | 名称 | 视图 |
 |---|---|---|
@@ -270,7 +270,7 @@ UnoCSS preset 配置中将上述 token 映射为原子类，例如 `text-primary
 
 所有路由懒加载。根路径 `/` 用 UserLayout 包裹。
 
-### 6.2 admin-web (端口 5174)
+### 6.2 admin-web (端口 5374)
 
 | 路径 | 名称 | 视图 |
 |---|---|---|
@@ -428,8 +428,8 @@ packages:
 
 ## 12. 端口与跨端切换
 
-- user-web dev server: `5173`
-- admin-web dev server: `5174`
+- user-web dev server: `5373`
+- admin-web dev server: `5374`
 - 跨端切换通过 `window.location.href` 跳转，不共享状态
 
 ## 13. 迁移与清理
@@ -441,7 +441,7 @@ packages:
 ## 14. 验收标准
 
 1. `pnpm install` 在根目录成功安装两端依赖
-2. `pnpm dev` 同时启动 5173 与 5174 两个端口
+2. `pnpm dev` 同时启动 5373 与 5374 两个端口
 3. user-web 6 个页面均可访问，视觉符合设计系统，mock 数据加载正常
 4. admin-web dashboard 完整可访问，4 个骨架页正确显示占位
 5. `pnpm typecheck` 通过

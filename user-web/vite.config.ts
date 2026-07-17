@@ -1,12 +1,12 @@
 import { defineConfig } from 'vite'
 import vue from '@vitejs/plugin-vue'
 import UnoCSS from 'unocss/vite'
-import { resolve } from 'path'
+import { fileURLToPath, URL } from 'url'
 
 export default defineConfig({
   plugins: [vue(), UnoCSS()],
   resolve: {
-    alias: { '@': resolve(__dirname, 'src') },
+    alias: { '@': fileURLToPath(new URL('src', import.meta.url)) },
   },
   server: { port: 5373, host: true, open: false },
   css: {

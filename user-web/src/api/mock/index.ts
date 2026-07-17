@@ -17,7 +17,7 @@ export function registerMock(): void {
 
   const mock = new MockAdapter(request, { delayResponse: 0 })
 
-  const wrap = (handler: () => unknown) => async () => {
+  const wrap = (handler: () => unknown) => async (): Promise<[number, unknown]> => {
     await randomDelay()
     return [200, { code: 0, data: handler(), message: 'ok' }]
   }

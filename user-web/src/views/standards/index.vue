@@ -100,7 +100,9 @@ const categories = ref<StandardCategory[]>([])
 
 const categoryTree = computed(() => categories.value.map(mapCategory))
 
-function mapCategory(c: StandardCategory) {
+interface CategoryTreeNode { key: string; name: string; count: number; children?: CategoryTreeNode[] }
+
+function mapCategory(c: StandardCategory): CategoryTreeNode {
   return {
     key: c.id,
     name: c.name,

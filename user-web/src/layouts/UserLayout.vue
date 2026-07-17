@@ -108,12 +108,12 @@
           <a-list-item>
             <a-list-item-meta>
               <template #title>
-                <a-tag :color="notifColorMap[item.type]" size="small">{{ notifLabelMap[item.type] }}</a-tag>
-                <span class="notif-title">{{ item.title }}</span>
+                <a-tag :color="notifColorMap[(item as Notification).type]" size="small">{{ notifLabelMap[(item as Notification).type] }}</a-tag>
+                <span class="notif-title">{{ (item as Notification).title }}</span>
               </template>
-              <template #description>{{ item.content }}</template>
+              <template #description>{{ (item as Notification).content }}</template>
             </a-list-item-meta>
-            <div class="notif-time">{{ item.time }}</div>
+            <div class="notif-time">{{ (item as Notification).time }}</div>
           </a-list-item>
         </template>
       </a-list>
