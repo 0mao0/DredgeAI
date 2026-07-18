@@ -20,7 +20,7 @@
         v-model:selectedKeys="selectedKeys"
         theme="dark"
         mode="inline"
-        class="sider-menu"
+        class="sider-menu sider-menu--main"
         @click="handleMenuClick"
       >
         <a-menu-item key="/dashboard">
@@ -39,13 +39,24 @@
           <BookOutlined />
           <span>标准查询</span>
         </a-menu-item>
-        <a-menu-item key="/profile">
-          <UserOutlined />
-          <span>个人中心</span>
-        </a-menu-item>
+      </a-menu>
+
+      <div class="sider-divider" />
+
+      <a-menu
+        v-model:selectedKeys="selectedKeys"
+        theme="dark"
+        mode="inline"
+        class="sider-menu sider-menu--bottom"
+        @click="handleMenuClick"
+      >
         <a-menu-item key="/api">
           <ApiOutlined />
           <span>API 管理</span>
+        </a-menu-item>
+        <a-menu-item key="/profile">
+          <UserOutlined />
+          <span>个人中心</span>
         </a-menu-item>
       </a-menu>
     </a-layout-sider>
@@ -225,8 +236,15 @@ function handleUserMenu({ key }: { key: string }): void {
 }
 
 .sider-menu {
-  flex: 1;
   border-right: none !important;
+  &--main { flex: 1; overflow-y: auto; }
+  &--bottom { flex-shrink: 0; }
+}
+.sider-divider {
+  height: 1px;
+  background: rgba(255, 255, 255, 0.06);
+  margin: 0 16px;
+  flex-shrink: 0;
 }
 
 .main-layout { height: 100%; overflow: hidden; }
