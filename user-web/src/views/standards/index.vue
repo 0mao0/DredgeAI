@@ -156,7 +156,7 @@ onMounted(async () => {
 .result-code {
   font-size: @font-size-sm; font-weight: @font-weight-semibold;
   color: @brand-primary;
-  background: fade(@brand-primary, 10%);
+  background: color-mix(in srgb, @brand-primary 10%, transparent);
   padding: 2px @spacing-sm; border-radius: @radius-sm;
 }
 .result-title { font-size: @font-size-base; font-weight: @font-weight-medium; color: @text-primary; }

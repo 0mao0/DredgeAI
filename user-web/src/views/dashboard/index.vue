@@ -256,10 +256,10 @@ onMounted(async () => {
   border-radius: @radius-base;
   display: flex; align-items: center; justify-content: center;
   font-size: 18px;
-  &--已完成 { background: fade(@success, 12%); color: @success; }
-  &--进行中 { background: fade(@brand-primary, 12%); color: @brand-primary; }
-  &--已暂停 { background: fade(@warning, 12%); color: @warning; }
-  &--已失败 { background: fade(@danger, 12%); color: @danger; }
+  &--已完成 { background: color-mix(in srgb, @success 12%, transparent); color: @success; }
+  &--进行中 { background: color-mix(in srgb, @brand-primary 12%, transparent); color: @brand-primary; }
+  &--已暂停 { background: color-mix(in srgb, @warning 12%, transparent); color: @warning; }
+  &--已失败 { background: color-mix(in srgb, @danger 12%, transparent); color: @danger; }
 }
 .task-right { display: flex; flex-direction: column; align-items: flex-end; gap: @spacing-xs; }
 .task-progress { width: 120px; }
@@ -276,7 +276,7 @@ onMounted(async () => {
 .app-icon-wrap {
   width: 36px; height: 36px;
   border-radius: @radius-base;
-  background: fade(@brand-primary, 10%);
+  background: color-mix(in srgb, @brand-primary 10%, transparent);
   color: @brand-primary;
   display: flex; align-items: center; justify-content: center;
   font-size: 16px;
@@ -293,10 +293,10 @@ onMounted(async () => {
   border-radius: @radius-sm;
   display: flex; align-items: center; justify-content: center;
   font-size: 16px;
-  &--pdf { background: fade(@danger, 12%); color: @danger; }
-  &--docx { background: fade(@info, 12%); color: @info; }
-  &--xlsx { background: fade(@success, 12%); color: @success; }
-  &--image { background: fade(@warning, 12%); color: @warning; }
+  &--pdf { background: color-mix(in srgb, @danger 12%, transparent); color: @danger; }
+  &--docx { background: color-mix(in srgb, @info 12%, transparent); color: @info; }
+  &--xlsx { background: color-mix(in srgb, @success 12%, transparent); color: @success; }
+  &--image { background: color-mix(in srgb, @warning 12%, transparent); color: @warning; }
   &--other { background: @divider-color; color: @text-secondary; }
 }
 

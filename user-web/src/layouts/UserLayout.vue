@@ -76,26 +76,10 @@
           />
         </div>
         <div class="header-right">
-          <a-badge :count="userStore.unreadCount" :offset="[2, -2]">
-            <BellOutlined class="header-icon" @click="showNotifications = true" />
-          </a-badge>
+          <ThemeToggle />
           <a-tooltip title="管理后台">
-            <SettingOutlined class="header-icon" @click="goAdmin" />
+            <ControlOutlined class="header-icon" @click="goAdmin" />
           </a-tooltip>
-          <a-dropdown>
-            <span class="user-info">
-              <a-avatar :style="{ background: '@{brand-gradient}' }">
-                {{ userStore.userInfo?.name?.[0] || 'U' }}
-              </a-avatar>
-              <span class="user-name">{{ userStore.userInfo?.name || '用户' }}</span>
-            </span>
-            <template #overlay>
-              <a-menu @click="handleUserMenu">
-                <a-menu-item key="profile"><UserOutlined /> 个人中心</a-menu-item>
-                <a-menu-item key="logout"><LogoutOutlined /> 退出登录</a-menu-item>
-              </a-menu>
-            </template>
-          </a-dropdown>
         </div>
       </a-layout-header>
 
@@ -108,65 +92,26 @@
       </a-layout-content>
     </a-layout>
 
-    <a-drawer
-      v-model:open="showNotifications"
-      title="通知中心"
-      placement="right"
-      width="380"
-    >
-      <a-list :data-source="userStore.notifications" item-layout="vertical">
-        <template #renderItem="{ item }">
-          <a-list-item>
-            <a-list-item-meta>
-              <template #title>
-                <a-tag :color="notifColorMap[(item as Notification).type]" size="small">{{ notifLabelMap[(item as Notification).type] }}</a-tag>
-                <span class="notif-title">{{ (item as Notification).title }}</span>
-              </template>
-              <template #description>{{ (item as Notification).content }}</template>
-            </a-list-item-meta>
-            <div class="notif-time">{{ (item as Notification).time }}</div>
-          </a-list-item>
-        </template>
-      </a-list>
-    </a-drawer>
+
   </a-layout>
 </template>
 
 <script setup lang="ts">
-import { ref, watch, onMounted } from 'vue'
+import { ref, watch } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import {
   DashboardOutlined, AppstoreOutlined, FileSearchOutlined, BookOutlined,
   UserOutlined, ApiOutlined, MenuFoldOutlined, MenuUnfoldOutlined,
-  BellOutlined, SettingOutlined, LogoutOutlined,
+  ControlOutlined,
 } from '@ant-design/icons-vue'
-import { useUserStore } from '@/stores/user'
+import ThemeToggle from '@/components/ThemeToggle.vue'
 import { ADMIN_WEB_URL } from '@/utils/constants'
-import type { Notification } from '@/types'
 
 const router = useRouter()
 const route = useRoute()
-const userStore = useUserStore()
 
 const collapsed = ref(false)
 const selectedKeys = ref<string[]>([route.path])
-const showNotifications = ref(false)
-
-const notifColorMap: Record<Notification['type'], string> = {
-  system: 'blue',
-  business: 'green',
-  audit: 'orange',
-}
-const notifLabelMap: Record<Notification['type'], string> = {
-  system: '系统',
-  business: '业务',
-  audit: '审计',
-}
-
-onMounted(() => {
-  if (!userStore.userInfo) userStore.fetchUser()
-  userStore.fetchNotifications()
-})
 
 watch(() => route.path, (p) => { selectedKeys.value = [p] })
 
@@ -181,14 +126,6 @@ function handleGlobalSearch(value: string): void {
 
 function goAdmin(): void {
   window.location.href = ADMIN_WEB_URL
-}
-
-function handleUserMenu({ key }: { key: string }): void {
-  if (key === 'profile') router.push('/profile')
-  else if (key === 'logout') {
-    localStorage.removeItem('DREDGE_AI_TOKEN')
-    router.push('/dashboard')
-  }
 }
 </script>
 
@@ -284,23 +221,10 @@ function handleUserMenu({ key }: { key: string }): void {
   cursor: pointer;
   &:hover { color: @brand-primary; }
 }
-.user-info {
-  display: flex;
-  align-items: center;
-  gap: @spacing-sm;
-  cursor: pointer;
-}
-.user-name {
-  font-size: @font-size-sm;
-  color: @text-primary;
-}
 
 .content {
   flex: 1;
   overflow-y: auto;
   background: @content-bg;
 }
-
-.notif-title { margin-left: 8px; font-weight: 500; }
-.notif-time { font-size: 12px; color: @text-tertiary; margin-top: 4px; }
 </style>

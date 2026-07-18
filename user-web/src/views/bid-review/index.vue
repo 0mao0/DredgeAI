@@ -166,7 +166,7 @@ onMounted(async () => {
   cursor: pointer;
   transition: background @transition-base;
   &:hover { background: @content-bg; }
-  &.active { background: fade(@brand-primary, 6%); border-left: 3px solid @brand-primary; }
+  &.active { background: color-mix(in srgb, @brand-primary 6%, transparent); border-left: 3px solid @brand-primary; }
 }
 .session-name { font-size: @font-size-sm; font-weight: @font-weight-medium; color: @text-primary; margin-bottom: 4px; }
 .session-meta {

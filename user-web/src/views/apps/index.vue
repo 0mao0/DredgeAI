@@ -143,7 +143,7 @@ onMounted(async () => {
   &:hover {
     box-shadow: @shadow-md;
     transform: translateY(-2px);
-    border-color: fade(@brand-primary, 30%);
+    border-color: color-mix(in srgb, @brand-primary 30%, transparent);
   }
   &--disabled { opacity: 0.7; }
 }
