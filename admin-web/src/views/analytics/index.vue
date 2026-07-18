@@ -32,9 +32,9 @@
 
 <script setup lang="ts">
 import { ref, computed, onMounted } from 'vue'
-import PageHeader from '@/components/PageHeader.vue'
-import SectionCard from '@/components/SectionCard.vue'
-import ChartContainer from '@/components/ChartContainer.vue'
+import PageHeader from '@shared/components/PageHeader.vue'
+import SectionCard from '@shared/components/SectionCard.vue'
+import ChartContainer from '@shared/components/ChartContainer.vue'
 import { getDailyApiCalls, getModelUsage, getUserGrowth, getErrorRate } from '@/api/modules/analytics'
 
 const loading = ref(false)
@@ -115,7 +115,7 @@ onMounted(async () => {
 </script>
 
 <style scoped lang="less">
-@import '@/styles/variables.less';
+@import '@shared/styles/variables.less';
 .chart-row {
   margin-top: @spacing-lg;
 }

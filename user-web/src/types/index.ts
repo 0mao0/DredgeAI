@@ -23,7 +23,7 @@ export interface AppCard {
   id: string
   title: string
   description: string
-  category: '日常办公' | '专业业务' | '知识查询' | '开发接口'
+  category: '设计' | '施工' | '经营' | '通用'
   icon: string
   status: '已授权' | '待申请' | '已下架'
   route?: string
@@ -130,3 +130,15 @@ export interface Notification {
 export interface ChartSeries { name: string; data: number[] }
 export interface LineChartData { categories: string[]; series: ChartSeries[] }
 export interface PieChartData { name: string; data: { name: string; value: number }[] }
+
+export interface ApiUsageStats {
+  totalTokens: number
+  totalCalls: number
+}
+
+export interface UsageTimeSeries {
+  categories: string[]
+  byModel: { modelName: string; data: number[] }[]
+  byKey: { keyName: string; data: number[] }[]
+  byName: { name: string; data: number[] }[]
+}

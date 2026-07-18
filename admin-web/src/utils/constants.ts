@@ -1,5 +1,6 @@
 export const USE_MOCK = true
 export const API_BASE_URL = '/api/admin'
+export const STORAGE_TOKEN_KEY = 'DREDGE_AI_ADMIN_TOKEN'
 
 export const USER_WEB_URL = 'http://localhost:5373'
 

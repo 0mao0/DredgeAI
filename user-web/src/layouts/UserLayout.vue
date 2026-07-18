@@ -5,8 +5,8 @@
       :trigger="null"
       collapsible
       theme="dark"
-      :width="240"
-      :collapsed-width="64"
+      :width="170"
+      :collapsed-width="48"
       class="sider"
     >
       <div class="logo">
@@ -27,17 +27,9 @@
           <DashboardOutlined />
           <span>工作台</span>
         </a-menu-item>
-        <a-menu-item key="/apps">
-          <AppstoreOutlined />
-          <span>应用广场</span>
-        </a-menu-item>
-        <a-menu-item key="/bid-review">
-          <FileSearchOutlined />
-          <span>AI 审标</span>
-        </a-menu-item>
-        <a-menu-item key="/standards">
-          <BookOutlined />
-          <span>标准查询</span>
+        <a-menu-item v-for="app in appStore.sidebarApps" :key="app.route">
+          <component :is="iconMap[app.icon]" />
+          <span>{{ app.title }}</span>
         </a-menu-item>
       </a-menu>
 
@@ -77,9 +69,6 @@
         </div>
         <div class="header-right">
           <ThemeToggle />
-          <a-tooltip title="管理后台">
-            <ControlOutlined class="header-icon" @click="goAdmin" />
-          </a-tooltip>
         </div>
       </a-layout-header>
 
@@ -97,15 +86,36 @@
 </template>
 
 <script setup lang="ts">
-import { ref, watch } from 'vue'
+import { ref, watch, onMounted } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import {
-  DashboardOutlined, AppstoreOutlined, FileSearchOutlined, BookOutlined,
-  UserOutlined, ApiOutlined, MenuFoldOutlined, MenuUnfoldOutlined,
-  ControlOutlined,
+  DashboardOutlined, UserOutlined, ApiOutlined, MenuFoldOutlined, MenuUnfoldOutlined,
 } from '@ant-design/icons-vue'
-import ThemeToggle from '@/components/ThemeToggle.vue'
-import { ADMIN_WEB_URL } from '@/utils/constants'
+import * as Icons from '@ant-design/icons-vue'
+import ThemeToggle from '@shared/components/ThemeToggle.vue'
+import { useAppStore } from '@/stores/app'
+import { useUserStore } from '@/stores/user'
+import type { Component } from 'vue'
+
+const appStore = useAppStore()
+const userStore = useUserStore()
+
+const iconMap: Record<string, Component> = {
+  FileSearchOutlined: Icons.FileSearchOutlined,
+  BookOutlined: Icons.BookOutlined,
+  EditOutlined: Icons.EditOutlined,
+  SafetyOutlined: Icons.SafetyOutlined,
+  DashboardOutlined: Icons.DashboardOutlined,
+  ApiOutlined: Icons.ApiOutlined,
+  QuestionCircleOutlined: Icons.QuestionCircleOutlined,
+  SwapOutlined: Icons.SwapOutlined,
+  CodeOutlined: Icons.CodeOutlined,
+  TeamOutlined: Icons.TeamOutlined,
+  AuditOutlined: Icons.AuditOutlined,
+  SearchOutlined: Icons.SearchOutlined,
+  WarningOutlined: Icons.WarningOutlined,
+  FundOutlined: Icons.FundOutlined,
+}
 
 const router = useRouter()
 const route = useRoute()
@@ -121,16 +131,19 @@ function handleMenuClick({ key }: { key: string }): void {
 
 function handleGlobalSearch(value: string): void {
   if (!value) return
-  router.push({ path: '/apps', query: { q: value } })
+  router.push({ path: '/dashboard', query: { q: value } })
 }
 
-function goAdmin(): void {
-  window.location.href = ADMIN_WEB_URL
-}
+onMounted(() => {
+  userStore.fetchUser()
+  userStore.fetchNotifications()
+  appStore.fetchApps()
+})
+
 </script>
 
 <style scoped lang="less">
-@import '@/styles/variables.less';
+@import '@shared/styles/variables.less';
 
 .user-layout { height: 100vh; }
 
@@ -187,7 +200,7 @@ function goAdmin(): void {
 .main-layout { height: 100%; overflow: hidden; }
 
 .header {
-  background: @card-bg;
+  background: @header-bg;
   padding: 0 @spacing-xl;
   display: flex;
   align-items: center;
@@ -225,6 +238,7 @@ function goAdmin(): void {
 .content {
   flex: 1;
   overflow-y: auto;
+  scrollbar-gutter: stable;
   background: @content-bg;
 }
 </style>

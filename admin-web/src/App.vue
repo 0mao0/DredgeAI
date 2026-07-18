@@ -5,7 +5,7 @@
 </template>
 
 <script setup lang="ts">
-import { useTheme } from '@/composables/useTheme'
+import { useTheme } from '@shared/composables/useTheme'
 
 const { themeConfig } = useTheme()
 </script>

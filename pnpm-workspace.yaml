@@ -1,3 +1,4 @@
 packages:
   - 'user-web'
   - 'admin-web'
+  - 'packages/*'

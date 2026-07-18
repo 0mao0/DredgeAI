@@ -47,10 +47,10 @@
 
 <script setup lang="ts">
 import { ref, computed, onMounted } from 'vue'
-import PageHeader from '@/components/PageHeader.vue'
-import SectionCard from '@/components/SectionCard.vue'
-import MetricCard from '@/components/MetricCard.vue'
-import ChartContainer from '@/components/ChartContainer.vue'
+import PageHeader from '@shared/components/PageHeader.vue'
+import SectionCard from '@shared/components/SectionCard.vue'
+import MetricCard from '@shared/components/MetricCard.vue'
+import ChartContainer from '@shared/components/ChartContainer.vue'
 import type { DashboardMetric, SystemLog } from '@/types'
 import { getDashboardMetrics, getApiCallsTrend, getAppDistribution, getActiveUsersTrend, getRecentLogs } from '@/api/modules/dashboard'
 
@@ -138,7 +138,7 @@ onMounted(fetchData)
 </script>
 
 <style scoped lang="less">
-@import '@/styles/variables.less';
+@import '@shared/styles/variables.less';
 
 .metrics-row { margin-bottom: @spacing-lg; }
 .charts-row { margin-bottom: @spacing-lg; }

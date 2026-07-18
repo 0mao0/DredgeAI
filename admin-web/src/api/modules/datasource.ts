@@ -2,5 +2,5 @@ import request from '@/api/request'
 import type { DataSource } from '@/types'
 
 export function getDataSources(): Promise<DataSource[]> {
-  return request.get('/datasources')
+  return request.get<DataSource[]>('/datasources')
 }

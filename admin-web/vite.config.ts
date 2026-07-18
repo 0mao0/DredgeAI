@@ -6,7 +6,11 @@ import { fileURLToPath, URL } from 'url'
 export default defineConfig({
   plugins: [vue(), UnoCSS()],
   resolve: {
-    alias: { '@': fileURLToPath(new URL('src', import.meta.url)) },
+    alias: {
+      '@': fileURLToPath(new URL('src', import.meta.url)),
+      '@shared': fileURLToPath(new URL('../packages/shared/src', import.meta.url)),
+    },
+    dedupe: ['vue', 'ant-design-vue', '@ant-design/icons-vue', 'vue-echarts'],
   },
   server: { port: 5374, host: true, open: false },
   css: {

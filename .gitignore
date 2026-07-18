@@ -56,6 +56,14 @@ yarn.lock
 .vite/
 **/.vite/
 
+# 构建工具配置的类型声明产物（由 TS 编译生成，不应入库）
+vite.config.d.ts
+**/vite.config.d.ts
+vite.config.js
+**/vite.config.js
+uno.config.d.ts
+**/uno.config.d.ts
+
 # 测试覆盖率
 coverage/
 **/coverage/

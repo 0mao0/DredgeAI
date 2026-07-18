@@ -1,9 +1,3 @@
-export interface ApiResponse<T = unknown> {
-  code: number
-  msg: string
-  data: T
-}
-
 export interface Pagination {
   page: number
   pageSize: number
@@ -121,4 +115,28 @@ export interface ModelType {
   name: string
   provider: string
   description?: string
+}
+
+export interface UsageByModel {
+  modelName: string
+  calls: number
+  share: number
+}
+
+export interface UsageByKey {
+  keyName: string
+  calls: number
+  share: number
+}
+
+export interface ApiUsageStats {
+  totalTokens: number
+  totalCalls: number
+}
+
+export interface UsageTimeSeries {
+  categories: string[]
+  byModel: { modelName: string; data: number[] }[]
+  byKey: { keyName: string; data: number[] }[]
+  byName: { name: string; data: number[] }[]
 }

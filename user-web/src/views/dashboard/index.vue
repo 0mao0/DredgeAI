@@ -35,9 +35,6 @@
     <a-row :gutter="[24, 24]" class="main-row">
       <a-col :span="16">
         <SectionCard title="最近任务" class="mb-24">
-          <template #extra>
-            <a-button type="link" size="small" @click="router.push('/apps')">查看全部</a-button>
-          </template>
           <a-list :data-source="appStore.tasks" :loading="loading">
             <template #renderItem="{ item }">
               <a-list-item class="task-item">
@@ -69,28 +66,6 @@
       </a-col>
 
       <a-col :span="8">
-        <SectionCard title="授权应用" class="mb-24">
-          <template #extra>
-            <a-button type="link" size="small" @click="router.push('/apps')">应用广场</a-button>
-          </template>
-          <div class="app-list">
-            <div
-              v-for="app in authorizedApps"
-              :key="app.id"
-              class="app-item"
-              @click="app.route && router.push(app.route)"
-            >
-              <div class="app-icon-wrap">
-                <component :is="iconMap[app.icon]" />
-              </div>
-              <div class="app-info">
-                <div class="app-name">{{ app.title }}</div>
-                <div class="app-desc">{{ app.description }}</div>
-              </div>
-            </div>
-          </div>
-        </SectionCard>
-
         <SectionCard title="最近文件">
           <a-list :data-source="appStore.files" :loading="loading" size="small">
             <template #renderItem="{ item }">
@@ -121,21 +96,21 @@
 import { ref, computed, watchEffect, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import {
-  FileSearchOutlined, BookOutlined, EditOutlined, SafetyOutlined,
-  DashboardOutlined, ApiOutlined, QuestionCircleOutlined, SwapOutlined,
-  CodeOutlined, TeamOutlined, FilePdfOutlined, FileWordOutlined,
+  FileSearchOutlined, BookOutlined, EditOutlined,
+  FilePdfOutlined, FileWordOutlined,
   FileExcelOutlined, FileImageOutlined, FileOutlined,
   CheckCircleOutlined, SyncOutlined, PauseCircleOutlined, CloseCircleOutlined,
 } from '@ant-design/icons-vue'
-import SectionCard from '@/components/SectionCard.vue'
+import SectionCard from '@shared/components/SectionCard.vue'
 import StatusTag from '@/components/StatusTag.vue'
-import ChartContainer from '@/components/ChartContainer.vue'
+import ChartContainer from '@shared/components/ChartContainer.vue'
 import { useUserStore } from '@/stores/user'
 import { useAppStore } from '@/stores/app'
-import { efficiencyTrend } from '@/mock/chart'
+import { getEfficiencyTrend } from '@/api/modules/chart'
+import type { LineChartData } from '@/types'
 import type { Component } from 'vue'
-import { useTheme } from '@/composables/useTheme'
-import { cssVarValue } from '@/composables/useCssVar'
+import { useTheme } from '@shared/composables/useTheme'
+import { cssVarValue } from '@shared/composables/useCssVar'
 
 const router = useRouter()
 const userStore = useUserStore()
@@ -145,9 +120,7 @@ const loading = ref(false)
 const chartLoading = ref(false)
 
 const iconMap: Record<string, Component> = {
-  FileSearchOutlined, BookOutlined, EditOutlined, SafetyOutlined,
-  DashboardOutlined, ApiOutlined, QuestionCircleOutlined, SwapOutlined,
-  CodeOutlined, TeamOutlined,
+  FileSearchOutlined, BookOutlined, EditOutlined,
 }
 const statusIconMap: Record<string, Component> = {
   '已完成': CheckCircleOutlined,
@@ -163,13 +136,13 @@ const fileIconMap: Record<string, Component> = {
   other: FileOutlined,
 }
 
-const authorizedApps = computed(() => appStore.apps.filter((a) => a.status === '已授权').slice(0, 5))
-
 const pendingTaskCount = computed(() => appStore.tasks.filter((t) => t.status === '进行中' || t.status === '已暂停').length)
 
 const { currentTheme } = useTheme()
 const brandColor = ref('#0EA5E9')
 const successColor = ref('#10B981')
+
+const efficiencyTrend = ref<LineChartData>({ categories: [], series: [] })
 
 watchEffect(() => {
   currentTheme.value
@@ -181,9 +154,9 @@ const efficiencyChartOption = computed(() => ({
   tooltip: { trigger: 'axis' },
   legend: { data: ['任务数', '完成数'], bottom: 0 },
   grid: { left: '3%', right: '4%', bottom: '10%', top: '5%', containLabel: true },
-  xAxis: { type: 'category', boundaryGap: false, data: efficiencyTrend.categories },
+  xAxis: { type: 'category', boundaryGap: false, data: efficiencyTrend.value.categories },
   yAxis: { type: 'value' },
-  series: efficiencyTrend.series.map((s, i) => ({
+  series: efficiencyTrend.value.series.map((s, i) => ({
     name: s.name,
     type: 'line',
     smooth: true,
@@ -201,6 +174,7 @@ onMounted(async () => {
     appStore.fetchQuickTasks(),
     appStore.fetchFiles(),
     appStore.fetchApps(),
+    getEfficiencyTrend().then((d) => { efficiencyTrend.value = d }),
   ])
   loading.value = false
   chartLoading.value = false
@@ -208,7 +182,7 @@ onMounted(async () => {
 </script>
 
 <style scoped lang="less">
-@import '@/styles/variables.less';
+@import '@shared/styles/variables.less';
 
 .mb-24 { margin-bottom: @spacing-xl; }
 

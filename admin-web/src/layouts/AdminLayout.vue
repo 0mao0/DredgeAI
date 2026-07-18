@@ -125,7 +125,7 @@ import {
 } from '@ant-design/icons-vue'
 import { useAppStore } from '@/stores/app'
 import { getProfile } from '@/api/modules/profile'
-import ThemeToggle from '@/components/ThemeToggle.vue'
+import ThemeToggle from '@shared/components/ThemeToggle.vue'
 
 const router = useRouter()
 const route = useRoute()
@@ -166,7 +166,7 @@ function handleUserMenu({ key }: { key: string }): void {
 </script>
 
 <style scoped lang="less">
-@import '@/styles/variables.less';
+@import '@shared/styles/variables.less';
 
 .admin-layout { height: 100vh; }
 

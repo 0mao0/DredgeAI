@@ -114,12 +114,12 @@
 import { ref, reactive, computed, watchEffect, onMounted } from 'vue'
 import { message } from 'ant-design-vue'
 import { UploadOutlined, DownloadOutlined, BulbOutlined } from '@ant-design/icons-vue'
-import SectionCard from '@/components/SectionCard.vue'
+import SectionCard from '@shared/components/SectionCard.vue'
 import StatusTag from '@/components/StatusTag.vue'
 import { getBidSteps, getBidRisks, getBidSessions, getBidDocument } from '@/api/modules/bid'
 import type { BidReviewStep, RiskItem, BidReviewSession } from '@/types'
-import { useTheme } from '@/composables/useTheme'
-import { cssVarValue } from '@/composables/useCssVar'
+import { useTheme } from '@shared/composables/useTheme'
+import { cssVarValue } from '@shared/composables/useCssVar'
 
 const { currentTheme } = useTheme()
 const badgeColors = reactive({ danger: '#EF4444', success: '#10B981' })
@@ -166,7 +166,7 @@ onMounted(async () => {
 </script>
 
 <style scoped lang="less">
-@import '@/styles/variables.less';
+@import '@shared/styles/variables.less';
 
 .mb-16 { margin-bottom: @spacing-lg; }
 

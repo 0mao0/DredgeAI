@@ -1,41 +1,361 @@
 <template>
   <div class="page-container">
-    <PageHeader title="API 管理" description="管理 API 密钥和调用">
+    <PageHeader title="API 管理" description="管理 API 密钥、查看模型调用统计与用量趋势">
       <template #extra>
-        <a-button type="primary">新建密钥</a-button>
+        <a-button type="primary" @click="showCreateModal = true">
+          <plus-outlined />
+          新建密钥
+        </a-button>
       </template>
     </PageHeader>
-    <SectionCard title="API 使用说明" class="mb-24">
-      <p class="api-desc">使用以下端点接入智浚 AI 平台。所有请求需要在 Header 中携带 API Key。</p>
-      <a-typography>
-        <a-typography-paragraph>
-          <pre><code>curl -X POST https://api.dredgeai.com/v1/chat
-  -H "Authorization: Bearer YOUR_API_KEY"
-  -H "Content-Type: application/json"</code></pre>
-        </a-typography-paragraph>
-      </a-typography>
-    </SectionCard>
+
+    <a-spin :spinning="loading" tip="加载中...">
+      <SectionCard title="API Key 列表" nopad class="mb-24">
+        <a-table
+          :data-source="apiKeys"
+          :columns="columns"
+          :pagination="{ pageSize: 10 }"
+          row-key="id"
+        >
+          <template #bodyCell="{ column, record }">
+            <template v-if="column.key === 'key'">
+              <code class="key-text">{{ record.key }}</code>
+              <a-button type="link" size="small" @click="copyKey(record.key)">
+                <copy-outlined />
+              </a-button>
+            </template>
+            <template v-else-if="column.key === 'status'">
+              <a-tag :color="record.status === '启用' ? 'green' : 'red'">{{ record.status }}</a-tag>
+            </template>
+            <template v-else-if="column.key === 'usage'">
+              <a-progress
+                :percent="Math.round((record.usage / record.quota) * 100)"
+                size="small"
+                :status="record.usage / record.quota > 0.9 ? 'exception' : 'normal'"
+              />
+            </template>
+            <template v-else-if="column.key === 'action'">
+              <a-button type="link" size="small">编辑</a-button>
+              <a-button type="link" size="small" :danger="record.status === '启用'">
+                {{ record.status === '启用' ? '禁用' : '启用' }}
+              </a-button>
+            </template>
+          </template>
+        </a-table>
+      </SectionCard>
+
+      <div class="stats-section">
+        <div class="stats-header">
+          <h3 class="stats-title">统计分析</h3>
+          <div class="time-range-wrap">
+            <a-radio-group v-model:value="timeRange" size="small" @change="onTimeRangeChange">
+              <a-radio-button value="7d">近7日</a-radio-button>
+              <a-radio-button value="30d">近30日</a-radio-button>
+              <a-radio-button value="this-month">本月</a-radio-button>
+              <a-radio-button value="last-month">上月</a-radio-button>
+              <a-radio-button value="custom">自定义</a-radio-button>
+            </a-radio-group>
+            <a-range-picker
+              v-if="timeRange === 'custom'"
+              v-model:value="customDateRange"
+              size="small"
+              class="custom-date-picker"
+              :allow-empty="false"
+            />
+          </div>
+        </div>
+
+        <a-row :gutter="24" class="mb-24">
+          <a-col :span="12">
+            <div class="stat-card">
+              <div class="stat-label">总 Token 用量</div>
+              <div class="stat-value">{{ formatNum(usageStats?.totalTokens || 0) }}</div>
+            </div>
+          </a-col>
+          <a-col :span="12">
+            <div class="stat-card">
+              <div class="stat-label">总 API 调用次数</div>
+              <div class="stat-value">{{ formatNum(usageStats?.totalCalls || 0) }}</div>
+            </div>
+          </a-col>
+        </a-row>
+
+        <a-row :gutter="24">
+          <a-col :span="12" class="mb-24">
+            <SectionCard title="按模型调用趋势" nopad>
+              <ChartContainer :option="byModelOption" height="280px" />
+            </SectionCard>
+          </a-col>
+          <a-col :span="12" class="mb-24">
+            <SectionCard title="按 API Key 调用趋势" nopad>
+              <ChartContainer :option="byKeyOption" height="280px" />
+            </SectionCard>
+          </a-col>
+          <a-col :span="12" class="mb-24">
+            <SectionCard title="按名称调用趋势" nopad>
+              <ChartContainer :option="byNameOption" height="280px" />
+            </SectionCard>
+          </a-col>
+          <a-col :span="12" class="mb-24">
+            <SectionCard title="模型总调用占比" nopad>
+              <ChartContainer :option="pieOption" height="280px" />
+            </SectionCard>
+          </a-col>
+        </a-row>
+      </div>
+    </a-spin>
+
+    <a-modal v-model:open="showCreateModal" title="新建 API Key" @ok="handleCreate">
+      <a-form layout="vertical">
+        <a-form-item label="Key 名称" required>
+          <a-input v-model:value="newKey.name" placeholder="如：生产环境-主入口" />
+        </a-form-item>
+        <a-form-item label="所属应用" required>
+          <a-input v-model:value="newKey.app" placeholder="如：智浚 AI 平台" />
+        </a-form-item>
+        <a-form-item label="模型类型" required>
+          <a-select v-model:value="newKey.modelType" :options="modelOptions" placeholder="选择模型" />
+        </a-form-item>
+        <a-form-item label="配额（次）">
+          <a-input-number v-model:value="newKey.quota" :min="0" :step="10000" style="width: 100%" />
+        </a-form-item>
+      </a-form>
+    </a-modal>
   </div>
 </template>
 
 <script setup lang="ts">
-import PageHeader from '@/components/PageHeader.vue'
-import SectionCard from '@/components/SectionCard.vue'
+import { ref, computed, watch, watchEffect, onMounted } from 'vue'
+import dayjs from 'dayjs'
+import { message } from 'ant-design-vue'
+import { PlusOutlined, CopyOutlined } from '@ant-design/icons-vue'
+import PageHeader from '@shared/components/PageHeader.vue'
+import SectionCard from '@shared/components/SectionCard.vue'
+import ChartContainer from '@shared/components/ChartContainer.vue'
+import { getApiKeyList, getModelTypes, getUsageByModel, getUsageStats, getUsageTimeSeries } from '@/api/modules/apikey'
+import type { ApiKey, ModelType, UsageByModel, ApiUsageStats, UsageTimeSeries } from '@/types'
+import { useTheme } from '@shared/composables/useTheme'
+import { cssVarValue } from '@shared/composables/useCssVar'
+
+const apiKeys = ref<ApiKey[]>([])
+const modelTypes = ref<ModelType[]>([])
+const usageByModel = ref<UsageByModel[]>([])
+const usageStats = ref<ApiUsageStats | null>(null)
+const usageTimeSeriesData = ref<UsageTimeSeries | null>(null)
+const showCreateModal = ref(false)
+const timeRange = ref('7d')
+const loading = ref(true)
+
+const newKey = ref({ name: '', app: '', modelType: '', quota: 1000000 })
+const customDateRange = ref<[dayjs.Dayjs, dayjs.Dayjs]>()
+
+function onTimeRangeChange(): void {
+  if (timeRange.value !== 'custom') {
+    loadTimeSeries()
+  }
+}
+
+watch(customDateRange, (val) => {
+  if (val?.[0] && val?.[1] && timeRange.value === 'custom') {
+    loadTimeSeries()
+  }
+})
+
+const columns = [
+  { title: '名称', dataIndex: 'name', key: 'name' },
+  { title: 'Key', key: 'key', width: 200 },
+  { title: '所属应用', dataIndex: 'app', key: 'app' },
+  { title: '状态', key: 'status', width: 80 },
+  { title: '用量', key: 'usage', width: 140 },
+  { title: '最后使用', dataIndex: 'lastUsed', key: 'lastUsed', width: 160 },
+  { title: '创建时间', dataIndex: 'createdAt', key: 'createdAt', width: 120 },
+  { title: '操作', key: 'action', width: 120 },
+]
+
+const modelOptions = computed(() => modelTypes.value.map((m) => ({ label: m.name, value: m.name })))
+
+function formatNum(n: number): string {
+  if (n >= 10000) return (n / 10000).toFixed(1) + '万'
+  if (n >= 1000) return (n / 1000).toFixed(1) + 'k'
+  return n.toLocaleString()
+}
+
+const { currentTheme } = useTheme()
+const brandColor = ref('#0EA5E9')
+const successColor = ref('#10B981')
+const accentColor = ref('#06B6D4')
+const warningColor = ref('#F59E0B')
+const dangerColor = ref('#EF4444')
+const cardBgColor = ref('#FFFFFF')
+
+const colors = computed(() => [brandColor.value, accentColor.value, successColor.value, warningColor.value, dangerColor.value])
+
+watchEffect(() => {
+  currentTheme.value
+  brandColor.value = cssVarValue('--color-brand')
+  successColor.value = cssVarValue('--color-success')
+  accentColor.value = cssVarValue('--color-accent')
+  warningColor.value = cssVarValue('--color-warning')
+  dangerColor.value = cssVarValue('--color-danger')
+  cardBgColor.value = cssVarValue('--color-card-bg')
+})
+
+function makeTimeSeriesOption(data: { name: string; data: number[] }[] | undefined, categories: string[] | undefined) {
+  if (!data || !categories) return {}
+  return {
+    tooltip: { trigger: 'axis' },
+    legend: { type: 'scroll', bottom: 0 },
+    grid: { left: '3%', right: '4%', bottom: '18%', top: '5%', containLabel: true },
+    xAxis: { type: 'category', data: categories, axisLabel: { fontSize: 11 } },
+    yAxis: { type: 'value' },
+    series: data.map((s, i) => ({
+      name: s.name,
+      type: 'bar',
+      data: s.data,
+      itemStyle: { color: colors.value[i % colors.value.length], borderRadius: [3, 3, 0, 0] },
+      barWidth: '30%',
+    })),
+  }
+}
+
+const byModelOption = computed(() =>
+  makeTimeSeriesOption(
+    usageTimeSeriesData.value?.byModel?.map((s) => ({ name: s.modelName, data: s.data })),
+    usageTimeSeriesData.value?.categories))
+
+const byKeyOption = computed(() =>
+  makeTimeSeriesOption(
+    usageTimeSeriesData.value?.byKey?.map((s) => ({ name: s.keyName, data: s.data })),
+    usageTimeSeriesData.value?.categories))
+
+const byNameOption = computed(() =>
+  makeTimeSeriesOption(usageTimeSeriesData.value?.byName, usageTimeSeriesData.value?.categories))
+
+const pieOption = computed(() => ({
+  tooltip: { trigger: 'item', formatter: '{b}: {c} ({d}%)' },
+  legend: { bottom: 0, type: 'scroll' },
+  series: [{
+    type: 'pie',
+    radius: ['40%', '70%'],
+    center: ['50%', '45%'],
+    avoidLabelOverlap: false,
+    itemStyle: { borderRadius: 6, borderColor: cardBgColor.value, borderWidth: 2 },
+    label: { show: false },
+    emphasis: { label: { show: true, fontSize: 14, fontWeight: 'bold' } },
+    data: usageByModel.value.map((u) => ({ name: u.modelName, value: u.calls })),
+    color: colors.value,
+  }],
+}))
+
+function copyKey(key: string): void {
+  navigator.clipboard.writeText(key)
+  message.success('已复制到剪贴板')
+}
+
+function handleCreate(): void {
+  if (!newKey.value.name || !newKey.value.app || !newKey.value.modelType) {
+    message.warning('请填写完整信息')
+    return
+  }
+  message.success('API Key 创建成功')
+  showCreateModal.value = false
+  newKey.value = { name: '', app: '', modelType: '', quota: 1000000 }
+}
+
+async function loadTimeSeries(): Promise<void> {
+  if (timeRange.value === 'custom' && customDateRange.value?.[0] && customDateRange.value?.[1]) {
+    const fmt = 'YYYY-MM-DD'
+    usageTimeSeriesData.value = await getUsageTimeSeries('custom', {
+      startDate: customDateRange.value[0].format(fmt),
+      endDate: customDateRange.value[1].format(fmt),
+    })
+  } else {
+    usageTimeSeriesData.value = await getUsageTimeSeries(timeRange.value)
+  }
+}
+
+onMounted(async () => {
+  try {
+    loading.value = true
+    const [k, m, um, stats] = await Promise.all([
+      getApiKeyList(), getModelTypes(), getUsageByModel(), getUsageStats(),
+    ])
+    apiKeys.value = k
+    modelTypes.value = m
+    usageByModel.value = um
+    usageStats.value = stats
+    await loadTimeSeries()
+  } catch (e) {
+    console.error('[API] 数据加载失败', e)
+  } finally {
+    loading.value = false
+  }
+})
 </script>
 
 <style scoped lang="less">
-@import '@/styles/variables.less';
+@import '@shared/styles/variables.less';
+
 .mb-24 { margin-bottom: @spacing-xl; }
-.api-desc {
+
+.key-text {
+  font-family: 'Consolas', 'Monaco', monospace;
+  font-size: @font-size-xs;
+  color: @text-primary;
+  background: @content-bg;
+  padding: 2px @spacing-sm;
+  border-radius: @radius-sm;
+}
+
+.stats-section {
+  background: @card-bg;
+  border-radius: @radius-lg;
+  border: 1px solid @border-color;
+  box-shadow: @shadow-sm;
+  padding: @spacing-xl;
+}
+
+.stats-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: @spacing-xl;
+}
+
+.time-range-wrap {
+  display: flex;
+  align-items: center;
+  gap: @spacing-sm;
+}
+.custom-date-picker {
+  min-width: 200px;
+}
+
+.stats-title {
+  font-size: @font-size-lg;
+  font-weight: @font-weight-semibold;
+  color: @text-primary;
+  margin: 0;
+}
+
+.stat-card {
+  background: @content-bg;
+  border-radius: @radius-base;
+  padding: @spacing-lg @spacing-xl;
+  display: flex;
+  flex-direction: column;
+  gap: @spacing-xs;
+}
+
+.stat-label {
   font-size: @font-size-sm;
   color: @text-secondary;
-  margin-bottom: @spacing-md;
 }
-pre {
-  background: @divider-color;
-  padding: @spacing-lg;
-  border-radius: @radius-base;
-  overflow-x: auto;
-  code { font-size: @font-size-sm; }
+
+.stat-value {
+  font-size: @font-size-3xl;
+  font-weight: @font-weight-bold;
+  color: @text-primary;
+  line-height: 1.2;
 }
 </style>

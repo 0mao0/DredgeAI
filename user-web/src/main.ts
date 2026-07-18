@@ -6,9 +6,9 @@ import 'ant-design-vue/dist/reset.css'
 import 'virtual:uno.css'
 import App from './App.vue'
 import router from './router'
-import './styles/reset.less'
-import './styles/global.less'
-import { registerMock } from './api/mock'
+import '@shared/styles/reset.less'
+import '@shared/styles/global.less'
+import { registerMock } from './mock'
 
 registerMock()
 

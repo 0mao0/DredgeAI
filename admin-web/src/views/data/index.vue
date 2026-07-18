@@ -24,7 +24,7 @@
 
 <script setup lang="ts">
 import { ref, onMounted } from 'vue'
-import PageHeader from '@/components/PageHeader.vue'
+import PageHeader from '@shared/components/PageHeader.vue'
 import type { DataSource } from '@/types'
 import { getDataSources } from '@/api/modules/datasource'
 
@@ -36,7 +36,7 @@ onMounted(async () => {
 </script>
 
 <style scoped lang="less">
-@import '@/styles/variables.less';
+@import '@shared/styles/variables.less';
 .ds-card {
   :deep(.ant-card-head-title) { font-size: @font-size-base; }
 }
