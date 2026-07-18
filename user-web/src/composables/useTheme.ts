@@ -13,6 +13,10 @@ function applyTheme(t: Theme): void {
   document.documentElement.setAttribute('data-theme', t)
 }
 
+function cssVal(name: string): string {
+  return getComputedStyle(document.documentElement).getPropertyValue(name).trim()
+}
+
 applyTheme(currentTheme.value)
 
 export function useTheme() {
@@ -28,7 +32,7 @@ export function useTheme() {
   const themeConfig = computed<ThemeConfig>(() => ({
     algorithm: currentTheme.value === 'dark' ? darkAlgorithm : defaultAlgorithm,
     token: {
-      colorPrimary: '#0EA5E9',
+      colorPrimary: cssVal('--color-brand') || '#0EA5E9',
       borderRadius: 8,
       fontSize: 14,
     },

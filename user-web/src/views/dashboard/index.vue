@@ -118,7 +118,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted } from 'vue'
+import { ref, computed, watchEffect, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import {
   FileSearchOutlined, BookOutlined, EditOutlined, SafetyOutlined,
@@ -134,6 +134,8 @@ import { useUserStore } from '@/stores/user'
 import { useAppStore } from '@/stores/app'
 import { efficiencyTrend } from '@/mock/chart'
 import type { Component } from 'vue'
+import { useTheme } from '@/composables/useTheme'
+import { cssVarValue } from '@/composables/useCssVar'
 
 const router = useRouter()
 const userStore = useUserStore()
@@ -165,6 +167,16 @@ const authorizedApps = computed(() => appStore.apps.filter((a) => a.status === '
 
 const pendingTaskCount = computed(() => appStore.tasks.filter((t) => t.status === '进行中' || t.status === '已暂停').length)
 
+const { currentTheme } = useTheme()
+const brandColor = ref('#0EA5E9')
+const successColor = ref('#10B981')
+
+watchEffect(() => {
+  currentTheme.value
+  brandColor.value = cssVarValue('--color-brand')
+  successColor.value = cssVarValue('--color-success')
+})
+
 const efficiencyChartOption = computed(() => ({
   tooltip: { trigger: 'axis' },
   legend: { data: ['任务数', '完成数'], bottom: 0 },
@@ -176,7 +188,7 @@ const efficiencyChartOption = computed(() => ({
     type: 'line',
     smooth: true,
     data: s.data,
-    itemStyle: { color: i === 0 ? '#0EA5E9' : '#10B981' },
+    itemStyle: { color: i === 0 ? brandColor.value : successColor.value },
     areaStyle: { opacity: 0.1 },
   })),
 }))

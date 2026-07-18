@@ -69,7 +69,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted } from 'vue'
+import { ref, computed, watchEffect, onMounted } from 'vue'
 import { message } from 'ant-design-vue'
 import { PlusOutlined, CopyOutlined } from '@ant-design/icons-vue'
 import PageHeader from '@/components/PageHeader.vue'
@@ -78,6 +78,8 @@ import StatusTag from '@/components/StatusTag.vue'
 import ChartContainer from '@/components/ChartContainer.vue'
 import { getApiKeyList, getModelTypes, getUsageByModel, getUsageByKey } from '@/api/modules/apikey'
 import type { ApiKey, ModelType, UsageByModel, UsageByKey } from '@/types'
+import { useTheme } from '@/composables/useTheme'
+import { cssVarValue } from '@/composables/useCssVar'
 
 const apiKeys = ref<ApiKey[]>([])
 const modelTypes = ref<ModelType[]>([])
@@ -99,6 +101,25 @@ const columns = [
 
 const modelOptions = computed(() => modelTypes.value.map((m) => ({ label: m.name, value: m.name })))
 
+const { currentTheme } = useTheme()
+
+const brandColor = ref('#0EA5E9')
+const successColor = ref('#10B981')
+const accentColor = ref('#06B6D4')
+const warningColor = ref('#F59E0B')
+const dangerColor = ref('#EF4444')
+const cardBgColor = ref('#FFFFFF')
+
+watchEffect(() => {
+  currentTheme.value
+  brandColor.value = cssVarValue('--color-brand')
+  successColor.value = cssVarValue('--color-success')
+  accentColor.value = cssVarValue('--color-accent')
+  warningColor.value = cssVarValue('--color-warning')
+  dangerColor.value = cssVarValue('--color-danger')
+  cardBgColor.value = cssVarValue('--color-card-bg')
+})
+
 const modelPieOption = computed(() => ({
   tooltip: { trigger: 'item', formatter: '{b}: {c} ({d}%)' },
   legend: { bottom: 0, type: 'scroll' },
@@ -106,11 +127,11 @@ const modelPieOption = computed(() => ({
     type: 'pie',
     radius: ['40%', '70%'],
     avoidLabelOverlap: false,
-    itemStyle: { borderRadius: 8, borderColor: '#fff', borderWidth: 2 },
+    itemStyle: { borderRadius: 8, borderColor: cardBgColor.value, borderWidth: 2 },
     label: { show: false },
     emphasis: { label: { show: true, fontSize: 14, fontWeight: 'bold' } },
     data: usageByModel.value.map((u) => ({ name: u.modelName, value: u.calls })),
-    color: ['#0EA5E9', '#06B6D4', '#10B981', '#F59E0B', '#EF4444'],
+    color: [brandColor.value, accentColor.value, successColor.value, warningColor.value, dangerColor.value],
   }],
 }))
 
@@ -122,7 +143,7 @@ const keyBarOption = computed(() => ({
   series: [{
     type: 'bar',
     data: usageByKey.value.map((u) => u.calls),
-    itemStyle: { color: '#0EA5E9', borderRadius: [4, 4, 0, 0] },
+    itemStyle: { color: brandColor.value, borderRadius: [4, 4, 0, 0] },
     barWidth: '40%',
   }],
 }))

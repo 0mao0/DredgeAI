@@ -26,7 +26,7 @@
               <div class="session-name">{{ session.document }}</div>
               <div class="session-meta">
                 <span>{{ session.date }}</span>
-                <a-badge :count="session.riskCount" :number-style="{ backgroundColor: session.riskCount > 0 ? '#EF4444' : '#10B981' }" />
+                <a-badge :count="session.riskCount" :number-style="{ backgroundColor: session.riskCount > 0 ? badgeColors.danger : badgeColors.success }" />
               </div>
             </div>
           </div>
@@ -111,13 +111,24 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted } from 'vue'
+import { ref, reactive, computed, watchEffect, onMounted } from 'vue'
 import { message } from 'ant-design-vue'
 import { UploadOutlined, DownloadOutlined, BulbOutlined } from '@ant-design/icons-vue'
 import SectionCard from '@/components/SectionCard.vue'
 import StatusTag from '@/components/StatusTag.vue'
 import { getBidSteps, getBidRisks, getBidSessions, getBidDocument } from '@/api/modules/bid'
 import type { BidReviewStep, RiskItem, BidReviewSession } from '@/types'
+import { useTheme } from '@/composables/useTheme'
+import { cssVarValue } from '@/composables/useCssVar'
+
+const { currentTheme } = useTheme()
+const badgeColors = reactive({ danger: '#EF4444', success: '#10B981' })
+
+watchEffect(() => {
+  currentTheme.value
+  badgeColors.danger = cssVarValue('--color-danger')
+  badgeColors.success = cssVarValue('--color-success')
+})
 
 const steps = ref<BidReviewStep[]>([])
 const risks = ref<RiskItem[]>([])
