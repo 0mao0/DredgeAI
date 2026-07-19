@@ -1,5 +1,7 @@
 import { createRouter, createWebHistory } from 'vue-router'
 import UserLayout from '@/layouts/UserLayout.vue'
+import { installGuards } from '@shared/web/router'
+import { STORAGE_TOKEN_KEY } from '@/utils/constants'
 
 const router = createRouter({
   history: createWebHistory(),
@@ -28,9 +30,6 @@ const router = createRouter({
   ],
 })
 
-router.afterEach((to) => {
-  const title = to.meta.title as string | undefined
-  document.title = title ? `${title} · 智浚 AI` : '智浚 AI · 用户端'
-})
+installGuards(router, { tokenKey: STORAGE_TOKEN_KEY, appName: '智浚 AI · 用户端' })
 
 export default router
