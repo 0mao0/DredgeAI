@@ -1,5 +1,5 @@
 import type MockAdapter from 'axios-mock-adapter'
-import { bidReviewSteps, riskItems, bidReviewSessions, bidDocumentExcerpt } from '@/mock/data/bid'
+import { bidReviewSteps, riskItems, bidReviewSessions, bidDocumentExcerpt } from '@shared/mock/data/bid'
 
 export function registerBidMock(
   mock: MockAdapter,

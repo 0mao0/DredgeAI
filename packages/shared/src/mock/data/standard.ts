@@ -1,4 +1,4 @@
-import type { StandardResult, StandardSearchHistory, StandardCategory } from '@/types'
+import type { StandardResult, StandardSearchHistory, StandardCategory } from '@shared/types'
 
 export const standardsSearchHistory: StandardSearchHistory[] = [
   { id: 'h-1', query: 'GB/T 19001 质量管理体系', date: '2026-07-17 10:15', resultCount: 3 },

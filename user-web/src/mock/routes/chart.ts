@@ -1,5 +1,5 @@
 import type MockAdapter from 'axios-mock-adapter'
-import { efficiencyTrend } from '@/mock/data/chart'
+import { efficiencyTrend } from '@shared/mock/data/chart'
 
 export function registerChartMock(
   mock: MockAdapter,

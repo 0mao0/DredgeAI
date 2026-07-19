@@ -1,5 +1,5 @@
 import type MockAdapter from 'axios-mock-adapter'
-import { appCards } from '@/mock/data/app'
+import { appCards } from '@shared/mock/data/app'
 
 export function registerAppMock(
   mock: MockAdapter,

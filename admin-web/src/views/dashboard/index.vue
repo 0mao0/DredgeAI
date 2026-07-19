@@ -51,12 +51,16 @@ import PageHeader from '@shared/components/PageHeader.vue'
 import SectionCard from '@shared/components/SectionCard.vue'
 import MetricCard from '@shared/components/MetricCard.vue'
 import ChartContainer from '@shared/components/ChartContainer.vue'
+import { useCssVar } from '@shared/composables/useCssVar'
 import type { DashboardMetric, SystemLog } from '@/types'
 import { getDashboardMetrics, getApiCallsTrend, getAppDistribution, getActiveUsersTrend, getRecentLogs } from '@/api/modules/dashboard'
 
 const loading = ref(false)
 const metrics = ref<DashboardMetric[]>([])
 const recentLogs = ref<SystemLog[]>([])
+
+const brandColor = useCssVar('--color-brand')
+const successColor = useCssVar('--color-success')
 
 const apiCallsTrend = ref<{ categories: string[]; series: { name: string; data: number[] }[] }>({ categories: [], series: [] })
 const appDistribution = ref<{ name: string; data: { name: string; value: number }[] }>({ name: '', data: [] })
@@ -79,8 +83,8 @@ const apiCallsChartOption = computed(() => ({
     type: 'line' as const,
     smooth: true,
     data: s.data,
-    itemStyle: { color: '#0EA5E9' },
-    areaStyle: { color: 'rgba(14, 165, 233, 0.1)' },
+    itemStyle: { color: brandColor.value },
+    areaStyle: { opacity: 0.1 },
   })),
 }))
 
@@ -108,7 +112,7 @@ const activeUsersChartOption = computed(() => ({
     type: 'line' as const,
     smooth: true,
     data: s.data,
-    itemStyle: { color: i === 0 ? '#0EA5E9' : '#10B981' },
+    itemStyle: { color: i === 0 ? brandColor.value : successColor.value },
     areaStyle: { opacity: 0.08 },
   })),
 }))

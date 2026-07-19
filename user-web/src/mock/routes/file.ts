@@ -1,5 +1,5 @@
 import type MockAdapter from 'axios-mock-adapter'
-import { fileItems } from '@/mock/data/file'
+import { fileItems } from '@shared/mock/data/file'
 
 export function registerFileMock(
   mock: MockAdapter,

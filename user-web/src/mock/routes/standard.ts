@@ -1,5 +1,5 @@
 import type MockAdapter from 'axios-mock-adapter'
-import { standardsResult, standardsSearchHistory, standardCategories, recommendedQuestions } from '@/mock/data/standard'
+import { standardsResult, standardsSearchHistory, standardCategories, recommendedQuestions } from '@shared/mock/data/standard'
 
 export function registerStandardMock(
   mock: MockAdapter,

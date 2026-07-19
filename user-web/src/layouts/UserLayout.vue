@@ -9,13 +9,7 @@
       :collapsed-width="48"
       class="sider"
     >
-      <div class="logo">
-        <div class="logo-mark">智</div>
-        <div v-if="!collapsed" class="logo-text">
-          <div class="logo-name">智浚 AI</div>
-          <div class="logo-sub">DredgeAI</div>
-        </div>
-      </div>
+      <Logo :collapsed="collapsed" subtitle="DredgeAI" />
       <a-menu
         v-model:selectedKeys="selectedKeys"
         :theme="isDark ? 'dark' : 'light'"
@@ -108,6 +102,7 @@ import {
   BulbFilled, BulbOutlined,
 } from '@ant-design/icons-vue'
 import * as Icons from '@ant-design/icons-vue'
+import Logo from '@shared/components/Logo.vue'
 import { useAppStore } from '@/stores/app'
 import { useUserStore } from '@/stores/user'
 import { useThemeStore } from '@/stores/theme'
@@ -145,6 +140,13 @@ const iconMap: Record<string, Component> = {
   SearchOutlined: Icons.SearchOutlined,
   WarningOutlined: Icons.WarningOutlined,
   FundOutlined: Icons.FundOutlined,
+  VideoCameraOutlined: Icons.VideoCameraOutlined,
+  CustomerServiceOutlined: Icons.CustomerServiceOutlined,
+  BulbOutlined: Icons.BulbOutlined,
+  ToolOutlined: Icons.ToolOutlined,
+  FileProtectOutlined: Icons.FileProtectOutlined,
+  RadarChartOutlined: Icons.RadarChartOutlined,
+  ExperimentOutlined: Icons.ExperimentOutlined,
 }
 
 const router = useRouter()
@@ -179,39 +181,6 @@ onMounted(() => {
 .sider {
   background: @header-bg !important;
   :deep(.ant-layout-sider-children) { display: flex; flex-direction: column; }
-}
-
-.logo {
-  height: @header-height;
-  display: flex;
-  align-items: center;
-  gap: @spacing-md;
-  padding: 0 @spacing-xl;
-  border-bottom: 1px solid @border-color;
-}
-.logo-mark {
-  width: 32px;
-  height: 32px;
-  border-radius: @radius-base;
-  background: @brand-gradient;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  color: white;
-  font-weight: @font-weight-bold;
-  font-size: @font-size-lg;
-  flex-shrink: 0;
-}
-.logo-name {
-  font-size: @font-size-lg;
-  font-weight: @font-weight-semibold;
-  color: @header-text;
-  line-height: 1.2;
-}
-.logo-sub {
-  font-size: 10px;
-  color: @header-text-secondary;
-  letter-spacing: 1px;
 }
 
 .sider-menu {

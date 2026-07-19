@@ -1,5 +1,5 @@
 import type MockAdapter from 'axios-mock-adapter'
-import { apiKeys, modelTypes, usageByModel, usageByKey } from '@/mock/data/apikey'
+import { apiKeys, modelTypes, usageByModel, usageByKey } from '@shared/mock/data/apikey'
 
 function generateTimeSeries(days: number) {
   const now = new Date()
@@ -42,7 +42,7 @@ function generateTimeSeries(days: number) {
 }
 
 /**
- * 注册 API Key 相关的 mock 路由
+ * 注册 API Key 相关�?mock 路由
  */
 export function registerApiKeyMock(
   mock: MockAdapter,

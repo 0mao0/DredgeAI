@@ -1,5 +1,5 @@
 import type MockAdapter from 'axios-mock-adapter'
-import { mockDataSources } from '@/mock/data/data-sources'
+import { mockDataSources } from '@shared/mock/data/data-sources'
 
 /**
  * 注册数据源相关的 mock 路由

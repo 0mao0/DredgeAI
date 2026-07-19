@@ -1,4 +1,4 @@
-import type { FileItem } from '@/types'
+import type { FileItem } from '@shared/types'
 
 export const fileItems: FileItem[] = [
   { id: '1', name: 'XX_项目_招标文件.pdf', type: 'pdf', size: '2.4 MB', updatedAt: '2026-07-17 14:30' },

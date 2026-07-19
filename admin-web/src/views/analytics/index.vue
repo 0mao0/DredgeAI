@@ -35,10 +35,14 @@ import { ref, computed, onMounted } from 'vue'
 import PageHeader from '@shared/components/PageHeader.vue'
 import SectionCard from '@shared/components/SectionCard.vue'
 import ChartContainer from '@shared/components/ChartContainer.vue'
+import { useCssVar } from '@shared/composables/useCssVar'
 import { getDailyApiCalls, getModelUsage, getUserGrowth, getErrorRate } from '@/api/modules/analytics'
 
 const loading = ref(false)
 const dailyApi = ref<{ categories: string[]; series: { name: string; data: number[] }[] }>({ categories: [], series: [] })
+
+const brandColor = useCssVar('--color-brand')
+const dangerColor = useCssVar('--color-danger')
 const modelUsage = ref<{ name: string; data: { name: string; value: number }[] }>({ name: '', data: [] })
 const userGrowth = ref<{ categories: string[]; series: { name: string; data: number[] }[] }>({ categories: [], series: [] })
 const errorRate = ref<{ categories: string[]; series: { name: string; data: number[] }[] }>({ categories: [], series: [] })
@@ -54,7 +58,7 @@ const dailyApiOption = computed(() => ({
     type: 'line' as const,
     smooth: true,
     data: s.data,
-    itemStyle: { color: i === 0 ? '#0EA5E9' : '#94A3B8' },
+    itemStyle: { color: i === 0 ? brandColor.value : '#94A3B8' },
     areaStyle: { opacity: 0.08 },
   })),
 }))
@@ -79,7 +83,7 @@ const userGrowthOption = computed(() => ({
     name: s.name,
     type: 'bar' as const,
     data: s.data,
-    itemStyle: { color: '#0EA5E9', borderRadius: [4, 4, 0, 0] },
+    itemStyle: { color: brandColor.value, borderRadius: [4, 4, 0, 0] },
   })),
 }))
 
@@ -93,8 +97,8 @@ const errorRateOption = computed(() => ({
     type: 'line' as const,
     smooth: true,
     data: s.data.map((v) => +(v * 100).toFixed(1)),
-    itemStyle: { color: '#EF4444' },
-    areaStyle: { color: 'rgba(239, 68, 68, 0.1)' },
+    itemStyle: { color: dangerColor.value },
+    areaStyle: { opacity: 0.1 },
   })),
 }))
 

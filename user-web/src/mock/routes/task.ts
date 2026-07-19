@@ -1,5 +1,5 @@
 import type MockAdapter from 'axios-mock-adapter'
-import { taskItems, quickTasks } from '@/mock/data/task'
+import { taskItems, quickTasks } from '@shared/mock/data/task'
 
 export function registerTaskMock(
   mock: MockAdapter,

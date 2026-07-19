@@ -1,4 +1,4 @@
-import type { PermissionItem } from '@/types'
+import type { PermissionItem } from '@shared/types'
 
 export const mockPermissions: PermissionItem[] = [
   { id: '1', name: '仪表盘', code: 'dashboard:view', type: 'menu', status: '启用', sort: 1 },

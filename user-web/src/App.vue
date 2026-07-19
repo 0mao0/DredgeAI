@@ -24,14 +24,14 @@ const effectiveTheme = computed(() => {
 const themeConfig = computed(() => ({
   algorithm: effectiveTheme.value === 'dark' ? darkAlgorithm : defaultAlgorithm,
   token: {
-    colorPrimary: '#0EA5E9',
+    colorPrimary: effectiveTheme.value === 'dark' ? '#60A5FA' : '#0EA5E9',
     borderRadius: 8,
     fontSize: 14,
-    colorBgContainer: effectiveTheme.value === 'dark' ? '#1E293B' : '#FFFFFF',
-    colorBgLayout: effectiveTheme.value === 'dark' ? '#0B1220' : '#F8FAFC',
-    colorTextBase: effectiveTheme.value === 'dark' ? '#F1F5F9' : '#0F172A',
-    colorBorder: effectiveTheme.value === 'dark' ? '#334155' : '#E2E8F0',
-    colorBgElevated: effectiveTheme.value === 'dark' ? '#1E293B' : '#FFFFFF',
+    colorBgContainer: effectiveTheme.value === 'dark' ? '#141C2C' : '#FFFFFF',
+    colorBgLayout: effectiveTheme.value === 'dark' ? '#0B1220' : '#F6F3EF',
+    colorTextBase: effectiveTheme.value === 'dark' ? '#E2E8F0' : '#1C1917',
+    colorBorder: effectiveTheme.value === 'dark' ? '#1E2A3E' : '#E5DFD8',
+    colorBgElevated: effectiveTheme.value === 'dark' ? '#1A2438' : '#FFFFFF',
   },
 }))
 </script>

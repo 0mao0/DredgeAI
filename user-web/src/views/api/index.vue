@@ -9,101 +9,60 @@
       </template>
     </PageHeader>
 
-    <a-spin :spinning="loading" tip="加载中...">
-      <SectionCard title="API Key 列表" nopad class="mb-24">
-        <a-table
-          :data-source="apiKeys"
-          :columns="columns"
-          :pagination="{ pageSize: 10 }"
-          row-key="id"
-        >
-          <template #bodyCell="{ column, record }">
-            <template v-if="column.key === 'key'">
-              <code class="key-text">{{ record.key }}</code>
-              <a-button type="link" size="small" @click="copyKey(record.fullKey)">
-                <copy-outlined />
-              </a-button>
-            </template>
-            <template v-else-if="column.key === 'status'">
-              <a-tag :color="record.status === '启用' ? 'green' : 'red'">{{ record.status }}</a-tag>
-            </template>
-            <template v-else-if="column.key === 'doc'">
-              <a-button type="link" size="small" :href="record.docUrl" target="_blank">
-                <file-text-outlined /> 文档
-              </a-button>
-            </template>
-            <template v-else-if="column.key === 'action'">
-              <a-button type="link" size="small">编辑</a-button>
-              <a-button type="link" size="small" :danger="record.status === '启用'">
-                {{ record.status === '启用' ? '禁用' : '启用' }}
-              </a-button>
-            </template>
+    <SectionCard nopad class="mb-24">
+      <a-table
+        :data-source="apiKeys"
+        :columns="columns"
+        :pagination="{ pageSize: 10 }"
+        row-key="id"
+      >
+        <template #bodyCell="{ column, record }">
+          <template v-if="column.key === 'key'">
+            <code class="key-text">{{ record.key }}</code>
           </template>
-        </a-table>
-      </SectionCard>
+          <template v-else-if="column.key === 'doc'">
+            <a-button type="link" size="small" @click="openDoc(record.docUrl)">
+              <file-text-outlined /> 文档
+            </a-button>
+          </template>
+          <template v-else-if="column.key === 'action'">
+            <a-button type="link" size="small" @click="handleEdit(record)">编辑</a-button>
+            <a-popconfirm title="确认删除？" @confirm="handleDelete(record.id)">
+              <a-button type="link" size="small" danger>删除</a-button>
+            </a-popconfirm>
+          </template>
+        </template>
+      </a-table>
+    </SectionCard>
 
-      <div class="stats-section">
-        <div class="stats-header">
-          <h3 class="stats-title">统计分析</h3>
-          <div class="time-range-wrap">
-            <a-radio-group v-model:value="timeRange" size="small" @change="onTimeRangeChange">
-              <a-radio-button value="7d">近7日</a-radio-button>
-              <a-radio-button value="30d">近30日</a-radio-button>
-              <a-radio-button value="this-month">本月</a-radio-button>
-              <a-radio-button value="last-month">上月</a-radio-button>
-              <a-radio-button value="custom">自定义</a-radio-button>
-            </a-radio-group>
-            <a-range-picker
-              v-if="timeRange === 'custom'"
-              v-model:value="customDateRange"
-              size="small"
-              class="custom-date-picker"
-              :allow-empty="false"
-            />
-          </div>
+    <SectionCard title="调用趋势">
+      <div class="chart-header">
+        <a-radio-group v-model:value="chartMode" size="small">
+          <a-radio-button value="model">按模型</a-radio-button>
+          <a-radio-button value="key">按 API Key</a-radio-button>
+          <a-radio-button value="total">调用次数</a-radio-button>
+        </a-radio-group>
+        <div class="time-range-wrap">
+          <a-radio-group v-model:value="timeRange" size="small">
+            <a-radio-button value="7d">近7日</a-radio-button>
+            <a-radio-button value="30d">近30日</a-radio-button>
+            <a-radio-button value="month">本月</a-radio-button>
+            <a-radio-button value="prevMonth">上月</a-radio-button>
+            <a-radio-button value="custom">自定义</a-radio-button>
+          </a-radio-group>
+          <a-range-picker
+            v-if="timeRange === 'custom'"
+            v-model:value="customDateRange"
+            size="small"
+            class="custom-date-picker"
+            :allow-empty="false"
+          />
         </div>
-
-        <a-row :gutter="24" class="mb-24">
-          <a-col :span="12">
-            <div class="stat-card">
-              <div class="stat-label">总 Token 用量</div>
-              <div class="stat-value">{{ formatNum(usageStats?.totalTokens || 0) }}</div>
-            </div>
-          </a-col>
-          <a-col :span="12">
-            <div class="stat-card">
-              <div class="stat-label">总 API 调用次数</div>
-              <div class="stat-value">{{ formatNum(usageStats?.totalCalls || 0) }}</div>
-            </div>
-          </a-col>
-        </a-row>
-
-        <a-row :gutter="24">
-          <a-col :span="12" class="mb-24">
-            <SectionCard title="按模型调用趋势" nopad>
-              <ChartContainer :option="byModelOption" height="280px" />
-            </SectionCard>
-          </a-col>
-          <a-col :span="12" class="mb-24">
-            <SectionCard title="按 API Key 调用趋势" nopad>
-              <ChartContainer :option="byKeyOption" height="280px" />
-            </SectionCard>
-          </a-col>
-          <a-col :span="12" class="mb-24">
-            <SectionCard title="按名称调用趋势" nopad>
-              <ChartContainer :option="byNameOption" height="280px" />
-            </SectionCard>
-          </a-col>
-          <a-col :span="12" class="mb-24">
-            <SectionCard title="模型总调用占比" nopad>
-              <ChartContainer :option="pieOption" height="280px" />
-            </SectionCard>
-          </a-col>
-        </a-row>
       </div>
-    </a-spin>
+      <ChartContainer :option="chartOption" height="320px" />
+    </SectionCard>
 
-    <a-modal v-model:open="showCreateModal" title="创建 API Key" @ok="handleCreate">
+    <a-modal v-model:open="showCreateModal" title="创建 API Key" @ok="handleCreate" @cancel="newKey = { name: '', modelType: '' }">
       <a-form layout="vertical">
         <a-form-item label="Key 名称" required>
           <a-input v-model:value="newKey.name" placeholder="如：生产环境-主入口" />
@@ -113,122 +72,279 @@
         </a-form-item>
       </a-form>
     </a-modal>
+
+    <a-modal v-model:open="showCopyModal" title="创建成功" :footer="null" width="520px" @cancel="newKey = { name: '', modelType: '' }">
+      <div class="copy-modal-body">
+        <p class="copy-warning">
+          请将此 API key 保存在<span class="highlight">安全且易于访问</span>的地方。出于安全原因，你将<strong>无法</strong>通过 API keys 管理界面再次查看它。如果你丟失了这个 key，将需要<strong>重新创建</strong>。
+        </p>
+        <div class="key-box">
+          <code>{{ createdKey }}</code>
+        </div>
+        <a-button type="primary" block @click="copyCreatedKey">
+          <copy-outlined /> 复制 Key
+        </a-button>
+      </div>
+    </a-modal>
+
+    <a-modal v-model:open="showEditModal" title="编辑 API Key" @ok="handleEditOk" @cancel="editTarget = null">
+      <a-form layout="vertical">
+        <a-form-item label="Key 名称" required>
+          <a-input v-model:value="editName" placeholder="输入新名称" />
+        </a-form-item>
+      </a-form>
+    </a-modal>
   </div>
 </template>
 
 <script setup lang="ts">
-import { ref, computed, watch, onMounted } from 'vue'
-import dayjs from 'dayjs'
+import { ref, computed } from 'vue'
 import { message } from 'ant-design-vue'
 import { PlusOutlined, CopyOutlined, FileTextOutlined } from '@ant-design/icons-vue'
 import PageHeader from '@shared/components/PageHeader.vue'
 import SectionCard from '@shared/components/SectionCard.vue'
 import ChartContainer from '@shared/components/ChartContainer.vue'
-import { getApiKeyList, getModelTypes, getUsageByModel, getUsageStats, getUsageTimeSeries } from '@/api/modules/apikey'
-import type { ApiKey, ModelType, UsageByModel, ApiUsageStats, UsageTimeSeries } from '@/types'
 import { useCssVar } from '@shared/composables/useCssVar'
 
-const apiKeys = ref<ApiKey[]>([])
-const modelTypes = ref<ModelType[]>([])
-const usageByModel = ref<UsageByModel[]>([])
-const usageStats = ref<ApiUsageStats | null>(null)
-const usageTimeSeriesData = ref<UsageTimeSeries | null>(null)
-const showCreateModal = ref(false)
-const timeRange = ref('7d')
-const loading = ref(true)
-
-const newKey = ref({ name: '', modelType: '' })
-const customDateRange = ref<[dayjs.Dayjs, dayjs.Dayjs]>()
-
-function onTimeRangeChange(): void {
-  if (timeRange.value !== 'custom') {
-    loadTimeSeries()
-  }
-}
-
-watch(customDateRange, (val) => {
-  if (val?.[0] && val?.[1] && timeRange.value === 'custom') {
-    loadTimeSeries()
-  }
-})
-
 const columns = [
-  { title: '名称', dataIndex: 'name', key: 'name' },
-  { title: 'Key', key: 'key', width: 180 },
-  { title: '模型', dataIndex: 'modelType', key: 'modelType' },
-  { title: '状态', key: 'status', width: 80 },
-  { title: '创建时间', dataIndex: 'createdAt', key: 'createdAt' },
-  { title: 'API 文档', key: 'doc', width: 100 },
-  { title: '操作', key: 'action', width: 120 },
+  { title: '名称', dataIndex: 'name', key: 'name', align: 'center' },
+  { title: 'Key', key: 'key', width: 240, align: 'center' },
+  { title: '模型', dataIndex: 'model', key: 'model', align: 'center' },
+  { title: '创建日期', dataIndex: 'createdAt', key: 'createdAt', width: 120, align: 'center' },
+  { title: 'API 文档', key: 'doc', width: 110, align: 'center' },
+  { title: '操作', key: 'action', width: 130, align: 'center' },
 ]
 
-const modelOptions = computed(() => modelTypes.value.map((m) => ({ label: m.name, value: m.name })))
+const mockKeys = [
+  { id: '1', name: '生产环境-主入口', key: 'sk-dg-xxxxxxxxxxxx1', model: 'GPT-4o', createdAt: '2026-06-01', docUrl: 'https://docs.example.com/gpt4o' },
+  { id: '2', name: '生产环境-备用', key: 'sk-dg-xxxxxxxxxxxx2', model: 'GPT-4o-mini', createdAt: '2026-06-10', docUrl: 'https://docs.example.com/gpt4o-mini' },
+  { id: '3', name: '测试环境', key: 'sk-dg-xxxxxxxxxxxx3', model: 'Claude-3.5-Sonnet', createdAt: '2026-06-15', docUrl: 'https://docs.example.com/claude35' },
+  { id: '4', name: '内部工具-AI助手', key: 'sk-dg-xxxxxxxxxxxx4', model: 'DeepSeek-V3', createdAt: '2026-06-20', docUrl: 'https://docs.example.com/deepseek' },
+  { id: '5', name: '数据分析管道', key: 'sk-dg-xxxxxxxxxxxx5', model: 'GPT-4o', createdAt: '2026-07-01', docUrl: 'https://docs.example.com/gpt4o' },
+]
 
-function formatNum(n: number): string {
-  if (n >= 10000) return (n / 10000).toFixed(1) + '万'
-  if (n >= 1000) return (n / 1000).toFixed(1) + 'k'
-  return n.toLocaleString()
-}
+const apiKeys = ref(mockKeys)
+
+const modelOptions = [
+  { label: 'GPT-4o', value: 'GPT-4o' },
+  { label: 'GPT-4o-mini', value: 'GPT-4o-mini' },
+  { label: 'Claude-3.5-Sonnet', value: 'Claude-3.5-Sonnet' },
+  { label: 'DeepSeek-V3', value: 'DeepSeek-V3' },
+]
+
+const showCreateModal = ref(false)
+const showCopyModal = ref(false)
+const showEditModal = ref(false)
+const createdKey = ref('')
+const newKey = ref({ name: '', modelType: '' })
+const editTarget = ref<{ id: string; name: string } | null>(null)
+const editName = ref('')
+const chartMode = ref<'model' | 'key' | 'total'>('model')
+const timeRange = ref('7d')
+const customDateRange = ref()
 
 const brandColor = useCssVar('--color-brand')
 const successColor = useCssVar('--color-success')
 const accentColor = useCssVar('--color-accent')
 const warningColor = useCssVar('--color-warning')
 const dangerColor = useCssVar('--color-danger')
-const cardBgColor = useCssVar('--color-card-bg')
 
 const colors = computed(() => [brandColor.value, accentColor.value, successColor.value, warningColor.value, dangerColor.value])
 
-function makeTimeSeriesOption(data: { name: string; data: number[] }[] | undefined, categories: string[] | undefined) {
-  if (!data || !categories) return {}
+function generateDays(n: number, offset = 0): string[] {
+  const days: string[] = []
+  const ref = new Date()
+  ref.setDate(ref.getDate() + offset)
+  for (let i = n - 1; i >= 0; i--) {
+    const d = new Date(ref)
+    d.setDate(d.getDate() - i)
+    days.push(`${d.getMonth() + 1}/${d.getDate()}`)
+  }
+  return days
+}
+
+function makeMockSeries(base: number, variance: number, len: number): number[] {
+  return Array.from({ length: len }, () => Math.max(0, base + Math.round((Math.random() - 0.5) * variance)))
+}
+
+function daysInMonth(y: number, m: number): number {
+  return new Date(y, m, 0).getDate()
+}
+
+const days30 = generateDays(30)
+const days7 = generateDays(7)
+const daysMonth = computed(() => {
+  const now = new Date()
+  const n = now.getDate()
+  return generateDays(n)
+})
+const daysPrevMonth = computed(() => {
+  const now = new Date()
+  const y = now.getFullYear()
+  const m = now.getMonth()
+  const n = daysInMonth(y, m)
+  return generateDays(n, -n)
+})
+
+const mockChartData = computed(() => {
+  let days: string[]
+  switch (timeRange.value) {
+    case '7d': days = days7; break
+    case 'month': days = daysMonth.value; break
+    case 'prevMonth': days = daysPrevMonth.value; break
+    default: days = days30
+  }
+  const len = days.length
   return {
-    tooltip: { trigger: 'axis' },
-    legend: { type: 'scroll', bottom: 0 },
-    grid: { left: '3%', right: '4%', bottom: '18%', top: '5%', containLabel: true },
-    xAxis: { type: 'category', data: categories, axisLabel: { fontSize: 11 } },
-    yAxis: { type: 'value' },
-    series: data.map((s, i) => ({
-      name: s.name,
-      type: 'bar',
-      data: s.data,
-      itemStyle: { color: colors.value[i % colors.value.length], borderRadius: [3, 3, 0, 0] },
-      barWidth: '30%',
-    })),
+    categories: days,
+    byModel: [
+      { name: 'GPT-4o', data: makeMockSeries(320, 200, len) },
+      { name: 'GPT-4o-mini', data: makeMockSeries(580, 300, len) },
+      { name: 'Claude-3.5-Sonnet', data: makeMockSeries(180, 120, len) },
+      { name: 'DeepSeek-V3', data: makeMockSeries(260, 160, len) },
+    ],
+    byKey: [
+      { name: 'sk-dg-xxxx1 (生产-主)', data: makeMockSeries(450, 250, len) },
+      { name: 'sk-dg-xxxx2 (生产-备)', data: makeMockSeries(200, 150, len) },
+      { name: 'sk-dg-xxxx3 (测试)', data: makeMockSeries(380, 200, len) },
+      { name: 'sk-dg-xxxx4 (内部)', data: makeMockSeries(160, 100, len) },
+      { name: 'sk-dg-xxxx5 (数据)', data: makeMockSeries(140, 80, len) },
+    ],
+    total: makeMockSeries(1300, 400, len),
+  }
+})
+
+function makeBarGradient(hex: string) {
+  return {
+    type: 'linear' as const,
+    x: 0, y: 0, x2: 0, y2: 1,
+    colorStops: [
+      { offset: 0, color: hex },
+      { offset: 1, color: hex + '66' },
+    ],
   }
 }
 
-const byModelOption = computed(() =>
-  makeTimeSeriesOption(
-    usageTimeSeriesData.value?.byModel?.map((s) => ({ name: s.modelName, data: s.data })),
-    usageTimeSeriesData.value?.categories))
+const chartOption = computed(() => {
+  const data = mockChartData.value
+  const categories = data.categories
+  const isDark = document.documentElement.getAttribute('data-theme') === 'dark'
+  const axisColor = isDark ? '#52627A' : '#A8A29E'
+  const splitColor = isDark ? 'rgba(148, 163, 184, 0.08)' : 'rgba(0, 0, 0, 0.06)'
+  const tooltipBg = isDark ? 'rgba(15, 23, 42, 0.92)' : 'rgba(255, 255, 255, 0.92)'
+  const tooltipBorder = isDark ? 'rgba(148, 163, 184, 0.15)' : 'rgba(0, 0, 0, 0.06)'
+  const tooltipColor = isDark ? '#E2E8F0' : '#1C1917'
 
-const byKeyOption = computed(() =>
-  makeTimeSeriesOption(
-    usageTimeSeriesData.value?.byKey?.map((s) => ({ name: s.keyName, data: s.data })),
-    usageTimeSeriesData.value?.categories))
+  if (chartMode.value === 'total') {
+    return {
+      tooltip: {
+        trigger: 'axis',
+        backgroundColor: tooltipBg,
+        borderColor: tooltipBorder,
+        borderWidth: 1,
+        textStyle: { color: tooltipColor, fontSize: 13 },
+        valueFormatter: (v: number) => `${v.toLocaleString()} 次`,
+      },
+      grid: { left: 40, right: 16, bottom: 24, top: 12 },
+      xAxis: {
+        type: 'category', data: categories,
+        axisLine: { show: false },
+        axisTick: { show: false },
+        axisLabel: { color: axisColor, fontSize: 11 },
+      },
+      yAxis: {
+        type: 'value', min: 0,
+        axisLine: { show: false },
+        axisTick: { show: false },
+        axisLabel: { color: axisColor, fontSize: 11 },
+        splitLine: { lineStyle: { color: splitColor, type: 'dashed' } },
+      },
+      series: [{
+        type: 'bar',
+        data: data.total,
+        barWidth: '32%',
+        itemStyle: {
+          color: makeBarGradient(brandColor.value),
+          borderRadius: [6, 6, 0, 0],
+        },
+        animationDuration: 600,
+        animationEasing: 'easeOutQuad',
+      }],
+    }
+  }
 
-const byNameOption = computed(() =>
-  makeTimeSeriesOption(usageTimeSeriesData.value?.byName, usageTimeSeriesData.value?.categories))
+  const series = chartMode.value === 'model' ? data.byModel : data.byKey
+  const count = series.length
+  return {
+    tooltip: {
+      trigger: 'axis',
+      backgroundColor: tooltipBg,
+      borderColor: tooltipBorder,
+      borderWidth: 1,
+      textStyle: { color: tooltipColor, fontSize: 13 },
+      valueFormatter: (v: number) => `${v.toLocaleString()} 次`,
+    },
+    legend: {
+      type: 'scroll', bottom: 0,
+      textStyle: { color: isDark ? '#94A3B8' : '#78716C', fontSize: 12 },
+    },
+    grid: { left: 40, right: 16, bottom: 44, top: 12 },
+    xAxis: {
+      type: 'category', data: categories,
+      axisLine: { show: false },
+      axisTick: { show: false },
+      axisLabel: { color: axisColor, fontSize: 11 },
+    },
+    yAxis: {
+      type: 'value', min: 0,
+      axisLine: { show: false },
+      axisTick: { show: false },
+      axisLabel: { color: axisColor, fontSize: 11 },
+      splitLine: { lineStyle: { color: splitColor, type: 'dashed' } },
+    },
+    series: series.map((s, i) => ({
+      name: s.name,
+      type: 'bar',
+      stack: 'total',
+      data: s.data,
+      barWidth: '44%',
+      itemStyle: {
+        color: makeBarGradient(colors.value[i % colors.value.length]),
+        borderRadius: i === count - 1 ? [6, 6, 0, 0] : 0,
+      },
+      animationDuration: 400 + i * 80,
+      animationEasing: 'easeOutQuad',
+    })),
+  }
+})
 
-const pieOption = computed(() => ({
-  tooltip: { trigger: 'item', formatter: '{b}: {c} ({d}%)' },
-  legend: { bottom: 0, type: 'scroll' },
-  series: [{
-    type: 'pie',
-    radius: ['40%', '70%'],
-    center: ['50%', '45%'],
-    avoidLabelOverlap: false,
-    itemStyle: { borderRadius: 6, borderColor: cardBgColor.value, borderWidth: 2 },
-    label: { show: false },
-    emphasis: { label: { show: true, fontSize: 14, fontWeight: 'bold' } },
-    data: usageByModel.value.map((u) => ({ name: u.modelName, value: u.calls })),
-    color: colors.value,
-  }],
-}))
+function openDoc(url: string): void {
+  window.open(url, '_blank')
+}
 
-function copyKey(key: string): void {
-  navigator.clipboard.writeText(key)
-  message.success('已复制到剪贴板')
+function handleDelete(id: string): void {
+  apiKeys.value = apiKeys.value.filter((k) => k.id !== id)
+  message.success('已删除')
+}
+
+function handleEdit(record: { id: string; name: string }): void {
+  editTarget.value = record
+  editName.value = record.name
+  showEditModal.value = true
+}
+
+function handleEditOk(): void {
+  if (!editName.value.trim()) {
+    message.warning('名称不能为空')
+    return
+  }
+  if (editTarget.value) {
+    const item = apiKeys.value.find((k) => k.id === editTarget.value!.id)
+    if (item) item.name = editName.value.trim()
+  }
+  message.success('已更新')
+  showEditModal.value = false
+  editTarget.value = null
 }
 
 function handleCreate(): void {
@@ -236,40 +352,15 @@ function handleCreate(): void {
     message.warning('请填写完整信息')
     return
   }
-  message.success('API Key 创建成功')
+  createdKey.value = 'sk-dg-' + Array.from({ length: 20 }, () => 'abcdefghijklmnopqrstuvwxyz0123456789'[Math.floor(Math.random() * 36)]).join('')
   showCreateModal.value = false
-  newKey.value = { name: '', modelType: '' }
+  showCopyModal.value = true
 }
 
-async function loadTimeSeries(): Promise<void> {
-  if (timeRange.value === 'custom' && customDateRange.value?.[0] && customDateRange.value?.[1]) {
-    const fmt = 'YYYY-MM-DD'
-    usageTimeSeriesData.value = await getUsageTimeSeries('custom', {
-      startDate: customDateRange.value[0].format(fmt),
-      endDate: customDateRange.value[1].format(fmt),
-    })
-  } else {
-    usageTimeSeriesData.value = await getUsageTimeSeries(timeRange.value)
-  }
+function copyCreatedKey(): void {
+  navigator.clipboard.writeText(createdKey.value)
+  message.success('已复制到剪贴板')
 }
-
-onMounted(async () => {
-  try {
-    loading.value = true
-    const [k, m, um, stats] = await Promise.all([
-      getApiKeyList(), getModelTypes(), getUsageByModel(), getUsageStats(),
-    ])
-    apiKeys.value = k
-    modelTypes.value = m
-    usageByModel.value = um
-    usageStats.value = stats
-    await loadTimeSeries()
-  } catch (e) {
-    console.error('[API] 数据加载失败', e)
-  } finally {
-    loading.value = false
-  }
-})
 </script>
 
 <style scoped lang="less">
@@ -286,19 +377,11 @@ onMounted(async () => {
   border-radius: @radius-sm;
 }
 
-.stats-section {
-  background: @card-bg;
-  border-radius: @radius-lg;
-  border: 1px solid @border-color;
-  box-shadow: @shadow-sm;
-  padding: @spacing-xl;
-}
-
-.stats-header {
+.chart-header {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  margin-bottom: @spacing-xl;
+  margin-bottom: @spacing-lg;
 }
 
 .time-range-wrap {
@@ -310,31 +393,22 @@ onMounted(async () => {
   min-width: 200px;
 }
 
-.stats-title {
-  font-size: @font-size-lg;
-  font-weight: @font-weight-semibold;
-  color: @text-primary;
-  margin: 0;
-}
-
-.stat-card {
-  background: @content-bg;
-  border-radius: @radius-base;
-  padding: @spacing-lg @spacing-xl;
-  display: flex;
-  flex-direction: column;
-  gap: @spacing-xs;
-}
-
-.stat-label {
-  font-size: @font-size-sm;
-  color: @text-secondary;
-}
-
-.stat-value {
-  font-size: @font-size-3xl;
-  font-weight: @font-weight-bold;
-  color: @text-primary;
-  line-height: 1.2;
+.copy-modal-body {
+  p { margin-bottom: 16px; }
+  .highlight { color: var(--color-warning, #f59e0b); font-weight: 600; }
+  strong { color: var(--color-danger, #ef4444); }
+  .key-box {
+    background: var(--content-bg);
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius-sm);
+    padding: 12px 16px;
+    margin-bottom: 16px;
+    code {
+      font-family: 'Consolas', 'Monaco', monospace;
+      font-size: 13px;
+      word-break: break-all;
+      color: var(--text-primary);
+    }
+  }
 }
 </style>

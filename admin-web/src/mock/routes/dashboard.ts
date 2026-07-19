@@ -1,5 +1,5 @@
 import type MockAdapter from 'axios-mock-adapter'
-import { mockAdminStats, mockMetrics, mockApiCallsTrend, mockAppDistribution, mockActiveUsersTrend, mockRecentLogs } from '@/mock/data/dashboard'
+import { mockAdminStats, mockMetrics, mockApiCallsTrend, mockAppDistribution, mockActiveUsersTrend, mockRecentLogs } from '@shared/mock/data/dashboard'
 
 /**
  * 注册仪表盘相关的 mock 路由

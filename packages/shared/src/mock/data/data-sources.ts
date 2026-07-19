@@ -1,4 +1,4 @@
-import type { DataSource } from '@/types'
+import type { DataSource } from '@shared/types'
 
 export const mockDataSources: DataSource[] = [
   { id: '1', name: '生产数据库', type: 'mysql', status: '已连接', lastSync: '2026-07-18 09:30:00', description: '主业务数据库' },

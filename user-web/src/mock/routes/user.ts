@@ -1,5 +1,5 @@
 import type MockAdapter from 'axios-mock-adapter'
-import { currentUser } from '@/mock/data/user'
+import { currentUser } from '@shared/mock/data/user'
 
 export function registerUserMock(
   mock: MockAdapter,

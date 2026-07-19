@@ -1,4 +1,4 @@
-import type { BidReviewStep, RiskItem, BidReviewSession } from '@/types'
+import type { BidReviewStep, RiskItem, BidReviewSession } from '@shared/types'
 
 export const bidReviewSteps: BidReviewStep[] = [
   { title: '上传文档', description: '支持 PDF/Word 格式，单文件 ≤ 50MB', status: 'finish' },

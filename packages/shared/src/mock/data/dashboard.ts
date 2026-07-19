@@ -1,4 +1,4 @@
-import type { AdminStats, LineChartData, PieChartData, DashboardMetric, SystemLog } from '@/types'
+import type { AdminStats, LineChartData, PieChartData, DashboardMetric, SystemLog } from '@shared/types'
 
 export const mockAdminStats: AdminStats = {
   totalUsers: 2846,
@@ -28,11 +28,15 @@ export const mockApiCallsTrend: LineChartData = {
 export const mockAppDistribution: PieChartData = {
   name: '应用分布',
   data: [
-    { name: '智能审批', value: 35 },
-    { name: '知识检索', value: 25 },
-    { name: '标书分析', value: 20 },
-    { name: '数据助手', value: 12 },
-    { name: '其他', value: 8 },
+    { name: '标准查询', value: 28 },
+    { name: 'AI视频', value: 14 },
+    { name: 'AI配音', value: 12 },
+    { name: '施工经验', value: 11 },
+    { name: '施组审核', value: 6 },
+    { name: '耙吸效率', value: 5 },
+    { name: '投标审核', value: 7 },
+    { name: '情报采集', value: 4 },
+    { name: '设计经验', value: 7 },
   ],
 }
 
@@ -45,7 +49,7 @@ export const mockActiveUsersTrend: LineChartData = {
 }
 
 export const mockRecentLogs: SystemLog[] = [
-  { id: '1', type: '操作日志', operator: '管理员', content: '修改了「智能审批」应用配置', createdAt: '2026-07-18 09:30:00', level: 'info' },
+  { id: '1', type: '操作日志', operator: '管理员', content: '修改了「标准查询」应用配置', createdAt: '2026-07-18 09:30:00', level: 'info' },
   { id: '2', type: '安全告警', operator: '系统', content: '检测到异常 API 调用频率', createdAt: '2026-07-18 08:15:00', level: 'warning' },
   { id: '3', type: '系统错误', operator: '系统', content: '数据处理任务 #1023 执行失败', createdAt: '2026-07-18 07:45:00', level: 'error' },
   { id: '4', type: '操作日志', operator: '张三', content: '新增角色「数据分析师」', createdAt: '2026-07-17 16:20:00', level: 'info' },

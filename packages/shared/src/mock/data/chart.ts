@@ -1,4 +1,4 @@
-import type { LineChartData, PieChartData } from '@/types'
+import type { LineChartData, PieChartData } from '@shared/types'
 
 export const efficiencyTrend: LineChartData = {
   categories: ['7/11', '7/12', '7/13', '7/14', '7/15', '7/16', '7/17'],

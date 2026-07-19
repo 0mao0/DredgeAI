@@ -1,5 +1,5 @@
 import type MockAdapter from 'axios-mock-adapter'
-import { apiKeys, modelTypes, usageByModel, usageByKey } from '@/mock/data/apikey'
+import { userApiKeys as apiKeys, modelTypes, usageByModel, usageByKey } from '@shared/mock/data/apikey'
 
 function generateTimeSeries(days: number) {
   const now = new Date()

@@ -1,6 +1,6 @@
-import type { UserInfo } from '@/types'
+import type { AdminUserInfo } from '@shared/types'
 
-export const mockProfile: UserInfo = {
+export const mockProfile: AdminUserInfo = {
   id: '1',
   username: 'admin',
   name: '管理员',

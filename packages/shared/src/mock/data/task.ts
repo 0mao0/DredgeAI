@@ -1,4 +1,4 @@
-import type { TaskItem } from '@/types'
+import type { TaskItem } from '@shared/types'
 
 export const taskItems: TaskItem[] = [
   { id: '1', title: 'XX 项目招标文件风险分析', status: '进行中', updatedAt: '2026-07-17 14:32', app: 'AI 审标', progress: 65 },
@@ -10,7 +10,7 @@ export const taskItems: TaskItem[] = [
 ]
 
 export const quickTasks = [
-  { id: 'qt-1', title: '开始 AI 审标', tag: '专业业务', route: '/bid-review', icon: 'FileSearchOutlined' },
-  { id: 'qt-2', title: '查询标准条款', tag: '知识查询', route: '/standards', icon: 'BookOutlined' },
-  { id: 'qt-3', title: '撰写工程报告', tag: '日常办公', route: '/approval', icon: 'EditOutlined' },
+  { id: 'qt-1', title: '开始投标审核', tag: '经营', route: '/bid-review', icon: 'FileSearchOutlined' },
+  { id: 'qt-2', title: '查阅疏浚情报', tag: '经营', route: '/intelligence/dredge', icon: 'RadarChartOutlined' },
+  { id: 'qt-3', title: '施工经验检索', tag: '施工', route: '/construction-experience', icon: 'ToolOutlined' },
 ] as const

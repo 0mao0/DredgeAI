@@ -1,6 +1,110 @@
-import type { ApiKey, ModelType, UsageByModel, UsageByKey, UsageTimeSeries } from '@/types'
+import type { ApiKey, ModelType, UsageByModel, UsageByKey, UsageTimeSeries } from '@shared/types'
 
-export const apiKeys: ApiKey[] = [
+/** admin 侧 Key：字段更全（含 app / expiredAt / lastUsed） */
+export const adminApiKeys: ApiKey[] = [
+  {
+    id: '1',
+    name: '生产环境-主入口',
+    key: 'sk-dredge-9f2a****c1b4',
+    fullKey: 'sk-dredge-9f2a3e7d8b90c1b4',
+    modelType: 'GPT-4o',
+    app: '智浚 AI 平台',
+    status: '启用',
+    createdAt: '2025-03-12',
+    expiredAt: '2027-03-12',
+    lastUsed: '2026-07-18 09:12',
+    quota: 10000000,
+    usage: 7250000,
+    docUrl: 'https://docs.dredgeai.com/api/gpt4o',
+  },
+  {
+    id: '2',
+    name: '用量统计采集器',
+    key: 'sk-dredge-3e7d****8a90',
+    fullKey: 'sk-dredge-3e7dba4567c18a90',
+    modelType: 'Claude 3 Haiku',
+    app: '数据中台',
+    status: '启用',
+    createdAt: '2025-05-20',
+    lastUsed: '2026-07-18 08:55',
+    quota: 5000000,
+    usage: 3120000,
+    docUrl: 'https://docs.dredgeai.com/api/haiku',
+  },
+  {
+    id: '3',
+    name: 'BIM 分析专用',
+    key: 'sk-dredge-61c2****4f3e',
+    fullKey: 'sk-dredge-61c20e8c5b674f3e',
+    modelType: 'GPT-4o',
+    app: 'BIM 智能分析',
+    status: '启用',
+    createdAt: '2025-06-08',
+    lastUsed: '2026-07-17 22:40',
+    quota: 3000000,
+    usage: 1840000,
+    docUrl: 'https://docs.dredgeai.com/api/gpt4o',
+  },
+  {
+    id: '4',
+    name: '测试环境-内部',
+    key: 'sk-dredge-ba45****2d18',
+    fullKey: 'sk-dredge-ba45d4f19a2e2d18',
+    modelType: 'Claude 3.5 Sonnet',
+    app: '内部测试',
+    status: '启用',
+    createdAt: '2025-08-01',
+    lastUsed: '2026-07-18 10:02',
+    quota: 1000000,
+    usage: 460000,
+    docUrl: 'https://docs.dredgeai.com/api/claude',
+  },
+  {
+    id: '5',
+    name: '海外节点-新加坡',
+    key: 'sk-dredge-77f9****e0c3',
+    fullKey: 'sk-dredge-77f9m3n4e0c3q1r2',
+    modelType: 'GPT-4o',
+    app: '海外业务',
+    status: '禁用',
+    createdAt: '2025-09-15',
+    lastUsed: '2026-06-30 14:20',
+    quota: 2000000,
+    usage: 920000,
+    docUrl: 'https://docs.dredgeai.com/api/gpt4o',
+  },
+  {
+    id: '6',
+    name: '文档分析-合同审查',
+    key: 'sk-dredge-0e8c****5b67',
+    fullKey: 'sk-dredge-0e8cs3t45b67u5v6',
+    modelType: 'Claude 3.5 Sonnet',
+    app: '合同审查',
+    status: '启用',
+    createdAt: '2025-10-22',
+    lastUsed: '2026-07-18 09:30',
+    quota: 2000000,
+    usage: 1230000,
+    docUrl: 'https://docs.dredgeai.com/api/claude',
+  },
+  {
+    id: '7',
+    name: 'AI 审标专用',
+    key: 'sk-dredge-d4f1****9a2e',
+    fullKey: 'sk-dredge-d4f1o9p09a2eq1r2',
+    modelType: 'GPT-4o',
+    app: 'AI 审标',
+    status: '启用',
+    createdAt: '2025-11-03',
+    lastUsed: '2026-07-18 08:40',
+    quota: 1500000,
+    usage: 890000,
+    docUrl: 'https://docs.dredgeai.com/api/gpt4o',
+  },
+]
+
+/** user 侧 Key：无 app 字段 */
+export const userApiKeys: ApiKey[] = [
   { id: 'k-1', name: '生产环境-主入口', key: 'sk-dg-****-a1b2', fullKey: 'sk-dg-prod-a1b2c3d4e5f6', modelType: 'GPT-4o', createdAt: '2026-06-01', status: '启用', usage: 12500, quota: 50000, docUrl: 'https://docs.dredgeai.com/api/gpt4o' },
   { id: 'k-2', name: '测试环境-内部', key: 'sk-dg-****-f6e5', fullKey: 'sk-dg-test-f6e5d4c3b2a1', modelType: 'Claude 3.5 Sonnet', createdAt: '2026-06-15', status: '启用', usage: 8300, quota: 20000, docUrl: 'https://docs.dredgeai.com/api/claude' },
   { id: 'k-3', name: '第三方集成-合作商A', key: 'sk-dg-****-x7y8', fullKey: 'sk-dg-integ-x7y8z9a0b1c2', modelType: 'DeepSeek-V3', createdAt: '2026-07-01', status: '禁用', usage: 0, quota: 10000, docUrl: 'https://docs.dredgeai.com/api/deepseek' },
@@ -17,6 +121,9 @@ export const apiKeys: ApiKey[] = [
   { id: 'k-14', name: '海外节点-新加坡', key: 'sk-dg-****-q1r2', fullKey: 'sk-dg-sg-q1r2s3t4u5v6', modelType: 'GPT-4o', createdAt: '2026-07-20', status: '启用', usage: 7200, quota: 35000, docUrl: 'https://docs.dredgeai.com/api/gpt4o' },
   { id: 'k-15', name: '开发调试-临时', key: 'sk-dg-****-s3t4', fullKey: 'sk-dg-dev-s3t4u5v6w7x8', modelType: 'Claude 3.5 Sonnet', createdAt: '2026-07-22', status: '启用', usage: 2800, quota: 10000, docUrl: 'https://docs.dredgeai.com/api/claude' },
 ]
+
+/** 兼容别名：admin/user 路由各自按需引用 */
+export const apiKeys = adminApiKeys
 
 export const modelTypes: ModelType[] = [
   { id: 'gpt4o', name: 'GPT-4o', provider: 'OpenAI', description: '通用旗舰模型，适合复杂推理与多模态' },

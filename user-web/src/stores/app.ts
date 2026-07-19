@@ -52,8 +52,8 @@ export const useAppStore = defineStore('app', () => {
     return sidebarAppsSet.value.has(route)
   }
 
-  /** 默认勾选 3 个应用显示在侧边栏：标书智能分析、图纸合规检查、知识检索系统 */
-  const DEFAULT_VISIBLE_ROUTES = ['/bid-review', '/standards', '/knowledge']
+  /** 默认勾选应用显示在侧边栏：通用3 + 施工2 + 经营2(情报采集子应用) */
+  const DEFAULT_VISIBLE_ROUTES = ['/standard-query', '/ai-video', '/ai-dubbing', '/dredge-efficiency', '/bid-review', '/intelligence/dredge', '/intelligence/tech']
 
   async function fetchApps(): Promise<void> {
     apps.value = await getAppList()

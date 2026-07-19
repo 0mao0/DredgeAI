@@ -28,14 +28,14 @@ export function useTheme() {
   const themeConfig = computed<ThemeConfig>(() => ({
     algorithm: currentTheme.value === 'dark' ? darkAlgorithm : defaultAlgorithm,
     token: {
-      colorPrimary: '#0EA5E9',
+      colorPrimary: currentTheme.value === 'dark' ? '#60A5FA' : '#0EA5E9',
       borderRadius: 8,
       fontSize: 14,
-      colorBgContainer: currentTheme.value === 'dark' ? '#1E293B' : '#FFFFFF',
-      colorBgLayout: currentTheme.value === 'dark' ? '#0B1220' : '#F8FAFC',
-      colorTextBase: currentTheme.value === 'dark' ? '#F1F5F9' : '#0F172A',
-      colorBorder: currentTheme.value === 'dark' ? '#334155' : '#E2E8F0',
-      colorBgElevated: currentTheme.value === 'dark' ? '#1E293B' : '#FFFFFF',
+      colorBgContainer: currentTheme.value === 'dark' ? '#141C2C' : '#FFFFFF',
+      colorBgLayout: currentTheme.value === 'dark' ? '#0B1220' : '#F6F3EF',
+      colorTextBase: currentTheme.value === 'dark' ? '#E2E8F0' : '#1C1917',
+      colorBorder: currentTheme.value === 'dark' ? '#1E2A3E' : '#E5DFD8',
+      colorBgElevated: currentTheme.value === 'dark' ? '#1A2438' : '#FFFFFF',
     },
   }))
 

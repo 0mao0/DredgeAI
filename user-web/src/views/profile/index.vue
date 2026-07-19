@@ -24,14 +24,14 @@
       </div>
       <div class="banner-stats">
         <div class="stat-item">
-          <div class="stat-icon" style="--stat-color: #0EA5E9"><AppstoreOutlined /></div>
+          <div class="stat-icon" style="--stat-color: var(--color-brand)"><AppstoreOutlined /></div>
           <div class="stat-body">
             <div class="stat-value">{{ appStore.authorizedApps.length }}</div>
             <div class="stat-label">已授权应用</div>
           </div>
         </div>
         <div class="stat-item">
-          <div class="stat-icon" style="--stat-color: #10B981"><CheckCircleOutlined /></div>
+          <div class="stat-icon" style="--stat-color: var(--color-success)"><CheckCircleOutlined /></div>
           <div class="stat-body">
             <div class="stat-value">{{ appStore.visibleAppRoutes.length }}</div>
             <div class="stat-label">已启用应用</div>
@@ -102,10 +102,10 @@
       <div class="profile-right">
         <div class="section-card">
           <div class="sc-header">
-            <span>应用设置</span>
-            <a-tag color="blue">{{ sidebarApps.length }} / {{ filteredApps.length }} 已启用</a-tag>
-          </div>
-          <div class="sc-body">
+            <div class="sc-header-left">
+              <span>应用设置</span>
+              <span class="app-count">（{{ sidebarApps.length }} / {{ appStore.authorizedApps.length }}）</span>
+            </div>
             <div class="category-bar">
               <div
                 v-for="cat in categoryOptions"
@@ -115,6 +115,8 @@
                 @click="toggleCategory(cat.key)"
               >{{ cat.label }}<span class="cat-count">({{ cat.count }})</span></div>
             </div>
+          </div>
+          <div class="sc-body">            
             <div class="app-grid" ref="appListRef">
               <div
                 v-for="(app, idx) in filteredApps"
@@ -174,24 +176,26 @@ const userStore = useUserStore()
 const appStore = useAppStore()
 const themeStore = useThemeStore()
 
-// 应用图标映射
+// 应用图标映射（覆盖所有已定义的应用图标）
 const iconMap: Record<string, Component> = {
-  FileSearchOutlined: Icons.FileSearchOutlined,
+  BookOutlined: Icons.BookOutlined,
+  VideoCameraOutlined: Icons.VideoCameraOutlined,
+  CustomerServiceOutlined: Icons.CustomerServiceOutlined,
+  BulbOutlined: Icons.BulbOutlined,
+  ToolOutlined: Icons.ToolOutlined,
+  FileProtectOutlined: Icons.FileProtectOutlined,
   DashboardOutlined: Icons.DashboardOutlined,
-  SafetyOutlined: Icons.SafetyOutlined,
-  ApiOutlined: Icons.ApiOutlined,
-  EditOutlined: Icons.EditOutlined,
-  WarningOutlined: Icons.WarningOutlined,
-  FundOutlined: Icons.FundOutlined,
-  QuestionCircleOutlined: Icons.QuestionCircleOutlined,
-  AuditOutlined: Icons.AuditOutlined,
-  SearchOutlined: Icons.SearchOutlined,
+  RadarChartOutlined: Icons.RadarChartOutlined,
+  ExperimentOutlined: Icons.ExperimentOutlined,
+  FileSearchOutlined: Icons.FileSearchOutlined,
+  AppstoreOutlined: Icons.AppstoreOutlined,
 }
 
-// 应用图标颜色
+// 应用图标颜色（使用 CSS 变量以响应主题切换）
 const appIconColors = [
-  '#0EA5E9', '#06B6D4', '#10B981', '#F59E0B',
-  '#EF4444', '#8B5CF6', '#EC4899', '#F97316',
+  'var(--color-brand)', 'var(--color-accent)', 'var(--color-success)',
+  'var(--color-warning)', 'var(--color-danger)',
+  '#8B5CF6', '#EC4899', '#F97316',
 ]
 
 // 主题选项
@@ -220,8 +224,8 @@ const notifOptions = [
   { label: '审计日志', value: 'audit' },
 ]
 
-// 分类定义（顺序固定：基础 | 设计 | 施工 | 经营），计数动态计算
-const CATEGORY_DEFS: Array<'基础' | '设计' | '施工' | '经营'> = ['基础', '设计', '施工', '经营']
+// 分类定义（顺序固定：通用 | 设计 | 施工 | 经营），计数动态计算
+const CATEGORY_DEFS: Array<'通用' | '设计' | '施工' | '经营'> = ['通用', '设计', '施工', '经营']
 
 // 分类选项（含各分类下的应用数量）
 const categoryOptions = computed(() => {
@@ -244,10 +248,10 @@ function toggleNotif(value: string): void {
 }
 
 // 当前选中的分类列表（多选），默认为空表示显示全部
-const selectedCategories = ref<Array<'基础' | '设计' | '施工' | '经营'>>([])
+const selectedCategories = ref<Array<'通用' | '设计' | '施工' | '经营'>>([])
 
 // 切换分类选中状态
-function toggleCategory(key: '基础' | '设计' | '施工' | '经营'): void {
+function toggleCategory(key: '通用' | '设计' | '施工' | '经营'): void {
   const idx = selectedCategories.value.indexOf(key)
   if (idx === -1) {
     selectedCategories.value = [...selectedCategories.value, key]
@@ -258,11 +262,17 @@ function toggleCategory(key: '基础' | '设计' | '施工' | '经营'): void {
 
 const sidebarApps = computed(() => appStore.sidebarApps)
 
-// 过滤后的应用列表：选中分类取并集，未选则显示全部
+// 过滤后的应用列表：按可见顺序（visibleAppRoutes）排序，选中分类取并集，未选则显示全部
 const filteredApps = computed(() => {
-  const apps = appStore.authorizedApps.filter((a) => a.route)
-  if (selectedCategories.value.length === 0) return apps
-  return apps.filter((a) => selectedCategories.value.includes(a.category))
+  const ordered = appStore.authorizedApps
+    .filter((a) => a.route)
+    .sort((a, b) => {
+      const ai = appStore.visibleAppRoutes.indexOf(a.route!)
+      const bi = appStore.visibleAppRoutes.indexOf(b.route!)
+      return ai - bi
+    })
+  if (selectedCategories.value.length === 0) return ordered
+  return ordered.filter((a) => selectedCategories.value.includes(a.category))
 })
 
 // 拖拽状态
@@ -273,11 +283,15 @@ const appListRef = ref<HTMLElement>()
 
 function onDragStart(idx: number, e: DragEvent): void {
   dragIndex.value = idx
-  if (e.dataTransfer) e.dataTransfer.effectAllowed = 'move'
+  if (e.dataTransfer) {
+    e.dataTransfer.effectAllowed = 'move'
+    e.dataTransfer.setData('text/plain', String(idx))
+  }
 }
 
 function onDragOver(idx: number, e: DragEvent): void {
   e.preventDefault()
+  if (e.dataTransfer) e.dataTransfer.dropEffect = 'move'
   if (idx === dragIndex.value) return
   const el = appListRef.value?.children[idx] as HTMLElement | undefined
   if (!el) return
@@ -479,6 +493,23 @@ function onDrop(idx: number): void {
   font-size: @font-size-base;
   font-weight: @font-weight-semibold;
   color: @text-primary;
+}
+
+.sc-header-left {
+  display: flex;
+  align-items: center;
+  gap: @spacing-sm;
+}
+
+.sc-header .category-bar {
+  margin-bottom: 0;
+}
+
+.app-count {
+  font-size: @font-size-sm;
+  color: @text-tertiary;
+  font-weight: @font-weight-regular;
+  font-variant-numeric: tabular-nums;
 }
 
 .sc-body {
