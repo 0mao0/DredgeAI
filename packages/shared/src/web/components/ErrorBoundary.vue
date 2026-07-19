@@ -6,8 +6,8 @@
       :sub-title="errorMessage"
     >
       <template #extra>
-        <a-button type="primary" @click="handleReload">刷新页面</a-button>
-        <a-button @click="handleReset">重试</a-button>
+        <a-button type="primary" @click="handleReload">{{ reloadLabel }}</a-button>
+        <a-button @click="handleReset">{{ retryLabel }}</a-button>
       </template>
     </a-result>
   </template>
@@ -16,22 +16,24 @@
 
 <script setup lang="ts">
 import { ref, onErrorCaptured } from 'vue'
+import { t } from '@shared/core/i18n'
 
 interface Props {
   title?: string
 }
 
 withDefaults(defineProps<Props>(), {
-  title: '页面出现异常',
+  title: t('common.error'),
 })
 
 const error = ref<Error | null>(null)
 const errorMessage = ref('')
+const reloadLabel = t('common.reload')
+const retryLabel = t('common.retry')
 
 onErrorCaptured((err: Error) => {
   error.value = err
   errorMessage.value = err.message || String(err)
-  // 阻止异常继续向上传播
   return false
 })
 
