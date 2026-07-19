@@ -35,6 +35,27 @@
       </a-table>
     </SectionCard>
 
+    <a-row :gutter="16" class="mb-24">
+      <a-col :span="12">
+          <MetricCard
+            title="总调用次数"
+            :value="formatNumber(totalCalls)"
+            suffix="次"
+            icon="ThunderboltOutlined"
+            :color="brandColor"
+          />
+      </a-col>
+      <a-col :span="12">
+          <MetricCard
+            title="总 Token 消耗量"
+            :value="formatNumber(totalTokens)"
+            suffix="tokens"
+            icon="DatabaseOutlined"
+            :color="accentColor"
+          />
+      </a-col>
+    </a-row>
+
     <SectionCard title="调用趋势">
       <div class="chart-header">
         <a-radio-group v-model:value="chartMode" size="small">
@@ -104,7 +125,9 @@ import { PlusOutlined, CopyOutlined, FileTextOutlined } from '@ant-design/icons-
 import PageHeader from '@shared/components/PageHeader.vue'
 import SectionCard from '@shared/components/SectionCard.vue'
 import ChartContainer from '@shared/components/ChartContainer.vue'
+import MetricCard from '@shared/components/MetricCard.vue'
 import { useCssVar } from '@shared/composables/useCssVar'
+import { formatNumber } from '@shared/utils/format'
 
 const columns = [
   { title: '名称', dataIndex: 'name', key: 'name', align: 'center' },
@@ -224,6 +247,36 @@ function makeBarGradient(hex: string) {
     ],
   }
 }
+
+const totalCalls = computed(() => {
+  const data = mockChartData.value
+  if (chartMode.value === 'total') {
+    return data.total.reduce((s, v) => s + v, 0)
+  }
+  const series = chartMode.value === 'model' ? data.byModel : data.byKey
+  return series.reduce((sum, s) => sum + s.data.reduce((a, b) => a + b, 0), 0)
+})
+
+// 每调用 1 次的 Token 消耗（按模型/Key 估算），使 Token 随维度筛选联动
+const tokensPerCall = computed(() => {
+  const data = mockChartData.value
+  if (chartMode.value === 'total') return 850
+  const series = chartMode.value === 'model' ? data.byModel : data.byKey
+  const weights = series.map((s) =>
+    s.name.includes('mini') || s.name.includes('DeepSeek') || s.name.includes('测试')
+      ? 320
+      : s.name.includes('GPT-4o') || s.name.includes('生产')
+        ? 1100
+        : 760,
+  )
+  const totals = series.map((s) => s.data.reduce((a, b) => a + b, 0))
+  const sumCalls = totals.reduce((a, b) => a + b, 0)
+  if (sumCalls === 0) return 850
+  const sumTokens = totals.reduce((a, b, i) => a + b * weights[i], 0)
+  return sumTokens / sumCalls
+})
+
+const totalTokens = computed(() => Math.round(totalCalls.value * tokensPerCall.value))
 
 const chartOption = computed(() => {
   const data = mockChartData.value

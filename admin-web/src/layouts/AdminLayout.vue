@@ -355,12 +355,12 @@ function handleUserMenu({ key }: { key: string }): void {
 .main-layout { height: 100%; overflow: hidden; }
 
 .header {
-  background: var(--antd-header-bg);
+  background: @sidebar-bg;
   padding: 0 @spacing-xl;
   display: flex;
   align-items: center;
   height: @header-height;
-  box-shadow: @shadow-sm;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
   z-index: 10;
   transition: background @transition-base;
 }
@@ -372,13 +372,13 @@ function handleUserMenu({ key }: { key: string }): void {
 }
 .trigger {
   font-size: 18px;
-  color: @text-secondary;
+  color: rgba(255, 255, 255, 0.65);
   cursor: pointer;
-  &:hover { color: @brand-primary; }
+  &:hover { color: #fff; }
 }
 .breadcrumb {
-  :deep(.ant-breadcrumb-separator) { color: @text-tertiary; }
-  :deep(.ant-breadcrumb-link) { color: @text-secondary; font-size: @font-size-sm; }
+  :deep(.ant-breadcrumb-separator) { color: rgba(255, 255, 255, 0.35); }
+  :deep(.ant-breadcrumb-link) { color: rgba(255, 255, 255, 0.65); font-size: @font-size-sm; }
 }
 .header-right {
   display: flex;
@@ -387,9 +387,9 @@ function handleUserMenu({ key }: { key: string }): void {
 }
 .header-icon {
   font-size: 18px;
-  color: @text-secondary;
+  color: rgba(255, 255, 255, 0.65);
   cursor: pointer;
-  &:hover { color: @brand-primary; }
+  &:hover { color: #fff; }
 }
 .user-info {
   display: flex;
@@ -399,7 +399,7 @@ function handleUserMenu({ key }: { key: string }): void {
 }
 .user-name {
   font-size: @font-size-sm;
-  color: @text-primary;
+  color: rgba(255, 255, 255, 0.85);
 }
 
 .content {

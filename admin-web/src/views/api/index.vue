@@ -43,6 +43,27 @@
       </a-tab-pane>
 
       <a-tab-pane key="stats" tab="统计总览">
+        <a-row :gutter="16" class="mb-24">
+          <a-col :span="12">
+            <MetricCard
+              title="总调用次数"
+              :value="formatNumber(overviewTotalCalls)"
+              suffix="次"
+              icon="ThunderboltOutlined"
+              :color="brandColor"
+            />
+          </a-col>
+          <a-col :span="12">
+            <MetricCard
+              title="总 Token 消耗量"
+              :value="formatNumber(overviewTotalTokens)"
+              suffix="tokens"
+              icon="DatabaseOutlined"
+              :color="accentColor"
+            />
+          </a-col>
+        </a-row>
+
         <SectionCard title="全平台调用趋势">
           <div class="chart-header">
             <a-radio-group v-model:value="overviewChartMode" size="small">
@@ -97,10 +118,10 @@
                 <span :class="['rank-badge', { gold: index < 3 }]">{{ index + 1 }}</span>
               </template>
               <template v-else-if="column.key === 'calls'">
-                {{ formatNum(record.calls) }}
+                 {{ formatNumber(record.calls) }}
               </template>
               <template v-else-if="column.key === 'tokens'">
-                {{ formatNum(record.tokens) }}
+                 {{ formatNumber(record.tokens) }}
               </template>
               <template v-else-if="column.key === 'models'">
                 <a-tag :color="record.models.length === 4 ? 'green' : 'orange'">{{ record.models.length === 4 ? '全部' : '部分' }}</a-tag>
@@ -195,6 +216,8 @@ import { PlusOutlined, FileTextOutlined } from '@ant-design/icons-vue'
 import PageHeader from '@shared/components/PageHeader.vue'
 import SectionCard from '@shared/components/SectionCard.vue'
 import ChartContainer from '@shared/components/ChartContainer.vue'
+import MetricCard from '@shared/components/MetricCard.vue'
+import { formatNumber } from '@shared/utils/format'
 import { useCssVar } from '@shared/composables/useCssVar'
 
 const activeTab = ref('keys')
@@ -318,12 +341,6 @@ function makeBarGradient(hex: string) {
   }
 }
 
-function formatNum(n: number): string {
-  if (n >= 10000) return (n / 10000).toFixed(1) + '万'
-  if (n >= 1000) return (n / 1000).toFixed(1) + 'k'
-  return n.toLocaleString()
-}
-
 // ─── Tab 2: Charts ────────────────────────────────────
 
 function chartTheme() {
@@ -379,6 +396,35 @@ const overviewChartData = computed(() => {
     total: makeMockSeries(4500, 1200, len),
   }
 })
+
+const overviewTotalCalls = computed(() => {
+  const data = overviewChartData.value
+  if (overviewChartMode.value === 'total') {
+    return data.total.reduce((s, v) => s + v, 0)
+  }
+  const series = overviewChartMode.value === 'model' ? data.byModel : data.byKey
+  return series.reduce((sum, s) => sum + s.data.reduce((a, b) => a + b, 0), 0)
+})
+
+const overviewTokensPerCall = computed(() => {
+  const data = overviewChartData.value
+  if (overviewChartMode.value === 'total') return 760
+  const series = overviewChartMode.value === 'model' ? data.byModel : data.byKey
+  const weights = series.map((s) =>
+    s.name.includes('mini') || s.name.includes('DeepSeek') || s.name.includes('测试')
+      ? 300
+      : s.name.includes('GPT-4o') || s.name.includes('生产')
+        ? 980
+        : 680,
+  )
+  const totals = series.map((s) => s.data.reduce((a, b) => a + b, 0))
+  const sumCalls = totals.reduce((a, b) => a + b, 0)
+  if (sumCalls === 0) return 760
+  const sumTokens = totals.reduce((a, b, i) => a + b * weights[i], 0)
+  return sumTokens / sumCalls
+})
+
+const overviewTotalTokens = computed(() => Math.round(overviewTotalCalls.value * overviewTokensPerCall.value))
 
 const overviewChartOption = computed(() => {
   const data = overviewChartData.value

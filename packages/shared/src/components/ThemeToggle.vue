@@ -7,6 +7,7 @@
       class="theme-toggle"
       shape="circle"
       size="small"
+      type="text"
       @click="toggleTheme"
     >
       <template #icon>
@@ -29,5 +30,10 @@ const isDark = computed(() => currentTheme.value === 'dark')
 <style scoped lang="less">
 .theme-toggle {
   font-size: 16px;
+  color: rgba(255, 255, 255, 0.65);
+  &:hover {
+    color: #fff !important;
+    background: rgba(255, 255, 255, 0.08) !important;
+  }
 }
 </style>
