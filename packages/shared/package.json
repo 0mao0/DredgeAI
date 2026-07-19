@@ -12,7 +12,8 @@
     "vue": "^3.4.0",
     "ant-design-vue": "^4.0.0",
     "axios": "^1.6.0",
-    "pinia": "^2.1.0"
+    "pinia": "^2.1.0",
+    "pinia-plugin-persistedstate": "^4.0.0"
   },
   "devDependencies": {
     "vue": "^3.4.0",
@@ -21,6 +22,7 @@
     "vue-echarts": "^7.0.0",
     "echarts": "^5.5.0",
     "axios": "^1.6.0",
-    "pinia": "^2.1.0"
+    "pinia": "^2.1.0",
+    "pinia-plugin-persistedstate": "^4.0.0"
   }
 }

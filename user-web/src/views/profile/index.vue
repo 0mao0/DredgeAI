@@ -169,7 +169,7 @@ import {
 import * as Icons from '@ant-design/icons-vue'
 import { useUserStore } from '@/stores/user'
 import { useAppStore } from '@/stores/app'
-import { useThemeStore } from '@/stores/theme'
+import { useThemeStore } from '@shared/web/stores'
 import type { Component } from 'vue'
 
 const userStore = useUserStore()

@@ -105,7 +105,7 @@ import * as Icons from '@ant-design/icons-vue'
 import Logo from '@shared/web/components/Logo.vue'
 import { useAppStore } from '@/stores/app'
 import { useUserStore } from '@/stores/user'
-import { useThemeStore } from '@/stores/theme'
+import { useThemeStore } from '@shared/web/stores'
 import type { Component } from 'vue'
 
 const appStore = useAppStore()

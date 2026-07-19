@@ -14,8 +14,8 @@ export { default as ThemeToggle } from './components/ThemeToggle.vue'
 export { useCssVar } from './composables/useCssVar'
 export { useTheme } from './composables/useTheme'
 
-// 共享 stores（Phase 3 创建后启用）
-// export * from './stores'
+// 共享 stores
+export * from './stores'
 
 // 共享指令（Phase 4 创建后启用）
 // export * from './directives'
