@@ -1,8 +1,9 @@
 import request from '@/api/request'
+import { urls } from '@shared/core/api'
 import type { ApplicationItem, SubApp } from '@/types'
 
 export function getApplications(): Promise<ApplicationItem[]> {
-  return request.get<ApplicationItem[]>('/applications')
+  return request.get<ApplicationItem[]>(urls.applications)
 }
 
 /** 获取某模块已发布的子应用列表 */

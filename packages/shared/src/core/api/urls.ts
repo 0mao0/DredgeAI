@@ -1,0 +1,48 @@
+/**
+ * URL 契约：所有 API 资源路径在此声明，双端共用同一 key。
+ * 路径不含 baseURL 前缀（前缀由各端的 createRequest 注入）。
+ * 修复历史问题：原 user-web 用 /key、admin-web 用 /apikey，命名不统一。
+ */
+export const urls = {
+  // user-web
+  userCurrent: '/user/current',
+  appList: '/app/list',
+  taskRecent: '/task/recent',
+  taskQuick: '/task/quick',
+  fileRecent: '/file/recent',
+  bidSteps: '/bid/steps',
+  bidRisks: '/bid/risks',
+  bidSessions: '/bid/sessions',
+  bidDocument: '/bid/document',
+  standardResult: '/standard/result',
+  standardHistory: '/standard/history',
+  standardCategories: '/standard/categories',
+  standardRecommended: '/standard/recommended',
+  chartEfficiencyTrend: '/chart/efficiency-trend',
+
+  // 共享（双端均使用 /apikey 命名，统一规范）
+  apiKeyList: '/apikey/list',
+  apiKeyModels: '/apikey/models',
+  apiKeyUsageByModel: '/apikey/usage-by-model',
+  apiKeyUsageByKey: '/apikey/usage-by-key',
+  apiKeyUsageStats: '/apikey/usage-stats',
+  apiKeyUsageTimeSeries: '/apikey/usage-timeseries',
+
+  // admin-web
+  adminStats: '/dashboard/stats',
+  dashboardMetrics: '/dashboard/metrics',
+  dashboardApiCallsTrend: '/dashboard/api-calls-trend',
+  dashboardAppDistribution: '/dashboard/app-distribution',
+  dashboardActiveUsersTrend: '/dashboard/active-users-trend',
+  dashboardRecentLogs: '/dashboard/recent-logs',
+  analyticsDailyApiCalls: '/analytics/daily-api-calls',
+  analyticsModelUsage: '/analytics/model-usage',
+  analyticsUserGrowth: '/analytics/user-growth',
+  analyticsErrorRate: '/analytics/error-rate',
+  applications: '/applications',
+  permissions: '/permissions',
+  datasources: '/datasources',
+  adminProfile: '/profile',
+} as const
+
+export type UrlKey = keyof typeof urls

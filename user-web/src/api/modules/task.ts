@@ -1,18 +1,13 @@
 import request from '@/api/request'
-import type { TaskItem } from '@/types'
+import { urls } from '@shared/core/api'
+import type { TaskItem, QuickTask } from '@/types'
 
-export interface QuickTask {
-  id: string
-  title: string
-  tag: string
-  route: string
-  icon: string
-}
+export type { QuickTask }
 
 export function getRecentTasks(): Promise<TaskItem[]> {
-  return request.get<TaskItem[]>('/task/recent')
+  return request.get<TaskItem[]>(urls.taskRecent)
 }
 
 export function getQuickTasks(): Promise<QuickTask[]> {
-  return request.get<QuickTask[]>('/task/quick')
+  return request.get<QuickTask[]>(urls.taskQuick)
 }
