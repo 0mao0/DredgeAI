@@ -16,7 +16,6 @@ export const useAppStore = defineStore('app', () => {
   const tasks = ref<TaskItem[]>([])
   const quickTasks = ref<{ id: string; title: string; tag: string; route: string; icon: string }[]>([])
   const files = ref<FileItem[]>([])
-  const sidebarCollapsed = ref(false)
   const visibleAppRoutes = ref<string[]>([])
 
   const authorizedApps = computed(() =>
@@ -71,14 +70,13 @@ export const useAppStore = defineStore('app', () => {
   async function fetchTasks(): Promise<void> { tasks.value = await getRecentTasks() }
   async function fetchQuickTasks(): Promise<void> { quickTasks.value = await getQuickTasks() }
   async function fetchFiles(): Promise<void> { files.value = await getRecentFiles() }
-  function toggleSidebar(): void { sidebarCollapsed.value = !sidebarCollapsed.value }
 
   return {
-    apps, tasks, quickTasks, files, sidebarCollapsed,
+    apps, tasks, quickTasks, files,
     visibleAppRoutes, authorizedApps, sidebarApps,
     setVisibleRoutes, toggleAppRoute, isRouteVisible,
-    fetchApps, fetchTasks, fetchQuickTasks, fetchFiles, toggleSidebar,
+    fetchApps, fetchTasks, fetchQuickTasks, fetchFiles,
   }
 }, {
-  persist: { pick: ['sidebarCollapsed', 'visibleAppRoutes'] },
+  persist: { pick: ['visibleAppRoutes'] },
 })

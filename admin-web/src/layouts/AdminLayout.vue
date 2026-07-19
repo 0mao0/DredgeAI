@@ -202,6 +202,7 @@ import {
 } from '@ant-design/icons-vue'
 import Logo from '@shared/web/components/Logo.vue'
 import { useAppStore } from '@/stores/app'
+import { useSidebarStore } from '@shared/web/stores'
 import { getProfile } from '@/api/modules/profile'
 import { getApplications } from '@/api/modules/applications'
 import ThemeToggle from '@shared/web/components/ThemeToggle.vue'
@@ -209,10 +210,11 @@ import ThemeToggle from '@shared/web/components/ThemeToggle.vue'
 const router = useRouter()
 const route = useRoute()
 const appStore = useAppStore()
+const sidebarStore = useSidebarStore()
 
 const collapsed = computed({
-  get: () => appStore.sidebarCollapsed,
-  set: (v) => { appStore.sidebarCollapsed = v },
+  get: () => sidebarStore.collapsed,
+  set: (v) => { sidebarStore.setCollapsed(v) },
 })
 const selectedKeys = ref<string[]>([route.path])
 
