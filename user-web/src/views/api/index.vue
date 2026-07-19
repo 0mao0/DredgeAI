@@ -127,7 +127,7 @@ import SectionCard from '@shared/components/SectionCard.vue'
 import ChartContainer from '@shared/components/ChartContainer.vue'
 import MetricCard from '@shared/components/MetricCard.vue'
 import { useCssVar } from '@shared/composables/useCssVar'
-import { formatNumber } from '@shared/utils/format'
+import { formatNumber } from '@shared/core/utils/format'
 
 const columns = [
   { title: '名称', dataIndex: 'name', key: 'name', align: 'center' },

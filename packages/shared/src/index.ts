@@ -10,8 +10,8 @@ export { default as ThemeToggle } from './components/ThemeToggle.vue'
 export { useCssVar } from './composables/useCssVar'
 export { useTheme } from './composables/useTheme'
 
-// 共享工具函数
-export * from './utils/format'
+// 共享工具函数（已迁移至 core/utils）
+export * from './core/utils'
 
 // 共享类型
 export * from './types'
