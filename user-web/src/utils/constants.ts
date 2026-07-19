@@ -4,4 +4,5 @@ export const ADMIN_WEB_URL = 'http://localhost:5374'
 
 export const API_BASE_URL = '/api'
 
-export const USE_MOCK = true
+// 仅在开发模式启用 mock，生产构建自动关闭，确保真实 API 被调用
+export const USE_MOCK = import.meta.env.DEV

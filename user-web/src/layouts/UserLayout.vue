@@ -4,7 +4,7 @@
       v-model:collapsed="collapsed"
       :trigger="null"
       collapsible
-      theme="dark"
+      :theme="isDark ? 'dark' : 'light'"
       :width="170"
       :collapsed-width="48"
       class="sider"
@@ -18,7 +18,7 @@
       </div>
       <a-menu
         v-model:selectedKeys="selectedKeys"
-        theme="dark"
+        :theme="isDark ? 'dark' : 'light'"
         mode="inline"
         class="sider-menu sider-menu--main"
         @click="handleMenuClick"
@@ -37,7 +37,7 @@
 
       <a-menu
         v-model:selectedKeys="selectedKeys"
-        theme="dark"
+        :theme="isDark ? 'dark' : 'light'"
         mode="inline"
         class="sider-menu sider-menu--bottom"
         @click="handleMenuClick"
@@ -68,14 +68,29 @@
           />
         </div>
         <div class="header-right">
-          <ThemeToggle />
+          <a-tooltip
+            :title="isDark ? '切换亮色模式' : '切换暗色模式'"
+            placement="bottomRight"
+          >
+            <a-button
+              class="theme-btn"
+              shape="circle"
+              size="small"
+              @click="toggleTheme"
+            >
+              <template #icon>
+                <BulbFilled v-if="isDark" />
+                <BulbOutlined v-else />
+              </template>
+            </a-button>
+          </a-tooltip>
         </div>
       </a-layout-header>
 
       <a-layout-content class="content">
-        <router-view v-slot="{ Component }">
+        <router-view v-slot="{ Component, route }">
           <transition name="fade" mode="out-in">
-            <component :is="Component" />
+            <component :is="Component" :key="route.path" />
           </transition>
         </router-view>
       </a-layout-content>
@@ -86,19 +101,34 @@
 </template>
 
 <script setup lang="ts">
-import { ref, watch, onMounted } from 'vue'
+import { ref, computed, watch, onMounted } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import {
   DashboardOutlined, UserOutlined, ApiOutlined, MenuFoldOutlined, MenuUnfoldOutlined,
+  BulbFilled, BulbOutlined,
 } from '@ant-design/icons-vue'
 import * as Icons from '@ant-design/icons-vue'
-import ThemeToggle from '@shared/components/ThemeToggle.vue'
 import { useAppStore } from '@/stores/app'
 import { useUserStore } from '@/stores/user'
+import { useThemeStore } from '@/stores/theme'
 import type { Component } from 'vue'
 
 const appStore = useAppStore()
 const userStore = useUserStore()
+const themeStore = useThemeStore()
+
+// 判断当前是否为暗色主题
+const isDark = computed(() => {
+  if (themeStore.theme === 'auto') {
+    return window.matchMedia('(prefers-color-scheme: dark)').matches
+  }
+  return themeStore.theme === 'dark'
+})
+
+// 切换主题（浅色/深色）
+function toggleTheme(): void {
+  themeStore.theme = isDark.value ? 'light' : 'dark'
+}
 
 const iconMap: Record<string, Component> = {
   FileSearchOutlined: Icons.FileSearchOutlined,
@@ -136,7 +166,6 @@ function handleGlobalSearch(value: string): void {
 
 onMounted(() => {
   userStore.fetchUser()
-  userStore.fetchNotifications()
   appStore.fetchApps()
 })
 
@@ -148,7 +177,7 @@ onMounted(() => {
 .user-layout { height: 100vh; }
 
 .sider {
-  background: @sidebar-bg !important;
+  background: @header-bg !important;
   :deep(.ant-layout-sider-children) { display: flex; flex-direction: column; }
 }
 
@@ -158,7 +187,7 @@ onMounted(() => {
   align-items: center;
   gap: @spacing-md;
   padding: 0 @spacing-xl;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+  border-bottom: 1px solid @border-color;
 }
 .logo-mark {
   width: 32px;
@@ -176,12 +205,12 @@ onMounted(() => {
 .logo-name {
   font-size: @font-size-lg;
   font-weight: @font-weight-semibold;
-  color: white;
+  color: @header-text;
   line-height: 1.2;
 }
 .logo-sub {
   font-size: 10px;
-  color: rgba(255, 255, 255, 0.4);
+  color: @header-text-secondary;
   letter-spacing: 1px;
 }
 
@@ -192,7 +221,7 @@ onMounted(() => {
 }
 .sider-divider {
   height: 1px;
-  background: rgba(255, 255, 255, 0.06);
+  background: @border-color;
   margin: 0 16px;
   flex-shrink: 0;
 }
@@ -216,7 +245,7 @@ onMounted(() => {
 }
 .trigger {
   font-size: 18px;
-  color: @text-secondary;
+  color: @header-text-secondary;
   cursor: pointer;
   &:hover { color: @brand-primary; }
 }
@@ -228,10 +257,9 @@ onMounted(() => {
   align-items: center;
   gap: @spacing-xl;
 }
-.header-icon {
-  font-size: 18px;
-  color: @text-secondary;
-  cursor: pointer;
+.theme-btn {
+  font-size: 16px;
+  color: @header-text-secondary;
   &:hover { color: @brand-primary; }
 }
 

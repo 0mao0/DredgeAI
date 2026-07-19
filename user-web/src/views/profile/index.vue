@@ -1,118 +1,170 @@
 <template>
-  <div class="page-container">
-    <PageHeader title="个人中心" description="账号信息与个性化设置" />
-
-    <SectionCard class="profile-card">
-      <div class="profile-top-row">
-        <a-avatar :size="64" :style="{ background: 'var(--color-brand-gradient)' }">
-          {{ userStore.userInfo?.name?.[0] || 'U' }}
-        </a-avatar>
-        <div class="profile-info">
-          <div class="profile-name">{{ userStore.userInfo?.name || '用户' }}</div>
-          <div class="profile-meta">
-            <span>{{ userStore.userInfo?.position }}</span>
-            <em>·</em>
-            <span>{{ userStore.userInfo?.department }}</span>
+  <div class="profile-page">
+    <!-- 个人信息横幅（紧凑） -->
+    <div class="profile-banner">
+      <div class="banner-bg" />
+      <div class="banner-main">
+        <div class="banner-avatar-wrap">
+          <a-avatar :size="64" class="banner-avatar">
+            <template #icon><UserOutlined /></template>
+          </a-avatar>
+          <div class="banner-status-dot" />
+        </div>
+        <div class="banner-info">
+          <div class="banner-name">
+            {{ userStore.userInfo?.name || '用户' }}
+            <a-tag color="blue" class="banner-role-tag">{{ userStore.userInfo?.position }}</a-tag>
+          </div>
+          <div class="banner-meta">
+            <span class="banner-meta-item"><TeamOutlined />{{ userStore.userInfo?.department }}</span>
+            <span class="banner-meta-item"><MailOutlined />{{ userStore.userInfo?.email }}</span>
+            <span class="banner-meta-item"><PhoneOutlined />{{ userStore.userInfo?.phone }}</span>
           </div>
         </div>
       </div>
-      <a-descriptions :column="2" size="small" class="profile-desc">
-        <a-descriptions-item label="邮箱">{{ userStore.userInfo?.email }}</a-descriptions-item>
-        <a-descriptions-item label="电话">{{ userStore.userInfo?.phone }}</a-descriptions-item>
-      </a-descriptions>
-    </SectionCard>
-
-    <a-row :gutter="24" class="profile-bottom">
-      <a-col :xs="24" :lg="7">
-        <SectionCard title="偏好设置">
-          <a-form layout="vertical">
-            <a-form-item label="界面主题">
-              <a-radio-group v-model:value="themeStore.theme">
-                <a-radio-button value="light">浅色</a-radio-button>
-                <a-radio-button value="dark">深色</a-radio-button>
-                <a-radio-button value="auto">跟随系统</a-radio-button>
-              </a-radio-group>
-            </a-form-item>
-            <a-form-item label="语言">
-              <a-radio-group v-model:value="preferences.language">
-                <a-radio-button value="zh-CN">简体中文</a-radio-button>
-                <a-radio-button value="en-US">English</a-radio-button>
-              </a-radio-group>
-            </a-form-item>
-            <a-form-item label="通知偏好">
-              <a-checkbox-group v-model:value="preferences.notifications" :options="notifOptions" />
-            </a-form-item>
-          </a-form>
-        </SectionCard>
-      </a-col>
-
-      <a-col :xs="24" :lg="17">
-        <SectionCard title="应用设置">
-          <template #extra>
-            <a-tag>{{ sidebarApps.length }} / {{ filteredApps.length }} 已启用</a-tag>
-          </template>
-          <a-typography-text type="secondary" class="app-desc">
-            开启需要在左侧菜单常驻的应用，拖动可调整顺序
-          </a-typography-text>
-          <div class="category-tabs">
-            <a-button
-              v-for="cat in categoryOptions"
-              :key="cat.key"
-              :type="activeCategory === cat.key ? 'primary' : 'default'"
-              size="small"
-              class="category-btn"
-              @click="activeCategory = cat.key"
-            >
-              {{ cat.label }}
-            </a-button>
+      <div class="banner-stats">
+        <div class="stat-item">
+          <div class="stat-icon" style="--stat-color: #0EA5E9"><AppstoreOutlined /></div>
+          <div class="stat-body">
+            <div class="stat-value">{{ appStore.authorizedApps.length }}</div>
+            <div class="stat-label">已授权应用</div>
           </div>
-          <div class="app-list" ref="appListRef">
-            <div
-              v-for="(app, idx) in filteredApps"
-              :key="app.route || app.id"
-              class="app-row"
-              :class="{
-                dragging: dragIndex === idx,
-                'over-top': dragOverIndex === idx && dragOverDir === 'top',
-                'over-bottom': dragOverIndex === idx && dragOverDir === 'bottom',
-                disabled: !app.route,
-              }"
-              :draggable="!!app.route"
-              @dragstart="onDragStart(idx, $event)"
-              @dragover="onDragOver(idx, $event)"
-              @dragend="onDragEnd"
-              @drop="onDrop(idx)"
-            >
-              <div class="app-drag-handle">
-                <HolderOutlined />
+        </div>
+        <div class="stat-item">
+          <div class="stat-icon" style="--stat-color: #10B981"><CheckCircleOutlined /></div>
+          <div class="stat-body">
+            <div class="stat-value">{{ appStore.visibleAppRoutes.length }}</div>
+            <div class="stat-label">已启用应用</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- 下方内容：左窄（偏好设置） + 右宽（应用设置） -->
+    <div class="profile-content">
+      <!-- 左侧：偏好设置（紧凑） -->
+      <div class="profile-left">
+        <div class="section-card">
+          <div class="sc-header">偏好设置</div>
+          <div class="sc-body">
+            <div class="pref-group">
+              <div class="pref-label">界面主题</div>
+              <div class="theme-row">
+                <div
+                  v-for="opt in themeOptions"
+                  :key="opt.value"
+                  class="theme-chip"
+                  :class="{ active: themeStore.theme === opt.value }"
+                  @click="themeStore.theme = opt.value"
+                >
+                  <div class="theme-dot" :class="opt.value" />
+                  <span>{{ opt.label }}</span>
+                </div>
               </div>
-              <div class="app-icon-wrap">
-                <component :is="iconMap[app.icon]" />
+            </div>
+            <a-divider class="pref-divider" />
+            <div class="pref-group">
+              <div class="pref-label">语言</div>
+              <div class="theme-row">
+                <div
+                  v-for="opt in langOptions"
+                  :key="opt.value"
+                  class="theme-chip"
+                  :class="{ active: preferences.language === opt.value }"
+                  @click="preferences.language = opt.value"
+                >
+                  <span>{{ opt.label }}</span>
+                </div>
               </div>
-              <div class="app-info">
-                <div class="app-name">{{ app.title }}</div>
-                <div class="app-desc">{{ app.description }}</div>
+            </div>
+            <a-divider class="pref-divider" />
+            <div class="pref-group">
+              <div class="pref-label">通知偏好</div>
+              <div class="notif-checks">
+                <label
+                  v-for="opt in notifOptions"
+                  :key="opt.value"
+                  class="notif-check"
+                >
+                  <a-checkbox
+                    :checked="preferences.notifications.includes(opt.value)"
+                    @change="toggleNotif(opt.value)"
+                  />
+                  <span>{{ opt.label }}</span>
+                </label>
               </div>
-              <a-switch
-                v-if="app.route"
-                :checked="appStore.visibleAppRoutes.includes(app.route)"
-                size="small"
-                @change="appStore.toggleAppRoute(app.route)"
-              />
             </div>
           </div>
-        </SectionCard>
-      </a-col>
-    </a-row>
+        </div>
+      </div>
+
+      <!-- 右侧：应用设置（主体） -->
+      <div class="profile-right">
+        <div class="section-card">
+          <div class="sc-header">
+            <span>应用设置</span>
+            <a-tag color="blue">{{ sidebarApps.length }} / {{ filteredApps.length }} 已启用</a-tag>
+          </div>
+          <div class="sc-body">
+            <div class="category-bar">
+              <div
+                v-for="cat in categoryOptions"
+                :key="cat.key"
+                class="category-tab"
+                :class="{ active: selectedCategories.includes(cat.key) }"
+                @click="toggleCategory(cat.key)"
+              >{{ cat.label }}<span class="cat-count">({{ cat.count }})</span></div>
+            </div>
+            <div class="app-grid" ref="appListRef">
+              <div
+                v-for="(app, idx) in filteredApps"
+                :key="app.route || app.id"
+                class="app-card"
+                :class="{
+                  dragging: dragIndex === idx,
+                  'over-top': dragOverIndex === idx && dragOverDir === 'top',
+                  'over-bottom': dragOverIndex === idx && dragOverDir === 'bottom',
+                  disabled: !app.route,
+                }"
+                :draggable="!!app.route && appStore.visibleAppRoutes.includes(app.route)"
+                @dragstart="onDragStart(idx, $event)"
+                @dragover="onDragOver(idx, $event)"
+                @dragend="onDragEnd"
+                @drop="onDrop(idx)"
+              >
+                <div class="app-card-drag"><HolderOutlined /></div>
+                <div
+                  class="app-card-icon"
+                  :style="{ '--app-icon-color': appIconColors[idx % appIconColors.length] }"
+                >
+                  <component :is="iconMap[app.icon]" />
+                </div>
+                <div class="app-card-body">
+                  <span class="app-card-name">{{ app.title }}</span>
+                  <span class="app-card-desc">{{ app.description }}</span>
+                </div>
+                <a-switch
+                  v-if="app.route"
+                  :checked="appStore.visibleAppRoutes.includes(app.route)"
+                  size="small"
+                  @change="appStore.toggleAppRoute(app.route)"
+                />
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
   </div>
 </template>
 
 <script setup lang="ts">
 import { ref, computed } from 'vue'
-import { HolderOutlined, AuditOutlined, SearchOutlined } from '@ant-design/icons-vue'
+import {
+  HolderOutlined, UserOutlined, TeamOutlined, MailOutlined, PhoneOutlined,
+  AppstoreOutlined, CheckCircleOutlined,
+} from '@ant-design/icons-vue'
 import * as Icons from '@ant-design/icons-vue'
-import PageHeader from '@shared/components/PageHeader.vue'
-import SectionCard from '@shared/components/SectionCard.vue'
 import { useUserStore } from '@/stores/user'
 import { useAppStore } from '@/stores/app'
 import { useThemeStore } from '@/stores/theme'
@@ -122,9 +174,8 @@ const userStore = useUserStore()
 const appStore = useAppStore()
 const themeStore = useThemeStore()
 
+// 应用图标映射
 const iconMap: Record<string, Component> = {
-  AuditOutlined,
-  SearchOutlined,
   FileSearchOutlined: Icons.FileSearchOutlined,
   DashboardOutlined: Icons.DashboardOutlined,
   SafetyOutlined: Icons.SafetyOutlined,
@@ -133,25 +184,88 @@ const iconMap: Record<string, Component> = {
   WarningOutlined: Icons.WarningOutlined,
   FundOutlined: Icons.FundOutlined,
   QuestionCircleOutlined: Icons.QuestionCircleOutlined,
+  AuditOutlined: Icons.AuditOutlined,
+  SearchOutlined: Icons.SearchOutlined,
+}
+
+// 应用图标颜色
+const appIconColors = [
+  '#0EA5E9', '#06B6D4', '#10B981', '#F59E0B',
+  '#EF4444', '#8B5CF6', '#EC4899', '#F97316',
+]
+
+// 主题选项
+const themeOptions = [
+  { value: 'light' as const, label: '浅色' },
+  { value: 'dark' as const, label: '深色' },
+  { value: 'auto' as const, label: '自动' },
+]
+
+// 语言选项
+const langOptions = [
+  { value: 'zh-CN', label: '简体中文' },
+  { value: 'en-US', label: 'English' },
+]
+
+// 偏好设置
+const preferences = ref({
+  language: 'zh-CN',
+  notifications: ['business', 'system'],
+})
+
+// 通知选项
+const notifOptions = [
+  { label: '业务通知', value: 'business' },
+  { label: '系统通知', value: 'system' },
+  { label: '审计日志', value: 'audit' },
+]
+
+// 分类定义（顺序固定：基础 | 设计 | 施工 | 经营），计数动态计算
+const CATEGORY_DEFS: Array<'基础' | '设计' | '施工' | '经营'> = ['基础', '设计', '施工', '经营']
+
+// 分类选项（含各分类下的应用数量）
+const categoryOptions = computed(() => {
+  const apps = appStore.authorizedApps.filter((a) => a.route)
+  return CATEGORY_DEFS.map((key) => ({
+    key,
+    label: key,
+    count: apps.filter((a) => a.category === key).length,
+  }))
+})
+
+// 切换通知偏好
+function toggleNotif(value: string): void {
+  const idx = preferences.value.notifications.indexOf(value)
+  if (idx === -1) {
+    preferences.value.notifications.push(value)
+  } else {
+    preferences.value.notifications.splice(idx, 1)
+  }
+}
+
+// 当前选中的分类列表（多选），默认为空表示显示全部
+const selectedCategories = ref<Array<'基础' | '设计' | '施工' | '经营'>>([])
+
+// 切换分类选中状态
+function toggleCategory(key: '基础' | '设计' | '施工' | '经营'): void {
+  const idx = selectedCategories.value.indexOf(key)
+  if (idx === -1) {
+    selectedCategories.value = [...selectedCategories.value, key]
+  } else {
+    selectedCategories.value = selectedCategories.value.filter((k) => k !== key)
+  }
 }
 
 const sidebarApps = computed(() => appStore.sidebarApps)
 
-const categoryOptions = [
-  { key: 'all', label: '全部' },
-  { key: '设计', label: '设计' },
-  { key: '施工', label: '施工' },
-  { key: '经营', label: '经营' },
-]
-
-const activeCategory = ref('all')
-
+// 过滤后的应用列表：选中分类取并集，未选则显示全部
 const filteredApps = computed(() => {
   const apps = appStore.authorizedApps.filter((a) => a.route)
-  if (activeCategory.value === 'all') return apps
-  return apps.filter((a) => a.category === activeCategory.value)
+  if (selectedCategories.value.length === 0) return apps
+  return apps.filter((a) => selectedCategories.value.includes(a.category))
 })
 
+// 拖拽状态
 const dragIndex = ref(-1)
 const dragOverIndex = ref(-1)
 const dragOverDir = ref<'top' | 'bottom'>('bottom')
@@ -179,166 +293,133 @@ function onDragEnd(): void {
 }
 
 function onDrop(idx: number): void {
-  if (dragIndex.value === -1 || dragIndex.value === idx) {
-    onDragEnd()
-    return
-  }
+  if (dragIndex.value === -1 || dragIndex.value === idx) { onDragEnd(); return }
   const routes = [...appStore.visibleAppRoutes]
   const fromIdx = routes.indexOf(filteredApps.value[dragIndex.value].route!)
   const toIdx = routes.indexOf(filteredApps.value[idx].route!)
-  if (fromIdx === -1 || toIdx === -1) {
-    onDragEnd()
-    return
-  }
+  if (fromIdx === -1 || toIdx === -1) { onDragEnd(); return }
   const [moved] = routes.splice(fromIdx, 1)
   routes.splice(toIdx, 0, moved)
   appStore.setVisibleRoutes(routes)
   onDragEnd()
 }
-
-const preferences = ref({
-  language: 'zh-CN',
-  notifications: ['business', 'system'],
-})
-
-const notifOptions = [
-  { label: '业务通知', value: 'business' },
-  { label: '系统通知', value: 'system' },
-  { label: '审计日志', value: 'audit' },
-]
 </script>
 
 <style scoped lang="less">
 @import '@shared/styles/variables.less';
 
-.profile-card {
-  margin-bottom: @spacing-md;
-
-  :deep(.section-card-body) {
-    padding: @spacing-base;
-  }
+// 页面容器 - 全宽，无最大宽度限制
+.profile-page {
+  padding: @spacing-xl;
+  padding-bottom: @spacing-3xl;
 }
 
-.profile-top-row {
+// ========== 个人信息横幅 ==========
+.profile-banner {
+  position: relative;
+  background: @card-bg;
+  border-radius: @radius-lg;
+  border: 1px solid @border-color;
+  overflow: hidden;
+  margin-bottom: @spacing-xl;
+}
+
+.banner-bg {
+  position: absolute;
+  inset: 0;
+  height: 100px;
+  background: var(--color-brand-gradient);
+  opacity: 0.06;
+  mask-image: linear-gradient(to bottom, rgba(0,0,0,1) 0%, rgba(0,0,0,0) 100%);
+  -webkit-mask-image: linear-gradient(to bottom, rgba(0,0,0,1) 0%, rgba(0,0,0,0) 100%);
+}
+
+.banner-main {
+  position: relative;
   display: flex;
   align-items: center;
   gap: @spacing-lg;
+  padding: @spacing-xl @spacing-xl @spacing-md;
 }
 
-.profile-info {
-  min-width: 0;
+.banner-avatar-wrap {
+  position: relative;
+  flex-shrink: 0;
 }
 
-.profile-name {
+.banner-avatar {
+  border: 2px solid @card-bg;
+  box-shadow: 0 0 0 2px var(--color-brand), @shadow-brand;
+  background: var(--color-brand-gradient);
+  font-size: 26px;
+}
+
+.banner-status-dot {
+  position: absolute;
+  bottom: 2px;
+  right: 2px;
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  background: @success;
+  border: 2px solid @card-bg;
+}
+
+.banner-info { flex: 1; min-width: 0; }
+
+.banner-name {
+  display: flex;
+  align-items: center;
+  gap: @spacing-sm;
   font-size: @font-size-xl;
-  font-weight: @font-weight-semibold;
+  font-weight: @font-weight-bold;
   color: @text-primary;
 }
 
-.profile-meta {
+.banner-role-tag {
+  font-size: @font-size-xs;
+  border-radius: 20px;
+  padding: 0 8px;
+  line-height: 20px;
+}
+
+.banner-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: @spacing-lg;
+  margin-top: @spacing-xs;
+}
+
+.banner-meta-item {
+  display: flex;
+  align-items: center;
+  gap: 4px;
   font-size: @font-size-sm;
   color: @text-secondary;
-  margin-top: 2px;
-
-  em {
-    margin: 0 @spacing-xs;
-    font-style: normal;
-    color: @text-tertiary;
-  }
+  .anticon { font-size: 13px; color: @text-tertiary; }
 }
 
-.profile-desc {
-  margin-top: @spacing-base;
-  :deep(.ant-descriptions-item) {
-    padding-bottom: 0;
-  }
-}
-
-.profile-bottom {
-  margin-top: 0;
-  :deep(.section-card-body) {
-    padding: @spacing-base;
-  }
-  :deep(.ant-form-item) {
-    margin-bottom: @spacing-sm;
-  }
-}
-
-.app-desc {
-  display: block;
-  margin-bottom: @spacing-sm;
-}
-
-.category-tabs {
+// 统计卡片
+.banner-stats {
   display: flex;
   gap: @spacing-sm;
-  margin-bottom: @spacing-sm;
+  padding: 0 @spacing-xl @spacing-lg;
 }
 
-.category-btn {
-  min-width: 56px;
-}
-
-.app-list {
-  display: flex;
-  flex-direction: column;
-  gap: @spacing-xs;
-}
-
-.app-row {
+.stat-item {
+  flex: 1;
   display: flex;
   align-items: center;
-  gap: @spacing-sm;
-  padding: @spacing-xs @spacing-sm;
-  border: 1px solid @border-color;
+  gap: @spacing-md;
+  padding: @spacing-sm @spacing-base;
+  background: @content-bg;
   border-radius: @radius-base;
-  background: var(--color-card-bg);
-  transition: all 0.15s;
-  position: relative;
-
-  &.disabled {
-    opacity: 0.5;
-    cursor: not-allowed;
-  }
-
-  &:not(.disabled) {
-    cursor: default;
-
-    &:hover {
-      border-color: var(--color-brand);
-      box-shadow: var(--shadow-sm);
-    }
-
-    .app-drag-handle {
-      cursor: grab;
-      color: @text-tertiary;
-      &:hover { color: @text-primary; }
-    }
-  }
-
-  &.dragging {
-    opacity: 0.4;
-    border-style: dashed;
-  }
-
-  &.over-top {
-    border-top: 2px solid var(--color-brand);
-    margin-top: 2px;
-  }
-
-  &.over-bottom {
-    border-bottom: 2px solid var(--color-brand);
-    margin-bottom: 2px;
-  }
+  border: 1px solid @border-color;
+  transition: border-color @transition-fast;
+  &:hover { border-color: var(--color-brand); }
 }
 
-.app-drag-handle {
-  font-size: 14px;
-  display: flex;
-  align-items: center;
-}
-
-.app-icon-wrap {
+.stat-icon {
   width: 36px;
   height: 36px;
   border-radius: @radius-base;
@@ -346,29 +427,264 @@ const notifOptions = [
   align-items: center;
   justify-content: center;
   font-size: 16px;
-  color: var(--color-brand);
-  background: color-mix(in srgb, var(--color-brand) 12%, transparent);
+  color: #fff;
+  background: var(--stat-color);
   flex-shrink: 0;
 }
 
-.app-info {
+.stat-value {
+  font-size: @font-size-lg;
+  font-weight: @font-weight-bold;
+  color: @text-primary;
+  line-height: 1.2;
+}
+
+.stat-label {
+  font-size: @font-size-xs;
+  color: @text-tertiary;
+}
+
+// ========== 内容区域 ==========
+.profile-content {
+  display: flex;
+  gap: @spacing-xl;
+  align-items: flex-start;
+}
+
+// 左侧偏好设置 - 窄栏
+.profile-left {
+  flex: 0 0 280px;
+  min-width: 0;
+}
+
+// 右侧应用设置 - 主体
+.profile-right {
   flex: 1;
   min-width: 0;
 }
 
-.app-name {
-  font-size: @font-size-sm;
-  font-weight: @font-weight-medium;
+// ========== 通用卡片样式 ==========
+.section-card {
+  background: @card-bg;
+  border-radius: @radius-lg;
+  border: 1px solid @border-color;
+}
+
+.sc-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: @spacing-md @spacing-xl;
+  border-bottom: 1px solid @divider-color;
+  font-size: @font-size-base;
+  font-weight: @font-weight-semibold;
   color: @text-primary;
 }
 
-.app-desc {
+.sc-body {
+  padding: @spacing-base @spacing-xl @spacing-xl;
+}
+
+// ========== 偏好设置 ==========
+.pref-group {
+  & + & { margin-top: 0; }
+}
+
+.pref-label {
+  font-size: @font-size-sm;
+  color: @text-tertiary;
+  margin-bottom: @spacing-sm;
+}
+
+.pref-divider {
+  margin: @spacing-md 0;
+}
+
+// 主题 / 语言 选择器 - 紧凑 chip 风格
+.theme-row {
+  display: flex;
+  gap: 6px;
+}
+
+.theme-chip {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding: @spacing-sm 6px;
+  border-radius: @radius-sm;
+  border: 1px solid @border-color;
+  font-size: @font-size-xs;
+  color: @text-secondary;
+  cursor: pointer;
+  transition: all @transition-fast;
+  user-select: none;
+
+  &:hover {
+    border-color: var(--color-brand);
+    color: var(--color-brand);
+  }
+
+  &.active {
+    border-color: var(--color-brand);
+    background: color-mix(in srgb, var(--color-brand) 8%, @card-bg);
+    color: var(--color-brand);
+    font-weight: @font-weight-medium;
+  }
+}
+
+.theme-dot {
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  flex-shrink: 0;
+
+  &.light { background: #F59E0B; }
+  &.dark { background: #1E293B; }
+  &.auto { background: linear-gradient(135deg, #F59E0B 50%, #1E293B 50%); }
+}
+
+// 通知偏好 checkbox
+.notif-checks {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.notif-check {
+  display: flex;
+  align-items: center;
+  gap: @spacing-sm;
+  padding: @spacing-xs 0;
+  font-size: @font-size-sm;
+  color: @text-primary;
+  cursor: pointer;
+}
+
+// ========== 应用设置 ==========
+.category-bar {
+  display: inline-flex;
+  gap: 2px;
+  margin-bottom: @spacing-md;
+  padding: 3px;
+  background: @content-bg;
+  border-radius: @radius-sm;
+}
+
+.category-tab {
+  padding: 4px 12px;
+  font-size: @font-size-sm;
+  color: @text-secondary;
+  border-radius: 4px;
+  cursor: pointer;
+  transition: all @transition-fast;
+  user-select: none;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+
+  &:hover { color: @text-primary; }
+
+  .cat-count {
+    font-size: @font-size-xs;
+    color: @text-tertiary;
+    font-variant-numeric: tabular-nums;
+  }
+
+  &.active {
+    background: var(--color-brand);
+    color: #fff;
+    font-weight: @font-weight-medium;
+    box-shadow: @shadow-sm;
+
+    .cat-count { color: rgba(255, 255, 255, 0.85); }
+  }
+}
+
+// 应用列表
+.app-grid {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.app-card {
+  display: flex;
+  align-items: center;
+  gap: @spacing-sm;
+  padding: @spacing-sm @spacing-md;
+  border: 1px solid transparent;
+  border-radius: @radius-base;
+  background: @card-bg;
+  transition: all @transition-fast;
+
+  &:not(.disabled):hover {
+    border-color: @border-color;
+    background: @content-bg;
+  }
+
+  &.disabled {
+    opacity: 0.35;
+    cursor: not-allowed;
+  }
+
+  &.dragging {
+    opacity: 0.3;
+    border-style: dashed;
+    border-color: var(--color-brand);
+    transform: scale(0.98);
+  }
+
+  &.over-top { border-top: 2px solid var(--color-brand); }
+  &.over-bottom { border-bottom: 2px solid var(--color-brand); }
+}
+
+.app-card-drag {
+  color: @text-tertiary;
+  cursor: grab;
+  font-size: 14px;
+  flex-shrink: 0;
+
+  .disabled & { cursor: not-allowed; }
+}
+
+.app-card-icon {
+  width: 34px;
+  height: 34px;
+  border-radius: @radius-base;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 16px;
+  color: var(--app-icon-color);
+  background: color-mix(in srgb, var(--app-icon-color) 10%, transparent);
+  flex-shrink: 0;
+  transition: transform @transition-fast;
+
+  .app-card:not(.disabled):hover & { transform: scale(1.1); }
+}
+
+.app-card-body {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  align-items: baseline;
+  gap: @spacing-sm;
+}
+
+.app-card-name {
+  font-size: @font-size-sm;
+  font-weight: @font-weight-medium;
+  color: @text-primary;
+  white-space: nowrap;
+}
+
+.app-card-desc {
   font-size: @font-size-xs;
   color: @text-tertiary;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
-
-
 </style>

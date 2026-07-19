@@ -41,9 +41,7 @@ export const useAppStore = defineStore('app', () => {
   }
 
   function toggleAppRoute(route: string): void {
-    const set = new Set(visibleAppRoutes.value)
-    if (set.has(route)) {
-      set.delete(route)
+    if (visibleAppRoutes.value.includes(route)) {
       visibleAppRoutes.value = visibleAppRoutes.value.filter((r) => r !== route)
     } else {
       visibleAppRoutes.value = [...visibleAppRoutes.value, route]
@@ -63,11 +61,10 @@ export const useAppStore = defineStore('app', () => {
       .filter((a) => a.route)
       .map((a) => a.route!)
 
-    // 迁移：如果持久化的路由在当前应用中不存在，重置为默认值
-    const hasStaleRoutes = visibleAppRoutes.value.length > 0
-      && visibleAppRoutes.value.some((r) => !routesWithRoute.includes(r))
-
-    if (visibleAppRoutes.value.length === 0 || hasStaleRoutes) {
+    // 过滤掉失效路由（应用被取消授权等），保留其余用户已勾选的路由
+    visibleAppRoutes.value = visibleAppRoutes.value.filter((r) => routesWithRoute.includes(r))
+    // 仅在结果为空时回退到默认值
+    if (visibleAppRoutes.value.length === 0) {
       visibleAppRoutes.value = DEFAULT_VISIBLE_ROUTES.filter((r) => routesWithRoute.includes(r))
     }
   }

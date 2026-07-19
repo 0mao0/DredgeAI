@@ -111,23 +111,18 @@
 </template>
 
 <script setup lang="ts">
-import { ref, reactive, computed, watchEffect, onMounted } from 'vue'
+import { ref, reactive, computed, onMounted } from 'vue'
 import { message } from 'ant-design-vue'
 import { UploadOutlined, DownloadOutlined, BulbOutlined } from '@ant-design/icons-vue'
 import SectionCard from '@shared/components/SectionCard.vue'
 import StatusTag from '@/components/StatusTag.vue'
 import { getBidSteps, getBidRisks, getBidSessions, getBidDocument } from '@/api/modules/bid'
 import type { BidReviewStep, RiskItem, BidReviewSession } from '@/types'
-import { useTheme } from '@shared/composables/useTheme'
-import { cssVarValue } from '@shared/composables/useCssVar'
+import { useCssVar } from '@shared/composables/useCssVar'
 
-const { currentTheme } = useTheme()
-const badgeColors = reactive({ danger: '#EF4444', success: '#10B981' })
-
-watchEffect(() => {
-  currentTheme.value
-  badgeColors.danger = cssVarValue('--color-danger')
-  badgeColors.success = cssVarValue('--color-success')
+const badgeColors = reactive({
+  danger: useCssVar('--color-danger'),
+  success: useCssVar('--color-success'),
 })
 
 const steps = ref<BidReviewStep[]>([])

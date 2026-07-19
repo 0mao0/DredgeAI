@@ -34,7 +34,7 @@
 
     <a-row :gutter="[24, 24]" class="main-row">
       <a-col :span="16">
-        <SectionCard title="最近任务" class="mb-24">
+        <SectionCard title="最近任务" class="mb-24" flush>
           <a-list :data-source="appStore.tasks" :loading="loading">
             <template #renderItem="{ item }">
               <a-list-item class="task-item">
@@ -66,7 +66,7 @@
       </a-col>
 
       <a-col :span="8">
-        <SectionCard title="最近文件">
+        <SectionCard title="最近文件" flush>
           <a-list :data-source="appStore.files" :loading="loading" size="small">
             <template #renderItem="{ item }">
               <a-list-item class="file-item">
@@ -93,7 +93,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, watchEffect, onMounted } from 'vue'
+import { ref, computed, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import {
   FileSearchOutlined, BookOutlined, EditOutlined,
@@ -109,8 +109,7 @@ import { useAppStore } from '@/stores/app'
 import { getEfficiencyTrend } from '@/api/modules/chart'
 import type { LineChartData } from '@/types'
 import type { Component } from 'vue'
-import { useTheme } from '@shared/composables/useTheme'
-import { cssVarValue } from '@shared/composables/useCssVar'
+import { useCssVar } from '@shared/composables/useCssVar'
 
 const router = useRouter()
 const userStore = useUserStore()
@@ -138,17 +137,10 @@ const fileIconMap: Record<string, Component> = {
 
 const pendingTaskCount = computed(() => appStore.tasks.filter((t) => t.status === '进行中' || t.status === '已暂停').length)
 
-const { currentTheme } = useTheme()
-const brandColor = ref('#0EA5E9')
-const successColor = ref('#10B981')
+const brandColor = useCssVar('--color-brand')
+const successColor = useCssVar('--color-success')
 
 const efficiencyTrend = ref<LineChartData>({ categories: [], series: [] })
-
-watchEffect(() => {
-  currentTheme.value
-  brandColor.value = cssVarValue('--color-brand')
-  successColor.value = cssVarValue('--color-success')
-})
 
 const efficiencyChartOption = computed(() => ({
   tooltip: { trigger: 'axis' },

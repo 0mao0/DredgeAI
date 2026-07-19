@@ -15,7 +15,7 @@ export const mockMetrics: DashboardMetric[] = [
   { id: '1', title: '总用户数', value: '2,846', suffix: '人', trend: 12.5, trendUp: true, icon: 'TeamOutlined', color: '#0EA5E9' },
   { id: '2', title: '活跃用户', value: '1,243', suffix: '人', trend: 8.1, trendUp: true, icon: 'UserSwitchOutlined', color: '#10B981' },
   { id: '3', title: 'API 调用', value: '125.8', suffix: '万次', trend: 23.8, trendUp: true, icon: 'ApiOutlined', color: '#F59E0B' },
-  { id: '4', title: '应用数', value: '18', suffix: '个', trend: 5.2, trendUp: true, icon: 'AppstoreOutlined', color: '#8B5CF6' },
+  { id: '4', title: '应用数', value: '10', suffix: '个', trend: 5.2, trendUp: true, icon: 'AppstoreOutlined', color: '#8B5CF6' },
 ]
 
 export const mockApiCallsTrend: LineChartData = {

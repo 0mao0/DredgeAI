@@ -82,7 +82,7 @@
           </a-breadcrumb>
         </div>
         <div class="header-right">
-          <a-badge dot :class="{ 'has-unread': false }">
+          <a-badge dot>
             <BellOutlined class="header-icon" />
           </a-badge>
           <ThemeToggle />
@@ -104,9 +104,9 @@
       </a-layout-header>
 
       <a-layout-content class="content">
-        <router-view v-slot="{ Component }">
+        <router-view v-slot="{ Component, route }">
           <transition name="fade" mode="out-in">
-            <component :is="Component" />
+            <component :is="Component" :key="route.path" />
           </transition>
         </router-view>
       </a-layout-content>

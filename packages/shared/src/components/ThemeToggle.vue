@@ -1,5 +1,8 @@
 <template>
-  <a-tooltip :title="isDark ? '切换亮色模式' : '切换暗色模式'">
+  <a-tooltip
+    :title="isDark ? '切换亮色模式' : '切换暗色模式'"
+    placement="bottomRight"
+  >
     <a-button
       class="theme-toggle"
       shape="circle"

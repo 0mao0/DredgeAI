@@ -117,7 +117,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, watch, watchEffect, onMounted } from 'vue'
+import { ref, computed, watch, onMounted } from 'vue'
 import dayjs from 'dayjs'
 import { message } from 'ant-design-vue'
 import { PlusOutlined, CopyOutlined, FileTextOutlined } from '@ant-design/icons-vue'
@@ -126,8 +126,7 @@ import SectionCard from '@shared/components/SectionCard.vue'
 import ChartContainer from '@shared/components/ChartContainer.vue'
 import { getApiKeyList, getModelTypes, getUsageByModel, getUsageStats, getUsageTimeSeries } from '@/api/modules/apikey'
 import type { ApiKey, ModelType, UsageByModel, ApiUsageStats, UsageTimeSeries } from '@/types'
-import { useTheme } from '@shared/composables/useTheme'
-import { cssVarValue } from '@shared/composables/useCssVar'
+import { useCssVar } from '@shared/composables/useCssVar'
 
 const apiKeys = ref<ApiKey[]>([])
 const modelTypes = ref<ModelType[]>([])
@@ -171,25 +170,14 @@ function formatNum(n: number): string {
   return n.toLocaleString()
 }
 
-const { currentTheme } = useTheme()
-const brandColor = ref('#0EA5E9')
-const successColor = ref('#10B981')
-const accentColor = ref('#06B6D4')
-const warningColor = ref('#F59E0B')
-const dangerColor = ref('#EF4444')
-const cardBgColor = ref('#FFFFFF')
+const brandColor = useCssVar('--color-brand')
+const successColor = useCssVar('--color-success')
+const accentColor = useCssVar('--color-accent')
+const warningColor = useCssVar('--color-warning')
+const dangerColor = useCssVar('--color-danger')
+const cardBgColor = useCssVar('--color-card-bg')
 
 const colors = computed(() => [brandColor.value, accentColor.value, successColor.value, warningColor.value, dangerColor.value])
-
-watchEffect(() => {
-  currentTheme.value
-  brandColor.value = cssVarValue('--color-brand')
-  successColor.value = cssVarValue('--color-success')
-  accentColor.value = cssVarValue('--color-accent')
-  warningColor.value = cssVarValue('--color-warning')
-  dangerColor.value = cssVarValue('--color-danger')
-  cardBgColor.value = cssVarValue('--color-card-bg')
-})
 
 function makeTimeSeriesOption(data: { name: string; data: number[] }[] | undefined, categories: string[] | undefined) {
   if (!data || !categories) return {}
@@ -268,11 +256,9 @@ async function loadTimeSeries(): Promise<void> {
 onMounted(async () => {
   try {
     loading.value = true
-    console.log('[API] 开始加载数据...')
     const [k, m, um, stats] = await Promise.all([
       getApiKeyList(), getModelTypes(), getUsageByModel(), getUsageStats(),
     ])
-    console.log('[API] Keys:', k?.length, 'Models:', m?.length, 'Usage:', um?.length, 'Stats:', stats)
     apiKeys.value = k
     modelTypes.value = m
     usageByModel.value = um

@@ -41,6 +41,7 @@ lerna-debug.log*
 # Trae IDE 工作目录
 .trae/
 **/.trae/
+.opencode/
 
 # 包管理器锁文件（项目使用 pnpm，忽略其他包管理器的锁文件）
 package-lock.json

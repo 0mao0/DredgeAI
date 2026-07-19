@@ -8,14 +8,14 @@
         <slot name="extra" />
       </div>
     </div>
-    <div class="section-card-body" :class="{ 'section-card-body--nopad': nopad }">
+    <div class="section-card-body" :class="{ 'section-card-body--nopad': nopad, 'section-card-body--flush': flush }">
       <slot />
     </div>
   </div>
 </template>
 
 <script setup lang="ts">
-withDefaults(defineProps<{ title?: string; nopad?: boolean }>(), { nopad: false })
+withDefaults(defineProps<{ title?: string; nopad?: boolean; flush?: boolean }>(), { nopad: false, flush: false })
 </script>
 
 <style scoped lang="less">
@@ -44,5 +44,7 @@ withDefaults(defineProps<{ title?: string; nopad?: boolean }>(), { nopad: false 
 .section-card-body {
   padding: @spacing-xl;
   &--nopad { padding: 0; }
+  // 列表/紧凑场景：顶部贴边，消除标题与列表首项的视觉空隙
+  &--flush { padding-top: 0; }
 }
 </style>

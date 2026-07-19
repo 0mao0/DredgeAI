@@ -8,10 +8,6 @@ export const useAppStore = defineStore('app', () => {
 
   const isSuperAdmin = computed(() => profile.value?.role === 'super_admin')
 
-  function toggleSidebar(): void {
-    sidebarCollapsed.value = !sidebarCollapsed.value
-  }
-
   function setProfile(user: UserInfo): void {
     profile.value = user
   }
@@ -20,7 +16,6 @@ export const useAppStore = defineStore('app', () => {
     sidebarCollapsed,
     profile,
     isSuperAdmin,
-    toggleSidebar,
     setProfile,
   }
 }, {

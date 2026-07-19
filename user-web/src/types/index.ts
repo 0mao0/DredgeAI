@@ -23,7 +23,7 @@ export interface AppCard {
   id: string
   title: string
   description: string
-  category: '设计' | '施工' | '经营' | '通用'
+  category: '基础' | '设计' | '施工' | '经营'
   icon: string
   status: '已授权' | '待申请' | '已下架'
   route?: string
@@ -117,15 +117,6 @@ export interface ModelType {
 
 export interface UsageByModel { modelName: string; calls: number; share: number }
 export interface UsageByKey { keyName: string; calls: number; share: number }
-
-export interface Notification {
-  id: string
-  type: 'system' | 'business' | 'audit'
-  title: string
-  content: string
-  time: string
-  read: boolean
-}
 
 export interface ChartSeries { name: string; data: number[] }
 export interface LineChartData { categories: string[]; series: ChartSeries[] }

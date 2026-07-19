@@ -1,4 +1,5 @@
-export const USE_MOCK = true
+// 仅在开发模式启用 mock，生产构建自动关闭，确保真实 API 被调用
+export const USE_MOCK = import.meta.env.DEV
 export const API_BASE_URL = '/api/admin'
 export const STORAGE_TOKEN_KEY = 'DREDGE_AI_ADMIN_TOKEN'
 

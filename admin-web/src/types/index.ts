@@ -101,6 +101,8 @@ export interface ApiKey {
   id: string
   name: string
   key: string
+  fullKey: string
+  modelType: string
   app: string
   status: '启用' | '禁用'
   createdAt: string
@@ -108,6 +110,7 @@ export interface ApiKey {
   lastUsed?: string
   quota: number
   usage: number
+  docUrl: string
 }
 
 export interface ModelType {

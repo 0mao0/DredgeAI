@@ -4,7 +4,6 @@ import { USE_MOCK } from '@/utils/constants'
 import { registerDashboardMock } from './routes/dashboard'
 import { registerPermissionMock } from './routes/permissions'
 import { registerApplicationMock } from './routes/applications'
-import { registerSystemLogMock } from './routes/system-log'
 import { registerDatasourceMock } from './routes/datasource'
 import { registerAnalyticsMock } from './routes/analytics'
 import { registerProfileMock } from './routes/profile'
@@ -18,7 +17,7 @@ export function registerMock(): void {
   const mock = new MockAdapter(request, { delayResponse: 0 })
 
   // ABP 格式：成功响应直接返回数据体，不包裹 { code, data, message }
-  const wrap = (handler: () => unknown) => async (config?: { url?: string }): Promise<[number, unknown]> => {
+  const wrap = (handler: () => unknown) => async (config?: { method?: string; url?: string }): Promise<[number, unknown]> => {
     console.log('[mock] hit:', config?.method?.toUpperCase(), config?.url)
     return [200, handler()]
   }
@@ -26,14 +25,13 @@ export function registerMock(): void {
   registerDashboardMock(mock, wrap)
   registerPermissionMock(mock, wrap)
   registerApplicationMock(mock, wrap)
-  registerSystemLogMock(mock, wrap)
   registerDatasourceMock(mock, wrap)
   registerAnalyticsMock(mock, wrap)
   registerProfileMock(mock, wrap)
   registerApiKeyMock(mock, wrap)
 
-  // 打印所有注册的 GET 处理器，用于诊断
-  console.log('[mock] registered GET handlers:', mock.handlers.get?.map((h: { url?: string }) => h.url))
+  // 打印已注册的处理器数量（用于诊断）
+  console.log('[mock] routes registered')
 
   // ABP 格式：未匹配的请求返回错误响应
   mock.onAny().reply((config) => {

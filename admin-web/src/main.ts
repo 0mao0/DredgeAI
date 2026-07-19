@@ -10,13 +10,8 @@ import '@shared/styles/reset.less'
 import '@shared/styles/global.less'
 import { registerMock } from './mock'
 
-console.log('[main] USE_MOCK check: about to call registerMock')
-try {
-  registerMock()
-  console.log('[main] registerMock completed successfully')
-} catch (e) {
-  console.error('[main] registerMock FAILED:', e)
-}
+// 注册 mock 路由（仅在开发模式生效，由 USE_MOCK 控制）
+registerMock()
 
 const app = createApp(App)
 const pinia = createPinia()

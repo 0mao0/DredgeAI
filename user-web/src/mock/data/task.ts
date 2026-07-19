@@ -12,5 +12,5 @@ export const taskItems: TaskItem[] = [
 export const quickTasks = [
   { id: 'qt-1', title: '开始 AI 审标', tag: '专业业务', route: '/bid-review', icon: 'FileSearchOutlined' },
   { id: 'qt-2', title: '查询标准条款', tag: '知识查询', route: '/standards', icon: 'BookOutlined' },
-  { id: 'qt-3', title: '撰写工程报告', tag: '日常办公', route: '/apps', icon: 'EditOutlined' },
+  { id: 'qt-3', title: '撰写工程报告', tag: '日常办公', route: '/approval', icon: 'EditOutlined' },
 ] as const
