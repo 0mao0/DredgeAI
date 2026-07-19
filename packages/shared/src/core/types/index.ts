@@ -1,3 +1,14 @@
 // 类型 barrel，按领域 sub-bundle 导出
-// 占位：Task 1.2 创建各领域文件后改为完整 re-export
-export {}
+export * from './common'
+export * from './abp'
+export * from './apikey'
+export * from './application'
+export * from './dashboard'
+export * from './user'
+export * from './bid'
+export * from './standard'
+export * from './task'
+export * from './file'
+export * from './permission'
+export * from './datasource'
+export * from './analytics'
