@@ -4,6 +4,7 @@
 // 共享组件
 export { default as ChartContainer } from './components/ChartContainer.vue'
 export { default as DataSkeleton } from './components/DataSkeleton.vue'
+export { default as ErrorBoundary } from './components/ErrorBoundary.vue'
 export { default as Logo } from './components/Logo.vue'
 export { default as MetricCard } from './components/MetricCard.vue'
 export { default as PageHeader } from './components/PageHeader.vue'
