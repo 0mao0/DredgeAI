@@ -20,5 +20,5 @@ export * from './stores'
 // 共享路由守卫
 export * from './router'
 
-// 共享指令（Phase 4 创建后启用）
-// export * from './directives'
+// 共享指令
+export * from './directives'
