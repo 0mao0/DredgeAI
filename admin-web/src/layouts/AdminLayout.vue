@@ -200,11 +200,11 @@ import {
   MenuFoldOutlined, MenuUnfoldOutlined,
   BellOutlined, LogoutOutlined,
 } from '@ant-design/icons-vue'
-import Logo from '@shared/components/Logo.vue'
+import Logo from '@shared/web/components/Logo.vue'
 import { useAppStore } from '@/stores/app'
 import { getProfile } from '@/api/modules/profile'
 import { getApplications } from '@/api/modules/applications'
-import ThemeToggle from '@shared/components/ThemeToggle.vue'
+import ThemeToggle from '@shared/web/components/ThemeToggle.vue'
 
 const router = useRouter()
 const route = useRoute()
@@ -307,7 +307,7 @@ function handleUserMenu({ key }: { key: string }): void {
 </script>
 
 <style scoped lang="less">
-@import '@shared/styles/variables.less';
+@import '@shared/web/styles/variables.less';
 
 .admin-layout { height: 100vh; }
 

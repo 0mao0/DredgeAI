@@ -122,11 +122,11 @@
 import { ref, computed } from 'vue'
 import { message } from 'ant-design-vue'
 import { PlusOutlined, CopyOutlined, FileTextOutlined } from '@ant-design/icons-vue'
-import PageHeader from '@shared/components/PageHeader.vue'
-import SectionCard from '@shared/components/SectionCard.vue'
-import ChartContainer from '@shared/components/ChartContainer.vue'
-import MetricCard from '@shared/components/MetricCard.vue'
-import { useCssVar } from '@shared/composables/useCssVar'
+import PageHeader from '@shared/web/components/PageHeader.vue'
+import SectionCard from '@shared/web/components/SectionCard.vue'
+import ChartContainer from '@shared/web/components/ChartContainer.vue'
+import MetricCard from '@shared/web/components/MetricCard.vue'
+import { useCssVar } from '@shared/web/composables/useCssVar'
 import { formatNumber } from '@shared/core/utils/format'
 
 const columns = [
@@ -417,7 +417,7 @@ function copyCreatedKey(): void {
 </script>
 
 <style scoped lang="less">
-@import '@shared/styles/variables.less';
+@import '@shared/web/styles/variables.less';
 
 .mb-24 { margin-bottom: @spacing-xl; }
 

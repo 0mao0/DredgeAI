@@ -101,15 +101,15 @@ import {
   FileExcelOutlined, FileImageOutlined, FileOutlined,
   CheckCircleOutlined, SyncOutlined, PauseCircleOutlined, CloseCircleOutlined,
 } from '@ant-design/icons-vue'
-import SectionCard from '@shared/components/SectionCard.vue'
+import SectionCard from '@shared/web/components/SectionCard.vue'
 import StatusTag from '@/components/StatusTag.vue'
-import ChartContainer from '@shared/components/ChartContainer.vue'
+import ChartContainer from '@shared/web/components/ChartContainer.vue'
 import { useUserStore } from '@/stores/user'
 import { useAppStore } from '@/stores/app'
 import { getEfficiencyTrend } from '@/api/modules/chart'
 import type { LineChartData } from '@/types'
 import type { Component } from 'vue'
-import { useCssVar } from '@shared/composables/useCssVar'
+import { useCssVar } from '@shared/web/composables/useCssVar'
 
 const router = useRouter()
 const userStore = useUserStore()
@@ -174,7 +174,7 @@ onMounted(async () => {
 </script>
 
 <style scoped lang="less">
-@import '@shared/styles/variables.less';
+@import '@shared/web/styles/variables.less';
 
 .mb-24 { margin-bottom: @spacing-xl; }
 

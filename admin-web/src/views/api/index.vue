@@ -213,12 +213,12 @@
 import { ref, computed } from 'vue'
 import { message } from 'ant-design-vue'
 import { PlusOutlined, FileTextOutlined } from '@ant-design/icons-vue'
-import PageHeader from '@shared/components/PageHeader.vue'
-import SectionCard from '@shared/components/SectionCard.vue'
-import ChartContainer from '@shared/components/ChartContainer.vue'
-import MetricCard from '@shared/components/MetricCard.vue'
+import PageHeader from '@shared/web/components/PageHeader.vue'
+import SectionCard from '@shared/web/components/SectionCard.vue'
+import ChartContainer from '@shared/web/components/ChartContainer.vue'
+import MetricCard from '@shared/web/components/MetricCard.vue'
 import { formatNumber } from '@shared/core/utils/format'
-import { useCssVar } from '@shared/composables/useCssVar'
+import { useCssVar } from '@shared/web/composables/useCssVar'
 
 const activeTab = ref('keys')
 
@@ -593,7 +593,7 @@ function handleLimitsOk(): void {
 </script>
 
 <style scoped lang="less">
-@import '@shared/styles/variables.less';
+@import '@shared/web/styles/variables.less';
 
 .mb-24 { margin-bottom: @spacing-xl; }
 .mt-24 { margin-top: @spacing-xl; }

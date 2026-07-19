@@ -86,7 +86,7 @@
 <script setup lang="ts">
 import { ref, computed, onMounted } from 'vue'
 import { message } from 'ant-design-vue'
-import PageHeader from '@shared/components/PageHeader.vue'
+import PageHeader from '@shared/web/components/PageHeader.vue'
 import type { ApplicationItem } from '@/types'
 import * as Icons from '@ant-design/icons-vue'
 import { EditOutlined } from '@ant-design/icons-vue'
@@ -268,7 +268,7 @@ onMounted(async () => {
 </script>
 
 <style scoped lang="less">
-@import '@shared/styles/variables.less';
+@import '@shared/web/styles/variables.less';
 
 .tree-name { display: inline-flex; align-items: center; gap: @spacing-sm; }
 .tree-name--sub { color: @text-secondary; }

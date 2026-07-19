@@ -87,8 +87,8 @@
 <script setup lang="ts">
 import { ref, computed, onMounted } from 'vue'
 import { TagOutlined, LinkOutlined } from '@ant-design/icons-vue'
-import PageHeader from '@shared/components/PageHeader.vue'
-import SectionCard from '@shared/components/SectionCard.vue'
+import PageHeader from '@shared/web/components/PageHeader.vue'
+import SectionCard from '@shared/web/components/SectionCard.vue'
 import { getStandardResult, getStandardHistory, getStandardCategories, getRecommendedQuestions } from '@/api/modules/standard'
 import type { StandardResult, StandardSearchHistory, StandardCategory } from '@/types'
 
@@ -127,7 +127,7 @@ onMounted(async () => {
 </script>
 
 <style scoped lang="less">
-@import '@shared/styles/variables.less';
+@import '@shared/web/styles/variables.less';
 
 .mb-16 { margin-bottom: @spacing-lg; }
 

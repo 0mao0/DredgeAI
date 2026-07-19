@@ -6,8 +6,8 @@ import 'ant-design-vue/dist/reset.css'
 import 'virtual:uno.css'
 import App from './App.vue'
 import router from './router'
-import '@shared/styles/reset.less'
-import '@shared/styles/global.less'
+import '@shared/web/styles/reset.less'
+import '@shared/web/styles/global.less'
 import { registerMock } from './mock'
 
 // 注册 mock 路由（仅在开发模式生效，由 USE_MOCK 控制）

@@ -320,7 +320,7 @@ function onDrop(idx: number): void {
 </script>
 
 <style scoped lang="less">
-@import '@shared/styles/variables.less';
+@import '@shared/web/styles/variables.less';
 
 // 页面容器 - 全宽，无最大宽度限制
 .profile-page {

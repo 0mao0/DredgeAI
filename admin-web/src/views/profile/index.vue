@@ -32,8 +32,8 @@
 
 <script setup lang="ts">
 import { computed, onMounted } from 'vue'
-import PageHeader from '@shared/components/PageHeader.vue'
-import SectionCard from '@shared/components/SectionCard.vue'
+import PageHeader from '@shared/web/components/PageHeader.vue'
+import SectionCard from '@shared/web/components/SectionCard.vue'
 import { useAppStore } from '@/stores/app'
 import { getProfile } from '@/api/modules/profile'
 
@@ -54,7 +54,7 @@ onMounted(async () => {
 </script>
 
 <style scoped lang="less">
-@import '@shared/styles/variables.less';
+@import '@shared/web/styles/variables.less';
 .profile-card { text-align: center; }
 .profile-avatar-wrap {
   padding: @spacing-xl 0;

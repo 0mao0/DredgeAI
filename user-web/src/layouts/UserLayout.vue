@@ -102,7 +102,7 @@ import {
   BulbFilled, BulbOutlined,
 } from '@ant-design/icons-vue'
 import * as Icons from '@ant-design/icons-vue'
-import Logo from '@shared/components/Logo.vue'
+import Logo from '@shared/web/components/Logo.vue'
 import { useAppStore } from '@/stores/app'
 import { useUserStore } from '@/stores/user'
 import { useThemeStore } from '@/stores/theme'
@@ -174,7 +174,7 @@ onMounted(() => {
 </script>
 
 <style scoped lang="less">
-@import '@shared/styles/variables.less';
+@import '@shared/web/styles/variables.less';
 
 .user-layout { height: 100vh; }
 

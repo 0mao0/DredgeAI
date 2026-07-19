@@ -114,11 +114,11 @@
 import { ref, reactive, computed, onMounted } from 'vue'
 import { message } from 'ant-design-vue'
 import { UploadOutlined, DownloadOutlined, BulbOutlined } from '@ant-design/icons-vue'
-import SectionCard from '@shared/components/SectionCard.vue'
+import SectionCard from '@shared/web/components/SectionCard.vue'
 import StatusTag from '@/components/StatusTag.vue'
 import { getBidSteps, getBidRisks, getBidSessions, getBidDocument } from '@/api/modules/bid'
 import type { BidReviewStep, RiskItem, BidReviewSession } from '@/types'
-import { useCssVar } from '@shared/composables/useCssVar'
+import { useCssVar } from '@shared/web/composables/useCssVar'
 
 const badgeColors = reactive({
   danger: useCssVar('--color-danger'),
@@ -161,7 +161,7 @@ onMounted(async () => {
 </script>
 
 <style scoped lang="less">
-@import '@shared/styles/variables.less';
+@import '@shared/web/styles/variables.less';
 
 .mb-16 { margin-bottom: @spacing-lg; }
 

@@ -41,8 +41,8 @@
 
 <script setup lang="ts">
 import { ref, computed } from 'vue'
-import PageHeader from '@shared/components/PageHeader.vue'
-import SectionCard from '@shared/components/SectionCard.vue'
+import PageHeader from '@shared/web/components/PageHeader.vue'
+import SectionCard from '@shared/web/components/SectionCard.vue'
 
 const filterType = ref('all')
 
