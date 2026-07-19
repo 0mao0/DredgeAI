@@ -1,7 +1,6 @@
 import { createRouter, createWebHistory } from 'vue-router'
 import AdminLayout from '@/layouts/AdminLayout.vue'
 import { installGuards } from '@shared/web/router'
-import { STORAGE_TOKEN_KEY } from '@/utils/constants'
 
 const router = createRouter({
   history: createWebHistory(),
@@ -40,6 +39,6 @@ const router = createRouter({
   ],
 })
 
-installGuards(router, { tokenKey: STORAGE_TOKEN_KEY, appName: '智浚 AI · 管理后台' })
+installGuards(router, { appName: '智浚 AI · 管理后台' })
 
 export default router

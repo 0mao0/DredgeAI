@@ -32,8 +32,15 @@ export function createTitleGuard(appName: string): (to: { meta: { title?: string
   }
 }
 
-/** 为 router 安装默认守卫组合（auth + title） */
-export function installGuards(router: Router, opts: { tokenKey: string; appName: string; loginPath?: string }): void {
-  router.beforeEach(createAuthGuard(opts.tokenKey, opts.loginPath))
+/** 为 router 安装默认守卫组合（auth + title）
+ *  - enableAuth 默认 false：仅当应用存在登录页且 tokenKey 配置时才启用，避免无 login 路由时死循环
+ */
+export function installGuards(
+  router: Router,
+  opts: { appName: string; tokenKey?: string; loginPath?: string; enableAuth?: boolean },
+): void {
+  if (opts.enableAuth && opts.tokenKey) {
+    router.beforeEach(createAuthGuard(opts.tokenKey, opts.loginPath))
+  }
   router.afterEach(createTitleGuard(opts.appName))
 }
