@@ -9,6 +9,7 @@ import { registerBidMock } from './routes/bid'
 import { registerStandardMock } from './routes/standard'
 import { registerApiKeyMock } from './routes/apikey'
 import { registerChartMock } from './routes/chart'
+import { registerDubbingMock } from './routes/dubbing'
 
 /** 注册所有 mock 路由 */
 export function registerMock(): void {
@@ -31,6 +32,7 @@ export function registerMock(): void {
   registerStandardMock(mock, wrap)
   registerApiKeyMock(mock, wrap)
   registerChartMock(mock, wrap)
+  registerDubbingMock(mock, wrap)
 
   // 打印已注册的处理器数量（用于诊断）
   console.log('[mock] routes registered')

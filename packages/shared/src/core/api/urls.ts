@@ -28,6 +28,17 @@ export const urls = {
   apiKeyUsageStats: '/apikey/usage-stats',
   apiKeyUsageTimeSeries: '/apikey/usage-timeseries',
 
+  // AI 配音
+  dubbingVoices: '/dubbing/voices',
+  dubbingGenerate: '/dubbing/generate',
+  dubbingTasks: '/dubbing/tasks',
+  dubbingTask: '/dubbing/tasks/:id',
+  dubbingTaskDownload: '/dubbing/tasks/:id/download',
+  adminDubbingTasks: '/dubbing/admin/tasks',
+  adminDubbingTask: '/dubbing/admin/tasks/:id',
+  adminDubbingUsageSummary: '/dubbing/admin/usage/summary',
+  adminDubbingUsageTimeseries: '/dubbing/admin/usage/timeseries',
+
   // admin-web
   adminStats: '/dashboard/stats',
   dashboardMetrics: '/dashboard/metrics',

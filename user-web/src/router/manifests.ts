@@ -69,7 +69,7 @@ export const userAppManifests: AppManifest[] = [
     name: 'AiDubbing',
     title: 'AI配音',
     icon: 'CustomerServiceOutlined',
-    component: () => import('@/views/placeholder/PlaceholderView.vue'),
+    component: () => import('@/views/dubbing/index.vue'),
     defaultVisible: true,
     category: '通用',
   },

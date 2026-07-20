@@ -65,6 +65,10 @@
           <ApiOutlined />
           <span>API 管理</span>
         </a-menu-item>
+        <a-menu-item key="/dubbing">
+          <CustomerServiceOutlined />
+          <span>AI 配音</span>
+        </a-menu-item>
         <a-sub-menu key="apps">
           <template #title>
             <AppstoreOutlined />
@@ -196,7 +200,7 @@ import {
   TeamOutlined, UsergroupAddOutlined, SafetyOutlined,
   DashboardOutlined, AppstoreOutlined, DatabaseOutlined, BarChartOutlined, ControlOutlined,
   FundOutlined, EyeOutlined, SwapOutlined, BankOutlined, FileSearchOutlined, BulbOutlined,
-  ApiOutlined, AlertOutlined, UserOutlined,
+  ApiOutlined, AlertOutlined, UserOutlined, CustomerServiceOutlined,
   MenuFoldOutlined, MenuUnfoldOutlined,
   BellOutlined, LogoutOutlined,
 } from '@ant-design/icons-vue'
@@ -244,6 +248,7 @@ const routeParentsMap: Record<string, string[]> = {
   '/data/static/standards': ['data', 'data-static'],
   '/data/static/reports': ['data', 'data-static'],
   '/data/static/experience': ['data', 'data-static'],
+  '/dubbing': [],
 }
 
 function getRouteParents(p: string): string[] | undefined {

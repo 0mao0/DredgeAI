@@ -8,6 +8,7 @@ import { registerDatasourceMock } from './routes/datasource'
 import { registerAnalyticsMock } from './routes/analytics'
 import { registerProfileMock } from './routes/profile'
 import { registerApiKeyMock } from './routes/apikey'
+import { registerDubbingMock } from './routes/dubbing'
 
 /** 注册所有 mock 路由 */
 export function registerMock(): void {
@@ -29,6 +30,7 @@ export function registerMock(): void {
   registerAnalyticsMock(mock, wrap)
   registerProfileMock(mock, wrap)
   registerApiKeyMock(mock, wrap)
+  registerDubbingMock(mock, wrap)
 
   // 打印已注册的处理器数量（用于诊断）
   console.log('[mock] routes registered')

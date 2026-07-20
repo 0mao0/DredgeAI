@@ -599,7 +599,11 @@ function handleLimitsOk(): void {
 .mt-24 { margin-top: @spacing-xl; }
 
 .api-tabs {
-  :deep(.ant-tabs-nav) { margin-bottom: @spacing-xl; }
+  :deep(.ant-tabs-nav) { margin-bottom: 16px; }
+  :deep(.ant-tabs-content-holder) { margin-top: 0; }
+}
+.page-container :deep(.page-header) {
+  margin-bottom: 12px;
 }
 
 .chart-header {

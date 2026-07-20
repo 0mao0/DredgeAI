@@ -18,6 +18,7 @@ const router = createRouter({
         { path: 'permissions', name: 'Permissions', component: () => import('@/views/permissions/index.vue'), meta: { title: '权限管理' } },
         { path: 'dashboard', name: 'Dashboard', component: () => import('@/views/dashboard/index.vue'), meta: { title: '仪表盘' } },
         { path: 'api', name: 'ApiManage', component: () => import('@/views/api/index.vue'), meta: { title: 'API 管理' } },
+        { path: 'dubbing', name: 'AiDubbing', component: () => import('@/views/dubbing/index.vue'), meta: { title: 'AI 配音' } },
         { path: 'applications', redirect: '/applications/analysis', children: [
           { path: 'analysis', component: () => import('@/views/applications/analysis.vue'), meta: { title: '数据分析' } },
           { path: 'control', component: () => import('@/views/applications/control.vue'), meta: { title: '发布管理' } },
