@@ -1,31 +1,42 @@
-import request from '@/api/request'
+import axios from 'axios'
+import type { AxiosResponse } from 'axios'
 import { urls } from '@shared/core/api'
-import type { VoiceItem, DubbingTask, PagedResult } from '@/types'
+import type { VoiceItem, VoiceRegisterResult } from '@/types'
 
-function buildUrl(urlTemplate: string, id: string): string {
-  return urlTemplate.replace(':id', id)
+/**
+ * TTS 服务专属请求实例。
+ * 直连 CosyVoice 服务（开发期经 Vite /tts 代理转发到 localhost:8000），
+ * 不挂载 ABP 拦截器、也不经 mock，避免与现有 /api 后端混用。
+ */
+export const ttsClient = axios.create({
+  baseURL: '',
+  timeout: 120000,
+})
+
+export async function getVoices(): Promise<VoiceItem[]> {
+  const res = (await ttsClient.get<VoiceItem[]>(urls.dubbingVoices)) as unknown as AxiosResponse<VoiceItem[]>
+  return res.data
 }
 
-export function getVoices(): Promise<VoiceItem[]> {
-  return request.get<VoiceItem[]>(urls.dubbingVoices)
+/** 同步合成：POST 文本，返回音频二进制流（wav） */
+export async function generateDubbing(text: string, voiceId: string, speed: number): Promise<Blob> {
+  const res = (await ttsClient.post<Blob>(
+    urls.dubbingGenerate,
+    { text, voice_id: voiceId, speed },
+    { responseType: 'blob' },
+  )) as unknown as AxiosResponse<Blob>
+  return res.data
 }
 
-export function generateDubbing(text: string, voiceId: string, speed: number): Promise<DubbingTask> {
-  return request.post<DubbingTask>(urls.dubbingGenerate, { text, voiceId, speed })
-}
-
-export function getDubbingTasks(params: { skip?: number; max?: number }): Promise<PagedResult<DubbingTask>> {
-  return request.get<PagedResult<DubbingTask>>(urls.dubbingTasks, { params })
-}
-
-export function getDubbingTask(id: string): Promise<DubbingTask> {
-  return request.get<DubbingTask>(buildUrl(urls.dubbingTask, id))
-}
-
-export function deleteDubbingTask(id: string): Promise<void> {
-  return request.delete<void>(buildUrl(urls.dubbingTask, id))
-}
-
-export function downloadDubbing(id: string): Promise<{ url: string }> {
-  return request.get<{ url: string }>(buildUrl(urls.dubbingTaskDownload, id))
+/** 注册新音色：上传录音/文件，返回音色信息（模型推理样本耗时较长，超时 5 分钟） */
+export async function registerVoice(formData: FormData): Promise<VoiceRegisterResult> {
+  const res = (await ttsClient.post<VoiceRegisterResult>(
+    urls.dubbingRegister,
+    formData,
+    {
+      headers: { 'Content-Type': 'multipart/form-data' },
+      timeout: 300000,
+    },
+  )) as unknown as AxiosResponse<VoiceRegisterResult>
+  return res.data
 }

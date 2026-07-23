@@ -26,7 +26,8 @@ const appName = ref('应用详情')
 onMounted(async () => {
   try {
     const apps = await getApplications()
-    const app = apps.find((a: ApplicationItem) => a.id === route.params.id)
+    const slug = `/applications/${route.params.id}`
+    const app = apps.find((a: ApplicationItem) => a.id === route.params.id || a.route === slug)
     if (app) appName.value = app.name
   } catch {
     // fallback

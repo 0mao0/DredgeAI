@@ -219,6 +219,9 @@ import ChartContainer from '@shared/web/components/ChartContainer.vue'
 import MetricCard from '@shared/web/components/MetricCard.vue'
 import { formatNumber } from '@shared/core/utils/format'
 import { useCssVar } from '@shared/web/composables/useCssVar'
+import { useChartTheme } from '@shared/web/composables/useChartTheme'
+
+const { chartTheme } = useChartTheme()
 
 const activeTab = ref('keys')
 
@@ -343,18 +346,6 @@ function makeBarGradient(hex: string) {
 
 // ─── Tab 2: Charts ────────────────────────────────────
 
-function chartTheme() {
-  const isDark = document.documentElement.getAttribute('data-theme') === 'dark'
-  return {
-    axisColor: isDark ? '#52627A' : '#A8A29E',
-    splitColor: isDark ? 'rgba(148, 163, 184, 0.08)' : 'rgba(0, 0, 0, 0.06)',
-    tooltipBg: isDark ? 'rgba(15, 23, 42, 0.92)' : 'rgba(255, 255, 255, 0.92)',
-    tooltipBorder: isDark ? 'rgba(148, 163, 184, 0.15)' : 'rgba(0, 0, 0, 0.06)',
-    tooltipColor: isDark ? '#E2E8F0' : '#1C1917',
-    legendColor: isDark ? '#94A3B8' : '#78716C',
-  }
-}
-
 const overviewChartMode = ref<'model' | 'key' | 'total'>('model')
 const overviewTimeRange = ref('7d')
 const overviewCustomDateRange = ref()
@@ -429,19 +420,14 @@ const overviewTotalTokens = computed(() => Math.round(overviewTotalCalls.value *
 const overviewChartOption = computed(() => {
   const data = overviewChartData.value
   const categories = data.categories
-  const isDark = document.documentElement.getAttribute('data-theme') === 'dark'
-  const axisColor = isDark ? '#52627A' : '#A8A29E'
-  const splitColor = isDark ? 'rgba(148, 163, 184, 0.08)' : 'rgba(0, 0, 0, 0.06)'
-  const tooltipBg = isDark ? 'rgba(15, 23, 42, 0.92)' : 'rgba(255, 255, 255, 0.92)'
-  const tooltipBorder = isDark ? 'rgba(148, 163, 184, 0.15)' : 'rgba(0, 0, 0, 0.06)'
-  const tooltipColor = isDark ? '#E2E8F0' : '#1C1917'
+  const t = chartTheme()
 
   const base = {
-    tooltip: { trigger: 'axis' as const, backgroundColor: tooltipBg, borderColor: tooltipBorder, borderWidth: 1, textStyle: { color: tooltipColor, fontSize: 13 }, valueFormatter: (v: number) => `${v.toLocaleString()} 次` },
+    tooltip: { trigger: 'axis' as const, backgroundColor: t.tooltipBg, borderColor: t.tooltipBorder, borderWidth: 1, textStyle: { color: t.tooltipColor, fontSize: 13 }, valueFormatter: (v: number) => `${v.toLocaleString()} 次` },
     grid: { left: 40, right: 16, bottom: 44, top: 12 },
-    xAxis: { type: 'category' as const, data: categories, axisLine: { show: false }, axisTick: { show: false }, axisLabel: { color: axisColor, fontSize: 11 } },
-    yAxis: { type: 'value' as const, min: 0, axisLine: { show: false }, axisTick: { show: false }, axisLabel: { color: axisColor, fontSize: 11 }, splitLine: { lineStyle: { color: splitColor, type: 'dashed' as const } } },
-    legend: { type: 'scroll' as const, bottom: 0, textStyle: { color: isDark ? '#94A3B8' : '#78716C', fontSize: 12 } },
+    xAxis: { type: 'category' as const, data: categories, axisLine: { show: false }, axisTick: { show: false }, axisLabel: { color: t.axisColor, fontSize: 11 } },
+    yAxis: { type: 'value' as const, min: 0, axisLine: { show: false }, axisTick: { show: false }, axisLabel: { color: t.axisColor, fontSize: 11 }, splitLine: { lineStyle: { color: t.splitColor, type: 'dashed' as const } } },
+    legend: { type: 'scroll' as const, bottom: 0, textStyle: { color: t.legendColor, fontSize: 12 } },
   }
 
   if (overviewChartMode.value === 'total') {
@@ -659,7 +645,7 @@ function handleLimitsOk(): void {
   background: @content-bg;
   color: @text-secondary;
   &.gold {
-    background: linear-gradient(135deg, #f59e0b, #d97706);
+    background: @brand-gradient;
     color: #fff;
   }
 }

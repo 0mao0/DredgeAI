@@ -14,7 +14,6 @@ export default defineConfig({
       warning: 'var(--color-warning)',
       danger: 'var(--color-danger)',
       info: 'var(--color-info)',
-      sidebar: { DEFAULT: 'var(--color-sidebar-bg)', 2: 'var(--color-sidebar-bg-2)' },
       content: 'var(--color-content-bg)',
       card: 'var(--color-card-bg)',
       text: {

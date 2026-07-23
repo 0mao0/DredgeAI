@@ -1,14 +1,20 @@
 <template>
   <div class="dubbing-admin">
-    <PageHeader title="AI 配音" description="全部用户配音记录与使用统计" />
+    <PageHeader title="AI 配音" />
     <a-tabs v-model:activeKey="activeTab" class="dubbing-tabs">
+      <a-tab-pane key="stats" tab="使用统计">
+        <UsageMetrics :summary="summary" :loading="loadingSummary" />
+        <UsageCharts :tasks="tasks" :time-series="timeSeries" :loading="loadingSummary" @range-change="handleRangeChange" />
+      </a-tab-pane>
       <a-tab-pane key="history" tab="历史记录">
         <AdminDubbingFilters :loading="loading" @search="handleSearch" />
         <AdminHistoryTable :tasks="tasks" :loading="loading" @play="handlePlay" @delete="handleDelete" />
       </a-tab-pane>
-      <a-tab-pane key="stats" tab="使用统计">
-        <UsageMetrics :summary="summary" :loading="loadingSummary" />
-        <UsageCharts :tasks="tasks" :time-series="timeSeries" :loading="loadingSummary" @range-change="handleRangeChange" />
+      <a-tab-pane key="voice" tab="音色管理">
+        <AdminVoiceManager />
+      </a-tab-pane>
+      <a-tab-pane key="permissions" tab="权限配置">
+        <PermissionPanel />
       </a-tab-pane>
     </a-tabs>
 
@@ -27,12 +33,14 @@ import { message } from 'ant-design-vue'
 import PageHeader from '@shared/web/components/PageHeader.vue'
 import AdminDubbingFilters from './components/AdminDubbingFilters.vue'
 import AdminHistoryTable from './components/AdminHistoryTable.vue'
+import AdminVoiceManager from './components/AdminVoiceManager.vue'
 import UsageMetrics from './components/UsageMetrics.vue'
 import UsageCharts from './components/UsageCharts.vue'
+import PermissionPanel from './components/PermissionPanel.vue'
 import { getAdminDubbingTasks, deleteAdminDubbingTask, getAdminDubbingUsageSummary, getAdminDubbingUsageTimeseries } from '@/api/modules/dubbing'
 import type { DubbingTask, DubbingUsageSummary, DubbingUsageTimeSeries } from '@/types'
 
-const activeTab = ref('history')
+const activeTab = ref('stats')
 const tasks = ref<DubbingTask[]>([])
 const loading = ref(false)
 const summary = ref<DubbingUsageSummary | null>(null)

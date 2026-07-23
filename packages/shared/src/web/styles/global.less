@@ -46,8 +46,10 @@ body {
   }
 }
 
-// 全局规则：所有表格表头文字居中
+// 全局规则：所有表格文字居中（表头 + 内容）
 .ant-table-thead > tr > th,
-.ant-table-thead > tr > th.ant-table-cell {
+.ant-table-thead > tr > th.ant-table-cell,
+.ant-table-tbody > tr > td,
+.ant-table-tbody > tr > td.ant-table-cell {
   text-align: center !important;
 }

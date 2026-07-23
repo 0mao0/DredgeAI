@@ -6,7 +6,7 @@
       <a-col :span="8">
         <a-card class="profile-card">
           <div class="profile-avatar-wrap">
-            <a-avatar :size="80" :style="{ background: '#0EA5E9', fontSize: '32px' }">{{ profile?.name?.[0] || 'A' }}</a-avatar>
+            <a-avatar :size="80" :style="{ background: 'var(--color-brand)', fontSize: '32px' }">{{ profile?.name?.[0] || 'A' }}</a-avatar>
             <div class="profile-name">{{ profile?.name || '管理员' }}</div>
             <div class="profile-role">{{ roleLabel }}</div>
           </div>

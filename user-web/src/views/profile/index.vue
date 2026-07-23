@@ -21,20 +21,20 @@
             <span class="banner-meta-item"><PhoneOutlined />{{ userStore.userInfo?.phone }}</span>
           </div>
         </div>
-      </div>
-      <div class="banner-stats">
-        <div class="stat-item">
-          <div class="stat-icon" style="--stat-color: var(--color-brand)"><AppstoreOutlined /></div>
-          <div class="stat-body">
-            <div class="stat-value">{{ appStore.authorizedApps.length }}</div>
-            <div class="stat-label">已授权应用</div>
+        <div class="banner-stats-inline">
+          <div class="stat-block">
+            <div class="stat-block-top">
+              <AppstoreOutlined style="color: var(--color-brand)" />
+              <span>{{ appStore.authorizedApps.length }}</span>
+            </div>
+            <div class="stat-block-label">已授权应用</div>
           </div>
-        </div>
-        <div class="stat-item">
-          <div class="stat-icon" style="--stat-color: var(--color-success)"><CheckCircleOutlined /></div>
-          <div class="stat-body">
-            <div class="stat-value">{{ appStore.visibleAppRoutes.length }}</div>
-            <div class="stat-label">已启用应用</div>
+          <div class="stat-block">
+            <div class="stat-block-top">
+              <CheckCircleOutlined style="color: var(--color-success)" />
+              <span>{{ appStore.visibleAppRoutes.length }}</span>
+            </div>
+            <div class="stat-block-label">已启用应用</div>
           </div>
         </div>
       </div>
@@ -107,13 +107,7 @@
               <span class="app-count">（{{ sidebarApps.length }} / {{ appStore.authorizedApps.length }}）</span>
             </div>
             <div class="category-bar">
-              <div
-                v-for="cat in categoryOptions"
-                :key="cat.key"
-                class="category-tab"
-                :class="{ active: selectedCategories.includes(cat.key) }"
-                @click="toggleCategory(cat.key)"
-              >{{ cat.label }}<span class="cat-count">({{ cat.count }})</span></div>
+              <span v-for="cat in categoryOptions" :key="cat.key" class="cat-tag" :style="{ color: catColorMap[cat.key], borderColor: catColorMap[cat.key], background: catColorMap[cat.key] + '22' }">{{ cat.label }}<span class="cat-tag-count">({{ cat.count }})</span></span>
             </div>
           </div>
           <div class="sc-body">            
@@ -123,6 +117,7 @@
                 :key="app.route || app.id"
                 class="app-card"
                 :class="{
+                  active: !!app.route && appStore.visibleAppRoutes.includes(app.route),
                   dragging: dragIndex === idx,
                   'over-top': dragOverIndex === idx && dragOverDir === 'top',
                   'over-bottom': dragOverIndex === idx && dragOverDir === 'bottom',
@@ -135,14 +130,17 @@
                 @drop="onDrop(idx)"
               >
                 <div class="app-card-drag"><HolderOutlined /></div>
-                <div
-                  class="app-card-icon"
-                  :style="{ '--app-icon-color': appIconColors[idx % appIconColors.length] }"
-                >
+                  <div
+                    class="app-card-icon"
+                    :style="{ '--app-icon-color': catColorMap[app.category] || '#94A3B8' }"
+                  >
                   <component :is="iconMap[app.icon]" />
                 </div>
                 <div class="app-card-body">
-                  <span class="app-card-name">{{ app.title }}</span>
+                  <div class="app-card-name-row">
+                    <span class="app-cat-pill" :style="catPillStyle(app.category)">{{ app.category }}</span>
+                    <span class="app-card-name" :style="{ color: catColorMap[app.category] || 'var(--color-text-primary)' }">{{ app.title }}</span>
+                  </div>
                   <span class="app-card-desc">{{ app.description }}</span>
                 </div>
                 <a-switch
@@ -190,13 +188,6 @@ const iconMap: Record<string, Component> = {
   FileSearchOutlined: Icons.FileSearchOutlined,
   AppstoreOutlined: Icons.AppstoreOutlined,
 }
-
-// 应用图标颜色（使用 CSS 变量以响应主题切换）
-const appIconColors = [
-  'var(--color-brand)', 'var(--color-accent)', 'var(--color-success)',
-  'var(--color-warning)', 'var(--color-danger)',
-  '#8B5CF6', '#EC4899', '#F97316',
-]
 
 // 主题选项
 const themeOptions = [
@@ -247,32 +238,29 @@ function toggleNotif(value: string): void {
   }
 }
 
-// 当前选中的分类列表（多选），默认为空表示显示全部
-const selectedCategories = ref<Array<'通用' | '设计' | '施工' | '经营'>>([])
-
-// 切换分类选中状态
-function toggleCategory(key: '通用' | '设计' | '施工' | '经营'): void {
-  const idx = selectedCategories.value.indexOf(key)
-  if (idx === -1) {
-    selectedCategories.value = [...selectedCategories.value, key]
-  } else {
-    selectedCategories.value = selectedCategories.value.filter((k) => k !== key)
-  }
-}
-
 const sidebarApps = computed(() => appStore.sidebarApps)
 
-// 过滤后的应用列表：按可见顺序（visibleAppRoutes）排序，选中分类取并集，未选则显示全部
+const catColorMap: Record<string, string> = {
+  '通用': '#3B82F6', '经营': '#10B981', '设计': '#8B5CF6', '施工': '#F59E0B',
+}
+
+function catPillStyle(category: string) {
+  const c = catColorMap[category] || '#94A3B8'
+  return { color: c, borderColor: c, background: c + '22' }
+}
+
+// 按可见顺序排序，已激活在前、未激活在后
 const filteredApps = computed(() => {
-  const ordered = appStore.authorizedApps
+  return appStore.authorizedApps
     .filter((a) => a.route)
     .sort((a, b) => {
       const ai = appStore.visibleAppRoutes.indexOf(a.route!)
       const bi = appStore.visibleAppRoutes.indexOf(b.route!)
+      if (ai === -1 && bi === -1) return 0
+      if (ai === -1) return 1
+      if (bi === -1) return -1
       return ai - bi
     })
-  if (selectedCategories.value.length === 0) return ordered
-  return ordered.filter((a) => selectedCategories.value.includes(a.category))
 })
 
 // 拖拽状态
@@ -353,7 +341,7 @@ function onDrop(idx: number): void {
   display: flex;
   align-items: center;
   gap: @spacing-lg;
-  padding: @spacing-xl @spacing-xl @spacing-md;
+  padding: @spacing-xl @spacing-xl @spacing-lg;
 }
 
 .banner-avatar-wrap {
@@ -413,49 +401,40 @@ function onDrop(idx: number): void {
   .anticon { font-size: 13px; color: @text-tertiary; }
 }
 
-// 统计卡片
-.banner-stats {
+// 方块统计
+.banner-stats-inline {
   display: flex;
   gap: @spacing-sm;
-  padding: 0 @spacing-xl @spacing-lg;
-}
-
-.stat-item {
-  flex: 1;
-  display: flex;
-  align-items: center;
-  gap: @spacing-md;
-  padding: @spacing-sm @spacing-base;
-  background: @content-bg;
-  border-radius: @radius-base;
-  border: 1px solid @border-color;
-  transition: border-color @transition-fast;
-  &:hover { border-color: var(--color-brand); }
-}
-
-.stat-icon {
-  width: 36px;
-  height: 36px;
-  border-radius: @radius-base;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  font-size: 16px;
-  color: #fff;
-  background: var(--stat-color);
+  margin-left: auto;
   flex-shrink: 0;
 }
 
-.stat-value {
+.stat-block {
+  width: 80px;
+  padding: @spacing-sm @spacing-xs;
+  background: @content-bg;
+  border-radius: @radius-base;
+  border: 1px solid @border-color;
+  text-align: center;
+}
+
+.stat-block-top {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 3px;
   font-size: @font-size-lg;
   font-weight: @font-weight-bold;
   color: @text-primary;
-  line-height: 1.2;
+  line-height: 1.3;
+  .anticon { font-size: 15px; }
 }
 
-.stat-label {
-  font-size: @font-size-xs;
+.stat-block-label {
+  font-size: 11px;
   color: @text-tertiary;
+  margin-top: 1px;
+  line-height: 1.3;
 }
 
 // ========== 内容区域 ==========
@@ -596,41 +575,48 @@ function onDrop(idx: number): void {
 // ========== 应用设置 ==========
 .category-bar {
   display: inline-flex;
-  gap: 2px;
-  margin-bottom: @spacing-md;
-  padding: 3px;
-  background: @content-bg;
-  border-radius: @radius-sm;
+  gap: @spacing-sm;
+  align-items: center;
 }
 
-.category-tab {
-  padding: 4px 12px;
-  font-size: @font-size-sm;
-  color: @text-secondary;
-  border-radius: 4px;
-  cursor: pointer;
-  transition: all @transition-fast;
-  user-select: none;
+.cat-tag {
   display: inline-flex;
   align-items: center;
-  gap: 4px;
+  gap: 3px;
+  padding: 1px 8px;
+  height: 22px;
+  font-size: @font-size-xs;
+  font-weight: 600;
+  border: 1px solid;
+  border-radius: 4px;
+  white-space: nowrap;
+}
 
-  &:hover { color: @text-primary; }
+.cat-tag-count {
+  font-size: @font-size-xs;
+  color: @text-tertiary;
+  font-variant-numeric: tabular-nums;
+}
 
-  .cat-count {
-    font-size: @font-size-xs;
-    color: @text-tertiary;
-    font-variant-numeric: tabular-nums;
-  }
+.app-cat-pill {
+  display: inline-flex;
+  align-items: center;
+  flex-shrink: 0;
+  padding: 0 5px;
+  height: 18px;
+  line-height: 16px;
+  font-size: 11px;
+  font-weight: 600;
+  border: 1px solid;
+  border-radius: 3px;
+  white-space: nowrap;
+}
 
-  &.active {
-    background: var(--color-brand);
-    color: #fff;
-    font-weight: @font-weight-medium;
-    box-shadow: @shadow-sm;
-
-    .cat-count { color: rgba(255, 255, 255, 0.85); }
-  }
+.app-card-name-row {
+  display: flex;
+  align-items: center;
+  gap: @spacing-sm;
+  min-width: 0;
 }
 
 // 应用列表
@@ -653,6 +639,11 @@ function onDrop(idx: number): void {
   &:not(.disabled):hover {
     border-color: @border-color;
     background: @content-bg;
+  }
+
+  &.active {
+    border-color: var(--color-brand);
+    background: color-mix(in srgb, var(--color-brand) 4%, @card-bg);
   }
 
   &.disabled {

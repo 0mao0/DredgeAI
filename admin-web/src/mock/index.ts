@@ -1,6 +1,6 @@
 import MockAdapter from 'axios-mock-adapter'
 import request from '@/api/request'
-import { USE_MOCK } from '@/utils/constants'
+import { USE_MOCK, MOCK_MODULES } from '@/utils/constants'
 import { registerDashboardMock } from './routes/dashboard'
 import { registerPermissionMock } from './routes/permissions'
 import { registerApplicationMock } from './routes/applications'
@@ -10,7 +10,7 @@ import { registerProfileMock } from './routes/profile'
 import { registerApiKeyMock } from './routes/apikey'
 import { registerDubbingMock } from './routes/dubbing'
 
-/** 注册所有 mock 路由 */
+/** 注册所有 mock 路由（按模块开关控制） */
 export function registerMock(): void {
   console.log('[mock] registerMock called, USE_MOCK =', USE_MOCK)
   if (!USE_MOCK) return
@@ -23,17 +23,25 @@ export function registerMock(): void {
     return [200, handler()]
   }
 
-  registerDashboardMock(mock, wrap)
-  registerPermissionMock(mock, wrap)
-  registerApplicationMock(mock, wrap)
-  registerDatasourceMock(mock, wrap)
-  registerAnalyticsMock(mock, wrap)
-  registerProfileMock(mock, wrap)
-  registerApiKeyMock(mock, wrap)
-  registerDubbingMock(mock, wrap)
+  // 按模块注册 mock，模块开关关闭则该模块请求直连真实 API
+  const modules: { key: string; register: (m: MockAdapter, w: typeof wrap) => void }[] = [
+    { key: 'dashboard', register: registerDashboardMock },
+    { key: 'permissions', register: registerPermissionMock },
+    { key: 'applications', register: registerApplicationMock },
+    { key: 'datasource', register: registerDatasourceMock },
+    { key: 'analytics', register: registerAnalyticsMock },
+    { key: 'profile', register: registerProfileMock },
+    { key: 'apikey', register: registerApiKeyMock },
+    { key: 'dubbing', register: registerDubbingMock },
+  ]
 
-  // 打印已注册的处理器数量（用于诊断）
-  console.log('[mock] routes registered')
+  for (const mod of modules) {
+    if (MOCK_MODULES[mod.key] !== false) {
+      mod.register(mock, wrap)
+    } else {
+      console.log(`[mock] ${mod.key} mock disabled — requests pass through to real API`)
+    }
+  }
 
   // ABP 格式：未匹配的请求返回错误响应
   mock.onAny().reply((config) => {

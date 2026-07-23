@@ -2,13 +2,23 @@
   <div class="op-panel">
     <!-- 左侧：语音列表 -->
     <section class="op-panel__left">
-      <SectionCard title="选择声音" class="op-panel__left-card" :flush="true">
+      <SectionCard class="op-panel__left-card" :flush="true">
+        <template #title>选择音色（{{ voices.length }}）</template>
+        <template #extra>
+          <a-button size="small" type="dashed" @click="emit('openRegister')">
+            <template #icon><PlusOutlined /></template>
+            制音
+          </a-button>
+        </template>
         <div class="op-panel__left-body">
           <VoicePicker
             :voices="voices"
             :loading="voicesLoading"
             :model-value="voiceId"
+            :disabled="generating || producingTask"
             @update:model-value="(v: string) => emit('update:voiceId', v)"
+            @delete-voice="(id: string) => emit('deleteVoice', id)"
+            @show-fail-detail="(v: VoiceItem) => emit('showFailDetail', v)"
           />
         </div>
       </SectionCard>
@@ -21,7 +31,7 @@
           <span class="op-panel__title-with-voice">
             输入文本
             <a-tag color="blue" class="op-panel__current-voice-tag">
-              <CustomerServiceOutlined /> {{ selectedVoiceName }}
+              <CustomerServiceOutlined /> {{ selectedVoiceGender }} {{ selectedVoiceStyle }}
             </a-tag>
           </span>
         </template>
@@ -31,73 +41,75 @@
           </span>
         </template>
         <DubbingInputPanel
-          :speed="speed"
           :generating="generating"
           :text="text"
           @update:text="(v: string) => emit('update:text', v)"
-          @update:speed="(v: number) => emit('update:speed', v)"
           @generate="emit('generate', $event)"
         />
       </SectionCard>
 
-      <SectionCard title="生成结果" class="op-panel__result-card">
-        <transition name="fade" mode="out-in">
-          <!-- 生成中：步骤进度 -->
-          <div v-if="generating || producingTask" :key="'producing'" class="result-producing">
-            <div class="producing-steps">
-              <div
-                v-for="(step, i) in steps"
-                :key="step.key"
-                class="producing-step"
-                :class="stepClass(i)"
-              >
-                <span class="producing-step__dot">
-                  <CheckOutlined v-if="stepState(i) === 'done'" />
-                  <LoadingOutlined v-else-if="stepState(i) === 'active'" spin />
-                  <span v-else>{{ i + 1 }}</span>
-                </span>
-                <span class="producing-step__label">{{ step.label }}</span>
+      <transition name="result-rise">
+        <SectionCard v-if="showResult" title="生成结果" class="op-panel__result-card">
+          <transition name="fade" mode="out-in">
+            <!-- 生成中：步骤进度 -->
+            <div v-if="generating || producingTask" :key="'producing'" class="result-producing">
+              <div class="producing-steps">
+                <div
+                  v-for="(step, i) in steps"
+                  :key="step.key"
+                  class="producing-step"
+                  :class="stepClass(i)"
+                >
+                  <span class="producing-step__dot">
+                    <CheckOutlined v-if="stepState(i) === 'done'" />
+                    <LoadingOutlined v-else-if="stepState(i) === 'active'" spin />
+                    <span v-else>{{ i + 1 }}</span>
+                  </span>
+                  <span class="producing-step__label">{{ step.label }}</span>
+                </div>
               </div>
+              <div class="producing-wave" aria-hidden="true">
+                <span v-for="n in 28" :key="n" class="producing-wave__bar" :style="{ animationDelay: (n * 60) + 'ms' }" />
+              </div>
+              <p class="producing-tip">正在合成语音，预计需要几分钟，请稍候…</p>
             </div>
-            <div class="producing-wave" aria-hidden="true">
-              <span v-for="n in 28" :key="n" class="producing-wave__bar" :style="{ animationDelay: (n * 60) + 'ms' }" />
+
+            <!-- 已完成：播放器 -->
+            <div v-else-if="currentTask && currentTask.status === '已完成'" :key="currentTask.id" class="result-area">
+              <a-tag color="green" class="result-status">
+                <CheckCircleFilled /> 合成完成
+              </a-tag>
+              <DubbingPlayer :task="currentTask" />
             </div>
-            <p class="producing-tip">正在合成语音，预计需要几秒钟，请稍候…</p>
-          </div>
 
-          <!-- 已完成：播放器 -->
-          <div v-else-if="currentTask && currentTask.status === '已完成'" :key="currentTask.id" class="result-area">
-            <a-tag color="green" class="result-status">
-              <CheckCircleFilled /> 合成完成
-            </a-tag>
-            <DubbingPlayer :task="currentTask" />
-          </div>
+            <!-- 失败 -->
+            <div v-else-if="currentTask && currentTask.status === '已失败'" :key="'failed'" class="result-area">
+              <a-result status="error" title="生成失败" sub-title="请检查文本内容后重试">
+                <template #extra><a-button type="primary" @click="emit('reset')">重新生成</a-button></template>
+              </a-result>
+            </div>
 
-          <!-- 失败 -->
-          <div v-else-if="currentTask && currentTask.status === '已失败'" :key="'failed'" class="result-area">
-            <a-result status="error" title="生成失败" sub-title="请检查文本内容后重试">
-              <template #extra><a-button type="primary" @click="emit('reset')">重新生成</a-button></template>
-            </a-result>
-          </div>
-
-          <!-- 空态 -->
-          <div v-else key="empty" class="result-empty">
-            <CustomerServiceOutlined class="result-empty__icon" />
-            <p class="result-empty__title">还没有配音结果</p>
-            <p class="result-empty__desc">在左侧选择音色并输入文本，点击「开始生成」即可创建你的第一段配音。</p>
-          </div>
-        </transition>
-      </SectionCard>
+            <!-- 空态（卡片已显示但无结果时） -->
+            <div v-else key="empty" class="result-empty">
+              <CustomerServiceOutlined class="result-empty__icon" />
+              <p class="result-empty__title">还没有配音结果</p>
+              <p class="result-empty__desc">在左侧选择音色并输入文本，点击「开始生成」即可创建你的第一段配音。</p>
+            </div>
+          </transition>
+        </SectionCard>
+      </transition>
     </section>
   </div>
 </template>
 
 <script setup lang="ts">
+import { computed } from 'vue'
 import {
   CheckOutlined,
   LoadingOutlined,
   CheckCircleFilled,
   CustomerServiceOutlined,
+  PlusOutlined,
 } from '@ant-design/icons-vue'
 import SectionCard from '@shared/web/components/SectionCard.vue'
 import VoicePicker from './VoicePicker.vue'
@@ -111,7 +123,6 @@ const props = defineProps<{
   voiceId: string
   selectedVoiceName: string
   text: string
-  speed: number
   generating: boolean
   producingTask: boolean
   activeStep: number
@@ -121,9 +132,11 @@ const props = defineProps<{
 const emit = defineEmits<{
   'update:voiceId': [value: string]
   'update:text': [value: string]
-  'update:speed': [value: number]
   generate: [text: string]
   reset: []
+  openRegister: []
+  deleteVoice: [voiceId: string]
+  showFailDetail: [voice: VoiceItem]
 }>()
 
 const steps = [
@@ -131,6 +144,20 @@ const steps = [
   { key: 'produce', label: '合成语音' },
   { key: 'done', label: '完成' },
 ]
+
+/** 从未发起过配音时隐藏结果卡片；一旦开始合成/有结果即常驻展示 */
+const showResult = computed(
+  () => props.generating || props.producingTask || props.currentTask !== null,
+)
+
+const selectedVoiceGender = computed(() => {
+  const v = props.voices.find((v) => v.id === props.voiceId)
+  return v?.gender || ''
+})
+const selectedVoiceStyle = computed(() => {
+  const v = props.voices.find((v) => v.id === props.voiceId)
+  return v?.style || ''
+})
 
 function stepState(i: number): 'done' | 'active' | 'todo' {
   if (i < props.activeStep) return 'done'
@@ -166,9 +193,9 @@ function stepClass(i: number): string {
   }
 
   &__left {
-    width: 30%;
-    min-width: 260px;
-    max-width: 380px;
+    width: 24%;
+    min-width: 220px;
+    max-width: 320px;
     display: flex;
     flex-direction: column;
     min-height: 0;
@@ -222,6 +249,7 @@ function stepClass(i: number): string {
     gap: @spacing-sm;
   }
   &__current-voice-tag { font-size: @font-size-sm; margin-right: 0; }
+
   &__charcount {
     font-size: @font-size-xs;
     color: @text-tertiary;
@@ -340,6 +368,19 @@ function stepClass(i: number): string {
 .fade-enter-active, .fade-leave-active { transition: opacity 0.25s ease; }
 .fade-enter-from, .fade-leave-to { opacity: 0; }
 
+/* 生成结果卡片：点击「开始」后从下方升入视野（fade + rise，ease-out 柔和落定） */
+.result-rise-enter-active {
+  transition:
+    opacity 0.42s cubic-bezier(0.22, 0.61, 0.36, 1),
+    transform 0.42s cubic-bezier(0.22, 0.61, 0.36, 1);
+}
+.result-rise-enter-from {
+  opacity: 0;
+  transform: translateY(16px);
+}
+.result-rise-leave-active { transition: opacity 0.2s ease, transform 0.2s ease; }
+.result-rise-leave-to { opacity: 0; transform: translateY(8px); }
+
 @media (max-width: 991px) {
   .op-panel {
     flex-direction: column;
@@ -353,5 +394,9 @@ function stepClass(i: number): string {
   .producing-wave__bar { animation: none; height: 60%; }
   .result-area { animation: none; }
   .fade-enter-active, .fade-leave-active { transition: none; }
+  .result-rise-enter-active,
+  .result-rise-leave-active { transition: opacity 0.2s ease; transform: none; }
+  .result-rise-enter-from,
+  .result-rise-leave-to { transform: none; }
 }
 </style>

@@ -27,6 +27,7 @@ import { computed, ref } from 'vue'
 import ChartContainer from '@shared/web/components/ChartContainer.vue'
 import SectionCard from '@shared/web/components/SectionCard.vue'
 import { useCssVar } from '@shared/web/composables/useCssVar'
+import { useChartTheme } from '@shared/web/composables/useChartTheme'
 import type { DubbingTask, DubbingUsageTimeSeries } from '@/types'
 
 const props = defineProps<{ tasks: DubbingTask[]; timeSeries: DubbingUsageTimeSeries | null; loading: boolean }>()
@@ -34,21 +35,11 @@ const emit = defineEmits<{ rangeChange: [range: string] }>()
 
 const chartRange = ref('30d')
 
+const { chartTheme } = useChartTheme()
+
 const brandColor = useCssVar('--color-brand')
 const accentColor = useCssVar('--color-accent')
 const successColor = useCssVar('--color-success')
-
-function chartTheme() {
-  const isDark = document.documentElement.getAttribute('data-theme') === 'dark'
-  return {
-    axisColor: isDark ? '#52627A' : '#A8A29E',
-    splitColor: isDark ? 'rgba(148, 163, 184, 0.08)' : 'rgba(0, 0, 0, 0.06)',
-    tooltipBg: isDark ? 'rgba(15, 23, 42, 0.92)' : 'rgba(255, 255, 255, 0.92)',
-    tooltipBorder: isDark ? 'rgba(148, 163, 184, 0.15)' : 'rgba(0, 0, 0, 0.06)',
-    tooltipColor: isDark ? '#E2E8F0' : '#1C1917',
-    legendColor: isDark ? '#94A3B8' : '#78716C',
-  }
-}
 
 function makeBarGradient(hex: string) {
   return {
@@ -68,8 +59,8 @@ const tasksOption = computed(() => {
   if (!categories.length) return {}
   return {
     tooltip: { trigger: 'axis' as const, backgroundColor: t.tooltipBg, borderColor: t.tooltipBorder, borderWidth: 1, textStyle: { color: t.tooltipColor, fontSize: 13 } },
-    grid: { left: 40, right: 16, bottom: 44, top: 16 },
-    xAxis: { type: 'category' as const, data: categories, axisLine: { show: false }, axisTick: { show: false }, axisLabel: { color: t.axisColor, fontSize: 11, rotate: 45 } },
+    grid: { left: 8, right: 16, bottom: 8, top: 16, containLabel: true },
+    xAxis: { type: 'category' as const, data: categories, axisLine: { show: false }, axisTick: { show: false }, axisLabel: { color: t.axisColor, fontSize: 11, rotate: 40, hideOverlap: true } },
     yAxis: { type: 'value' as const, min: 0, axisLine: { show: false }, axisTick: { show: false }, axisLabel: { color: t.axisColor, fontSize: 11 }, splitLine: { lineStyle: { color: t.splitColor, type: 'dashed' as const } } },
     series: [{
       name: '每日使用次数',
@@ -93,7 +84,7 @@ function rankBarOption(counts: Map<string, number>, palette: string[]) {
   }))
   return {
     tooltip: { trigger: 'axis' as const, backgroundColor: t.tooltipBg, borderColor: t.tooltipBorder, borderWidth: 1, textStyle: { color: t.tooltipColor, fontSize: 13 } },
-    grid: { left: 60, right: 32, bottom: 12, top: 16 },
+    grid: { left: 8, right: 32, bottom: 8, top: 16, containLabel: true },
     xAxis: { type: 'value' as const, axisLine: { show: false }, axisTick: { show: false }, axisLabel: { color: t.axisColor, fontSize: 11 }, splitLine: { lineStyle: { color: t.splitColor, type: 'dashed' as const } } },
     yAxis: { type: 'category' as const, data: categories.slice().reverse(), axisLine: { show: false }, axisTick: { show: false }, axisLabel: { color: t.axisColor, fontSize: 11, interval: 0 } },
     series: [{ type: 'bar' as const, data: data.slice().reverse(), barWidth: '55%', animationDuration: 600, animationEasing: 'easeOutQuad' as const }],

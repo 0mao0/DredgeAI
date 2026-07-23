@@ -28,12 +28,14 @@ const isDark = computed(() => currentTheme.value === 'dark')
 </script>
 
 <style scoped lang="less">
+@import '../styles/variables.less';
+
 .theme-toggle {
   font-size: 16px;
-  color: rgba(255, 255, 255, 0.65);
+  color: @header-text-secondary;
   &:hover {
-    color: #fff !important;
-    background: rgba(255, 255, 255, 0.08) !important;
+    color: @header-text !important;
+    background: @surface-hover !important;
   }
 }
 </style>

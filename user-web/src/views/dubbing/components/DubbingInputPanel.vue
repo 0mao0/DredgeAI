@@ -1,33 +1,16 @@
 <template>
   <div class="input-panel">
     <a-textarea
-      v-model:value="text"
+      :value="props.text"
       :maxlength="5000"
       :auto-size="{ minRows: 6, maxRows: 14 }"
       :placeholder="EXAMPLE_TEXT"
       class="input-panel__textarea"
+      @input="(e: Event) => emit('update:text', (e.target as HTMLTextAreaElement).value)"
     />
 
     <div class="input-panel__footer-row">
-      <div class="input-panel__speed-col">
-        <div class="input-panel__speed-head">
-          <span class="input-panel__speed-label">倍速</span>
-          <span class="input-panel__speed-val">{{ speed.toFixed(1) }}x</span>
-        </div>
-        <a-slider
-          :min="0.5"
-          :max="3"
-          :step="0.1"
-          :value="speed"
-          @update:value="(val: number) => emit('update:speed', val)"
-          class="input-panel__slider"
-        />
-      </div>
-
-      <div class="input-panel__eta-col">
-        <span class="input-panel__eta-label">预估时长</span>
-        <span class="input-panel__eta-value">{{ estimatedDuration }}</span>
-      </div>
+      <span class="input-panel__eta">{{ estimatedDuration }}</span>
 
       <a-button
         type="primary"
@@ -46,32 +29,30 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed } from 'vue'
+import { computed } from 'vue'
 import { SoundOutlined } from '@ant-design/icons-vue'
 
 const props = defineProps<{
-  speed: number
   generating: boolean
+  text: string
 }>()
 
 const emit = defineEmits<{
   generate: [text: string]
-  'update:speed': [value: number]
+  'update:text': [value: string]
 }>()
-
-const text = ref('')
 
 const EXAMPLE_TEXT = '各位领导，各位同事，大家下午好。今天由我来为大家汇报本项目的最新进展情况。经过全体团队成员的共同努力，项目整体进度已超过预期目标。'
 
-// 预估时长：字数 / 3.6 / 倍速（秒）
+// 预估时长：字数 / 3.6 / 倍速（秒），TTS 服务默认 1x 倍速
 const estimatedDuration = computed(() => {
-  const len = text.value.trim().length || EXAMPLE_TEXT.length
-  const sec = len / 3.6 / (props.speed || 1)
+  const len = props.text.trim().length || EXAMPLE_TEXT.length
+  const sec = len / 3.6
   return `${sec.toFixed(1)} 秒`
 })
 
 function handleGenerate(): void {
-  const content = text.value.trim() || EXAMPLE_TEXT
+  const content = props.text.trim() || EXAMPLE_TEXT
   emit('generate', content)
 }
 </script>
@@ -92,47 +73,13 @@ function handleGenerate(): void {
     gap: @spacing-md;
     margin-top: @spacing-sm;
   }
-  &__speed-col {
-    flex: 1 1 auto;
-    min-width: 0;
-    display: flex;
-    flex-direction: column;
-    justify-content: center;
-  }
-  &__speed-head {
-    display: flex;
-    align-items: baseline;
-    justify-content: space-between;
-    margin-bottom: 2px;
-  }
-  &__speed-label { font-size: @font-size-sm; color: @text-primary; white-space: nowrap; }
-  &__speed-val {
+  &__eta {
     font-size: @font-size-sm;
-    color: @text-secondary;
-    font-variant-numeric: tabular-nums;
-  }
-  &__slider { width: 100%; :deep(.ant-slider) { margin: 0; } }
-  &__eta-col {
-    flex: 0 0 16%;
-    max-width: 16%;
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    justify-content: center;
-    gap: 2px;
-    text-align: center;
-  }
-  &__eta-label { font-size: @font-size-xs; color: @text-tertiary; white-space: nowrap; }
-  &__eta-value {
-    font-size: @font-size-base;
     color: @text-primary;
-    font-weight: @font-weight-medium;
-    font-variant-numeric: tabular-nums;
     white-space: nowrap;
   }
   &__submit {
-    flex: 0 0 20%;
-    max-width: 20%;
+    margin-left: auto;
     height: 44px;
     font-size: @font-size-base;
     display: inline-flex;

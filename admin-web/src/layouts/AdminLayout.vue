@@ -4,17 +4,19 @@
       v-model:collapsed="collapsed"
       :trigger="null"
       collapsible
-      theme="dark"
-      :width="240"
+      :theme="isDark ? 'dark' : 'light'"
+      :width="200"
       :collapsed-width="64"
       class="sider"
     >
-      <Logo :collapsed="collapsed" subtitle="管理后台" />
+      <div class="sider-brand" @click="collapsed = !collapsed">
+        <Logo :collapsed="collapsed" subtitle="管理后台" />
+      </div>
 
       <a-menu
         v-model:selectedKeys="selectedKeys"
         v-model:openKeys="openKeys"
-        theme="dark"
+        :theme="isDark ? 'dark' : 'light'"
         mode="inline"
         class="sider-menu"
         @click="handleMenuClick"
@@ -65,10 +67,6 @@
           <ApiOutlined />
           <span>API 管理</span>
         </a-menu-item>
-        <a-menu-item key="/dubbing">
-          <CustomerServiceOutlined />
-          <span>AI 配音</span>
-        </a-menu-item>
         <a-sub-menu key="apps">
           <template #title>
             <AppstoreOutlined />
@@ -82,7 +80,7 @@
             <ControlOutlined />
             <span>发布管理</span>
           </a-menu-item>
-          <a-menu-item v-for="app in appMenuItems" :key="`/applications/${app.id}`">
+          <a-menu-item v-for="app in appMenuItems" :key="app.route">
             <span class="app-cat-tag" :style="{ color: app.catColor, borderColor: app.catColor, background: app.catColor + '22' }">{{ app.category }}</span>
             <span class="app-menu-label">{{ app.name }}</span>
           </a-menu-item>
@@ -137,50 +135,42 @@
           <AlertOutlined />
           <span>预警管理</span>
         </a-menu-item>
+      </a-menu>
 
-        <a-menu-divider class="menu-divider menu-divider--push" />
-
+      <a-menu
+        :selected-keys="[route.path]"
+        :theme="isDark ? 'dark' : 'light'"
+        mode="inline"
+        class="sider-menu-bottom"
+        @click="handleMenuClick"
+      >
         <a-menu-item key="/profile">
           <UserOutlined />
           <span>个人中心</span>
         </a-menu-item>
       </a-menu>
+
+      <div class="sider-footer">
+        <a-tooltip :title="collapsed ? '展开侧栏' : '收起侧栏'" placement="right">
+          <div class="sider-footer-btn" @click="collapsed = !collapsed">
+            <MenuUnfoldOutlined v-if="collapsed" />
+            <MenuFoldOutlined v-else />
+          </div>
+        </a-tooltip>
+        <template v-if="!collapsed">
+          <a-tooltip title="切换主题" placement="right">
+            <ThemeToggle />
+          </a-tooltip>
+          <a-tooltip title="退出登录" placement="right">
+            <div class="sider-footer-btn" @click="handleLogout">
+              <LogoutOutlined />
+            </div>
+          </a-tooltip>
+        </template>
+      </div>
     </a-layout-sider>
 
     <a-layout class="main-layout">
-      <a-layout-header class="header">
-        <div class="header-left">
-          <component
-            :is="collapsed ? MenuUnfoldOutlined : MenuFoldOutlined"
-            class="trigger"
-            @click="collapsed = !collapsed"
-          />
-          <a-breadcrumb class="breadcrumb">
-            <a-breadcrumb-item>{{ route.meta.title as string }}</a-breadcrumb-item>
-          </a-breadcrumb>
-        </div>
-        <div class="header-right">
-          <a-badge dot>
-            <BellOutlined class="header-icon" />
-          </a-badge>
-          <ThemeToggle />
-          <a-dropdown>
-            <span class="user-info">
-              <a-avatar :style="{ background: 'var(--color-brand)' }">
-                {{ profile?.name?.[0] || 'A' }}
-              </a-avatar>
-              <span class="user-name">{{ profile?.name || '管理员' }}</span>
-            </span>
-            <template #overlay>
-              <a-menu @click="handleUserMenu">
-                <a-menu-item key="profile"><UserOutlined /> 个人中心</a-menu-item>
-                <a-menu-item key="logout"><LogoutOutlined /> 退出登录</a-menu-item>
-              </a-menu>
-            </template>
-          </a-dropdown>
-        </div>
-      </a-layout-header>
-
       <a-layout-content class="content">
         <router-view v-slot="{ Component, route }">
           <transition name="fade" mode="out-in">
@@ -200,13 +190,13 @@ import {
   TeamOutlined, UsergroupAddOutlined, SafetyOutlined,
   DashboardOutlined, AppstoreOutlined, DatabaseOutlined, BarChartOutlined, ControlOutlined,
   FundOutlined, EyeOutlined, SwapOutlined, BankOutlined, FileSearchOutlined, BulbOutlined,
-  ApiOutlined, AlertOutlined, UserOutlined, CustomerServiceOutlined,
+  ApiOutlined, AlertOutlined, UserOutlined,
   MenuFoldOutlined, MenuUnfoldOutlined,
-  BellOutlined, LogoutOutlined,
+  LogoutOutlined,
 } from '@ant-design/icons-vue'
 import Logo from '@shared/web/components/Logo.vue'
 import { useAppStore } from '@/stores/app'
-import { useSidebarStore } from '@shared/web/stores'
+import { useSidebarStore, useThemeStore } from '@shared/web/stores'
 import { getProfile } from '@/api/modules/profile'
 import { getApplications } from '@/api/modules/applications'
 import ThemeToggle from '@shared/web/components/ThemeToggle.vue'
@@ -215,6 +205,14 @@ const router = useRouter()
 const route = useRoute()
 const appStore = useAppStore()
 const sidebarStore = useSidebarStore()
+const themeStore = useThemeStore()
+
+const isDark = computed(() => {
+  if (themeStore.theme === 'auto') {
+    return window.matchMedia('(prefers-color-scheme: dark)').matches
+  }
+  return themeStore.theme === 'dark'
+})
 
 const collapsed = computed({
   get: () => sidebarStore.collapsed,
@@ -222,7 +220,7 @@ const collapsed = computed({
 })
 const selectedKeys = ref<string[]>([route.path])
 
-interface AppMenuItem { id: string; name: string; category: string; catColor: string }
+interface AppMenuItem { id: string; name: string; category: string; catColor: string; route: string }
 const appMenuItems = ref<AppMenuItem[]>([])
 
 const catColorMap: Record<string, string> = {
@@ -248,7 +246,7 @@ const routeParentsMap: Record<string, string[]> = {
   '/data/static/standards': ['data', 'data-static'],
   '/data/static/reports': ['data', 'data-static'],
   '/data/static/experience': ['data', 'data-static'],
-  '/dubbing': [],
+  '/applications/dubbing': ['apps'],
 }
 
 function getRouteParents(p: string): string[] | undefined {
@@ -258,8 +256,6 @@ function getRouteParents(p: string): string[] | undefined {
 }
 
 const openKeys = ref<string[]>([])
-
-const profile = computed(() => appStore.profile)
 
 onMounted(async () => {
   const parents = getRouteParents(route.path)
@@ -277,14 +273,15 @@ onMounted(async () => {
     appMenuItems.value = apps.map((a) => ({
       id: a.id, name: a.name, category: a.category,
       catColor: catColorMap[a.category] || '#94A3B8',
+      route: a.route || `/applications/${a.id}`,
     }))
   } catch {
     appMenuItems.value = [
-      { id: '1', name: '智能问答', category: '通用', catColor: '#3B82F6' },
-      { id: '2', name: '经营看板', category: '经营', catColor: '#10B981' },
-      { id: '3', name: 'BIM 建模', category: '设计', catColor: '#8B5CF6' },
-      { id: '4', name: '进度追踪', category: '施工', catColor: '#F59E0B' },
-      { id: '5', name: '文档分析', category: '通用', catColor: '#3B82F6' },
+      { id: '1', name: '标准查询', category: '通用', catColor: '#3B82F6', route: '/applications/standard' },
+      { id: '2', name: 'AI视频', category: '通用', catColor: '#3B82F6', route: '/applications/ai-video' },
+      { id: '3', name: 'AI 配音', category: '通用', catColor: '#3B82F6', route: '/applications/dubbing' },
+      { id: '4', name: '设计经验', category: '设计', catColor: '#8B5CF6', route: '/applications/design-experience' },
+      { id: '5', name: '施工经验', category: '施工', catColor: '#F59E0B', route: '/applications/construction-experience' },
     ]
   }
 })
@@ -305,11 +302,8 @@ function handleMenuClick({ key }: { key: string }): void {
   router.push(key)
 }
 
-function handleUserMenu({ key }: { key: string }): void {
-  if (key === 'profile') router.push('/profile')
-  else if (key === 'logout') {
-    router.push('/dashboard')
-  }
+function handleLogout(): void {
+  router.push('/dashboard')
 }
 </script>
 
@@ -319,24 +313,53 @@ function handleUserMenu({ key }: { key: string }): void {
 .admin-layout { height: 100vh; }
 
 .sider {
-  background: @sidebar-bg !important;
+  background: @header-bg !important;
   :deep(.ant-layout-sider-children) { display: flex; flex-direction: column; }
 }
 
-.menu-divider {
-  margin: 8px 16px;
-  background: rgba(255, 255, 255, 0.06);
-}
-
-.menu-divider--push {
-  margin-top: auto;
-  margin-bottom: 4px;
+.sider-brand {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  height: @header-height;
+  padding-right: @spacing-xl;
 }
 
 .sider-menu {
   flex: 1;
   border-right: none !important;
   overflow-y: auto;
+}
+
+.sider-menu-bottom {
+  flex-shrink: 0;
+  border-right: none !important;
+}
+
+.sider-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-evenly;
+  padding: @spacing-sm @spacing-md;
+  border-top: 1px solid @border-color;
+  flex-shrink: 0;
+}
+
+.sider-footer-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  font-size: 15px;
+  color: @header-text-secondary;
+  cursor: pointer;
+  transition: color @transition-base, background @transition-base;
+  &:hover {
+    color: @header-text;
+    background: @surface-hover;
+  }
 }
 
 .app-cat-tag {
@@ -360,54 +383,6 @@ function handleUserMenu({ key }: { key: string }): void {
 }
 
 .main-layout { height: 100%; overflow: hidden; }
-
-.header {
-  background: @sidebar-bg;
-  padding: 0 @spacing-xl;
-  display: flex;
-  align-items: center;
-  height: @header-height;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
-  z-index: 10;
-  transition: background @transition-base;
-}
-.header-left {
-  display: flex;
-  align-items: center;
-  gap: @spacing-lg;
-  flex: 1;
-}
-.trigger {
-  font-size: 18px;
-  color: rgba(255, 255, 255, 0.65);
-  cursor: pointer;
-  &:hover { color: #fff; }
-}
-.breadcrumb {
-  :deep(.ant-breadcrumb-separator) { color: rgba(255, 255, 255, 0.35); }
-  :deep(.ant-breadcrumb-link) { color: rgba(255, 255, 255, 0.65); font-size: @font-size-sm; }
-}
-.header-right {
-  display: flex;
-  align-items: center;
-  gap: @spacing-xl;
-}
-.header-icon {
-  font-size: 18px;
-  color: rgba(255, 255, 255, 0.65);
-  cursor: pointer;
-  &:hover { color: #fff; }
-}
-.user-info {
-  display: flex;
-  align-items: center;
-  gap: @spacing-sm;
-  cursor: pointer;
-}
-.user-name {
-  font-size: @font-size-sm;
-  color: rgba(255, 255, 255, 0.85);
-}
 
 .content {
   flex: 1;

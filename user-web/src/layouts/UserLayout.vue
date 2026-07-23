@@ -9,7 +9,9 @@
       :collapsed-width="48"
       class="sider"
     >
-      <Logo :collapsed="collapsed" subtitle="DredgeAI" />
+      <div class="sider-brand" @click="collapsed = !collapsed">
+        <Logo :collapsed="collapsed" subtitle="DredgeAI" />
+      </div>
       <a-menu
         v-model:selectedKeys="selectedKeys"
         :theme="isDark ? 'dark' : 'light'"
@@ -181,6 +183,10 @@ onMounted(() => {
 .sider {
   background: @header-bg !important;
   :deep(.ant-layout-sider-children) { display: flex; flex-direction: column; }
+}
+
+.sider-brand {
+  cursor: pointer;
 }
 
 .sider-menu {

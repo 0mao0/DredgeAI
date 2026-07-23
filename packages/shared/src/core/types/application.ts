@@ -30,6 +30,8 @@ export interface ApplicationItem {
   createdAt: string
   /** antd 图标名，如 'BookOutlined' */
   icon: string
+  /** 前端路由 slug，如 '/applications/dubbing'；缺省时回退到 /applications/:id */
+  route?: string
   /** 按分类发布出的子应用；为空时模块直接作为用户端应用 */
   subApps?: SubApp[]
   /** 授权范围：所有用户可见，或按角色指定部分人 */

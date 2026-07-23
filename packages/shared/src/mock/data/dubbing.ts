@@ -1,23 +1,11 @@
 import type { VoiceItem, DubbingTask, DubbingUsageTimeSeries, DubbingUsageSummary } from '@shared/types'
-import sampleUrl from '@shared/assets/dubbing-sample.mp3'
 
 export const voiceItems: VoiceItem[] = [
-  { id: 'zh-male-news', name: '知衡·男声', category: '播音', gender: '男声', style: '沉稳大气新闻播报', provider: 'CosyVoice 3', sampleUrl },
-  { id: 'zh-female-news', name: '知语·女声', category: '播音', gender: '女声', style: '清晰流畅新闻播报', provider: 'CosyVoice 3', sampleUrl },
-  { id: 'zh-male-general', name: '知言·男声', category: '通用', gender: '男声', style: '自然温和日常对话', provider: 'CosyVoice 3', sampleUrl },
-  { id: 'zh-female-general', name: '知柔·女声', category: '通用', gender: '女声', style: '温柔亲切日常对话', provider: 'CosyVoice 3', sampleUrl },
-  { id: 'zh-female-service', name: '知悦·女声', category: '客服', gender: '女声', style: '甜美活泼客服风格', provider: 'CosyVoice 3', sampleUrl },
-  { id: 'zh-male-service', name: '知诚·男声', category: '客服', gender: '男声', style: '专业稳重客服风格', provider: 'CosyVoice 3', sampleUrl },
-  { id: 'zh-male-narrator', name: '知声·男声', category: '解说', gender: '男声', style: '磁性浑厚纪录片解说', provider: 'CosyVoice 3', sampleUrl },
-  { id: 'zh-female-narrator', name: '知韵·女声', category: '解说', gender: '女声', style: '优雅知性纪录片解说', provider: 'CosyVoice 3', sampleUrl },
-  { id: 'zh-female-child', name: '知萌·童声', category: '儿童', gender: '童声', style: '活泼可爱童声讲故事', provider: 'CosyVoice 3', sampleUrl },
-  { id: 'zh-male-documentary', name: '知远·男声', category: '解说', gender: '男声', style: '深沉厚重历史人文纪录片', provider: 'Fish-Speech', sampleUrl },
-  { id: 'zh-female-friendly', name: '知暖·女声', category: '通用', gender: '女声', style: '温暖亲切邻家姐姐风格', provider: 'GPT-SoVITS', sampleUrl },
-  { id: 'zh-male-tech', name: '知睿·男声', category: '通用', gender: '男声', style: '学术严谨技术讲解', provider: 'CosyVoice 3', sampleUrl },
-  { id: 'zh-female-sichuan', name: '知蜀·女声', category: '方言', gender: '女声', style: '地道四川话', provider: 'CosyVoice 3', sampleUrl },
-  { id: 'zh-male-shanghai', name: '知沪·男声', category: '方言', gender: '男声', style: '上海话日常对话', provider: 'CosyVoice 3', sampleUrl },
-  { id: 'zh-female-cantonese', name: '知粤·女声', category: '方言', gender: '女声', style: '粤语日常对话', provider: 'CosyVoice 3', sampleUrl },
-  { id: 'zh-male-minnan', name: '知闽·男声', category: '方言', gender: '男声', style: '闽南语日常对话', provider: 'Fish-Speech', sampleUrl },
+  { id: 'zh-male-wangfei', name: '王飞男声', gender: '男声', provider: 'CosyVoice 3', tags: [], visibility: 'public', createdAt: '2026-01-15T00:00:00' },
+  { id: 'zh-male-news', name: '男声·播报', gender: '男声', provider: 'CosyVoice 3', tags: ['新闻', '正式'], visibility: 'public', createdAt: '2026-01-15T00:00:00' },
+  { id: 'zh-female-news', name: '女声·播报', gender: '女声', provider: 'CosyVoice 3', tags: ['新闻', '正式'], visibility: 'public', createdAt: '2026-01-15T00:00:00' },
+  { id: 'zh-male-general', name: '男声·日常', gender: '男声', provider: 'CosyVoice 3', tags: ['日常'], visibility: 'public', createdAt: '2026-01-15T00:00:00' },
+  { id: 'zh-male-narrator', name: '男声·纪录片', gender: '男声', provider: 'CosyVoice 3', tags: ['纪录片', '正式'], visibility: 'public', createdAt: '2026-01-15T00:00:00' },
 ]
 
 let nextId = 1

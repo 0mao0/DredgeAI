@@ -28,9 +28,11 @@ export const urls = {
   apiKeyUsageStats: '/apikey/usage-stats',
   apiKeyUsageTimeSeries: '/apikey/usage-timeseries',
 
-  // AI 配音
-  dubbingVoices: '/dubbing/voices',
-  dubbingGenerate: '/dubbing/generate',
+  // AI 配音（直连 CosyVoice TTS 服务，经 Vite /tts 代理转发到 localhost:8000）
+  dubbingVoices: '/tts/voices',
+  dubbingGenerate: '/tts/tts',
+  dubbingRegister: '/tts/voices/upload',
+  adminVoices: '/dubbing/admin/voices',
   dubbingTasks: '/dubbing/tasks',
   dubbingTask: '/dubbing/tasks/:id',
   dubbingTaskDownload: '/dubbing/tasks/:id/download',

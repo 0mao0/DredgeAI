@@ -127,6 +127,7 @@ import SectionCard from '@shared/web/components/SectionCard.vue'
 import ChartContainer from '@shared/web/components/ChartContainer.vue'
 import MetricCard from '@shared/web/components/MetricCard.vue'
 import { useCssVar } from '@shared/web/composables/useCssVar'
+import { useChartTheme } from '@shared/web/composables/useChartTheme'
 import { formatNumber } from '@shared/core/utils/format'
 
 const columns = [
@@ -165,6 +166,8 @@ const editName = ref('')
 const chartMode = ref<'model' | 'key' | 'total'>('model')
 const timeRange = ref('7d')
 const customDateRange = ref()
+
+const { chartTheme } = useChartTheme()
 
 const brandColor = useCssVar('--color-brand')
 const successColor = useCssVar('--color-success')
@@ -281,92 +284,32 @@ const totalTokens = computed(() => Math.round(totalCalls.value * tokensPerCall.v
 const chartOption = computed(() => {
   const data = mockChartData.value
   const categories = data.categories
-  const isDark = document.documentElement.getAttribute('data-theme') === 'dark'
-  const axisColor = isDark ? '#52627A' : '#A8A29E'
-  const splitColor = isDark ? 'rgba(148, 163, 184, 0.08)' : 'rgba(0, 0, 0, 0.06)'
-  const tooltipBg = isDark ? 'rgba(15, 23, 42, 0.92)' : 'rgba(255, 255, 255, 0.92)'
-  const tooltipBorder = isDark ? 'rgba(148, 163, 184, 0.15)' : 'rgba(0, 0, 0, 0.06)'
-  const tooltipColor = isDark ? '#E2E8F0' : '#1C1917'
+  const t = chartTheme()
+
+  const base = () => ({
+    tooltip: { trigger: 'axis', backgroundColor: t.tooltipBg, borderColor: t.tooltipBorder, borderWidth: 1, textStyle: { color: t.tooltipColor, fontSize: 13 }, valueFormatter: (v: number) => `${v.toLocaleString()} 次` },
+    grid: { left: 40, right: 16, bottom: 24, top: 12 },
+    xAxis: { type: 'category', data: categories, axisLine: { show: false }, axisTick: { show: false }, axisLabel: { color: t.axisColor, fontSize: 11 } },
+    yAxis: { type: 'value', min: 0, axisLine: { show: false }, axisTick: { show: false }, axisLabel: { color: t.axisColor, fontSize: 11 }, splitLine: { lineStyle: { color: t.splitColor, type: 'dashed' } } },
+  })
 
   if (chartMode.value === 'total') {
     return {
-      tooltip: {
-        trigger: 'axis',
-        backgroundColor: tooltipBg,
-        borderColor: tooltipBorder,
-        borderWidth: 1,
-        textStyle: { color: tooltipColor, fontSize: 13 },
-        valueFormatter: (v: number) => `${v.toLocaleString()} 次`,
-      },
-      grid: { left: 40, right: 16, bottom: 24, top: 12 },
-      xAxis: {
-        type: 'category', data: categories,
-        axisLine: { show: false },
-        axisTick: { show: false },
-        axisLabel: { color: axisColor, fontSize: 11 },
-      },
-      yAxis: {
-        type: 'value', min: 0,
-        axisLine: { show: false },
-        axisTick: { show: false },
-        axisLabel: { color: axisColor, fontSize: 11 },
-        splitLine: { lineStyle: { color: splitColor, type: 'dashed' } },
-      },
-      series: [{
-        type: 'bar',
-        data: data.total,
-        barWidth: '32%',
-        itemStyle: {
-          color: makeBarGradient(brandColor.value),
-          borderRadius: [6, 6, 0, 0],
-        },
-        animationDuration: 600,
-        animationEasing: 'easeOutQuad',
-      }],
+      ...base(), legend: undefined,
+      series: [{ type: 'bar', data: data.total, barWidth: '32%', itemStyle: { color: makeBarGradient(brandColor.value), borderRadius: [6, 6, 0, 0] }, animationDuration: 600, animationEasing: 'easeOutQuad' }],
     }
   }
 
   const series = chartMode.value === 'model' ? data.byModel : data.byKey
   const count = series.length
   return {
-    tooltip: {
-      trigger: 'axis',
-      backgroundColor: tooltipBg,
-      borderColor: tooltipBorder,
-      borderWidth: 1,
-      textStyle: { color: tooltipColor, fontSize: 13 },
-      valueFormatter: (v: number) => `${v.toLocaleString()} 次`,
-    },
-    legend: {
-      type: 'scroll', bottom: 0,
-      textStyle: { color: isDark ? '#94A3B8' : '#78716C', fontSize: 12 },
-    },
+    ...base(),
     grid: { left: 40, right: 16, bottom: 44, top: 12 },
-    xAxis: {
-      type: 'category', data: categories,
-      axisLine: { show: false },
-      axisTick: { show: false },
-      axisLabel: { color: axisColor, fontSize: 11 },
-    },
-    yAxis: {
-      type: 'value', min: 0,
-      axisLine: { show: false },
-      axisTick: { show: false },
-      axisLabel: { color: axisColor, fontSize: 11 },
-      splitLine: { lineStyle: { color: splitColor, type: 'dashed' } },
-    },
+    legend: { type: 'scroll', bottom: 0, textStyle: { color: t.legendColor, fontSize: 12 } },
     series: series.map((s, i) => ({
-      name: s.name,
-      type: 'bar',
-      stack: 'total',
-      data: s.data,
-      barWidth: '44%',
-      itemStyle: {
-        color: makeBarGradient(colors.value[i % colors.value.length]),
-        borderRadius: i === count - 1 ? [6, 6, 0, 0] : 0,
-      },
-      animationDuration: 400 + i * 80,
-      animationEasing: 'easeOutQuad',
+      name: s.name, type: 'bar', stack: 'total', data: s.data, barWidth: '44%',
+      itemStyle: { color: makeBarGradient(colors.value[i % colors.value.length]), borderRadius: i === count - 1 ? [6, 6, 0, 0] : 0 },
+      animationDuration: 400 + i * 80, animationEasing: 'easeOutQuad',
     })),
   }
 })

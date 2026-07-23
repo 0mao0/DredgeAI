@@ -12,7 +12,19 @@ export default defineConfig({
     },
     dedupe: ['vue', 'ant-design-vue', '@ant-design/icons-vue', 'vue-echarts'],
   },
-  server: { port: 5373, host: true, open: false },
+  server: {
+    port: 5373,
+    host: true,
+    open: false,
+    proxy: {
+      // 本地 CosyVoice TTS 服务（开发联调用，生产由 VITE_TTS_TARGET 指向正式服务）
+      '/tts': {
+        target: process.env.VITE_TTS_TARGET || 'http://localhost:8000',
+        changeOrigin: true,
+        rewrite: (p) => p.replace(/^\/tts/, '/api'),
+      },
+    },
+  },
   css: {
     preprocessorOptions: {
       less: {
