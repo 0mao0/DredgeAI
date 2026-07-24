@@ -49,15 +49,15 @@ export function registerApiKeyMock(
   mock: MockAdapter,
   wrap: (h: () => unknown) => () => Promise<[number, unknown]>,
 ): void {
-  mock.onGet('/api/apikey/list').reply(wrap(() => apiKeys))
-  mock.onGet('/api/apikey/models').reply(wrap(() => modelTypes))
-  mock.onGet('/api/apikey/usage-by-model').reply(wrap(() => usageByModel))
-  mock.onGet('/api/apikey/usage-by-key').reply(wrap(() => usageByKey))
-  mock.onGet('/api/apikey/usage-stats').reply(wrap(() => ({
+  mock.onGet('/apikey/list').reply(wrap(() => apiKeys))
+  mock.onGet('/apikey/models').reply(wrap(() => modelTypes))
+  mock.onGet('/apikey/usage-by-model').reply(wrap(() => usageByModel))
+  mock.onGet('/apikey/usage-by-key').reply(wrap(() => usageByKey))
+  mock.onGet('/apikey/usage-stats').reply(wrap(() => ({
     totalTokens: 28640000,
     totalCalls: 72500,
   })))
-  mock.onGet('/api/apikey/usage-timeseries').reply((config) => {
+  mock.onGet('/apikey/usage-timeseries').reply((config) => {
     const now = new Date()
     const range = config.params?.range || '7d'
     if (range === 'custom') {

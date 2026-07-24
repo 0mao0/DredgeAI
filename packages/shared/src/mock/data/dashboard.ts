@@ -34,7 +34,7 @@ export const mockAppDistribution: PieChartData = {
     { name: '施工经验', value: 11 },
     { name: '施组审核', value: 6 },
     { name: '耙吸效率', value: 5 },
-    { name: '投标审核', value: 7 },
+    { name: 'AI投标', value: 7 },
     { name: '情报采集', value: 4 },
     { name: '设计经验', value: 7 },
   ],

@@ -13,6 +13,7 @@
     "vue-router": "^4.2.0",
     "ant-design-vue": "^4.0.0",
     "axios": "^1.6.0",
+    "nprogress": "^0.2.0",
     "pinia": "^2.1.0",
     "pinia-plugin-persistedstate": "^4.0.0"
   },
@@ -24,6 +25,7 @@
     "vue-echarts": "^7.0.0",
     "echarts": "^5.5.0",
     "axios": "^1.6.0",
+    "nprogress": "^0.2.0",
     "pinia": "^2.1.0",
     "pinia-plugin-persistedstate": "^4.0.0"
   }

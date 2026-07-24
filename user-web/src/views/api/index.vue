@@ -119,7 +119,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed } from 'vue'
+import { ref, computed, onMounted, watch } from 'vue'
 import { message } from 'ant-design-vue'
 import { PlusOutlined, CopyOutlined, FileTextOutlined } from '@ant-design/icons-vue'
 import PageHeader from '@shared/web/components/PageHeader.vue'
@@ -129,25 +129,20 @@ import MetricCard from '@shared/web/components/MetricCard.vue'
 import { useCssVar } from '@shared/web/composables/useCssVar'
 import { useChartTheme } from '@shared/web/composables/useChartTheme'
 import { formatNumber } from '@shared/core/utils/format'
+import { getApiKeyList, getUsageStats, getUsageTimeSeries } from '@/api/modules/apikey'
+import type { ApiKey, UsageTimeSeries } from '@/types'
 
 const columns = [
   { title: '名称', dataIndex: 'name', key: 'name', align: 'center' },
   { title: 'Key', key: 'key', width: 240, align: 'center' },
-  { title: '模型', dataIndex: 'model', key: 'model', align: 'center' },
+  { title: '模型', dataIndex: 'modelType', key: 'modelType', align: 'center' },
   { title: '创建日期', dataIndex: 'createdAt', key: 'createdAt', width: 120, align: 'center' },
   { title: 'API 文档', key: 'doc', width: 110, align: 'center' },
   { title: '操作', key: 'action', width: 130, align: 'center' },
 ]
 
-const mockKeys = [
-  { id: '1', name: '生产环境-主入口', key: 'sk-dg-xxxxxxxxxxxx1', model: 'GPT-4o', createdAt: '2026-06-01', docUrl: 'https://docs.example.com/gpt4o' },
-  { id: '2', name: '生产环境-备用', key: 'sk-dg-xxxxxxxxxxxx2', model: 'GPT-4o-mini', createdAt: '2026-06-10', docUrl: 'https://docs.example.com/gpt4o-mini' },
-  { id: '3', name: '测试环境', key: 'sk-dg-xxxxxxxxxxxx3', model: 'Claude-3.5-Sonnet', createdAt: '2026-06-15', docUrl: 'https://docs.example.com/claude35' },
-  { id: '4', name: '内部工具-AI助手', key: 'sk-dg-xxxxxxxxxxxx4', model: 'DeepSeek-V3', createdAt: '2026-06-20', docUrl: 'https://docs.example.com/deepseek' },
-  { id: '5', name: '数据分析管道', key: 'sk-dg-xxxxxxxxxxxx5', model: 'GPT-4o', createdAt: '2026-07-01', docUrl: 'https://docs.example.com/gpt4o' },
-]
-
-const apiKeys = ref(mockKeys)
+const apiKeys = ref<ApiKey[]>([])
+const loading = ref(true)
 
 const modelOptions = [
   { label: 'GPT-4o', value: 'GPT-4o' },
@@ -177,68 +172,41 @@ const dangerColor = useCssVar('--color-danger')
 
 const colors = computed(() => [brandColor.value, accentColor.value, successColor.value, warningColor.value, dangerColor.value])
 
-function generateDays(n: number, offset = 0): string[] {
-  const days: string[] = []
-  const ref = new Date()
-  ref.setDate(ref.getDate() + offset)
-  for (let i = n - 1; i >= 0; i--) {
-    const d = new Date(ref)
-    d.setDate(d.getDate() - i)
-    days.push(`${d.getMonth() + 1}/${d.getDate()}`)
+// ─── Data Fetching ──────────────────────────────────────
+
+const usageStats = ref({ totalCalls: 0, totalTokens: 0 })
+const timeSeriesData = ref<UsageTimeSeries | null>(null)
+
+onMounted(async () => {
+  try {
+    const [keys, stats] = await Promise.all([
+      getApiKeyList(),
+      getUsageStats(),
+    ])
+    apiKeys.value = keys
+    usageStats.value = stats
+  } catch {
+    message.error('加载 API 数据失败')
+  } finally {
+    loading.value = false
   }
-  return days
-}
-
-function makeMockSeries(base: number, variance: number, len: number): number[] {
-  return Array.from({ length: len }, () => Math.max(0, base + Math.round((Math.random() - 0.5) * variance)))
-}
-
-function daysInMonth(y: number, m: number): number {
-  return new Date(y, m, 0).getDate()
-}
-
-const days30 = generateDays(30)
-const days7 = generateDays(7)
-const daysMonth = computed(() => {
-  const now = new Date()
-  const n = now.getDate()
-  return generateDays(n)
-})
-const daysPrevMonth = computed(() => {
-  const now = new Date()
-  const y = now.getFullYear()
-  const m = now.getMonth()
-  const n = daysInMonth(y, m)
-  return generateDays(n, -n)
+  await fetchTimeSeries()
 })
 
-const mockChartData = computed(() => {
-  let days: string[]
-  switch (timeRange.value) {
-    case '7d': days = days7; break
-    case 'month': days = daysMonth.value; break
-    case 'prevMonth': days = daysPrevMonth.value; break
-    default: days = days30
+async function fetchTimeSeries() {
+  try {
+    const params: Record<string, string> = { range: timeRange.value }
+    if (timeRange.value === 'custom' && customDateRange.value) {
+      params.startDate = customDateRange.value[0]?.format('YYYY-MM-DD')
+      params.endDate = customDateRange.value[1]?.format('YYYY-MM-DD')
+    }
+    timeSeriesData.value = await getUsageTimeSeries(timeRange.value, params)
+  } catch {
+    message.error('加载趋势数据失败')
   }
-  const len = days.length
-  return {
-    categories: days,
-    byModel: [
-      { name: 'GPT-4o', data: makeMockSeries(320, 200, len) },
-      { name: 'GPT-4o-mini', data: makeMockSeries(580, 300, len) },
-      { name: 'Claude-3.5-Sonnet', data: makeMockSeries(180, 120, len) },
-      { name: 'DeepSeek-V3', data: makeMockSeries(260, 160, len) },
-    ],
-    byKey: [
-      { name: 'sk-dg-xxxx1 (生产-主)', data: makeMockSeries(450, 250, len) },
-      { name: 'sk-dg-xxxx2 (生产-备)', data: makeMockSeries(200, 150, len) },
-      { name: 'sk-dg-xxxx3 (测试)', data: makeMockSeries(380, 200, len) },
-      { name: 'sk-dg-xxxx4 (内部)', data: makeMockSeries(160, 100, len) },
-      { name: 'sk-dg-xxxx5 (数据)', data: makeMockSeries(140, 80, len) },
-    ],
-    total: makeMockSeries(1300, 400, len),
-  }
-})
+}
+
+watch(timeRange, () => fetchTimeSeries())
 
 function makeBarGradient(hex: string) {
   return {
@@ -252,37 +220,21 @@ function makeBarGradient(hex: string) {
 }
 
 const totalCalls = computed(() => {
-  const data = mockChartData.value
+  const data = timeSeriesData.value
+  if (!data) return 0
   if (chartMode.value === 'total') {
-    return data.total.reduce((s, v) => s + v, 0)
+    // 总调用次数 = 所有模型数据之和
+    return data.byModel.reduce((sum: number, m) => sum + m.data.reduce((a: number, b: number) => a + b, 0), 0)
   }
-  const series = chartMode.value === 'model' ? data.byModel : data.byKey
-  return series.reduce((sum, s) => sum + s.data.reduce((a, b) => a + b, 0), 0)
+  const series = chartMode.value === 'model' ? data.byModel : data.byName
+  return series.reduce((sum: number, s: { data: number[] }) => sum + s.data.reduce((a: number, b: number) => a + b, 0), 0)
 })
 
-// 每调用 1 次的 Token 消耗（按模型/Key 估算），使 Token 随维度筛选联动
-const tokensPerCall = computed(() => {
-  const data = mockChartData.value
-  if (chartMode.value === 'total') return 850
-  const series = chartMode.value === 'model' ? data.byModel : data.byKey
-  const weights = series.map((s) =>
-    s.name.includes('mini') || s.name.includes('DeepSeek') || s.name.includes('测试')
-      ? 320
-      : s.name.includes('GPT-4o') || s.name.includes('生产')
-        ? 1100
-        : 760,
-  )
-  const totals = series.map((s) => s.data.reduce((a, b) => a + b, 0))
-  const sumCalls = totals.reduce((a, b) => a + b, 0)
-  if (sumCalls === 0) return 850
-  const sumTokens = totals.reduce((a, b, i) => a + b * weights[i], 0)
-  return sumTokens / sumCalls
-})
-
-const totalTokens = computed(() => Math.round(totalCalls.value * tokensPerCall.value))
+const totalTokens = computed(() => usageStats.value.totalTokens)
 
 const chartOption = computed(() => {
-  const data = mockChartData.value
+  const data = timeSeriesData.value
+  if (!data) return {}
   const categories = data.categories
   const t = chartTheme()
 
@@ -294,19 +246,23 @@ const chartOption = computed(() => {
   })
 
   if (chartMode.value === 'total') {
+    // 总调用次数 = 所有 byModel 数据逐日求和
+    const totalData = data.byModel[0]?.data.map((_: number, i: number) =>
+      data.byModel.reduce((sum: number, m: { data: number[] }) => sum + (m.data[i] || 0), 0)
+    ) || []
     return {
       ...base(), legend: undefined,
-      series: [{ type: 'bar', data: data.total, barWidth: '32%', itemStyle: { color: makeBarGradient(brandColor.value), borderRadius: [6, 6, 0, 0] }, animationDuration: 600, animationEasing: 'easeOutQuad' }],
+      series: [{ type: 'bar', data: totalData, barWidth: '32%', itemStyle: { color: makeBarGradient(brandColor.value), borderRadius: [6, 6, 0, 0] }, animationDuration: 600, animationEasing: 'easeOutQuad' }],
     }
   }
 
-  const series = chartMode.value === 'model' ? data.byModel : data.byKey
+  const series = chartMode.value === 'model' ? data.byModel.map(m => ({ name: m.modelName, data: m.data })) : data.byName
   const count = series.length
   return {
     ...base(),
     grid: { left: 40, right: 16, bottom: 44, top: 12 },
     legend: { type: 'scroll', bottom: 0, textStyle: { color: t.legendColor, fontSize: 12 } },
-    series: series.map((s, i) => ({
+    series: series.map((s: { name: string; data: number[] }, i: number) => ({
       name: s.name, type: 'bar', stack: 'total', data: s.data, barWidth: '44%',
       itemStyle: { color: makeBarGradient(colors.value[i % colors.value.length]), borderRadius: i === count - 1 ? [6, 6, 0, 0] : 0 },
       animationDuration: 400 + i * 80, animationEasing: 'easeOutQuad',

@@ -95,8 +95,9 @@ function onEnded(): void {
   isPlaying.value = false
 }
 
-function onSpeedChange(e: any): void {
-  const rate = Number(e.target.value)
+function onSpeedChange(e: Event): void {
+  const target = e.target as HTMLInputElement
+  const rate = Number(target.value)
   playbackRate.value = rate
   if (audioRef.value) audioRef.value.playbackRate = rate
 }

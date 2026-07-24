@@ -17,7 +17,7 @@ const MODULE_ROUTES: Record<string, string> = {
   '5': '/construction-experience',
   '6': '/construction-review',
   '7': '/dredge-efficiency',
-  '9': '/bid-review',
+  '9': '/ai-bid',
 }
 
 function buildUserApps(): AppCard[] {
@@ -66,7 +66,7 @@ export const DEFAULT_SIDEBAR_ROUTES = [
   '/ai-video',
   '/ai-dubbing',
   '/dredge-efficiency',
-  '/bid-review',
+  '/ai-bid',
   '/intelligence/dredge',
   '/intelligence/tech',
 ]

@@ -185,6 +185,7 @@
 <script setup lang="ts">
 import { ref, watch, onMounted, computed } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
+import { message } from 'ant-design-vue'
 import {
   CodeOutlined, MenuOutlined, ScheduleOutlined, FileTextOutlined, InfoCircleOutlined,
   TeamOutlined, UsergroupAddOutlined, SafetyOutlined,
@@ -230,42 +231,21 @@ const catColorMap: Record<string, string> = {
   '施工': '#F59E0B',
 }
 
-const routeParentsMap: Record<string, string[]> = {
-  '/menu-config': ['dev'],
-  '/task-scheduler': ['dev'],
-  '/logs': ['dev'],
-  '/platform': ['dev'],
-  '/org-users': ['users'],
-  '/permissions': ['users'],
-  '/applications/analysis': ['apps'],
-  '/applications/control': ['apps'],
-  '/data/statistics': ['data'],
-  '/data/dynamic/monitoring': ['data', 'data-dynamic'],
-  '/data/dynamic/tide-level': ['data', 'data-dynamic'],
-  '/data/static/enterprise': ['data', 'data-static'],
-  '/data/static/standards': ['data', 'data-static'],
-  '/data/static/reports': ['data', 'data-static'],
-  '/data/static/experience': ['data', 'data-static'],
-  '/applications/dubbing': ['apps'],
-}
+	function getRouteParents(): string[] {
+	  return (route.meta?.parentKeys as string[]) || []
+	}
 
-function getRouteParents(p: string): string[] | undefined {
-  if (routeParentsMap[p]) return routeParentsMap[p]
-  if (p.startsWith('/applications/') && p !== '/applications/analysis' && p !== '/applications/control') return ['apps']
-  return undefined
-}
-
-const openKeys = ref<string[]>([])
+	const openKeys = ref<string[]>([])
 
 onMounted(async () => {
-  const parents = getRouteParents(route.path)
+  const parents = getRouteParents()
   if (parents) openKeys.value = [...parents]
   if (!appStore.profile) {
     try {
       const user = await getProfile()
       appStore.setProfile(user)
     } catch {
-      // mock fallback
+      message.warning('获取用户信息失败，使用默认配置')
     }
   }
   try {
@@ -276,6 +256,7 @@ onMounted(async () => {
       route: a.route || `/applications/${a.id}`,
     }))
   } catch {
+    message.warning('应用列表加载失败，使用默认菜单')
     appMenuItems.value = [
       { id: '1', name: '标准查询', category: '通用', catColor: '#3B82F6', route: '/applications/standard' },
       { id: '2', name: 'AI视频', category: '通用', catColor: '#3B82F6', route: '/applications/ai-video' },
@@ -288,7 +269,7 @@ onMounted(async () => {
 
 watch(() => route.path, (p) => {
   selectedKeys.value = [p]
-  const parents = getRouteParents(p)
+  const parents = getRouteParents()
   if (parents) {
     for (const parent of parents) {
       if (!openKeys.value.includes(parent)) {

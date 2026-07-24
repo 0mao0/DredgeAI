@@ -210,7 +210,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed } from 'vue'
+import { ref, computed, onMounted, watch } from 'vue'
 import { message } from 'ant-design-vue'
 import { PlusOutlined, FileTextOutlined } from '@ant-design/icons-vue'
 import PageHeader from '@shared/web/components/PageHeader.vue'
@@ -220,14 +220,25 @@ import MetricCard from '@shared/web/components/MetricCard.vue'
 import { formatNumber } from '@shared/core/utils/format'
 import { useCssVar } from '@shared/web/composables/useCssVar'
 import { useChartTheme } from '@shared/web/composables/useChartTheme'
+import { getUsageTimeSeries } from '@/api/modules/apikey'
+import type { UsageTimeSeries } from '@/types'
 
 const { chartTheme } = useChartTheme()
 
 const activeTab = ref('keys')
 
-// ─── Mock Data ────────────────────────────────────────
+// ─── Models (CRUD local state, no backend API) ──────────
 
-const mockModels = [
+interface ModelItem {
+  id: string
+  modelType: string
+  name: string
+  status: string
+  createdAt: string
+  docUrl: string
+}
+
+const mockModels: ModelItem[] = [
   { id: '1', modelType: '文本对话', name: 'GPT-4o', status: '启用', createdAt: '2026-06-01', docUrl: 'https://docs.example.com/gpt4o' },
   { id: '2', modelType: '文本对话', name: 'GPT-4o-mini', status: '启用', createdAt: '2026-06-10', docUrl: 'https://docs.example.com/gpt4o-mini' },
   { id: '3', modelType: '多模态', name: 'Claude-3.5-Sonnet', status: '未启用', createdAt: '2026-06-15', docUrl: 'https://docs.example.com/claude35' },
@@ -237,7 +248,7 @@ const mockModels = [
   { id: '7', modelType: '图像识别', name: 'GPT-4V', status: '启用', createdAt: '2026-07-08', docUrl: 'https://docs.example.com/gpt4v' },
 ]
 
-const models = ref(mockModels)
+const models = ref<ModelItem[]>(mockModels)
 
 const modelTypeOptions = [
   { label: '文本对话', value: '文本对话' },
@@ -271,12 +282,25 @@ const modelColumns = [
   { title: '操作', key: 'action', width: 130, align: 'center' },
 ]
 
+interface MergedUserRecord {
+  userId: string
+  name: string
+  department: string
+  calls: number
+  tokens: number
+  models: string[]
+  monthCallsLimit: number
+  monthCallsWarn: number
+  monthTokensLimit: number
+  monthTokensWarn: number
+}
+
 const mergedUserColumns = [
   { title: '排名', key: 'rank', width: 70, align: 'center' },
   { title: '用户', dataIndex: 'name', key: 'name', align: 'center' },
   { title: '部门', dataIndex: 'department', key: 'department', align: 'center' },
-  { title: '总调用次数', key: 'calls', align: 'center', sorter: (a: any, b: any) => a.calls - b.calls, sortDirections: ['ascend', 'descend'] },
-  { title: '总 Token 用量', key: 'tokens', align: 'center', sorter: (a: any, b: any) => a.tokens - b.tokens, sortDirections: ['ascend', 'descend'] },
+  { title: '总调用次数', key: 'calls', align: 'center', sorter: (a: MergedUserRecord, b: MergedUserRecord) => a.calls - b.calls, sortDirections: ['ascend', 'descend'] as const },
+  { title: '总 Token 用量', key: 'tokens', align: 'center', sorter: (a: MergedUserRecord, b: MergedUserRecord) => a.tokens - b.tokens, sortDirections: ['ascend', 'descend'] as const },
   { title: '授权模型', key: 'models', width: 100, align: 'center' },
   { title: '操作', key: 'action', width: 110, align: 'center' },
 ]
@@ -311,27 +335,14 @@ const dangerColor = useCssVar('--color-danger')
 
 const colors = computed(() => [brandColor.value, accentColor.value, successColor.value, warningColor.value, dangerColor.value])
 
-// ─── Chart Helpers ────────────────────────────────────
+// ─── Charts (API-backed) ─────────────────────────────────
 
-function generateDays(n: number, offset = 0): string[] {
-  const days: string[] = []
-  const ref = new Date()
-  ref.setDate(ref.getDate() + offset)
-  for (let i = n - 1; i >= 0; i--) {
-    const d = new Date(ref)
-    d.setDate(d.getDate() - i)
-    days.push(`${d.getMonth() + 1}/${d.getDate()}`)
-  }
-  return days
-}
+const overviewChartMode = ref<'model' | 'key' | 'total'>('model')
+const overviewTimeRange = ref('7d')
+const overviewCustomDateRange = ref()
 
-function makeMockSeries(base: number, variance: number, len: number): number[] {
-  return Array.from({ length: len }, () => Math.max(0, base + Math.round((Math.random() - 0.5) * variance)))
-}
-
-function daysInMonth(y: number, m: number): number {
-  return new Date(y, m, 0).getDate()
-}
+/** API 返回的时序数据 */
+const timeSeriesData = ref<UsageTimeSeries | null>(null)
 
 function makeBarGradient(hex: string) {
   return {
@@ -344,63 +355,36 @@ function makeBarGradient(hex: string) {
   }
 }
 
-// ─── Tab 2: Charts ────────────────────────────────────
-
-const overviewChartMode = ref<'model' | 'key' | 'total'>('model')
-const overviewTimeRange = ref('7d')
-const overviewCustomDateRange = ref()
-
-const overviewDays30 = generateDays(30)
-const overviewDays7 = generateDays(7)
-const overviewDaysMonth = computed(() => generateDays(new Date().getDate()))
-const overviewDaysPrevMonth = computed(() => {
-  const now = new Date()
-  return generateDays(daysInMonth(now.getFullYear(), now.getMonth()), -daysInMonth(now.getFullYear(), now.getMonth()))
-})
-
-const overviewChartData = computed(() => {
-  let days: string[]
-  switch (overviewTimeRange.value) {
-    case '7d': days = overviewDays7; break
-    case 'month': days = overviewDaysMonth.value; break
-    case 'prevMonth': days = overviewDaysPrevMonth.value; break
-    default: days = overviewDays30
+async function fetchTimeSeries() {
+  try {
+    const params: Record<string, string> = { range: overviewTimeRange.value }
+    if (overviewTimeRange.value === 'custom' && overviewCustomDateRange.value) {
+      params.startDate = overviewCustomDateRange.value[0]?.format('YYYY-MM-DD')
+      params.endDate = overviewCustomDateRange.value[1]?.format('YYYY-MM-DD')
+    }
+    timeSeriesData.value = await getUsageTimeSeries(overviewTimeRange.value, params)
+  } catch {
+    message.error('加载趋势数据失败')
   }
-  const len = days.length
-  return {
-    categories: days,
-    byModel: [
-      { name: 'GPT-4o', data: makeMockSeries(1200, 600, len) },
-      { name: 'GPT-4o-mini', data: makeMockSeries(1800, 800, len) },
-      { name: 'Claude-3.5-Sonnet', data: makeMockSeries(600, 300, len) },
-      { name: 'DeepSeek-V3', data: makeMockSeries(900, 400, len) },
-    ],
-    byKey: [
-      { name: '生产-主', data: makeMockSeries(450, 250, len) },
-      { name: '生产-备', data: makeMockSeries(200, 150, len) },
-      { name: '测试环境', data: makeMockSeries(380, 200, len) },
-      { name: '内部工具', data: makeMockSeries(160, 100, len) },
-      { name: '数据分析', data: makeMockSeries(140, 80, len) },
-      { name: '移动端', data: makeMockSeries(280, 160, len) },
-      { name: '批量任务', data: makeMockSeries(100, 60, len) },
-    ],
-    total: makeMockSeries(4500, 1200, len),
-  }
-})
+}
 
 const overviewTotalCalls = computed(() => {
-  const data = overviewChartData.value
+  const data = timeSeriesData.value
+  if (!data) return 0
   if (overviewChartMode.value === 'total') {
-    return data.total.reduce((s, v) => s + v, 0)
+    return data.byModel.reduce((sum, m) => sum + m.data.reduce((a, b) => a + b, 0), 0)
   }
-  const series = overviewChartMode.value === 'model' ? data.byModel : data.byKey
+  const series = overviewChartMode.value === 'model' ? data.byModel : data.byName
   return series.reduce((sum, s) => sum + s.data.reduce((a, b) => a + b, 0), 0)
 })
 
 const overviewTokensPerCall = computed(() => {
-  const data = overviewChartData.value
-  if (overviewChartMode.value === 'total') return 760
-  const series = overviewChartMode.value === 'model' ? data.byModel : data.byKey
+  const data = timeSeriesData.value
+  if (!data) return 760
+  // 统一 name 字段：byModel → modelName, byName → name
+  const series = overviewChartMode.value === 'model'
+    ? data.byModel.map((m) => ({ name: m.modelName, data: m.data }))
+    : data.byName
   const weights = series.map((s) =>
     s.name.includes('mini') || s.name.includes('DeepSeek') || s.name.includes('测试')
       ? 300
@@ -418,7 +402,8 @@ const overviewTokensPerCall = computed(() => {
 const overviewTotalTokens = computed(() => Math.round(overviewTotalCalls.value * overviewTokensPerCall.value))
 
 const overviewChartOption = computed(() => {
-  const data = overviewChartData.value
+  const data = timeSeriesData.value
+  if (!data) return {}
   const categories = data.categories
   const t = chartTheme()
 
@@ -431,14 +416,19 @@ const overviewChartOption = computed(() => {
   }
 
   if (overviewChartMode.value === 'total') {
+    // 总调用次数 = 所有 byModel 数据逐日求和
+    const totalData = data.byModel[0]?.data.map((_: number, i: number) =>
+      data.byModel.reduce((sum: number, m: { data: number[] }) => sum + (m.data[i] || 0), 0)
+    ) || []
     return {
       ...base, legend: undefined,
       grid: { left: 40, right: 16, bottom: 24, top: 12 },
-      series: [{ type: 'bar' as const, data: data.total, barWidth: '32%', itemStyle: { color: makeBarGradient(brandColor.value), borderRadius: [6, 6, 0, 0] }, animationDuration: 600, animationEasing: 'easeOutQuad' as const }],
+      series: [{ type: 'bar' as const, data: totalData, barWidth: '32%', itemStyle: { color: makeBarGradient(brandColor.value), borderRadius: [6, 6, 0, 0] }, animationDuration: 600, animationEasing: 'easeOutQuad' as const }],
     }
   }
 
-  const series = overviewChartMode.value === 'model' ? data.byModel : data.byKey
+  // byModel → modelName, byName → name
+  const series = overviewChartMode.value === 'model' ? data.byModel.map(m => ({ name: m.modelName, data: m.data })) : data.byName
   return {
     ...base,
     series: series.map((s, i) => ({
@@ -497,6 +487,15 @@ const mergedUserData = computed(() => [
   { userId: 'u5', name: '陈七', department: '市场部', calls: 196000, tokens: 38700000, models: ['GPT-4o-mini', 'Claude-3.5-Sonnet', 'DeepSeek-V3'], monthCallsLimit: 200000, monthCallsWarn: 150000, monthTokensLimit: 100000000, monthTokensWarn: 80000000 },
   { userId: 'u3', name: '王五', department: '数据部', calls: 156000, tokens: 29500000, models: ['DeepSeek-V3'], monthCallsLimit: 100000, monthCallsWarn: 80000, monthTokensLimit: 50000000, monthTokensWarn: 40000000 },
 ])
+
+// ─── Data Fetching ──────────────────────────────────────
+
+onMounted(() => {
+  fetchTimeSeries()
+})
+
+watch(overviewTimeRange, () => { fetchTimeSeries() })
+watch(overviewChartMode, () => { fetchTimeSeries() })
 
 // ─── CRUD Handlers ────────────────────────────────────
 

@@ -51,27 +51,32 @@ export interface AppCard {
   pinned?: boolean
 }
 
-/**
- * 应用清单：每个 user-web 应用对应一份 manifest，描述路由/组件/权限等元数据。
- * 路由表不再硬编码，而是由 manifest 数组动态生成。
- */
+/** 应用清单：每个应用/页面对应一份 manifest，描述路由/组件/权限等元数据。
+ * 支持嵌套 children 用于分组路由（如 apps/data 分组），
+ * 分组节点只需 path/name/title 和 children，无需 component。 */
 export interface AppManifest {
-  /** 唯一 id，与 ApplicationItem.id 或 SubApp.id 对应 */
+  /** 唯一 id */
   id: string
-  /** 路由路径（必须以 / 开头） */
+  /** 路由路径（必须以 / 开头；分组节点可无 component） */
   route: string
   /** 路由 name */
   name: string
   /** 菜单标题 */
   title: string
   /** antd 图标名（与 SubApp.icon 同一命名空间） */
-  icon: string
-  /** 视图组件的动态 import 函数 */
-  component: () => Promise<unknown>
-  /** 默认是否在侧边栏可见（用户可在 profile 页勾选） */
+  icon?: string
+  /** 视图组件的动态 import 函数（分组节点不设） */
+  component?: () => Promise<unknown>
+  /** 默认是否在侧边栏可见 */
   defaultVisible?: boolean
   /** 所需权限码（可选，路由守卫消费） */
   requiredPermission?: string
   /** 分类标签（用于侧边栏分组） */
   category?: '通用' | '经营' | '设计' | '施工'
+  /** 可选：用于侧边栏菜单展开的父级 key 列表 */
+  parentKeys?: string[]
+  /** 子路由（支持嵌套分组） */
+  children?: AppManifest[]
+  /** 是否重定向（redirect 路径） */
+  redirect?: string
 }

@@ -23,3 +23,6 @@ export * from './router'
 
 // 共享指令
 export * from './directives'
+
+// 共享 http 工具
+export { createWebRequest } from './http/createWebRequest'

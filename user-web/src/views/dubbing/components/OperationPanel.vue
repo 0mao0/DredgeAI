@@ -181,6 +181,12 @@ function stepClass(i: number): string {
   :deep(.section-card-header) {
     padding: @spacing-lg @spacing-xl @spacing-sm;
   }
+  :deep(.section-card-header > .section-card-title) {
+    min-width: 0;
+    overflow: hidden;
+    white-space: nowrap;
+    text-overflow: ellipsis;
+  }
   :deep(.section-card-body) {
     padding-top: @spacing-md;
   }
@@ -247,8 +253,16 @@ function stepClass(i: number): string {
     display: inline-flex;
     align-items: center;
     gap: @spacing-sm;
+    min-width: 0;
+    overflow: hidden;
   }
-  &__current-voice-tag { font-size: @font-size-sm; margin-right: 0; }
+  &__current-voice-tag {
+    font-size: @font-size-sm;
+    margin-right: 0;
+    overflow: hidden;
+    white-space: nowrap;
+    text-overflow: ellipsis;
+  }
 
   &__charcount {
     font-size: @font-size-xs;
@@ -381,7 +395,7 @@ function stepClass(i: number): string {
 .result-rise-leave-active { transition: opacity 0.2s ease, transform 0.2s ease; }
 .result-rise-leave-to { opacity: 0; transform: translateY(8px); }
 
-@media (max-width: 991px) {
+@media (max-width: 640px) {
   .op-panel {
     flex-direction: column;
     overflow-y: auto;

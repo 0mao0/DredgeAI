@@ -13,5 +13,5 @@ export const mockApplications: ApplicationItem[] = [
     { id: '8-1', name: '疏浚情报', category: '经营', parentAppId: '8', parentAppName: '情报采集', route: '/intelligence/dredge', icon: 'RadarChartOutlined', version: 'v1.0.0', status: '已发布', scope: '所有', description: '聚焦疏浚行业的科技与工程情报，由后台采集并结构化后发布' },
     { id: '8-2', name: '科技情报', category: '经营', parentAppId: '8', parentAppName: '情报采集', route: '/intelligence/tech', icon: 'ExperimentOutlined', version: 'v1.0.0', status: '已发布', scope: '所有', description: '通用科技前沿情报，支持用户订阅与智能推送' },
   ] },
-  { id: '9', name: '投标审核', category: '经营', manager: '冯杰', version: 'v3.0.2', status: '运营中', userCount: 290, apiCalls: 76000, createdAt: '2026-01-01', icon: 'FileSearchOutlined', route: '/applications/bid-review' },
+  { id: '9', name: 'AI投标', category: '经营', manager: '冯杰', version: 'v3.0.2', status: '运营中', userCount: 290, apiCalls: 76000, createdAt: '2026-01-01', icon: 'FileSearchOutlined', route: '/applications/ai-bid' },
 ]

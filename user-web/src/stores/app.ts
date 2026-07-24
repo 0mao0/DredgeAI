@@ -52,7 +52,7 @@ export const useAppStore = defineStore('app', () => {
   }
 
   /** 默认勾选应用显示在侧边栏：通用3 + 施工2 + 经营2(情报采集子应用) */
-  const DEFAULT_VISIBLE_ROUTES = ['/standard-query', '/ai-video', '/ai-dubbing', '/dredge-efficiency', '/bid-review', '/intelligence/dredge', '/intelligence/tech']
+  const DEFAULT_VISIBLE_ROUTES = ['/standard-query', '/ai-video', '/ai-dubbing', '/dredge-efficiency', '/ai-bid', '/intelligence/dredge', '/intelligence/tech']
 
   async function fetchApps(): Promise<void> {
     apps.value = await getAppList()

@@ -40,7 +40,7 @@
               <a-list-item class="task-item">
                 <a-list-item-meta>
                   <template #title>
-                    <span class="task-title" @click="router.push('/bid-review')">{{ item.title }}</span>
+                    <span class="task-title" @click="router.push('/ai-bid')">{{ item.title }}</span>
                   </template>
                   <template #description>
                     <span class="task-meta">{{ item.app }} · 更新于 {{ item.updatedAt }}</span>
