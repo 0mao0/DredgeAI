@@ -157,7 +157,11 @@ const route = useRoute()
 const collapsed = ref(false)
 const selectedKeys = ref<string[]>([route.path])
 
-watch(() => route.path, (p) => { selectedKeys.value = [p] })
+watch(() => route.path, (p) => {
+  // 子路由高亮父级菜单项
+  const parent = p.startsWith('/ai-bid/') ? '/ai-bid' : p
+  selectedKeys.value = [parent]
+})
 
 function handleMenuClick({ key }: { key: string }): void {
   router.push(key)

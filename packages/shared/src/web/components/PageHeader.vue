@@ -21,7 +21,7 @@ defineProps<{ title: string; description?: string }>()
   display: flex;
   align-items: flex-start;
   justify-content: space-between;
-  margin-bottom: @spacing-xl;
+  margin-bottom: @spacing-md;
 }
 .page-title {
   font-size: @font-size-2xl;

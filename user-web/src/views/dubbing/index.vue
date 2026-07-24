@@ -1,6 +1,6 @@
 <template>
   <div class="dubbing-page">
-    <PageHeader title="AI配音" description="文本转语音，轻松生成配音">
+    <PageHeader title="AI配音">
       <template #extra>
         <a-segmented
           v-model:value="activeTab"
@@ -403,18 +403,15 @@ fetchVoices()
 <style scoped lang="less">
 @import '@shared/web/styles/variables.less';
 
-.dubbing-page {
-  height: 100%;
-  display: flex;
-  flex-direction: column;
-  overflow: hidden;
-  padding: @page-padding;
-  box-sizing: border-box;
-
-  :deep(.page-header) {
-    margin-bottom: 0 !important;
-  }
-  :deep(.page-desc) {
+	.dubbing-page {
+	  height: 100%;
+	  display: flex;
+	  flex-direction: column;
+	  overflow: hidden;
+	  padding: @page-padding;
+	  box-sizing: border-box;
+	
+	  :deep(.page-desc) {
     margin-top: 0 !important;
   }
 }

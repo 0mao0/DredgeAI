@@ -1,8 +1,8 @@
 <template>
-  <div class="page-container bid-review">
+  <div class="bid-read">
     <a-row :gutter="[16, 16]">
-      <a-col :span="6">
-        <SectionCard title="审标步骤" class="mb-16">
+      <a-col :xs="24" :md="6">
+        <SectionCard title="审标步骤" class="bid-read__card mb-16">
           <a-steps :current="currentStep" direction="vertical" size="small">
             <a-step
               v-for="(step, i) in steps"
@@ -13,32 +13,13 @@
             />
           </a-steps>
         </SectionCard>
-
-        <SectionCard title="历史会话" nopad>
-          <div class="session-list">
-            <div
-              v-for="session in sessions"
-              :key="session.id"
-              class="session-item"
-              :class="{ active: session.id === activeSessionId }"
-              @click="activeSessionId = session.id"
-            >
-              <div class="session-name">{{ session.document }}</div>
-              <div class="session-meta">
-                <span>{{ session.date }}</span>
-                <a-badge :count="session.riskCount" :number-style="{ backgroundColor: session.riskCount > 0 ? badgeColors.danger : badgeColors.success }" />
-              </div>
-            </div>
-          </div>
-        </SectionCard>
       </a-col>
 
-      <a-col :span="12">
-        <SectionCard title="文档预览" class="mb-16">
+      <a-col :xs="24" :md="12">
+        <SectionCard title="文档预览" class="bid-read__card mb-16">
           <template #extra>
             <a-button type="link" size="small">
-              <upload-outlined />
-              重新上传
+              <upload-outlined /> 重新上传
             </a-button>
           </template>
           <div class="doc-viewer">
@@ -46,17 +27,22 @@
           </div>
         </SectionCard>
 
-        <SectionCard title="追问与对话" nopad>
+        <SectionCard title="追问与对话" nopad class="bid-read__card">
           <div class="chat-area">
-            <div class="chat-messages">
+            <div class="chat-messages" ref="chatRef">
               <div
                 v-for="(msg, i) in currentSession?.snippets || []"
                 :key="i"
                 class="chat-msg"
                 :class="`chat-msg--${msg.role}`"
+                :style="{ animationDelay: `${i * 0.05}s` }"
               >
                 <div class="chat-avatar">{{ msg.role === 'user' ? '我' : 'AI' }}</div>
                 <div class="chat-bubble">{{ msg.content }}</div>
+              </div>
+              <div v-if="!currentSession?.snippets?.length" class="chat-empty">
+                <bulb-outlined />
+                <span>暂无对话，上传文档后向 AI 追问标书细节</span>
               </div>
             </div>
             <div class="chat-input">
@@ -71,12 +57,11 @@
         </SectionCard>
       </a-col>
 
-      <a-col :span="6">
-        <SectionCard title="风险清单" class="mb-16">
+      <a-col :xs="24" :md="6">
+        <SectionCard title="风险清单" class="bid-read__card mb-16">
           <template #extra>
             <a-button type="link" size="small">
-              <download-outlined />
-              导出报告
+              <download-outlined /> 导出报告
             </a-button>
           </template>
           <div class="risk-summary">
@@ -87,12 +72,13 @@
           </div>
         </SectionCard>
 
-        <div class="risk-list">
+        <transition-group name="risk-stagger" tag="div" class="risk-list">
           <div
-            v-for="risk in risks"
+            v-for="(risk, i) in risks"
             :key="risk.id"
             class="risk-card"
             :class="`risk-card--${risk.level}`"
+            :style="{ transitionDelay: `${i * 0.04}s` }"
           >
             <div class="risk-card-header">
               <StatusTag :status="risk.level" />
@@ -104,26 +90,19 @@
               <span>{{ risk.suggestion }}</span>
             </div>
           </div>
-        </div>
+        </transition-group>
       </a-col>
     </a-row>
   </div>
 </template>
 
 <script setup lang="ts">
-import { ref, reactive, computed, onMounted } from 'vue'
-import { message } from 'ant-design-vue'
+import { ref, computed, onMounted } from 'vue'
 import { UploadOutlined, DownloadOutlined, BulbOutlined } from '@ant-design/icons-vue'
 import SectionCard from '@shared/web/components/SectionCard.vue'
 import StatusTag from '@/components/StatusTag.vue'
 import { getBidSteps, getBidRisks, getBidSessions, getBidDocument } from '@/api/modules/bid'
 import type { BidReviewStep, RiskItem, BidReviewSession } from '@/types'
-import { useCssVar } from '@shared/web/composables/useCssVar'
-
-const badgeColors = reactive({
-  danger: useCssVar('--color-danger'),
-  success: useCssVar('--color-success'),
-})
 
 const steps = ref<BidReviewStep[]>([])
 const risks = ref<RiskItem[]>([])
@@ -131,6 +110,7 @@ const sessions = ref<BidReviewSession[]>([])
 const document = ref('')
 const activeSessionId = ref('')
 const questionInput = ref('')
+const chatRef = ref<HTMLElement>()
 
 const currentStep = computed(() => steps.value.findIndex((s) => s.status === 'process'))
 
@@ -144,8 +124,15 @@ const riskSummary = computed(() => [
 
 function handleSendQuestion(): void {
   if (!questionInput.value.trim()) return
-  message.success('已发送追问，AI 正在分析...')
+  const snippet = currentSession.value?.snippets
+  if (snippet) {
+    snippet.push({ role: 'user', content: questionInput.value })
+    snippet.push({ role: 'assistant', content: '已收到您的追问，正在分析标书内容...' })
+  }
   questionInput.value = ''
+  setTimeout(() => {
+    chatRef.value?.scrollTo({ top: chatRef.value.scrollHeight, behavior: 'smooth' })
+  }, 50)
 }
 
 onMounted(async () => {
@@ -163,23 +150,17 @@ onMounted(async () => {
 <style scoped lang="less">
 @import '@shared/web/styles/variables.less';
 
+.bid-read {
+  &__card {
+    box-shadow: @shadow-sm;
+    transition: box-shadow @transition-base;
+    &:hover { box-shadow: @shadow-md; }
+  }
+}
+
 .mb-16 { margin-bottom: @spacing-lg; }
 
-.session-list { max-height: 400px; overflow-y: auto; }
-.session-item {
-  padding: @spacing-md @spacing-xl;
-  border-bottom: 1px solid @divider-color;
-  cursor: pointer;
-  transition: background @transition-base;
-  &:hover { background: @content-bg; }
-  &.active { background: color-mix(in srgb, @brand-primary 6%, transparent); border-left: 3px solid @brand-primary; }
-}
-.session-name { font-size: @font-size-sm; font-weight: @font-weight-medium; color: @text-primary; margin-bottom: 4px; }
-.session-meta {
-  display: flex; align-items: center; justify-content: space-between;
-  font-size: @font-size-xs; color: @text-tertiary;
-}
-
+/* —— 文档预览 —— */
 .doc-viewer {
   background: @content-bg;
   border-radius: @radius-base;
@@ -195,36 +176,59 @@ onMounted(async () => {
   white-space: pre-wrap;
 }
 
-.chat-area { display: flex; flex-direction: column; height: 320px; }
-.chat-messages { flex: 1; overflow-y: auto; padding: @spacing-lg; }
+/* —— 聊天 —— */
+.chat-area { display: flex; flex-direction: column; height: 340px; }
+.chat-messages {
+  flex: 1; overflow-y: auto; padding: @spacing-lg;
+  scroll-behavior: smooth;
+}
+.chat-empty {
+  display: flex; flex-direction: column; align-items: center; justify-content: center;
+  height: 100%; gap: @spacing-sm;
+  color: @text-tertiary; font-size: @font-size-sm;
+}
 .chat-msg {
   display: flex; gap: @spacing-sm; margin-bottom: @spacing-md;
+  animation: msg-in 0.3s ease both;
   &--user { flex-direction: row-reverse; }
 }
+@keyframes msg-in {
+  from { opacity: 0; transform: translateY(8px); }
+  to { opacity: 1; transform: translateY(0); }
+}
 .chat-avatar {
-  width: 32px; height: 32px; border-radius: 50%;
+  width: 30px; height: 30px; border-radius: 50%;
   background: @brand-gradient; color: white;
   display: flex; align-items: center; justify-content: center;
-  font-size: @font-size-xs; font-weight: @font-weight-semibold;
+  font-size: 11px; font-weight: @font-weight-semibold;
   flex-shrink: 0;
 }
 .chat-bubble {
   background: @content-bg;
-  padding: @spacing-sm @spacing-md;
-  border-radius: @radius-base;
+  padding: 8px 14px;
+  border-radius: 14px 14px 14px 4px;
   font-size: @font-size-sm;
   max-width: 70%;
-  .chat-msg--user & { background: @brand-primary; color: white; }
+  line-height: 1.5;
+  .chat-msg--user & {
+    background: @brand-primary; color: white;
+    border-radius: 14px 14px 4px 14px;
+  }
 }
-.chat-input { padding: @spacing-md @spacing-lg; border-top: 1px solid @divider-color; }
+.chat-input {
+  padding: @spacing-md @spacing-lg;
+  border-top: 1px solid @divider-color;
+}
 
+/* —— 风险 —— */
 .risk-summary {
   display: flex; justify-content: space-around;
   padding: @spacing-md 0;
 }
 .risk-stat { text-align: center; }
 .risk-stat-num {
-  font-size: @font-size-2xl; font-weight: @font-weight-bold;
+  font-size: 28px; font-weight: @font-weight-bold; line-height: 1;
+  margin-bottom: 4px;
   &--high { color: @danger; }
   &--mid { color: @warning; }
   &--low { color: @info; }
@@ -238,6 +242,11 @@ onMounted(async () => {
   border: 1px solid @border-color;
   border-left: 3px solid;
   padding: @spacing-md;
+  transition: all @transition-base;
+  &:hover {
+    box-shadow: @shadow-md;
+    transform: translateX(2px);
+  }
   &--高风险 { border-left-color: @danger; }
   &--中风险 { border-left-color: @warning; }
   &--低风险 { border-left-color: @info; }
@@ -254,4 +263,21 @@ onMounted(async () => {
   background: @content-bg;
   padding: @spacing-sm; border-radius: @radius-sm;
 }
+
+/* —— risk stagger animation —— */
+.risk-stagger-enter-active {
+  transition: all 0.3s ease;
+}
+.risk-stagger-leave-active {
+  transition: all 0.2s ease;
+}
+.risk-stagger-enter-from {
+  opacity: 0;
+  transform: translateX(-12px);
+}
+.risk-stagger-leave-to {
+  opacity: 0;
+  transform: translateX(12px);
+}
 </style>
+
