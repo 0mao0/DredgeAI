@@ -10,7 +10,7 @@
     </PageHeader>
 
     <SectionCard nopad class="mb-24">
-      <a-table
+      <a-table size="small"
         :data-source="apiKeys"
         :columns="columns"
         :pagination="{ pageSize: 10 }"

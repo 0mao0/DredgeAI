@@ -18,6 +18,11 @@ export const urls = {
   standardHistory: '/standard/history',
   standardCategories: '/standard/categories',
   standardRecommended: '/standard/recommended',
+  standardList: '/standard/list',
+  standardProperty: '/standard/property',
+  standardPropertyList: '/standard/property/list',
+  standardDocument: '/standard/document',
+  standardAIAnalysis: '/standard/ai-analysis',
   chartEfficiencyTrend: '/chart/efficiency-trend',
 
   // 共享（双端均使用 /apikey 命名，统一规范）

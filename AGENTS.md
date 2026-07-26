@@ -87,9 +87,17 @@
 | 女声标识 | `#DB2777` | css class |
 | 童声标识 | `#D97706` | css class |
 
+#### 颜色规范
+
+| 规则 | 说明 |
+|------|------|
+| 裸 hex 禁用 | `#FF4D4F` → `@danger`、`#10B981` → `@success`、`#8B5CF6` → `@accent` |
+| color-mix 替代旧函数 | 用 `color-mix(in srgb, @brand-primary 8%, transparent)` 代替 `fade()`/`darken()`/`lighten()` |
+| 语义色须定义变量 | 性别/风险标识等须在 `variables.less` 定义专属变量后再引用（如 `@voice-gender-male`） |
+
 ### 2.2 表格
 
-- **全局居中**：已在 `global.less` 设置 thead + tbody `text-align: center`，生成时无需写 `align="center"`。
+- **全局居中**：已在 `global.less` 设置 thead + tbody `text-align: center`，无需写 `align="center"`。
 - **列宽**：固定字段（序号、日期、状态、操作）设 `width: Npx`，文本字段（名称、描述）不设 `width` 自适应。
 - **操作列**：固定 `width: 180px`，`white-space: nowrap`，按钮用 `a-button type="link"` 紧凑排列。
 - **分页**：统一 `pageSize: 15`（管理端列表）或 `pageSize: 10`（弹框内表格），用 `showTotal` 展示总数。
@@ -216,27 +224,139 @@ const columns = [
 
 ### 2.12 弹框 / 模态框 / 抽屉
 
-- **宽度选择**：简单表单 `440px`，详情展示 `520px`，大表单 `640px`，大列表 `800px`。
-- **footer 按钮**：取消/次要操作在左，主操作在右（`a-button` + `a-button type="primary"`）。
-- **删除确认**：使用 `<a-popconfirm>` 内联确认，不要弹二次 modal。
-- **表单布局**：弹框内表单使用 `layout="vertical"`（label 在上，输入框在下）。
-- **提交 loading**：用 modal 的 `:confirm-loading` 或手动维护 `submitting` 状态。
-- **销毁**：弹框关闭后重置数据，加 `destroy-on-close`。
-- **全屏抽屉**：复杂表单可用 `<a-drawer>` 替代 modal，宽度 `480px`。
-- **模板**：
+- **弹框、表单、确认等 → 加载 `skill: layout-conventions`**
+
+| 场景 | 宽度 |
+|------|------|
+| 简单表单 | `440px` |
+| 详情展示 | `520px` |
+| 大表单 | `640px` |
+| 大列表 | `800px` |
+
+### 2.13 组件编码模式
+
+以下模式提炼自 AI 配音模块，适用于所有业务模块开发。
+
+#### 状态管理：Props Down, Events Up
+- `index.vue` 是**唯一**持有业务状态的组件，子组件只收 props、只 emit 事件，不跨组件共享 state。
+- 所有 API 调用集中在 `index.vue` 中，子组件**禁止**直接 `import request` 或调用 API 函数。
+
+```ts
+// ✅ index.vue：调用 API，管理所有 ref
+const voices = ref<VoiceItem[]>([])
+onMounted(async () => { voices.value = await getVoices() })
+
+// ❌ 子组件中直接调 API
+import { getVoices } from '@/api/modules/dubbing'
+```
+
+#### Props / Emits 类型
+```ts
+defineProps<{ voices: VoiceItem[]; loading?: boolean; disabled?: boolean }>()
+defineEmits<{ 'update:modelValue': [value: string]; select: [id: string] }>()
+```
+
+#### 状态三态覆盖
+每个数据域必须覆盖 loading / empty / error 三种 UI：
+
+| 状态 | UI 处理 |
+|------|---------|
+| loading | `<a-skeleton>` 或 `DataSkeleton` |
+| loaded（有数据） | 正常渲染 |
+| loaded（空） | `<a-empty description="..." />` |
+| error | `<a-result status="error">` + `message.error()` |
+
 ```vue
-<a-modal
-  v-model:open="visible"
-  title="标题"
-  :confirm-loading="submitting"
-  @ok="handleSubmit"
-  @cancel="visible = false"
-  destroy-on-close
->
-  <a-form :model="form" layout="vertical">
-    ...
-  </a-form>
-</a-modal>
+<a-skeleton v-if="loading" :paragraph="{ rows: 3 }" />
+<a-empty v-else-if="data.length === 0" description="暂无数据" />
+<div v-else><!-- 正常渲染 --></div>
+```
+
+#### CSS 命名：BEM 风格
+```less
+.dubbing-page { }             // Block
+.dubbing-page__body { }       // Block__Element
+.voice-item--selected { }     // Block--Modifier
+.voice-item__gender--male { } // Block__Element--Modifier
+```
+
+#### :deep() 覆盖 antd 样式
+```less
+.section-card {
+  :deep(.ant-card-body) { padding: @spacing-md @spacing-xl; }
+  :deep(.ant-tabs-tab) { padding: 6px 10px; }
+}
+```
+
+#### prefers-reduced-motion 降级
+所有动效必须提供：
+```less
+@media (prefers-reduced-motion: reduce) {
+  .result-area { animation: none; }
+  .fade-enter-active { transition: none; }
+}
+```
+
+#### 禁止事项
+- 禁止子组件直接 import API 模块（音频播放等须即时生成 blob 的特殊场景除外，但需注释说明原因）。
+- 禁止 CSS / 模板中混用 tab 和 space 缩进。
+
+### 2.14 UI 零件尺寸 / 样式规范
+
+所有 ant-design-vue 组件统一使用以下尺寸和样式规则，**各页面禁止自行发挥**。
+
+#### 按钮大小
+
+| 场景 | 用法 | 示例 |
+|------|------|------|
+| 表格行操作按钮 | `<a-button type="link" size="small">` | 编辑、删除、查看 |
+| PageHeader `#extra` 次要操作 | `<a-button size="small">` | 历史记录、刷新 |
+| PageHeader `#extra` 主要操作 | `<a-button type="primary">`（默认 middle） | 创建、新增 |
+| 卡片 `#extra` 操作 | `<a-button size="small">` 或 `type="link" size="small"` | 制音、下载 |
+| 弹框 footer 操作 | `<a-button>` / `<a-button type="primary">`（默认 middle） | 取消、确认 |
+| 主交互按钮 | `<a-button type="primary" size="large">` | 开始生成 |
+
+#### 表格
+
+```vue
+<a-table size="small" :pagination="{ pageSize: 15, showTotal: (t) => `共 ${t} 条` }" />
+```
+- 所有管理列表统一 `size="small"`（紧凑）
+- 弹框内表格 `pageSize: 10`，管理端列表 `pageSize: 15`
+
+#### 输入框 / 选择器 / 搜索框
+
+```vue
+<a-input size="medium" />          <!-- 默认，不写 size -->
+<a-select size="medium" />         <!-- 默认 -->
+<a-input-search size="medium" />   <!-- 默认 -->
+```
+- 不在表单内的搜索框（如 filter 栏）用默认 medium，设 `style="width:240px"`
+
+#### 分段控件 / 单选组 / 开关
+
+```vue
+<a-segmented />                             <!-- 默认 middle -->
+<a-radio-group size="small" button-style="solid" />
+<a-switch size="small" />
+```
+- `a-segmented` 只用于视图/模式切换，不用 size 属性
+- `a-radio-group` 和 `a-switch` 统一 `size="small"`
+
+#### Tabs 样式覆盖
+
+任何使用 `a-tabs` 的页面，必须在 scoped less 中覆盖间距：
+
+```less
+:deep(.ant-tabs-nav) { margin-bottom: @spacing-sm; }
+:deep(.ant-tabs-tab) { padding: 6px 10px; }
+```
+
+#### 日期选择器
+
+```vue
+<a-range-picker size="small" />
+<a-date-picker size="small" />
 ```
 
 ---

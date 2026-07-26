@@ -15,7 +15,7 @@
           <path d="M20 11C20 15.08 16.42 18.24 12.5 18.88V22H11.5V18.88C7.58 18.24 4 15.08 4 11H5.5C5.5 14.31 8.69 17 12 17C15.31 17 18.5 14.31 18.5 11H20Z" fill="currentColor" fill-opacity="0.6"/>
         </svg>
       </div>
-      <h2 class="modal-header__title">创建我的音色</h2>
+      <h2 class="modal-header__title">{{ title }}</h2>
       <button class="modal-header__close" @click="emit('update:open', false)">
         <svg width="14" height="14" viewBox="0 0 16 16" fill="none">
           <path d="M4 4L12 12M12 4L4 12" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
@@ -38,12 +38,12 @@
 
     <transition name="tab-fade" mode="out-in">
       <div class="content" :key="activeTab">
-        <RecordTab
+        <VoiceRegisterRecordTab
           v-if="activeTab === 'record'"
           @audio-ready="(blob) => recordAudio = blob"
           @cleared="recordAudio = null"
         />
-        <UploadTab
+        <VoiceRegisterUploadTab
           v-else
           @audio-ready="(blob, name) => { uploadAudio = blob; uploadFileName = name }"
           @cleared="uploadAudio = null"
@@ -91,21 +91,24 @@
 <script setup lang="ts">
 import { ref, computed, h } from 'vue'
 import { CustomerServiceOutlined, LoadingOutlined, UploadOutlined } from '@ant-design/icons-vue'
-import RecordTab from './RecordTab.vue'
-import UploadTab from './UploadTab.vue'
-import type { VoiceItem } from '@/types'
+import VoiceRegisterRecordTab from './VoiceRegisterRecordTab.vue'
+import VoiceRegisterUploadTab from './VoiceRegisterUploadTab.vue'
+import type { VoiceItem } from '@shared/types'
 
 const props = withDefaults(defineProps<{
   open: boolean
   initialTab?: 'record' | 'upload'
-}>(), { initialTab: 'record' })
+  title?: string
+}>(), {
+  initialTab: 'record',
+  title: '创建我的音色',
+})
 const emit = defineEmits<{
   'update:open': [value: boolean]
   confirmed: [payload: { voice: VoiceItem; formData: FormData }]
 }>()
 
 const activeTab = ref<'record' | 'upload'>(props.initialTab)
-
 const recordAudio = ref<Blob | null>(null)
 const uploadAudio = ref<Blob | null>(null)
 const uploadFileName = ref('recording.webm')
@@ -141,23 +144,24 @@ const canSubmit = computed(() => {
 function handleSubmit(): void {
   if (submitting.value) return
   const audioBlob = activeTab.value === 'record' ? recordAudio.value : uploadAudio.value
-  if (!audioBlob || !form.value.name.trim()) return
+  const name = form.value.name.trim()
+  if (!audioBlob || !name) return
 
   submitting.value = true
 
   const fd = new FormData()
   fd.append('file', audioBlob, activeTab.value === 'record' ? 'recording.webm' : uploadFileName.value)
-  fd.append('name', form.value.name.trim())
+  fd.append('name', name)
   fd.append('gender', form.value.gender)
 
   const pendingVoice: VoiceItem = {
     id: `temp_${Date.now()}`,
-    name: form.value.name.trim(),
+    name,
     gender: form.value.gender,
     category: '通用',
     style: '自定义音色',
-    provider: '自定义',
     visibility: 'private',
+    provider: '自定义',
     userId: 'local_user',
     createdAt: new Date().toISOString(),
     uploadStatus: 'converting',
@@ -169,7 +173,7 @@ function handleSubmit(): void {
 </script>
 
 <style scoped lang="less">
-@import '@shared/web/styles/variables.less';
+@import '../styles/variables.less';
 
 .voice-register-modal {
   :deep(.ant-modal-content) {
@@ -241,14 +245,10 @@ function handleSubmit(): void {
   }
 }
 
-.content {
-  padding: 12px 12px;
-}
+.content { padding: 12px 12px; }
 
 .tab-fade-enter-active,
-.tab-fade-leave-active {
-  transition: opacity 0.15s ease;
-}
+.tab-fade-leave-active { transition: opacity 0.15s ease; }
 .tab-fade-enter-from,
 .tab-fade-leave-to { opacity: 0; }
 
@@ -262,9 +262,7 @@ function handleSubmit(): void {
   margin-bottom: 12px;
 }
 
-.form-gender {
-  display: flex; gap: 6px; flex-shrink: 0;
-}
+.form-gender { display: flex; gap: 6px; flex-shrink: 0; }
 
 .form-actions {
   display: flex; align-items: center; justify-content: flex-end; gap: 8px;

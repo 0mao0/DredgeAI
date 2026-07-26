@@ -16,7 +16,7 @@
       <div class="toolbar-spacer" />
       <div class="toolbar-item">
         <span class="toolbar-label">仅看用户已删除</span>
-        <a-switch v-model:checked="deletedOnly" @change="fetchVoices" />
+        <a-switch v-model:checked="deletedOnly" size="small" @change="fetchVoices" />
       </div>
     </div>
 
@@ -26,7 +26,7 @@
       :loading="loading"
       row-key="id"
       :pagination="{ pageSize: 15, showSizeChanger: false, showTotal: (t: number) => `共 ${t} 条` }"
-      size="middle"
+      size="small"
       class="admin-voice-manager__table"
       :locale="{ emptyText: '暂无音色数据' }"
     >
@@ -86,26 +86,11 @@
       </template>
     </a-table>
 
-    <a-modal
+    <VoiceRegisterModal
       v-model:open="showAddModal"
       title="添加公有音色"
-      :confirm-loading="submitting"
-      @ok="handleAdd"
-      @cancel="resetForm"
-    >
-      <a-form :model="form" layout="vertical">
-        <a-form-item label="音色名称" required>
-          <a-input v-model:value="form.name" placeholder="如：知远·男声" maxlength="20" />
-        </a-form-item>
-        <a-form-item label="性别" required>
-          <a-radio-group v-model:value="form.gender" button-style="solid">
-            <a-radio-button value="男声">男声</a-radio-button>
-            <a-radio-button value="女声">女声</a-radio-button>
-            <a-radio-button value="童声">童声</a-radio-button>
-          </a-radio-group>
-        </a-form-item>
-      </a-form>
-    </a-modal>
+      @confirmed="handleVoiceConfirmed"
+    />
 
     <!-- Hidden audio element for sample playback -->
     <audio ref="audioRef" @ended="playingId = null" @error="playingId = null" />
@@ -124,8 +109,8 @@ import {
 } from '@ant-design/icons-vue'
 import { message } from 'ant-design-vue'
 import type { VoiceItem } from '@/types'
-import request from '@/api/request'
-import { urls } from '@shared/core/api'
+import { getAdminVoices, createAdminVoice, deleteAdminVoice } from '@/api/modules/dubbing'
+import VoiceRegisterModal from '@shared/web/components/VoiceRegisterModal.vue'
 
 const columns = [
   { title: '音色名称', dataIndex: 'name', key: 'name', width: 180 },
@@ -142,14 +127,8 @@ const loading = ref(false)
 const query = ref('')
 const deletedOnly = ref(false)
 const showAddModal = ref(false)
-const submitting = ref(false)
 const playingId = ref<string | null>(null)
 const audioRef = ref<HTMLAudioElement>()
-
-const form = ref({
-  name: '',
-  gender: '男声' as '男声' | '女声' | '童声',
-})
 
 async function fetchVoices(): Promise<void> {
   loading.value = true
@@ -158,8 +137,8 @@ async function fetchVoices(): Promise<void> {
     const q = query.value.trim()
     if (q) params.keyword = q
     if (deletedOnly.value) params.deletedOnly = 1
-    const res = await request.get<any>(urls.adminVoices, { params })
-    voices.value = (res?.data || res || []) as VoiceItem[]
+    const res = await getAdminVoices(params)
+    voices.value = res as VoiceItem[]
   } catch {
     message.error('加载音色列表失败')
   } finally {
@@ -179,40 +158,24 @@ function playSample(voice: VoiceItem): void {
   }
 }
 
-async function handleAdd(): Promise<void> {
-  if (!form.value.name.trim()) {
-    message.warning('请输入音色名称')
-    return
-  }
-  submitting.value = true
+async function handleVoiceConfirmed(payload: { voice: VoiceItem; formData: FormData }): Promise<void> {
   try {
-    await request.post(urls.adminVoices, {
-      name: form.value.name.trim(),
-      gender: form.value.gender,
-    })
+    await createAdminVoice(payload.formData)
     message.success('公有音色已添加')
-    showAddModal.value = false
-    resetForm()
     fetchVoices()
   } catch {
     message.error('添加失败')
-  } finally {
-    submitting.value = false
   }
 }
 
 async function handleDelete(id: string): Promise<void> {
   try {
-    await request.delete(`${urls.adminVoices}/${id}`)
+    await deleteAdminVoice(id)
     message.success('已删除')
     fetchVoices()
   } catch {
     message.error('删除失败')
   }
-}
-
-function resetForm(): void {
-  form.value = { name: '', gender: '男声' }
 }
 
 function formatTime(iso?: string): string {
@@ -269,8 +232,8 @@ onMounted(fetchVoices)
   height: 24px;
   border-radius: 50%;
   font-size: 14px;
-  &--male { color: #2563EB; background: color-mix(in srgb, #2563EB 12%, transparent); }
-  &--female { color: #DB2777; background: color-mix(in srgb, #DB2777 12%, transparent); }
-  &--child { color: #D97706; background: color-mix(in srgb, #D97706 12%, transparent); }
+  &--male { color: @voice-gender-male; background: color-mix(in srgb, @voice-gender-male 12%, transparent); }
+  &--female { color: @voice-gender-female; background: color-mix(in srgb, @voice-gender-female 12%, transparent); }
+  &--child { color: @voice-gender-child; background: color-mix(in srgb, @voice-gender-child 12%, transparent); }
 }
 </style>

@@ -5,7 +5,7 @@
     :loading="loading"
     :pagination="paginationProps"
     row-key="id"
-    size="middle"
+    size="small"
     :scroll="{ x: 1100 }"
   >
     <template #bodyCell="{ column, record }: { column: { key: string }; record: DubbingTask }">

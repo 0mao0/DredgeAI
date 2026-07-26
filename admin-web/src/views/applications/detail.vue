@@ -1,6 +1,6 @@
 <template>
   <div class="page-container">
-    <a-button class="back-btn" type="link" @click="router.back()">
+    <a-button class="back-btn" type="link" size="small" @click="router.back()">
       <arrow-left-outlined /> 返回
     </a-button>
     <PageHeader :title="appName" description="应用详情与配置" />

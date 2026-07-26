@@ -104,7 +104,7 @@ import PageHeader from '@shared/web/components/PageHeader.vue'
 import OperationPanel from './components/OperationPanel.vue'
 import HistoryPanel from './components/HistoryPanel.vue'
 import DubbingPlayer from './components/DubbingPlayer.vue'
-import VoiceRegisterModal from './components/VoiceRegisterModal.vue'
+import VoiceRegisterModal from '@shared/web/components/VoiceRegisterModal.vue'
 import { getVoices, generateDubbing, registerVoice } from '@/api/modules/dubbing'
 import type { VoiceItem, DubbingTask } from '@/types'
 
@@ -403,15 +403,15 @@ fetchVoices()
 <style scoped lang="less">
 @import '@shared/web/styles/variables.less';
 
-	.dubbing-page {
-	  height: 100%;
-	  display: flex;
-	  flex-direction: column;
-	  overflow: hidden;
-	  padding: @page-padding;
-	  box-sizing: border-box;
-	
-	  :deep(.page-desc) {
+.dubbing-page {
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  padding: @page-padding;
+  box-sizing: border-box;
+
+  :deep(.page-desc) {
     margin-top: 0 !important;
   }
 }

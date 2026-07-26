@@ -12,12 +12,13 @@
       :data-source="displayUsers"
       :pagination="{ pageSize: 10, showSizeChanger: false, showTotal: (t: number) => `共 ${t} 人` }"
       row-key="id"
-      size="middle"
+      size="small"
     >
       <template #bodyCell="{ column, record }">
         <template v-if="column.key === 'action'">
           <a-switch
             :checked="userAuth[record.id]"
+            size="small"
             :loading="toggleLoading[record.id]"
             @change="(v: boolean) => handleToggle(record.id, v)"
           />

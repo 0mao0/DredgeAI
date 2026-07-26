@@ -9,8 +9,18 @@
       :collapsed-width="48"
       class="sider"
     >
-      <div class="sider-brand" @click="collapsed = !collapsed">
-        <Logo :collapsed="collapsed" subtitle="DredgeAI" />
+      <div class="sider-brand">
+        <div class="sider-brand__left" @click="collapsed = !collapsed">
+          <div v-if="!collapsed">
+            <Logo :collapsed="collapsed" subtitle="DredgeAI" />
+          </div>
+          <MenuUnfoldOutlined v-else class="sider-brand__expand-icon" />
+        </div>
+        <MenuFoldOutlined
+          v-if="!collapsed"
+          class="sider-brand__trigger"
+          @click="collapsed = !collapsed"
+        />
       </div>
       <a-menu
         v-model:selectedKeys="selectedKeys"
@@ -45,34 +55,12 @@
         <a-menu-item key="/profile">
           <UserOutlined />
           <span>个人中心</span>
-        </a-menu-item>
-      </a-menu>
-    </a-layout-sider>
-
-    <a-layout class="main-layout">
-      <a-layout-header class="header">
-        <div class="header-left">
-          <component
-            :is="collapsed ? MenuUnfoldOutlined : MenuFoldOutlined"
-            class="trigger"
-            @click="collapsed = !collapsed"
-          />
-          <a-input-search
-            placeholder="搜索应用、任务、标准..."
-            class="header-search"
-            @search="handleGlobalSearch"
-          />
-        </div>
-        <div class="header-right">
-          <a-tooltip
-            :title="isDark ? '切换亮色模式' : '切换暗色模式'"
-            placement="bottomRight"
-          >
+          <a-tooltip v-if="!collapsed" :title="isDark ? '切换亮色模式' : '切换暗色模式'" placement="top">
             <a-button
-              class="theme-btn"
+              class="profile-theme-btn"
               shape="circle"
               size="small"
-              @click="toggleTheme"
+              @click.stop="toggleTheme"
             >
               <template #icon>
                 <BulbFilled v-if="isDark" />
@@ -80,9 +68,12 @@
               </template>
             </a-button>
           </a-tooltip>
-        </div>
-      </a-layout-header>
+        </a-menu-item>
+      </a-menu>
 
+    </a-layout-sider>
+
+    <a-layout class="main-layout">
       <a-layout-content class="content">
         <router-view v-slot="{ Component, route }">
           <transition name="fade" mode="out-in">
@@ -91,8 +82,6 @@
         </router-view>
       </a-layout-content>
     </a-layout>
-
-
   </a-layout>
 </template>
 
@@ -114,7 +103,6 @@ const appStore = useAppStore()
 const userStore = useUserStore()
 const themeStore = useThemeStore()
 
-// 判断当前是否为暗色主题
 const isDark = computed(() => {
   if (themeStore.theme === 'auto') {
     return window.matchMedia('(prefers-color-scheme: dark)').matches
@@ -122,7 +110,6 @@ const isDark = computed(() => {
   return themeStore.theme === 'dark'
 })
 
-// 切换主题（浅色/深色）
 function toggleTheme(): void {
   themeStore.theme = isDark.value ? 'light' : 'dark'
 }
@@ -158,7 +145,6 @@ const collapsed = ref(false)
 const selectedKeys = ref<string[]>([route.path])
 
 watch(() => route.path, (p) => {
-  // 子路由高亮父级菜单项
   const parent = p.startsWith('/ai-bid/') ? '/ai-bid' : p
   selectedKeys.value = [parent]
 })
@@ -167,16 +153,10 @@ function handleMenuClick({ key }: { key: string }): void {
   router.push(key)
 }
 
-function handleGlobalSearch(value: string): void {
-  if (!value) return
-  router.push({ path: '/dashboard', query: { q: value } })
-}
-
 onMounted(() => {
   userStore.fetchUser()
   appStore.fetchApps()
 })
-
 </script>
 
 <style scoped lang="less">
@@ -186,17 +166,50 @@ onMounted(() => {
 
 .sider {
   background: @header-bg !important;
+  border-right: 1px solid @border-color;
   :deep(.ant-layout-sider-children) { display: flex; flex-direction: column; }
 }
 
 .sider-brand {
-  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+
+  &__left {
+    cursor: pointer;
+    flex: 1;
+    min-width: 0;
+  }
+
+  &__expand-icon {
+    display: block;
+    margin: 0 auto;
+    font-size: 18px;
+    color: @header-text-secondary;
+    padding: @spacing-md 0;
+    text-align: center;
+  }
+
+  &__trigger {
+    font-size: 14px;
+    color: @header-text-secondary;
+    cursor: pointer;
+    flex-shrink: 0;
+    padding-right: @spacing-sm;
+    &:hover { color: @brand-primary; }
+  }
 }
 
 .sider-menu {
   border-right: none !important;
   &--main { flex: 1; overflow-y: auto; }
-  &--bottom { flex-shrink: 0; }
+  &--bottom {
+    flex-shrink: 0;
+    :deep(.ant-menu-item:last-child .ant-menu-title-content) {
+      display: flex;
+      align-items: center;
+    }
+  }
 }
 .sider-divider {
   height: 1px;
@@ -205,42 +218,14 @@ onMounted(() => {
   flex-shrink: 0;
 }
 
-.main-layout { height: 100%; overflow: hidden; }
+.profile-theme-btn {
+  font-size: 14px;
+  color: @header-text-secondary;
+  margin-left: 8px;
+  &:hover { color: @brand-primary; }
+}
 
-.header {
-  background: @header-bg;
-  padding: 0 @spacing-xl;
-  display: flex;
-  align-items: center;
-  height: @header-height;
-  box-shadow: @shadow-sm;
-  z-index: 10;
-}
-.header-left {
-  display: flex;
-  align-items: center;
-  gap: @spacing-lg;
-  flex: 1;
-}
-.trigger {
-  font-size: 18px;
-  color: @header-text-secondary;
-  cursor: pointer;
-  &:hover { color: @brand-primary; }
-}
-.header-search {
-  width: 320px;
-}
-.header-right {
-  display: flex;
-  align-items: center;
-  gap: @spacing-xl;
-}
-.theme-btn {
-  font-size: 16px;
-  color: @header-text-secondary;
-  &:hover { color: @brand-primary; }
-}
+.main-layout { height: 100%; overflow: hidden; }
 
 .content {
   flex: 1;

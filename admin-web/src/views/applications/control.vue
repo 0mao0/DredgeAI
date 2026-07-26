@@ -26,6 +26,7 @@
             :checked="record.published"
             checked-children="已发布"
             un-checked-children="已下架"
+            size="small"
             @change="(v: boolean) => onToggle(record, v)"
           />
         </template>
@@ -68,7 +69,7 @@
     <a-modal v-model:open="scopeVisible" :title="`${scopeTarget?.name} · 授权范围`" @ok="saveScope">
       <a-form layout="vertical">
         <a-form-item label="授权方式">
-          <a-radio-group v-model:value="scopeMode">
+          <a-radio-group v-model:value="scopeMode" size="small" button-style="solid">
             <a-radio value="所有">所有用户</a-radio>
             <a-radio value="部分">按角色指定</a-radio>
           </a-radio-group>

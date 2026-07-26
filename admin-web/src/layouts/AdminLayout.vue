@@ -9,8 +9,18 @@
       :collapsed-width="64"
       class="sider"
     >
-      <div class="sider-brand" @click="collapsed = !collapsed">
-        <Logo :collapsed="collapsed" subtitle="管理后台" />
+      <div class="sider-brand">
+        <div class="sider-brand__left" @click="collapsed = !collapsed">
+          <div v-if="!collapsed">
+            <Logo :collapsed="collapsed" subtitle="管理后台" />
+          </div>
+          <MenuUnfoldOutlined v-else class="sider-brand__expand-icon" />
+        </div>
+        <MenuFoldOutlined
+          v-if="!collapsed"
+          class="sider-brand__trigger"
+          @click="collapsed = !collapsed"
+        />
       </div>
 
       <a-menu
@@ -145,29 +155,15 @@
         @click="handleMenuClick"
       >
         <a-menu-item key="/profile">
-          <UserOutlined />
-          <span>个人中心</span>
+          <div class="profile-menu-row">
+            <UserOutlined />
+            <span>个人中心</span>
+            <span v-if="!collapsed" class="profile-spacer" />
+            <ThemeToggle v-if="!collapsed" />
+          </div>
         </a-menu-item>
       </a-menu>
 
-      <div class="sider-footer">
-        <a-tooltip :title="collapsed ? '展开侧栏' : '收起侧栏'" placement="right">
-          <div class="sider-footer-btn" @click="collapsed = !collapsed">
-            <MenuUnfoldOutlined v-if="collapsed" />
-            <MenuFoldOutlined v-else />
-          </div>
-        </a-tooltip>
-        <template v-if="!collapsed">
-          <a-tooltip title="切换主题" placement="right">
-            <ThemeToggle />
-          </a-tooltip>
-          <a-tooltip title="退出登录" placement="right">
-            <div class="sider-footer-btn" @click="handleLogout">
-              <LogoutOutlined />
-            </div>
-          </a-tooltip>
-        </template>
-      </div>
     </a-layout-sider>
 
     <a-layout class="main-layout">
@@ -193,7 +189,6 @@ import {
   FundOutlined, EyeOutlined, SwapOutlined, BankOutlined, FileSearchOutlined, BulbOutlined,
   ApiOutlined, AlertOutlined, UserOutlined,
   MenuFoldOutlined, MenuUnfoldOutlined,
-  LogoutOutlined,
 } from '@ant-design/icons-vue'
 import Logo from '@shared/web/components/Logo.vue'
 import { useAppStore } from '@/stores/app'
@@ -282,10 +277,6 @@ watch(() => route.path, (p) => {
 function handleMenuClick({ key }: { key: string }): void {
   router.push(key)
 }
-
-function handleLogout(): void {
-  router.push('/dashboard')
-}
 </script>
 
 <style scoped lang="less">
@@ -295,6 +286,7 @@ function handleLogout(): void {
 
 .sider {
   background: @header-bg !important;
+  border-right: 1px solid @border-color;
   :deep(.ant-layout-sider-children) { display: flex; flex-direction: column; }
 }
 
@@ -302,8 +294,30 @@ function handleLogout(): void {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  height: @header-height;
-  padding-right: @spacing-xl;
+
+  &__left {
+    cursor: pointer;
+    flex: 1;
+    min-width: 0;
+  }
+
+  &__expand-icon {
+    display: block;
+    margin: 0 auto;
+    font-size: 18px;
+    color: @header-text-secondary;
+    padding: @spacing-md 0;
+    text-align: center;
+  }
+
+  &__trigger {
+    font-size: 14px;
+    color: @header-text-secondary;
+    cursor: pointer;
+    flex-shrink: 0;
+    padding-right: @spacing-sm;
+    &:hover { color: @brand-primary; }
+  }
 }
 
 .sider-menu {
@@ -317,30 +331,14 @@ function handleLogout(): void {
   border-right: none !important;
 }
 
-.sider-footer {
+.profile-menu-row {
   display: flex;
   align-items: center;
-  justify-content: space-evenly;
-  padding: @spacing-sm @spacing-md;
-  border-top: 1px solid @border-color;
-  flex-shrink: 0;
+  width: 100%;
 }
 
-.sider-footer-btn {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  width: 28px;
-  height: 28px;
-  border-radius: 50%;
-  font-size: 15px;
-  color: @header-text-secondary;
-  cursor: pointer;
-  transition: color @transition-base, background @transition-base;
-  &:hover {
-    color: @header-text;
-    background: @surface-hover;
-  }
+.profile-spacer {
+  flex: 1;
 }
 
 .app-cat-tag {

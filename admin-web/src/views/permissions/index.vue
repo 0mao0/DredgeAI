@@ -12,7 +12,7 @@
         :pagination="{ pageSize: 10 }"
         :loading="loading"
         row-key="id"
-        size="middle"
+        size="small"
       />
     </SectionCard>
   </div>

@@ -1,7 +1,9 @@
 <template>
   <div class="page-header">
     <div class="page-header-left">
-      <h2 class="page-title">{{ title }}</h2>
+      <h2 class="page-title">
+        <slot name="title">{{ title }}</slot>
+      </h2>
       <p v-if="description" class="page-desc">{{ description }}</p>
     </div>
     <div v-if="$slots.extra" class="page-header-right">
@@ -11,7 +13,7 @@
 </template>
 
 <script setup lang="ts">
-defineProps<{ title: string; description?: string }>()
+defineProps<{ title?: string; description?: string }>()
 </script>
 
 <style scoped lang="less">

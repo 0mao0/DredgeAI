@@ -12,7 +12,7 @@
     <a-tabs v-model:activeKey="activeTab" class="api-tabs">
       <a-tab-pane key="keys" tab="模型管理">
         <SectionCard nopad>
-          <a-table
+          <a-table size="small"
             :data-source="models"
             :columns="modelColumns"
             :pagination="{ pageSize: 10 }"
@@ -107,7 +107,7 @@
 
       <a-tab-pane key="ranking" tab="用户控制">
         <SectionCard nopad>
-          <a-table
+          <a-table size="small"
             :data-source="mergedUserData"
             :columns="mergedUserColumns"
             :pagination="{ pageSize: 10 }"

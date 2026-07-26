@@ -7,6 +7,7 @@
         v-model:value="query"
         placeholder="搜索音色名称 / 风格"
         allow-clear
+        style="width:100%"
         class="voice-picker__search"
       />
       <ul class="voice-list">
@@ -255,9 +256,9 @@ onUnmounted(() => {
     height: 24px;
     border-radius: 50%;
     font-size: 14px;
-    &--male { color: #2563EB; background: color-mix(in srgb, #2563EB 12%, transparent); }
-    &--female { color: #DB2777; background: color-mix(in srgb, #DB2777 12%, transparent); }
-    &--child { color: #D97706; background: color-mix(in srgb, #D97706 12%, transparent); }
+    &--male { color: @voice-gender-male; background: color-mix(in srgb, @voice-gender-male 12%, transparent); }
+    &--female { color: @voice-gender-female; background: color-mix(in srgb, @voice-gender-female 12%, transparent); }
+    &--child { color: @voice-gender-child; background: color-mix(in srgb, @voice-gender-child 12%, transparent); }
   }
   &__info {
     flex: 1;
@@ -289,8 +290,8 @@ onUnmounted(() => {
     width: 20px;
     height: 20px;
     font-size: 13px;
-    &--public { color: #10B981; }
-    &--private { color: #8B5CF6; }
+    &--public { color: @success; }
+    &--private { color: @accent; }
   }
   &__status {
     display: inline-flex;
@@ -304,9 +305,9 @@ onUnmounted(() => {
     cursor: default;
     &--converting { color: @brand-primary; }
     &--failed {
-      color: #FF4D4F;
+      color: @danger;
       cursor: pointer;
-      &:hover { color: #fff; background: #FF4D4F; }
+      &:hover { color: #fff; background: @danger; }
     }
   }
   &__play {
@@ -330,12 +331,12 @@ onUnmounted(() => {
     width: 24px;
     height: 24px;
     font-size: 14px;
-    color: #FF4D4F;
+    color: @danger;
     cursor: pointer;
     border-radius: 50%;
     transition: color 0.2s ease, background 0.2s ease;
     flex-shrink: 0;
-    &:hover { color: #fff; background: #FF4D4F; }
+    &:hover { color: #fff; background: @danger; }
   }
 }
 

@@ -2,7 +2,7 @@
   <div class="page-container">
     <PageHeader title="仪表盘" description="系统运营概览">
       <template #extra>
-        <a-button type="primary" @click="refresh">刷新数据</a-button>
+        <a-button size="small" @click="refresh">刷新数据</a-button>
       </template>
     </PageHeader>
 

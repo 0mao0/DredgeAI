@@ -3,6 +3,7 @@
     <a-input-search
       v-model:value="keyword"
       placeholder="搜索用户/文本"
+      style="width:240px"
       class="filter-search"
       allow-clear
       @search="emitChange"
@@ -17,7 +18,7 @@
     <div class="filter-spacer" />
     <div class="filter-item">
       <span class="filter-label">仅看用户已删除</span>
-      <a-switch v-model:checked="deletedOnly" @change="emitChange" />
+      <a-switch v-model:checked="deletedOnly" size="small" @change="emitChange" />
     </div>
   </div>
 </template>
