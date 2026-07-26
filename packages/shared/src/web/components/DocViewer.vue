@@ -16,6 +16,20 @@
       </div>
     </template>
 
+    <div v-if="steps" class="doc-progress">
+      <div
+        v-for="(s, i) in steps"
+        :key="i"
+        class="doc-progress__step"
+        :class="stepClass(s)"
+      >
+        <span class="doc-progress__dot" />
+        <span class="doc-progress__label">{{ s.title }}</span>
+        <span v-if="s.progress != null" class="doc-progress__pct">{{ s.progress }}%</span>
+        <span v-if="i < steps.length - 1" class="doc-progress__line" />
+      </div>
+    </div>
+
     <DataSkeleton v-if="loading" :rows="5" />
 
     <EmptyState v-else-if="!doc" type="no-data" :title="emptyTitle" />
@@ -70,8 +84,15 @@ export interface DocContent {
   content: string
 }
 
+export interface DocProgressStep {
+  title: string
+  status: 'wait' | 'process' | 'finish' | 'error'
+  progress?: number
+}
+
 const props = withDefaults(defineProps<{
   doc: DocContent | null
+  steps?: DocProgressStep[]
   loading?: boolean
   error?: string | null
   cardTitle?: string
@@ -80,6 +101,14 @@ const props = withDefaults(defineProps<{
   cardTitle: '文档',
   emptyTitle: '暂无文档',
 })
+
+function stepClass(s: DocProgressStep): Record<string, boolean> {
+  return {
+    'doc-progress__step--done': s.status === 'finish',
+    'doc-progress__step--active': s.status === 'process',
+    'doc-progress__step--error': s.status === 'error',
+  }
+}
 
 const renderMode = ref<'md' | 'pdf'>('md')
 
@@ -150,6 +179,53 @@ const renderedMd = computed(() => {
   cursor: pointer;
   transition: color @transition-fast;
   &--on { color: @brand-primary; }
+}
+
+/* 外部 API 进度条（极窄，一行三阶段） */
+.doc-progress {
+  display: flex;
+  align-items: center;
+  padding: @spacing-xs @spacing-xl;
+  border-bottom: 1px solid @divider-color;
+  flex-shrink: 0;
+  height: 32px;
+  box-sizing: border-box;
+}
+.doc-progress__step {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  flex: 1;
+  font-size: @font-size-xs;
+  color: @text-tertiary;
+  position: relative;
+  white-space: nowrap;
+  &--done { color: @success; }
+  &--active { color: @brand-primary; }
+  &--error { color: @danger; }
+}
+.doc-progress__dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: currentColor;
+  flex-shrink: 0;
+}
+.doc-progress__label {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.doc-progress__pct {
+  font-variant-numeric: tabular-nums;
+}
+.doc-progress__line {
+  flex: 1;
+  height: 1px;
+  background: currentColor;
+  opacity: 0.2;
+  margin: 0 6px;
+  .doc-progress__step--active & { opacity: 0.5; }
+  .doc-progress__step--done & { opacity: 0.4; }
 }
 
 /* PDF 模拟 */

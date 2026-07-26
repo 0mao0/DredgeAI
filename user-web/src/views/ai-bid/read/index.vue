@@ -1,35 +1,25 @@
 <template>
-  <div class="bid-read">
-    <SectionCard title="审标进度" class="steps-card">
-      <a-steps v-model:current="currentStep" size="small" :percent="currentPercent">
-        <a-step
-          v-for="(step, i) in steps"
-          :key="i"
-          :title="step.title"
-          :description="step.progress != null ? `${step.progress}%` : step.description"
-          :status="step.status === 'finish' ? 'finish' : step.status === 'error' ? 'error' : i === currentStep ? 'process' : 'wait'"
-        />
-      </a-steps>
-    </SectionCard>
-
-    <div class="workbench">
-      <div class="workbench__main">
-        <DocViewer :doc="docContent" card-title="文档预览">
-          <template #extra>
-            <a-button type="link" size="small">
-              <UploadOutlined /> 重新上传
-            </a-button>
-          </template>
-        </DocViewer>
-      </div>
-      <div class="workbench__side">
-        <BidReviewPanel
-          :risks="risks"
-          :risk-summary="riskSummary"
-          :chat-messages="chatMessages"
-          @chat-send="handleChatSend"
-        />
-      </div>
+  <div class="workbench">
+    <div class="workbench__main">
+      <DocViewer
+        :doc="docContent"
+        :steps="steps"
+        card-title="文档预览"
+      >
+        <template #extra>
+          <a-button type="link" size="small">
+            <UploadOutlined /> 重新上传
+          </a-button>
+        </template>
+      </DocViewer>
+    </div>
+    <div class="workbench__side">
+      <BidReviewPanel
+        :risks="risks"
+        :risk-summary="riskSummary"
+        :chat-messages="chatMessages"
+        @chat-send="handleChatSend"
+      />
     </div>
   </div>
 </template>
@@ -37,22 +27,19 @@
 <script setup lang="ts">
 import { ref, computed, onMounted } from 'vue'
 import { UploadOutlined } from '@ant-design/icons-vue'
-import SectionCard from '@shared/web/components/SectionCard.vue'
 import DocViewer from '@shared/web/components/DocViewer.vue'
 import BidReviewPanel from './components/BidReviewPanel.vue'
 import { getBidSteps, getBidRisks, getBidSessions, getBidDocument } from '@/api/modules/bid'
-import type { BidReviewStep, RiskItem, BidReviewSession } from '@/types'
+import type { RiskItem, BidReviewSession } from '@/types'
+import type { DocProgressStep } from '@shared/web/components/DocViewer.vue'
 import type { ChatMessage } from '@shared/core/types/chat'
 
-const steps = ref<BidReviewStep[]>([])
+const steps = ref<DocProgressStep[]>([])
 const risks = ref<RiskItem[]>([])
 const sessions = ref<BidReviewSession[]>([])
 const document = ref('')
 const activeSessionId = ref('')
 const chatMessages = ref<ChatMessage[]>([])
-
-const currentStep = computed(() => Math.max(steps.value.findIndex((s) => s.status === 'process'), 0))
-const currentPercent = computed(() => steps.value[currentStep.value]?.progress ?? 0)
 
 const currentSession = computed(() => sessions.value.find((s) => s.id === activeSessionId.value))
 
@@ -93,19 +80,3 @@ onMounted(async () => {
   }
 })
 </script>
-
-<style scoped lang="less">
-@import '@shared/web/styles/variables.less';
-
-.bid-read {
-  display: flex;
-  flex-direction: column;
-  gap: @spacing-md;
-  height: 100%;
-}
-
-.steps-card {
-  flex-shrink: 0;
-  :deep(.ant-steps-item-description) { font-size: @font-size-xs; color: @text-tertiary; }
-}
-</style>
