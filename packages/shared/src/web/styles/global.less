@@ -116,3 +116,19 @@ body {
   &:hover > td { background: @surface-hover !important; }
   &:hover > td:first-child { box-shadow: inset 2px 0 0 @brand-primary; }
 }
+
+// 共享工作台布局：读标 / 标准查询 / 其他三栏或双栏页面共用
+.workbench {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  gap: @spacing-md;
+}
+.workbench__side {
+  width: 360px;
+  flex-shrink: 0;
+}
+.workbench__main {
+  flex: 1;
+  min-width: 0;
+}

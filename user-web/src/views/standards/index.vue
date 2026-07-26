@@ -26,7 +26,7 @@
 
       <!-- 中栏：阅读器 -->
       <main class="standard-body__center">
-        <StandardReader :doc="doc" :loading="docLoading" :error="docError" />
+        <DocViewer :doc="doc" :loading="docLoading" :error="docError" />
       </main>
 
       <!-- 右栏：属性 + AI -->
@@ -58,7 +58,7 @@ import { ref, computed, onMounted } from 'vue'
 import { message } from 'ant-design-vue'
 import PageHeader from '@shared/web/components/PageHeader.vue'
 import SectionCard from '@shared/web/components/SectionCard.vue'
-import StandardReader from './components/StandardReader.vue'
+import DocViewer from '@shared/web/components/DocViewer.vue'
 import StandardPropertyPanel from './components/StandardProperty.vue'
 import { getStandardList, getStandardProperty, getStandardDocument, updateStandardProperty, getStandardHistory } from '@/api/modules/standard'
 import type { StandardListItem, StandardProperty, StandardDocument, StandardSearchHistory } from '@/types'

@@ -24,19 +24,7 @@
         </a-tab-pane>
 
         <a-tab-pane key="ai" tab="AI对话" force-render>
-          <div class="standard-chat">
-            <div ref="chatBox" class="standard-chat__messages">
-              <div v-for="(msg, i) in chatMessages" :key="i" class="standard-chat__msg" :class="`standard-chat__msg--${msg.role}`">
-                <div class="standard-chat__avatar">{{ msg.role === 'user' ? '我' : 'AI' }}</div>
-                <div class="standard-chat__bubble">{{ msg.content }}</div>
-              </div>
-            </div>
-            <div class="standard-chat__foot">
-              <a-input v-model:value="chatInput" placeholder="向 AI 提问..." @press-enter="handleChat">
-                <template #suffix><SendOutlined class="standard-chat__send" @click="handleChat" /></template>
-              </a-input>
-            </div>
-          </div>
+          <AIChat :messages="chatMessagesAIChat" empty-text="你好！可以针对所选标准向我提问。" @send="handleChat" />
         </a-tab-pane>
       </a-tabs>
     </template>
@@ -44,14 +32,15 @@
 </template>
 
 <script setup lang="ts">
-import { ref, watch, nextTick } from 'vue'
-import { SendOutlined } from '@ant-design/icons-vue'
+import { ref, watch, computed } from 'vue'
 import { message } from 'ant-design-vue'
 import DataSkeleton from '@shared/web/components/DataSkeleton.vue'
 import EmptyState from '@shared/web/components/EmptyState.vue'
+import AIChat from '@shared/web/components/AIChat.vue'
+import type { ChatMessage } from '@shared/core/types/chat'
 import type { StandardProperty } from '@/types'
 
-interface ChatMessage { role: 'user' | 'ai', content: string }
+interface InternalMessage { role: 'user' | 'ai', content: string }
 
 const props = defineProps<{
   property: StandardProperty | null
@@ -72,22 +61,21 @@ function handleSubmit(): void {
   emit('submit', { ...form.value })
 }
 
-const chatInput = ref('')
-const chatBox = ref<HTMLElement>()
-const chatMessages = ref<ChatMessage[]>([
+const chatMessages = ref<InternalMessage[]>([
   { role: 'ai', content: '你好！可以针对所选标准向我提问。' },
 ])
 
-async function handleChat(): Promise<void> {
-  const t = chatInput.value.trim()
-  if (!t) return
-  chatMessages.value.push({ role: 'user', content: t })
-  chatInput.value = ''
-  await nextTick()
-  chatBox.value?.scrollTo({ top: chatBox.value.scrollHeight, behavior: 'smooth' })
+const chatMessagesAIChat = computed<ChatMessage[]>(() =>
+  chatMessages.value.map((m) => ({
+    role: m.role === 'ai' ? 'assistant' : 'user',
+    content: m.content,
+  })),
+)
+
+function handleChat(text: string): void {
+  chatMessages.value.push({ role: 'user', content: text })
   setTimeout(() => {
-    chatMessages.value.push({ role: 'ai', content: `已收到您的问题。请查阅规范原文以获取最准确的信息。` })
-    nextTick(() => chatBox.value?.scrollTo({ top: chatBox.value!.scrollHeight, behavior: 'smooth' }))
+    chatMessages.value.push({ role: 'ai', content: '已收到您的问题。请查阅规范原文以获取最准确的信息。' })
   }, 600)
 }
 
@@ -147,67 +135,4 @@ const parentOptions = [
 }
 
 .standard-scroll { height: 100%; overflow-y: auto; padding: 0 @spacing-md @spacing-md 0; }
-
-.standard-chat {
-  height: 100%;
-  display: flex;
-  flex-direction: column;
-  border: 1px solid @divider-color;
-  border-radius: @radius-base;
-  overflow: hidden;
-
-  &__messages {
-    flex: 1;
-    min-height: 0;
-    overflow-y: auto;
-    padding: @spacing-md;
-    display: flex;
-    flex-direction: column;
-    gap: @spacing-sm;
-  }
-
-  &__msg {
-    display: flex;
-    gap: 6px;
-    &--user { flex-direction: row-reverse; }
-  }
-
-  &__avatar {
-    width: 24px; height: 24px;
-    border-radius: 50%;
-    background: @brand-gradient;
-    color: #fff;
-    display: flex; align-items: center; justify-content: center;
-    font-size: 10px;
-    font-weight: @font-weight-semibold;
-    flex-shrink: 0;
-  }
-
-  &__bubble {
-    background: @content-bg;
-    padding: 6px 10px;
-    border-radius: 12px 12px 12px 4px;
-    font-size: @font-size-sm;
-    max-width: 80%;
-    line-height: 1.45;
-    word-break: break-word;
-    .standard-chat__msg--user & {
-      background: @brand-primary;
-      color: #fff;
-      border-radius: 12px 12px 4px 12px;
-    }
-  }
-
-  &__foot {
-    padding: @spacing-md;
-    border-top: 1px solid @divider-color;
-    flex-shrink: 0;
-  }
-
-  &__send { color: @brand-primary; cursor: pointer; font-size: 16px; }
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .standard-chat__bubble { transition: none; }
-}
 </style>

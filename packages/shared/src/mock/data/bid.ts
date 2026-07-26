@@ -1,10 +1,9 @@
 import type { BidReviewStep, RiskItem, BidReviewSession } from '@shared/types'
 
 export const bidReviewSteps: BidReviewStep[] = [
-  { title: '上传文档', description: '支持 PDF/Word 格式，单文件 ≤ 50MB', status: 'finish' },
-  { title: '智能识别', description: 'AI 识别关键条款与结构化信息', status: 'finish' },
-  { title: '风险分析', description: '风险分级与处置建议', status: 'process' },
-  { title: '输出报告', description: '导出分析报告与原文标注', status: 'wait' },
+  { title: '原始文档', description: '提取标书全文、表格、附图', status: 'finish', progress: 100 },
+  { title: '关键词提取', description: '识别资质条件、评分项、废标条款、人员/设备要求', status: 'process', progress: 65 },
+  { title: '图谱生成', description: '构建标书条款关系网络，对标需求与应答', status: 'wait', progress: 0 },
 ]
 
 export const riskItems: RiskItem[] = [
