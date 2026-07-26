@@ -85,11 +85,15 @@
           size="small"
           class="modal-player-text__toggle"
           @click="textExpanded = !textExpanded"
-        >{{ textExpanded ? '收起配音文本' : '查看配音文本' }}</a-button>
+        >
+          {{ textExpanded ? '收起配音文本' : '查看配音文本' }}
+        </a-button>
         <p
           v-if="textExpanded"
           class="modal-player-text__content"
-        >{{ currentTask?.text }}</p>
+        >
+          {{ currentTask?.text }}
+        </p>
       </div>
       <DubbingPlayer v-if="currentTask && currentTask.status === '已完成'" :task="currentTask" />
     </a-modal>
@@ -147,7 +151,7 @@ function loadPrivateVoices(): VoiceItem[] {
 }
 
 function savePrivateVoice(voice: VoiceItem): void {
-  const list = loadPrivateVoices().filter(v => v.id !== voice.id)
+  const list = loadPrivateVoices().filter((v) => v.id !== voice.id)
   list.unshift(voice)
   localStorage.setItem(PRIVATE_VOICES_KEY, JSON.stringify(list))
 }
@@ -179,7 +183,7 @@ function readDuration(blob: Blob): Promise<number> {
       resolve(sec)
       URL.revokeObjectURL(url)
     }
-    const timer = setTimeout(() => done(0), 5000)
+    const timer = setTimeout(done, 5000, 0)
     audio.onloadedmetadata = () => {
       clearTimeout(timer)
       done(Number.isFinite(audio.duration) ? Math.round(audio.duration * 10) / 10 : 0)
@@ -199,15 +203,15 @@ async function fetchVoices(): Promise<void> {
 
   // Load from server
   try {
-    loaded = (await getVoices()).map(v => withUrl({ ...v, visibility: v.visibility || 'public' }))
+    loaded = (await getVoices()).map((v) => withUrl({ ...v, visibility: v.visibility || 'public' }))
   } catch {
     message.error('音色列表加载失败，请确认 TTS 服务已启动')
   }
 
   // Always load private voices from localStorage (exclude soft-deleted ones)
-  const stored = loadPrivateVoices().filter(v => !v.deletedByUser).map(v => withUrl({ ...v, visibility: v.visibility || 'private' }))
+  const stored = loadPrivateVoices().filter((v) => !v.deletedByUser).map((v) => withUrl({ ...v, visibility: v.visibility || 'private' }))
   for (const pv of stored) {
-    const idx = loaded.findIndex(v => v.id === pv.id)
+    const idx = loaded.findIndex((v) => v.id === pv.id)
     if (idx >= 0) {
       loaded[idx] = pv
     } else {
@@ -221,15 +225,15 @@ async function fetchVoices(): Promise<void> {
   voicesLoading.value = false
 }
 
-function handleVoiceConfirmed(payload: { voice: VoiceItem; formData: FormData }): void {
+function handleVoiceConfirmed(payload: { voice: VoiceItem, formData: FormData }): void {
   const { voice, formData } = payload
   // Add to list immediately with 'converting' status
-  voices.value = [voice, ...voices.value.filter(v => v.id !== voice.id)]
+  voices.value = [voice, ...voices.value.filter((v) => v.id !== voice.id)]
   selectedVoiceId.value = voice.id
 
   // Upload in background — modal already closed
   registerVoice(formData)
-    .then(result => {
+    .then((result) => {
       const updated: VoiceItem = {
         ...voice,
         id: result.voice_id,
@@ -239,14 +243,14 @@ function handleVoiceConfirmed(payload: { voice: VoiceItem; formData: FormData })
       // Replace temp voice with real one, also clean up any converting/failed duplicates with same name
       voices.value = [
         updated,
-        ...voices.value.filter(v =>
-          v.id !== voice.id &&
-          !(v.name === voice.name && v.uploadStatus && v.uploadStatus !== 'ready'),
+        ...voices.value.filter((v) =>
+          v.id !== voice.id
+          && !(v.name === voice.name && v.uploadStatus && v.uploadStatus !== 'ready'),
         ),
       ]
       savePrivateVoice(updated)
       // Also purge duplicates and soft-deleted from localStorage
-      const stored = loadPrivateVoices().filter(v =>
+      const stored = loadPrivateVoices().filter((v) =>
         !v.deletedByUser && !(v.name === voice.name && v.uploadStatus && v.uploadStatus !== 'ready'),
       )
       localStorage.setItem(PRIVATE_VOICES_KEY, JSON.stringify(stored))
@@ -255,13 +259,13 @@ function handleVoiceConfirmed(payload: { voice: VoiceItem; formData: FormData })
       }
       message.success(`音色「${updated.name}」已创建`)
     })
-    .catch(err => {
+    .catch((err) => {
       // If a ready voice with same name already exists, silently discard this duplicate
       const alreadyReady = voices.value.some(
-        v => v.name === voice.name && v.id !== voice.id && v.uploadStatus === 'ready',
+        (v) => v.name === voice.name && v.id !== voice.id && v.uploadStatus === 'ready',
       )
       if (alreadyReady) {
-        voices.value = voices.value.filter(v => v.id !== voice.id)
+        voices.value = voices.value.filter((v) => v.id !== voice.id)
         return
       }
       const reason = err instanceof Error ? err.message : '服务器处理失败，请检查 TTS 服务是否正常运行'
@@ -272,7 +276,7 @@ function handleVoiceConfirmed(payload: { voice: VoiceItem; formData: FormData })
       }
       voices.value = [
         failed,
-        ...voices.value.filter(v => v.id !== voice.id),
+        ...voices.value.filter((v) => v.id !== voice.id),
       ]
       savePrivateVoice(failed)
       message.error(`音色「${voice.name}」转换失败`)
@@ -281,14 +285,14 @@ function handleVoiceConfirmed(payload: { voice: VoiceItem; formData: FormData })
 
 function handleVoiceDeleted(voiceId: string): void {
   // Soft delete: keep in localStorage with deletedByUser flag for admin visibility
-  const voice = voices.value.find(v => v.id === voiceId)
+  const voice = voices.value.find((v) => v.id === voiceId)
   if (voice) {
     const deleted = { ...voice, deletedByUser: true }
-    const stored = loadPrivateVoices().filter(v => v.id !== voiceId)
+    const stored = loadPrivateVoices().filter((v) => v.id !== voiceId)
     stored.unshift(deleted)
     localStorage.setItem(PRIVATE_VOICES_KEY, JSON.stringify(stored))
   }
-  voices.value = voices.value.filter(v => v.id !== voiceId)
+  voices.value = voices.value.filter((v) => v.id !== voiceId)
   if (selectedVoiceId.value === voiceId) {
     selectedVoiceId.value = voices.value[0]?.id || ''
   }

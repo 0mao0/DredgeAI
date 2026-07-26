@@ -7,7 +7,9 @@
       :theme="isDark ? 'dark' : 'light'"
       :width="200"
       :collapsed-width="64"
+      breakpoint="lg"
       class="sider"
+      @breakpoint="(broken: boolean) => { collapsed = broken }"
     >
       <div class="sider-brand">
         <div class="sider-brand__left" @click="collapsed = !collapsed">
@@ -24,128 +26,14 @@
       </div>
 
       <a-menu
-        v-model:selectedKeys="selectedKeys"
-        v-model:openKeys="openKeys"
+        v-model:selected-keys="selectedKeys"
+        v-model:open-keys="openKeys"
         :theme="isDark ? 'dark' : 'light'"
         mode="inline"
         class="sider-menu"
+        :items="menuItems"
         @click="handleMenuClick"
-      >
-        <a-sub-menu key="dev">
-          <template #title>
-            <CodeOutlined />
-            <span>开发管理</span>
-          </template>
-          <a-menu-item key="/menu-config">
-            <MenuOutlined />
-            <span>菜单配置</span>
-          </a-menu-item>
-          <a-menu-item key="/task-scheduler">
-            <ScheduleOutlined />
-            <span>任务调度</span>
-          </a-menu-item>
-          <a-menu-item key="/logs">
-            <FileTextOutlined />
-            <span>日志管理</span>
-          </a-menu-item>
-          <a-menu-item key="/platform">
-            <InfoCircleOutlined />
-            <span>平台信息</span>
-          </a-menu-item>
-        </a-sub-menu>
-
-        <a-sub-menu key="users">
-          <template #title>
-            <TeamOutlined />
-            <span>用户权限</span>
-          </template>
-          <a-menu-item key="/org-users">
-            <UsergroupAddOutlined />
-            <span>组织用户</span>
-          </a-menu-item>
-          <a-menu-item key="/permissions">
-            <SafetyOutlined />
-            <span>权限管理</span>
-          </a-menu-item>
-        </a-sub-menu>
-
-        <a-menu-item key="/dashboard">
-          <DashboardOutlined />
-          <span>仪表盘</span>
-        </a-menu-item>
-        <a-menu-item key="/api">
-          <ApiOutlined />
-          <span>API 管理</span>
-        </a-menu-item>
-        <a-sub-menu key="apps">
-          <template #title>
-            <AppstoreOutlined />
-            <span>应用管理</span>
-          </template>
-          <a-menu-item key="/applications/analysis">
-            <BarChartOutlined />
-            <span>数据分析</span>
-          </a-menu-item>
-          <a-menu-item key="/applications/control">
-            <ControlOutlined />
-            <span>发布管理</span>
-          </a-menu-item>
-          <a-menu-item v-for="app in appMenuItems" :key="app.route">
-            <span class="app-cat-tag" :style="{ color: app.catColor, borderColor: app.catColor, background: app.catColor + '22' }">{{ app.category }}</span>
-            <span class="app-menu-label">{{ app.name }}</span>
-          </a-menu-item>
-        </a-sub-menu>
-        <a-sub-menu key="data">
-          <template #title>
-            <DatabaseOutlined />
-            <span>数据仓库</span>
-          </template>
-          <a-menu-item key="/data/statistics">
-            <BarChartOutlined />
-            <span>数据统计</span>
-          </a-menu-item>
-          <a-sub-menu key="data-dynamic">
-            <template #title>
-              <FundOutlined />
-              <span>动态数据</span>
-            </template>
-            <a-menu-item key="/data/dynamic/monitoring">
-              <EyeOutlined />
-              <span>监控</span>
-            </a-menu-item>
-            <a-menu-item key="/data/dynamic/tide-level">
-              <SwapOutlined />
-              <span>潮位</span>
-            </a-menu-item>
-          </a-sub-menu>
-          <a-sub-menu key="data-static">
-            <template #title>
-              <DatabaseOutlined />
-              <span>静态数据</span>
-            </template>
-            <a-menu-item key="/data/static/enterprise">
-              <BankOutlined />
-              <span>企业库</span>
-            </a-menu-item>
-            <a-menu-item key="/data/static/standards">
-              <FileTextOutlined />
-              <span>标准库</span>
-            </a-menu-item>
-            <a-menu-item key="/data/static/reports">
-              <FileSearchOutlined />
-              <span>报告库</span>
-            </a-menu-item>
-            <a-menu-item key="/data/static/experience">
-              <BulbOutlined />
-              <span>经验库</span>
-            </a-menu-item>
-          </a-sub-menu>
-        </a-sub-menu>
-        <a-menu-item key="/alerts">
-          <AlertOutlined />
-          <span>预警管理</span>
-        </a-menu-item>
-      </a-menu>
+      />
 
       <a-menu
         :selected-keys="[route.path]"
@@ -163,7 +51,6 @@
           </div>
         </a-menu-item>
       </a-menu>
-
     </a-layout-sider>
 
     <a-layout class="main-layout">
@@ -179,23 +66,24 @@
 </template>
 
 <script setup lang="ts">
-import { ref, watch, onMounted, computed } from 'vue'
+import { ref, watch, onMounted, computed, h } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import { message } from 'ant-design-vue'
 import {
-  CodeOutlined, MenuOutlined, ScheduleOutlined, FileTextOutlined, InfoCircleOutlined,
-  TeamOutlined, UsergroupAddOutlined, SafetyOutlined,
-  DashboardOutlined, AppstoreOutlined, DatabaseOutlined, BarChartOutlined, ControlOutlined,
-  FundOutlined, EyeOutlined, SwapOutlined, BankOutlined, FileSearchOutlined, BulbOutlined,
-  ApiOutlined, AlertOutlined, UserOutlined,
-  MenuFoldOutlined, MenuUnfoldOutlined,
+  UserOutlined,
+  MenuFoldOutlined,
+  MenuUnfoldOutlined,
 } from '@ant-design/icons-vue'
+import * as Icons from '@ant-design/icons-vue'
 import Logo from '@shared/web/components/Logo.vue'
 import { useAppStore } from '@/stores/app'
 import { useSidebarStore, useThemeStore } from '@shared/web/stores'
-import { getProfile } from '@/api/modules/profile'
 import { getApplications } from '@/api/modules/applications'
 import ThemeToggle from '@shared/web/components/ThemeToggle.vue'
+import { adminAppManifests, adminMenuGroups } from '@/router/manifests'
+import { manifestToMenu, collectMenuKeys } from '@shared/web/router/manifest'
+import type { MenuNode } from '@shared/web/router/manifest'
+import type { Component, VNode } from 'vue'
 
 const router = useRouter()
 const route = useRoute()
@@ -203,12 +91,7 @@ const appStore = useAppStore()
 const sidebarStore = useSidebarStore()
 const themeStore = useThemeStore()
 
-const isDark = computed(() => {
-  if (themeStore.theme === 'auto') {
-    return window.matchMedia('(prefers-color-scheme: dark)').matches
-  }
-  return themeStore.theme === 'dark'
-})
+const isDark = computed(() => themeStore.isDark)
 
 const collapsed = computed({
   get: () => sidebarStore.collapsed,
@@ -216,37 +99,86 @@ const collapsed = computed({
 })
 const selectedKeys = ref<string[]>([route.path])
 
-interface AppMenuItem { id: string; name: string; category: string; catColor: string; route: string }
+interface AppMenuItem { id: string, name: string, category: string, catColor: string, route: string }
 const appMenuItems = ref<AppMenuItem[]>([])
 
 const catColorMap: Record<string, string> = {
-  '通用': '#3B82F6',
-  '经营': '#10B981',
-  '设计': '#8B5CF6',
-  '施工': '#F59E0B',
+  通用: '#3B82F6',
+  经营: '#10B981',
+  设计: '#8B5CF6',
+  施工: '#F59E0B',
 }
 
-	function getRouteParents(): string[] {
-	  return (route.meta?.parentKeys as string[]) || []
-	}
+// ─── 菜单：由 manifest 生成，动态应用列表并入 apps 分组 ───
 
-	const openKeys = ref<string[]>([])
+interface MenuItemNode {
+  key: string
+  label?: unknown
+  icon?: () => VNode
+  children?: MenuItemNode[]
+}
+
+const menuTree = manifestToMenu(adminAppManifests, adminMenuGroups)
+const manifestLeafKeys = collectMenuKeys(menuTree)
+
+function resolveIcon(name?: string): (() => VNode) | undefined {
+  if (!name) return undefined
+  const comp = (Icons as Record<string, Component>)[name]
+  return comp ? () => h(comp) : undefined
+}
+
+function toMenuItems(nodes: MenuNode[]): MenuItemNode[] {
+  return nodes.map((n) => ({
+    key: n.key,
+    label: n.title,
+    icon: resolveIcon(n.icon),
+    ...(n.children && n.children.length > 0 ? { children: toMenuItems(n.children) } : {}),
+  }))
+}
+
+function appToMenuItem(app: AppMenuItem): MenuItemNode {
+  return {
+    key: app.route,
+    label: () => h('span', { class: 'app-menu-entry' }, [
+      h('span', {
+        class: 'app-cat-tag',
+        style: { color: app.catColor, borderColor: app.catColor, background: `${app.catColor}22` },
+      }, app.category),
+      h('span', { class: 'app-menu-label' }, app.name),
+    ]),
+  }
+}
+
+const menuItems = computed<MenuItemNode[]>(() => {
+  const items = toMenuItems(menuTree)
+  const dynamic = appMenuItems.value
+    .filter((a) => !manifestLeafKeys.has(a.route))
+    .map(appToMenuItem)
+  const appsGroup = items.find((i) => i.key === 'apps')
+  if (appsGroup) appsGroup.children = [...(appsGroup.children ?? []), ...dynamic]
+  return items
+})
+
+function getRouteParents(): string[] {
+  return (route.meta?.parentKeys as string[]) || []
+}
+
+const openKeys = ref<string[]>([])
 
 onMounted(async () => {
   const parents = getRouteParents()
   if (parents) openKeys.value = [...parents]
-  if (!appStore.profile) {
-    try {
-      const user = await getProfile()
-      appStore.setProfile(user)
-    } catch {
-      message.warning('获取用户信息失败，使用默认配置')
-    }
+  try {
+    await appStore.fetchProfile()
+  } catch {
+    message.warning('获取用户信息失败，使用默认配置')
   }
   try {
     const apps = await getApplications()
     appMenuItems.value = apps.map((a) => ({
-      id: a.id, name: a.name, category: a.category,
+      id: a.id,
+      name: a.name,
+      category: a.category,
       catColor: catColorMap[a.category] || '#94A3B8',
       route: a.route || `/applications/${a.id}`,
     }))
@@ -341,6 +273,33 @@ function handleMenuClick({ key }: { key: string }): void {
   flex: 1;
 }
 
+.app-menu-label {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.main-layout { height: 100%; overflow: hidden; }
+
+.content {
+  flex: 1;
+  overflow-y: auto;
+  background: @content-bg;
+  transition: background @transition-base;
+}
+</style>
+
+<style lang="less">
+@import '@shared/web/styles/variables.less';
+
+// 非 scoped：动态应用菜单项由 h() 渲染，不带 scoped data 属性
+.app-menu-entry {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+
 .app-cat-tag {
   display: inline-flex;
   align-items: center;
@@ -359,14 +318,5 @@ function handleMenuClick({ key }: { key: string }): void {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-}
-
-.main-layout { height: 100%; overflow: hidden; }
-
-.content {
-  flex: 1;
-  overflow-y: auto;
-  background: @content-bg;
-  transition: background @transition-base;
 }
 </style>

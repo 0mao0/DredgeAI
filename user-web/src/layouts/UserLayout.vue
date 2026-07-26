@@ -7,7 +7,9 @@
       :theme="isDark ? 'dark' : 'light'"
       :width="170"
       :collapsed-width="48"
+      breakpoint="lg"
       class="sider"
+      @breakpoint="(broken: boolean) => { collapsed = broken }"
     >
       <div class="sider-brand">
         <div class="sider-brand__left" @click="collapsed = !collapsed">
@@ -23,7 +25,7 @@
         />
       </div>
       <a-menu
-        v-model:selectedKeys="selectedKeys"
+        v-model:selected-keys="selectedKeys"
         :theme="isDark ? 'dark' : 'light'"
         mode="inline"
         class="sider-menu sider-menu--main"
@@ -42,7 +44,7 @@
       <div class="sider-divider" />
 
       <a-menu
-        v-model:selectedKeys="selectedKeys"
+        v-model:selected-keys="selectedKeys"
         :theme="isDark ? 'dark' : 'light'"
         mode="inline"
         class="sider-menu sider-menu--bottom"
@@ -70,7 +72,6 @@
           </a-tooltip>
         </a-menu-item>
       </a-menu>
-
     </a-layout-sider>
 
     <a-layout class="main-layout">
@@ -89,29 +90,30 @@
 import { ref, computed, watch, onMounted } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import {
-  DashboardOutlined, UserOutlined, ApiOutlined, MenuFoldOutlined, MenuUnfoldOutlined,
-  BulbFilled, BulbOutlined,
+  DashboardOutlined,
+  UserOutlined,
+  ApiOutlined,
+  MenuFoldOutlined,
+  MenuUnfoldOutlined,
+  BulbFilled,
+  BulbOutlined,
 } from '@ant-design/icons-vue'
 import * as Icons from '@ant-design/icons-vue'
 import Logo from '@shared/web/components/Logo.vue'
 import { useAppStore } from '@/stores/app'
 import { useUserStore } from '@/stores/user'
-import { useThemeStore } from '@shared/web/stores'
+import { useSidebarStore, useThemeStore } from '@shared/web/stores'
 import type { Component } from 'vue'
 
 const appStore = useAppStore()
 const userStore = useUserStore()
 const themeStore = useThemeStore()
+const sidebarStore = useSidebarStore()
 
-const isDark = computed(() => {
-  if (themeStore.theme === 'auto') {
-    return window.matchMedia('(prefers-color-scheme: dark)').matches
-  }
-  return themeStore.theme === 'dark'
-})
+const isDark = computed(() => themeStore.isDark)
 
 function toggleTheme(): void {
-  themeStore.theme = isDark.value ? 'light' : 'dark'
+  themeStore.toggleTheme()
 }
 
 const iconMap: Record<string, Component> = {
@@ -141,7 +143,10 @@ const iconMap: Record<string, Component> = {
 const router = useRouter()
 const route = useRoute()
 
-const collapsed = ref(false)
+const collapsed = computed({
+  get: () => sidebarStore.collapsed,
+  set: (v) => { sidebarStore.setCollapsed(v) },
+})
 const selectedKeys = ref<string[]>([route.path])
 
 watch(() => route.path, (p) => {
@@ -229,6 +234,8 @@ onMounted(() => {
 
 .content {
   flex: 1;
+  display: flex;
+  flex-direction: column;
   overflow-y: auto;
   scrollbar-gutter: stable;
   background: @content-bg;

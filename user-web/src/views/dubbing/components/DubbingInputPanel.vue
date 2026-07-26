@@ -38,7 +38,7 @@ const props = defineProps<{
 }>()
 
 const emit = defineEmits<{
-  generate: [text: string]
+  'generate': [text: string]
   'update:text': [value: string]
 }>()
 

@@ -3,6 +3,7 @@ import AdminLayout from '@/layouts/AdminLayout.vue'
 import { installGuards } from '@shared/web/router'
 import { manifestToRoutes } from '@shared/web/router/manifest'
 import { adminAppManifests } from './manifests'
+import { useAppStore } from '@/stores/app'
 
 /**
  * admin-web 路由表由 manifest 数组动态生成。
@@ -23,6 +24,17 @@ const router = createRouter({
   ],
 })
 
-installGuards(router, { appName: '智浚 AI · 管理后台' })
+installGuards(router, {
+  appName: '智浚 AI · 管理后台',
+  getPermissions: async () => {
+    const store = useAppStore()
+    try {
+      await store.fetchProfile()
+    } catch {
+      return []
+    }
+    return store.permissions
+  },
+})
 
 export default router

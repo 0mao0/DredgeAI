@@ -1,7 +1,7 @@
 <template>
   <div class="module-placeholder" @click="$router.push('/ai-bid/read')">
     <div class="placeholder-graphic">
-      <clear-outlined />
+      <ClearOutlined />
     </div>
     <h3>投标文件合规审查</h3>
     <p>自动检查投标文件的完整性、一致性，识别资质缺失与格式问题。</p>

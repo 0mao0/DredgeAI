@@ -19,7 +19,7 @@
         <SectionCard title="文档预览" class="bid-read__card mb-16">
           <template #extra>
             <a-button type="link" size="small">
-              <upload-outlined /> 重新上传
+              <UploadOutlined /> 重新上传
             </a-button>
           </template>
           <div class="doc-viewer">
@@ -29,7 +29,7 @@
 
         <SectionCard title="追问与对话" nopad class="bid-read__card">
           <div class="chat-area">
-            <div class="chat-messages" ref="chatRef">
+            <div ref="chatRef" class="chat-messages">
               <div
                 v-for="(msg, i) in currentSession?.snippets || []"
                 :key="i"
@@ -41,7 +41,7 @@
                 <div class="chat-bubble">{{ msg.content }}</div>
               </div>
               <div v-if="!currentSession?.snippets?.length" class="chat-empty">
-                <bulb-outlined />
+                <BulbOutlined />
                 <span>暂无对话，上传文档后向 AI 追问标书细节</span>
               </div>
             </div>
@@ -61,11 +61,11 @@
         <SectionCard title="风险清单" class="bid-read__card mb-16">
           <template #extra>
             <a-button type="link" size="small">
-              <download-outlined /> 导出报告
+              <DownloadOutlined /> 导出报告
             </a-button>
           </template>
           <div class="risk-summary">
-            <div class="risk-stat" v-for="level in riskSummary" :key="level.label">
+            <div v-for="level in riskSummary" :key="level.label" class="risk-stat">
               <div class="risk-stat-num" :class="`risk-stat-num--${level.key}`">{{ level.count }}</div>
               <div class="risk-stat-label">{{ level.label }}</div>
             </div>
@@ -86,7 +86,7 @@
             </div>
             <div class="risk-content">{{ risk.content }}</div>
             <div v-if="risk.suggestion" class="risk-suggestion">
-              <bulb-outlined />
+              <BulbOutlined />
               <span>{{ risk.suggestion }}</span>
             </div>
           </div>
@@ -137,7 +137,10 @@ function handleSendQuestion(): void {
 
 onMounted(async () => {
   const [s, r, sess, doc] = await Promise.all([
-    getBidSteps(), getBidRisks(), getBidSessions(), getBidDocument(),
+    getBidSteps(),
+    getBidRisks(),
+    getBidSessions(),
+    getBidDocument(),
   ])
   steps.value = s
   risks.value = r
@@ -280,4 +283,3 @@ onMounted(async () => {
   transform: translateX(12px);
 }
 </style>
-

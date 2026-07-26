@@ -11,9 +11,9 @@
       <input ref="fileInputRef" type="file" accept=".wav,.m4a,.mp3,audio/wav,audio/mp4,audio/mpeg" style="display:none" @change="handleInputChange">
       <div class="upload-zone__icon" :class="{ 'upload-zone__icon--over': isDragOver }">
         <svg width="28" height="28" viewBox="0 0 24 24" fill="none">
-          <path d="M14 2H6C4.9 2 4 2.9 4 4V20C4 21.1 4.9 22 6 22H18C19.1 22 20 21.1 20 20V8L14 2Z" fill="currentColor" fill-opacity="0.15" stroke="currentColor" stroke-width="1.5"/>
-          <path d="M14 2V8H20" stroke="currentColor" stroke-width="1.5"/>
-          <path d="M12 18V12M9 15H15" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
+          <path d="M14 2H6C4.9 2 4 2.9 4 4V20C4 21.1 4.9 22 6 22H18C19.1 22 20 21.1 20 20V8L14 2Z" fill="currentColor" fill-opacity="0.15" stroke="currentColor" stroke-width="1.5" />
+          <path d="M14 2V8H20" stroke="currentColor" stroke-width="1.5" />
+          <path d="M12 18V12M9 15H15" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" />
         </svg>
       </div>
       <p class="upload-zone__text"><span class="upload-zone__link">点击上传</span> 或拖拽文件</p>
@@ -23,15 +23,15 @@
     <transition name="slide-up">
       <div v-if="uploadedFile" class="file-card" @click="togglePlayUploaded">
         <svg v-if="!playing" class="file-card__play" width="14" height="14" viewBox="0 0 24 24" fill="none">
-          <path d="M8 5V19L19 12L8 5Z" fill="currentColor"/>
+          <path d="M8 5V19L19 12L8 5Z" fill="currentColor" />
         </svg>
         <svg v-else class="file-card__play" width="14" height="14" viewBox="0 0 24 24" fill="none">
-          <rect x="6" y="4" width="4" height="16" rx="1" fill="currentColor"/>
-          <rect x="14" y="4" width="4" height="16" rx="1" fill="currentColor"/>
+          <rect x="6" y="4" width="4" height="16" rx="1" fill="currentColor" />
+          <rect x="14" y="4" width="4" height="16" rx="1" fill="currentColor" />
         </svg>
         <span>{{ uploadedFile.name }} · {{ formatFileSize(uploadedFile.size) }}</span>
         <button class="file-card__del" @click.stop="clearUploaded">
-          <svg width="12" height="12" viewBox="0 0 24 24" fill="none"><path d="M19 6.41L17.59 5L12 10.59L6.41 5L5 6.41L10.59 12L5 17.59L6.41 19L12 13.41L17.59 19L19 17.59L13.41 12L19 6.41Z" fill="currentColor"/></svg>
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none"><path d="M19 6.41L17.59 5L12 10.59L6.41 5L5 6.41L10.59 12L5 17.59L6.41 19L12 13.41L17.59 19L19 17.59L13.41 12L19 6.41Z" fill="currentColor" /></svg>
         </button>
       </div>
     </transition>
@@ -57,9 +57,9 @@ let playbackEl: HTMLAudioElement | null = null
 let blobUrl: string | null = null
 
 function formatFileSize(bytes: number): string {
-  if (bytes < 1024) return bytes + ' B'
-  if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + ' KB'
-  return (bytes / (1024 * 1024)).toFixed(1) + ' MB'
+  if (bytes < 1024) return `${bytes} B`
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`
+  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`
 }
 
 function triggerFileInput(): void {
@@ -81,7 +81,7 @@ function processFile(file: File): void {
   const maxSize = 10 * 1024 * 1024
   if (file.size > maxSize) { message.warning('文件大小不能超过 10MB'); return }
   const validTypes = ['.wav', '.m4a', '.mp3']
-  const ext = '.' + file.name.split('.').pop()?.toLowerCase()
+  const ext = `.${file.name.split('.').pop()?.toLowerCase()}`
   if (!validTypes.includes(ext)) { message.warning('请上传 .wav / .m4a / .mp3 格式文件'); return }
   uploadedFile.value = file
   uploadedBlob = file.slice(0, file.size, file.type)

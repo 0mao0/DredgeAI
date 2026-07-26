@@ -19,7 +19,7 @@ function parseBody(data: unknown): Record<string, unknown> {
 
 // 情报采集模块可发布的采集分类配置（发布后生成对应子应用）
 const collectionCategories: Record<string, CollectionCategory[]> = {
-  '8': [
+  8: [
     { key: 'dredge', name: '疏浚情报', description: '聚焦疏浚行业的科技与工程情报', published: true, subAppId: '8-1' },
     { key: 'tech', name: '科技情报', description: '通用科技前沿情报，支持订阅推送', published: true, subAppId: '8-2' },
     { key: 'policy', name: '政策情报', description: '行业政策与标准动态追踪', published: false },
@@ -36,7 +36,7 @@ export function registerApplicationMock(mock: MockAdapter, wrap: (handler: () =>
   })
 
   mock.onPost('/api/admin/applications/sub/status').reply((config) => {
-    const body = parseBody(config.data) as { subId: string; status: '已发布' | '已下架' }
+    const body = parseBody(config.data) as { subId: string, status: '已发布' | '已下架' }
     for (const app of mockApplications) {
       const sub = app.subApps?.find((s) => s.id === body.subId)
       if (sub) sub.status = body.status
@@ -45,21 +45,21 @@ export function registerApplicationMock(mock: MockAdapter, wrap: (handler: () =>
   })
 
   mock.onPost('/api/admin/applications/status').reply((config) => {
-    const body = parseBody(config.data) as { appId: string; status: '运营中' | '已下架' }
+    const body = parseBody(config.data) as { appId: string, status: '运营中' | '已下架' }
     const app = mockApplications.find((a) => a.id === body.appId)
     if (app) app.status = body.status
     return [200, null]
   })
 
   mock.onPost('/api/admin/applications/icon').reply((config) => {
-    const body = parseBody(config.data) as { appId: string; icon: string }
+    const body = parseBody(config.data) as { appId: string, icon: string }
     const app = mockApplications.find((a) => a.id === body.appId)
     if (app) app.icon = body.icon
     return [200, null]
   })
 
   mock.onPost('/api/admin/applications/sub/icon').reply((config) => {
-    const body = parseBody(config.data) as { subId: string; icon: string }
+    const body = parseBody(config.data) as { subId: string, icon: string }
     for (const app of mockApplications) {
       const sub = app.subApps?.find((s) => s.id === body.subId)
       if (sub) sub.icon = body.icon
@@ -68,14 +68,14 @@ export function registerApplicationMock(mock: MockAdapter, wrap: (handler: () =>
   })
 
   mock.onPost('/api/admin/applications/scope').reply((config) => {
-    const body = parseBody(config.data) as { appId: string; scope: '所有' | '部分' }
+    const body = parseBody(config.data) as { appId: string, scope: '所有' | '部分' }
     const app = mockApplications.find((a) => a.id === body.appId)
     if (app) app.scope = body.scope
     return [200, null]
   })
 
   mock.onPost('/api/admin/applications/sub/scope').reply((config) => {
-    const body = parseBody(config.data) as { subId: string; scope: '所有' | '部分' }
+    const body = parseBody(config.data) as { subId: string, scope: '所有' | '部分' }
     for (const app of mockApplications) {
       const sub = app.subApps?.find((s) => s.id === body.subId)
       if (sub) sub.scope = body.scope
@@ -89,7 +89,7 @@ export function registerApplicationMock(mock: MockAdapter, wrap: (handler: () =>
   })
 
   mock.onPost('/api/admin/applications/collection-categories/publish').reply((config) => {
-    const { appId, categoryKey } = parseBody(config.data) as { appId: string; categoryKey: string }
+    const { appId, categoryKey } = parseBody(config.data) as { appId: string, categoryKey: string }
     const app = mockApplications.find((a) => a.id === appId)
     const cat = collectionCategories[appId]?.find((c) => c.key === categoryKey)
     if (!app || !cat) return [404, { message: '未找到采集分类' }]

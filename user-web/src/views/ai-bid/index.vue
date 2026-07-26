@@ -20,7 +20,7 @@
       </div>
       <div class="bid-header-right">
         <a-button size="small" @click="sessionDrawer = true">
-          <history-outlined /> 历史记录
+          <HistoryOutlined /> 历史记录
         </a-button>
       </div>
     </div>
@@ -68,7 +68,11 @@
 import { ref } from 'vue'
 import { useRouter } from 'vue-router'
 import {
-  FileSearchOutlined, EditOutlined, SwapOutlined, ClearOutlined, HistoryOutlined,
+  FileSearchOutlined,
+  EditOutlined,
+  SwapOutlined,
+  ClearOutlined,
+  HistoryOutlined,
 } from '@ant-design/icons-vue'
 import { getBidSessions } from '@/api/modules/bid'
 import type { BidReviewSession } from '@/types'
@@ -79,10 +83,10 @@ const sessions = ref<BidReviewSession[]>([])
 const activeSessionId = ref('')
 
 const features = [
-  { route: '/ai-bid/read',  name: '读标', icon: FileSearchOutlined, bg: 'linear-gradient(135deg, #2563EB, #3B82F6)' },
-  { route: '/ai-bid/write', name: '写标', icon: EditOutlined,       bg: 'linear-gradient(135deg, #059669, #10B981)' },
-  { route: '/ai-bid/compare', name: '比标', icon: SwapOutlined,     bg: 'linear-gradient(135deg, #D97706, #F59E0B)' },
-  { route: '/ai-bid/clear', name: '清标',  icon: ClearOutlined,     bg: 'linear-gradient(135deg, #7C3AED, #8B5CF6)' },
+  { route: '/ai-bid/read', name: '读标', icon: FileSearchOutlined, bg: 'linear-gradient(135deg, #2563EB, #3B82F6)' },
+  { route: '/ai-bid/write', name: '写标', icon: EditOutlined, bg: 'linear-gradient(135deg, #059669, #10B981)' },
+  { route: '/ai-bid/compare', name: '比标', icon: SwapOutlined, bg: 'linear-gradient(135deg, #D97706, #F59E0B)' },
+  { route: '/ai-bid/clear', name: '清标', icon: ClearOutlined, bg: 'linear-gradient(135deg, #7C3AED, #8B5CF6)' },
 ]
 
 function selectSession(id: string): void {

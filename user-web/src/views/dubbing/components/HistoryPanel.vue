@@ -10,7 +10,7 @@
           :loading="loading"
           @play="emit('play', $event)"
           @delete="emit('delete', $event)"
-          @reEdit="emit('reEdit', $event)"
+          @re-edit="emit('reEdit', $event)"
         />
       </div>
     </SectionCard>

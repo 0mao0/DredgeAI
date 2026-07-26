@@ -12,7 +12,7 @@ import MetricCard from '@shared/web/components/MetricCard.vue'
 import { useCssVar } from '@shared/web/composables/useCssVar'
 import type { DubbingUsageSummary } from '@/types'
 
-defineProps<{ summary: DubbingUsageSummary | null; loading: boolean }>()
+defineProps<{ summary: DubbingUsageSummary | null, loading: boolean }>()
 
 const brandColor = useCssVar('--color-brand')
 const accentColor = useCssVar('--color-accent')

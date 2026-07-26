@@ -29,7 +29,7 @@ function makeTask(overrides: Partial<DubbingTask> & { text: string }): DubbingTa
   }
 }
 
-export let dubbingTasks: DubbingTask[] = [
+export const dubbingTasks: DubbingTask[] = [
   makeTask({ id: 'dubbing-1', text: '各位领导，各位同事，大家下午好。今天由我来为大家汇报本项目的最新进展情况。', voiceId: 'zh-male-news', voiceName: '知衡·男声', category: '播音', speed: 1.0, createdAt: '2026-07-18T14:30:00', durationSec: 8.5 }),
   makeTask({ id: 'dubbing-2', text: '尊敬的客户，您好！感谢您选择我们的服务。如需帮助，请按1转接人工客服。', voiceId: 'zh-female-service', voiceName: '知悦·女声', category: '客服', speed: 1.0, createdAt: '2026-07-18T11:20:00', durationSec: 6.2 }),
   makeTask({ id: 'dubbing-3', text: '在广阔的东海海域，一艘大型耙吸式挖泥船正在执行疏浚作业，将海底淤泥通过耙头吸入泥舱。', voiceId: 'zh-male-narrator', voiceName: '知声·男声', category: '解说', speed: 1.2, createdAt: '2026-07-17T16:45:00', durationSec: 12.8 }),
@@ -95,7 +95,7 @@ export const dubbingUsageTimeSeries = buildTimeSeries()
 export const dubbingUsageSummary: DubbingUsageSummary = {
   totalTasks: dubbingTasks.length,
   totalTokens: dubbingTasks.reduce((s, t) => s + t.tokenCost, 0),
-  totalUsers: new Set(dubbingTasks.filter(t => t.userId).map(t => t.userId)).size,
+  totalUsers: new Set(dubbingTasks.filter((t) => t.userId).map((t) => t.userId)).size,
   totalAudioSec: Math.round(dubbingTasks.reduce((s, t) => s + (t.durationSec || 0), 0)),
   todayTasks: 2,
   todayTokens: 320,

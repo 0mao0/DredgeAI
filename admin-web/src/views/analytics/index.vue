@@ -39,13 +39,13 @@ import { useCssVar } from '@shared/web/composables/useCssVar'
 import { getDailyApiCalls, getModelUsage, getUserGrowth, getErrorRate } from '@/api/modules/analytics'
 
 const loading = ref(false)
-const dailyApi = ref<{ categories: string[]; series: { name: string; data: number[] }[] }>({ categories: [], series: [] })
+const dailyApi = ref<{ categories: string[], series: { name: string, data: number[] }[] }>({ categories: [], series: [] })
 
 const brandColor = useCssVar('--color-brand')
 const dangerColor = useCssVar('--color-danger')
-const modelUsage = ref<{ name: string; data: { name: string; value: number }[] }>({ name: '', data: [] })
-const userGrowth = ref<{ categories: string[]; series: { name: string; data: number[] }[] }>({ categories: [], series: [] })
-const errorRate = ref<{ categories: string[]; series: { name: string; data: number[] }[] }>({ categories: [], series: [] })
+const modelUsage = ref<{ name: string, data: { name: string, value: number }[] }>({ name: '', data: [] })
+const userGrowth = ref<{ categories: string[], series: { name: string, data: number[] }[] }>({ categories: [], series: [] })
+const errorRate = ref<{ categories: string[], series: { name: string, data: number[] }[] }>({ categories: [], series: [] })
 
 const dailyApiOption = computed(() => ({
   tooltip: { trigger: 'axis' as const },

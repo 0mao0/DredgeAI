@@ -1,4 +1,4 @@
-import type { AxiosInstance } from 'axios'
+import type { AxiosInstance, AxiosRequestConfig } from 'axios'
 
 /** 创建 request 实例的参数 */
 export interface CreateRequestOptions {
@@ -12,16 +12,18 @@ export interface CreateRequestOptions {
   onUnauthorized?: () => void
 }
 
-/** 工厂返回的 axios 实例（已注入 ABP 拦截器与泛型方法签名） */
-export type RequestInstance = AxiosInstance
-
-/** 模块级 axios 实例扩展声明：注入泛型 get/post/put/patch/delete */
-declare module 'axios' {
-  export interface AxiosInstance {
-    get<T = unknown>(url: string, config?: import('axios').AxiosRequestConfig): Promise<T>
-    post<T = unknown>(url: string, data?: unknown, config?: import('axios').AxiosRequestConfig): Promise<T>
-    put<T = unknown>(url: string, data?: unknown, config?: import('axios').AxiosRequestConfig): Promise<T>
-    patch<T = unknown>(url: string, data?: unknown, config?: import('axios').AxiosRequestConfig): Promise<T>
-    delete<T = unknown>(url: string, config?: import('axios').AxiosRequestConfig): Promise<T>
-  }
+/**
+ * 工厂返回的请求实例：泛型方法直接返回数据体（ABP 拦截器已解包 AxiosResponse）。
+ * 独立包装接口，替代旧的 `declare module 'axios'` 全局扩展，避免污染第三方库类型。
+ */
+export interface RequestInstance {
+  get: <T = unknown>(url: string, config?: AxiosRequestConfig) => Promise<T>
+  post: <T = unknown>(url: string, data?: unknown, config?: AxiosRequestConfig) => Promise<T>
+  put: <T = unknown>(url: string, data?: unknown, config?: AxiosRequestConfig) => Promise<T>
+  patch: <T = unknown>(url: string, data?: unknown, config?: AxiosRequestConfig) => Promise<T>
+  delete: <T = unknown>(url: string, config?: AxiosRequestConfig) => Promise<T>
+  /** 拦截器（供 createWebRequest 等包装层挂载进度/错误处理） */
+  interceptors: AxiosInstance['interceptors']
+  /** 逃生舱：底层 axios 实例，仅供 MockAdapter 挂载等场景，业务代码禁止使用 */
+  raw: AxiosInstance
 }

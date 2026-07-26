@@ -3,15 +3,21 @@
     <div class="logo-mark">
       <svg viewBox="0 0 32 32" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
         <!-- 疏浚铲斗：切入水面的梯形铲头 -->
-        <path d="M7 9.5 L25 9.5 L21.5 17.5 Q16 20.5 10.5 17.5 Z"
-              fill="white" fill-opacity="0.96" />
+        <path
+          d="M7 9.5 L25 9.5 L21.5 17.5 Q16 20.5 10.5 17.5 Z"
+          fill="white" fill-opacity="0.96"
+        />
         <!-- 铲斗内高光分割线 -->
         <path d="M7 9.5 L25 9.5 L23.2 13 L8.8 13 Z" fill="white" fill-opacity="0.28" />
         <!-- 双层水波 -->
-        <path d="M4 22.5 Q8.5 20.5 13 22.5 T24 22.5"
-              stroke="white" stroke-width="1.6" stroke-linecap="round" fill="none" stroke-opacity="0.55" />
-        <path d="M6 26 Q10 24.3 13.5 26 T22 26"
-              stroke="white" stroke-width="1.6" stroke-linecap="round" fill="none" stroke-opacity="0.3" />
+        <path
+          d="M4 22.5 Q8.5 20.5 13 22.5 T24 22.5"
+          stroke="white" stroke-width="1.6" stroke-linecap="round" fill="none" stroke-opacity="0.55"
+        />
+        <path
+          d="M6 26 Q10 24.3 13.5 26 T22 26"
+          stroke="white" stroke-width="1.6" stroke-linecap="round" fill="none" stroke-opacity="0.3"
+        />
       </svg>
     </div>
     <div v-if="!collapsed" class="logo-text">

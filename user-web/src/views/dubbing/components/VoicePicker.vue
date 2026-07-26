@@ -81,7 +81,7 @@
           </a-popconfirm>
         </li>
       </ul>
-      <a-empty v-if="filteredVoices.length === 0" description="未找到音色" />
+      <EmptyState v-if="filteredVoices.length === 0" type="no-result" title="未找到音色" />
     </template>
   </div>
 </template>
@@ -101,6 +101,7 @@ import {
   CloseCircleFilled,
 } from '@ant-design/icons-vue'
 import { message } from 'ant-design-vue'
+import EmptyState from '@shared/web/components/EmptyState.vue'
 import type { VoiceItem } from '@/types'
 import { generateDubbing } from '@/api/modules/dubbing'
 
@@ -113,8 +114,8 @@ const props = defineProps<{
 
 const emit = defineEmits<{
   'update:modelValue': [value: string]
-  deleteVoice: [voiceId: string]
-  showFailDetail: [voice: VoiceItem]
+  'deleteVoice': [voiceId: string]
+  'showFailDetail': [voice: VoiceItem]
 }>()
 
 const query = ref('')
@@ -122,6 +123,8 @@ const playingId = ref<string | null>(null)
 const loadingVoiceId = ref<string | null>(null)
 const objectURLs = new Set<string>()
 let audioEl: HTMLAudioElement | null = null
+
+const preferredOrder: string[] = ['通用', '播音', '客服', '解说', '方言', '儿童']
 
 const filteredVoices = computed(() => {
   const q = query.value.trim().toLowerCase()
@@ -139,13 +142,11 @@ const filteredVoices = computed(() => {
   if (!q) return sorted
   return sorted.filter(
     (v) =>
-      v.name.toLowerCase().includes(q) ||
-      (v.style || '').toLowerCase().includes(q) ||
-      (v.category || '').toLowerCase().includes(q),
+      v.name.toLowerCase().includes(q)
+      || (v.style || '').toLowerCase().includes(q)
+      || (v.category || '').toLowerCase().includes(q),
   )
 })
-
-const preferredOrder: string[] = ['通用', '播音', '客服', '解说', '方言', '儿童']
 
 function selectVoice(id: string): void {
   emit('update:modelValue', id)

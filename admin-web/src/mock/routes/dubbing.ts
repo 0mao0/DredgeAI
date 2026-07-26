@@ -3,37 +3,60 @@ import { dubbingTasks, dubbingUsageSummary, dubbingUsageTimeSeries, voiceItems }
 import type { VoiceItem } from '@/types'
 
 // Public voices from shared mock data
-const publicVoices: VoiceItem[] = voiceItems.map(v => ({ ...v, visibility: 'public' as const }))
+const publicVoices: VoiceItem[] = voiceItems.map((v) => ({ ...v, visibility: 'public' as const }))
 
 // Simulated private voices uploaded by users (some soft-deleted)
 const privateVoices: VoiceItem[] = [
   {
-    id: 'private_voice_001', name: '我的声音16:44', gender: '男声',
-    provider: '自定义', visibility: 'private',
-    userId: 'local_user', userName: '张建国', createdAt: '2026-07-22T08:44:00',
+    id: 'private_voice_001',
+    name: '我的声音16:44',
+    gender: '男声',
+    provider: '自定义',
+    visibility: 'private',
+    userId: 'local_user',
+    userName: '张建国',
+    createdAt: '2026-07-22T08:44:00',
     uploadStatus: 'ready',
   },
   {
-    id: 'private_voice_002', name: '测试录音-项目汇报', gender: '女声',
-    provider: '自定义', visibility: 'private',
-    userId: 'u-002', userName: '李小梅', createdAt: '2026-07-21T14:30:00',
+    id: 'private_voice_002',
+    name: '测试录音-项目汇报',
+    gender: '女声',
+    provider: '自定义',
+    visibility: 'private',
+    userId: 'u-002',
+    userName: '李小梅',
+    createdAt: '2026-07-21T14:30:00',
     uploadStatus: 'ready',
   },
   {
-    id: 'private_voice_003', name: '我的朗读声音', gender: '男声',
-    provider: '自定义', visibility: 'private',
-    userId: 'u-001', userName: '张建国', createdAt: '2026-07-20T10:15:00',
-    uploadStatus: 'ready', deletedByUser: true,
+    id: 'private_voice_003',
+    name: '我的朗读声音',
+    gender: '男声',
+    provider: '自定义',
+    visibility: 'private',
+    userId: 'u-001',
+    userName: '张建国',
+    createdAt: '2026-07-20T10:15:00',
+    uploadStatus: 'ready',
+    deletedByUser: true,
   },
   {
-    id: 'private_voice_004', name: '会议录音-陈经理', gender: '男声',
-    provider: '自定义', visibility: 'private',
-    userId: 'u-005', userName: '陈晓东', createdAt: '2026-07-19T16:00:00',
-    uploadStatus: 'failed', failReason: '服务器处理超时', deletedByUser: true,
+    id: 'private_voice_004',
+    name: '会议录音-陈经理',
+    gender: '男声',
+    provider: '自定义',
+    visibility: 'private',
+    userId: 'u-005',
+    userName: '陈晓东',
+    createdAt: '2026-07-19T16:00:00',
+    uploadStatus: 'failed',
+    failReason: '服务器处理超时',
+    deletedByUser: true,
   },
 ]
 
-let adminVoices: VoiceItem[] = [...publicVoices, ...privateVoices]
+const adminVoices: VoiceItem[] = [...publicVoices, ...privateVoices]
 
 export function registerDubbingMock(mock: MockAdapter, wrap: (handler: () => unknown) => () => Promise<[number, unknown]>): void {
   mock.onGet('/api/admin/dubbing/admin/tasks').reply((config) => {
@@ -41,22 +64,22 @@ export function registerDubbingMock(mock: MockAdapter, wrap: (handler: () => unk
     let items = [...dubbingTasks]
     if (params.keyword) {
       const kw = String(params.keyword).toLowerCase()
-      items = items.filter(t => (t.userName || '').toLowerCase().includes(kw) || t.text.toLowerCase().includes(kw))
+      items = items.filter((t) => (t.userName || '').toLowerCase().includes(kw) || t.text.toLowerCase().includes(kw))
     }
     if (params.status) {
-      items = items.filter(t => t.status === params.status)
+      items = items.filter((t) => t.status === params.status)
     }
     if (params.deletedOnly) {
-      items = items.filter(t => t.deletedByUser)
+      items = items.filter((t) => t.deletedByUser)
     }
     return [200, { items, totalCount: items.length }]
   })
 
-  mock.onDelete(new RegExp('/api/admin/dubbing/admin/tasks/(.+)$')).reply((config) => {
+  mock.onDelete(/\/api\/admin\/dubbing\/admin\/tasks\/(.+)$/).reply((config) => {
     const match = config.url?.match(/\/api\/admin\/dubbing\/admin\/tasks\/(.+)$/)
     if (!match) return [404, {}]
     const id = match[1]
-    const idx = dubbingTasks.findIndex(t => t.id === id)
+    const idx = dubbingTasks.findIndex((t) => t.id === id)
     if (idx === -1) return [404, {}]
     if (!dubbingTasks[idx].deletedByUser) {
       return [403, {
@@ -78,10 +101,10 @@ export function registerDubbingMock(mock: MockAdapter, wrap: (handler: () => unk
     let list = [...adminVoices]
     if (params.keyword) {
       const kw = String(params.keyword).toLowerCase()
-      list = list.filter(v => v.name.toLowerCase().includes(kw) || (v.userName || '').toLowerCase().includes(kw))
+      list = list.filter((v) => v.name.toLowerCase().includes(kw) || (v.userName || '').toLowerCase().includes(kw))
     }
     if (params.deletedOnly) {
-      list = list.filter(v => v.deletedByUser)
+      list = list.filter((v) => v.deletedByUser)
     }
     return [200, list]
   })
@@ -102,11 +125,11 @@ export function registerDubbingMock(mock: MockAdapter, wrap: (handler: () => unk
     return [200, newVoice]
   })
 
-  mock.onDelete(new RegExp('/api/admin/dubbing/admin/voices/(.+)$')).reply((config) => {
+  mock.onDelete(/\/api\/admin\/dubbing\/admin\/voices\/(.+)$/).reply((config) => {
     const match = config.url?.match(/\/api\/admin\/dubbing\/admin\/voices\/(.+)$/)
     if (!match) return [404, {}]
     const id = match[1]
-    const idx = adminVoices.findIndex(v => v.id === id)
+    const idx = adminVoices.findIndex((v) => v.id === id)
     if (idx === -1) return [404, {}]
     const voice = adminVoices[idx]
     // Public voices can always be deleted; private only if user already deleted

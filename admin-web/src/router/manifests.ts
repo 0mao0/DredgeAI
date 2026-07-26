@@ -1,4 +1,11 @@
 import type { AppManifest } from '@shared/core/types/application'
+import type { MenuGroupMeta } from '@shared/web/router/manifest'
+
+/** 无 manifest 定义者的菜单分组元数据（dev/users 仅在 parentKeys 中被引用） */
+export const adminMenuGroups: Record<string, MenuGroupMeta> = {
+  dev: { title: '开发管理', icon: 'CodeOutlined' },
+  users: { title: '用户权限', icon: 'TeamOutlined' },
+}
 
 /**
  * admin-web 应用清单：声明所有管理端路由/组件/权限元数据。
@@ -58,6 +65,7 @@ export const adminAppManifests: AppManifest[] = [
         title: '应用详情',
         component: () => import('@/views/applications/detail.vue'),
         parentKeys: ['apps'],
+        menuPlacement: 'hidden',
       },
     ],
   },
@@ -202,6 +210,7 @@ export const adminAppManifests: AppManifest[] = [
     title: '个人中心',
     icon: 'UserOutlined',
     component: () => import('@/views/profile/index.vue'),
+    menuPlacement: 'bottom',
   },
   // ─── 开发者工具（分组） ────────────────────────────────
   {
@@ -212,6 +221,7 @@ export const adminAppManifests: AppManifest[] = [
     icon: 'MenuOutlined',
     component: () => import('@/views/dev/menu-config.vue'),
     parentKeys: ['dev'],
+    requiredPermission: 'dev',
   },
   {
     id: 'task-scheduler',
@@ -221,6 +231,7 @@ export const adminAppManifests: AppManifest[] = [
     icon: 'ScheduleOutlined',
     component: () => import('@/views/dev/task-scheduler.vue'),
     parentKeys: ['dev'],
+    requiredPermission: 'dev',
   },
   {
     id: 'logs',
@@ -230,6 +241,7 @@ export const adminAppManifests: AppManifest[] = [
     icon: 'FileTextOutlined',
     component: () => import('@/views/dev/logs.vue'),
     parentKeys: ['dev'],
+    requiredPermission: 'dev',
   },
   {
     id: 'platform',
@@ -239,5 +251,6 @@ export const adminAppManifests: AppManifest[] = [
     icon: 'InfoCircleOutlined',
     component: () => import('@/views/dev/platform.vue'),
     parentKeys: ['dev'],
+    requiredPermission: 'dev',
   },
 ]

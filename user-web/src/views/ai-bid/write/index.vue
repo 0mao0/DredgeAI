@@ -1,7 +1,7 @@
 <template>
   <div class="module-placeholder" @click="$router.push('/ai-bid/read')">
     <div class="placeholder-graphic">
-      <edit-outlined />
+      <EditOutlined />
     </div>
     <h3>AI 辅助编写投标文件</h3>
     <p>基于招标要求智能生成投标文档，支持大纲生成、内容续写、格式排版。</p>

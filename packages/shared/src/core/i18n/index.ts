@@ -1,4 +1,5 @@
-import { messages, type Locale } from './messages'
+import { messages } from './messages'
+import type { Locale } from './messages'
 
 /** 默认语言 */
 const DEFAULT_LOCALE: Locale = 'zh-CN'

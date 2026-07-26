@@ -83,7 +83,7 @@ const historyDrawer = ref(false)
 const treeData = computed(() => {
   const q = treeSearch.value.trim().toLowerCase()
   return q
-    ? standardList.value.filter(v => v.name.toLowerCase().includes(q) || v.code.toLowerCase().includes(q))
+    ? standardList.value.filter((v) => v.name.toLowerCase().includes(q) || v.code.toLowerCase().includes(q))
     : standardList.value
 })
 
@@ -142,7 +142,8 @@ onMounted(async () => {
 @import '@shared/web/styles/variables.less';
 
 .standard-page {
-  height: 100%;
+  flex: 1;
+  min-height: 0;
   display: flex;
   flex-direction: column;
   overflow: hidden;
@@ -156,9 +157,23 @@ onMounted(async () => {
   display: flex;
   gap: @spacing-md;
 
-  &__left { width: 240px; flex-shrink: 0; }
-  &__center { flex: 1; min-width: 0; }
-  &__right { width: 360px; flex-shrink: 0; }
+  &__left {
+    width: 240px;
+    flex-shrink: 0;
+    height: 100%;
+    :deep(.section-card) {
+      height: 100%;
+      display: flex;
+      flex-direction: column;
+      .section-card-body {
+        flex: 1;
+        min-height: 0;
+        overflow-y: auto;
+      }
+    }
+  }
+  &__center { flex: 1; min-width: 0; height: 100%; }
+  &__right { width: 360px; flex-shrink: 0; height: 100%; }
 }
 
 .tree-search { margin-bottom: @spacing-md; }

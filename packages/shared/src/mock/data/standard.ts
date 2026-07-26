@@ -20,7 +20,7 @@ export const standardCategories: StandardCategory[] = [
     { id: 'c-1-1', name: '工程建设', count: 320 },
     { id: 'c-1-2', name: '质量管理', count: 180 },
     { id: 'c-1-3', name: '安全环保', count: 210 },
-  ]},
+  ] },
   { id: 'c-2', name: '行业标准（JGJ）', count: 680 },
   { id: 'c-3', name: '地方标准（DB）', count: 420 },
   { id: 'c-4', name: '团体标准（T）', count: 280 },

@@ -17,9 +17,9 @@ export interface UsageByKey {
 
 export interface UsageTimeSeries {
   categories: string[]
-  byModel: { modelName: string; data: number[] }[]
-  byKey: { keyName: string; data: number[] }[]
-  byName: { name: string; data: number[] }[]
+  byModel: { modelName: string, data: number[] }[]
+  byKey: { keyName: string, data: number[] }[]
+  byName: { name: string, data: number[] }[]
 }
 
 export interface ModelType {

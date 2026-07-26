@@ -14,7 +14,7 @@ import { registerDubbingMock } from './routes/dubbing'
 export function registerMock(): void {
   if (!USE_MOCK) return
 
-  const mock = new MockAdapter(request, { delayResponse: 0 })
+  const mock = new MockAdapter(request.raw, { delayResponse: 0 })
 
   // ABP 格式：成功响应直接返回数据体，不包裹 { code, data, message }
   const wrap = (handler: () => unknown) => async (): Promise<[number, unknown]> => {
@@ -22,7 +22,7 @@ export function registerMock(): void {
   }
 
   // 按模块注册 mock，模块开关关闭则该模块请求直连真实 API
-  const modules: { key: string; register: (m: MockAdapter, w: typeof wrap) => void }[] = [
+  const modules: { key: string, register: (m: MockAdapter, w: typeof wrap) => void }[] = [
     { key: 'dashboard', register: registerDashboardMock },
     { key: 'permissions', register: registerPermissionMock },
     { key: 'applications', register: registerApplicationMock },

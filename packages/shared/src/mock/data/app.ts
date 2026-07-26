@@ -10,14 +10,14 @@ import { mockApplications } from './applications'
 
 // 普通模块（无子应用）在 user-web 侧边栏对应的路由
 const MODULE_ROUTES: Record<string, string> = {
-  '1': '/standard-query',
-  '2': '/ai-video',
-  '3': '/ai-dubbing',
-  '4': '/design-experience',
-  '5': '/construction-experience',
-  '6': '/construction-review',
-  '7': '/dredge-efficiency',
-  '9': '/ai-bid',
+  1: '/standard-query',
+  2: '/ai-video',
+  3: '/ai-dubbing',
+  4: '/design-experience',
+  5: '/construction-experience',
+  6: '/construction-review',
+  7: '/dredge-efficiency',
+  9: '/ai-bid',
 }
 
 function buildUserApps(): AppCard[] {
@@ -55,7 +55,8 @@ function buildUserApps(): AppCard[] {
   return cards
 }
 
-/** 9 个用户端应用模块，与 admin-web 共享同一套发布数据。测试用户已全部授权，默认勾选 5 个放入侧边栏。
+/**
+ * 9 个用户端应用模块，与 admin-web 共享同一套发布数据。测试用户已全部授权，默认勾选 5 个放入侧边栏。
  * 分类：通用(3) | 设计(1) | 施工(3) | 经营(2)
  */
 export const appCards: AppCard[] = buildUserApps()

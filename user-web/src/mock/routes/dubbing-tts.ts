@@ -13,14 +13,14 @@ function getPrivateVoices(): VoiceItem[] {
 }
 
 function savePrivateVoice(voice: VoiceItem): void {
-  const list = getPrivateVoices().filter(v => v.id !== voice.id)
+  const list = getPrivateVoices().filter((v) => v.id !== voice.id)
   list.unshift(voice)
   localStorage.setItem(PRIVATE_VOICES_KEY, JSON.stringify(list))
 }
 
 export function registerDubbingTtsMock(mock: MockAdapter): void {
   mock.onGet('/tts/voices').reply(async () => {
-    const publicVoices = voiceItems.map(v => ({ ...v, visibility: 'public' as const }))
+    const publicVoices = voiceItems.map((v) => ({ ...v, visibility: 'public' as const }))
     const privateVoices = getPrivateVoices()
     return [200, [...privateVoices, ...publicVoices]]
   })
@@ -54,5 +54,4 @@ export function registerDubbingTtsMock(mock: MockAdapter): void {
     }
     return [200, result]
   })
-
 }

@@ -30,7 +30,7 @@ import { useCssVar } from '@shared/web/composables/useCssVar'
 import { useChartTheme } from '@shared/web/composables/useChartTheme'
 import type { DubbingTask, DubbingUsageTimeSeries } from '@/types'
 
-const props = defineProps<{ tasks: DubbingTask[]; timeSeries: DubbingUsageTimeSeries | null; loading: boolean }>()
+const props = defineProps<{ tasks: DubbingTask[], timeSeries: DubbingUsageTimeSeries | null, loading: boolean }>()
 const emit = defineEmits<{ rangeChange: [range: string] }>()
 
 const chartRange = ref('30d')
@@ -44,10 +44,13 @@ const successColor = useCssVar('--color-success')
 function makeBarGradient(hex: string) {
   return {
     type: 'linear' as const,
-    x: 0, y: 0, x2: 0, y2: 1,
+    x: 0,
+    y: 0,
+    x2: 0,
+    y2: 1,
     colorStops: [
       { offset: 0, color: hex },
-      { offset: 1, color: hex + '66' },
+      { offset: 1, color: `${hex}66` },
     ],
   }
 }
@@ -77,7 +80,7 @@ const tasksOption = computed(() => {
 function rankBarOption(counts: Map<string, number>, palette: string[]) {
   const t = chartTheme()
   const sorted = [...counts.entries()].sort((a, b) => b[1] - a[1]).slice(0, 10)
-  const categories = sorted.map(e => e[0])
+  const categories = sorted.map((e) => e[0])
   const data = sorted.map((e, i) => ({
     value: e[1],
     itemStyle: { color: makeBarGradient(palette[i % palette.length]), borderRadius: [0, 6, 6, 0] },

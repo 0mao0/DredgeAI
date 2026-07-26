@@ -1,7 +1,7 @@
 <template>
   <div class="dubbing-admin">
     <PageHeader title="AI 配音" />
-    <a-tabs v-model:activeKey="activeTab" class="dubbing-tabs">
+    <a-tabs v-model:active-key="activeTab" class="dubbing-tabs">
       <a-tab-pane key="stats" tab="使用统计">
         <UsageMetrics :summary="summary" :loading="loadingSummary" />
         <UsageCharts :tasks="tasks" :time-series="timeSeries" :loading="loadingSummary" @range-change="handleRangeChange" />

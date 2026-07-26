@@ -110,7 +110,7 @@
 ```ts
 const columns = [
   { title: '序号', dataIndex: 'index', width: 80 },
-  { title: '名称', dataIndex: 'name' },  // 自适应
+  { title: '名称', dataIndex: 'name' }, // 自适应
   { title: '类型', dataIndex: 'type', width: 120 },
   { title: '状态', dataIndex: 'status', width: 100 },
   { title: '创建时间', dataIndex: 'createdAt', width: 180 },
@@ -243,17 +243,17 @@ const columns = [
 
 ```ts
 // ✅ index.vue：调用 API，管理所有 ref
-const voices = ref<VoiceItem[]>([])
-onMounted(async () => { voices.value = await getVoices() })
-
 // ❌ 子组件中直接调 API
 import { getVoices } from '@/api/modules/dubbing'
+
+const voices = ref<VoiceItem[]>([])
+onMounted(async () => { voices.value = await getVoices() })
 ```
 
 #### Props / Emits 类型
 ```ts
-defineProps<{ voices: VoiceItem[]; loading?: boolean; disabled?: boolean }>()
-defineEmits<{ 'update:modelValue': [value: string]; select: [id: string] }>()
+defineProps<{ voices: VoiceItem[], loading?: boolean, disabled?: boolean }>()
+defineEmits<{ 'update:modelValue': [value: string], 'select': [id: string] }>()
 ```
 
 #### 状态三态覆盖
@@ -268,8 +268,12 @@ defineEmits<{ 'update:modelValue': [value: string]; select: [id: string] }>()
 
 ```vue
 <a-skeleton v-if="loading" :paragraph="{ rows: 3 }" />
+
 <a-empty v-else-if="data.length === 0" description="暂无数据" />
-<div v-else><!-- 正常渲染 --></div>
+
+<div v-else>
+<!-- 正常渲染 -->
+</div>
 ```
 
 #### CSS 命名：BEM 风格
@@ -328,7 +332,9 @@ defineEmits<{ 'update:modelValue': [value: string]; select: [id: string] }>()
 
 ```vue
 <a-input size="medium" />          <!-- 默认，不写 size -->
+
 <a-select size="medium" />         <!-- 默认 -->
+
 <a-input-search size="medium" />   <!-- 默认 -->
 ```
 - 不在表单内的搜索框（如 filter 栏）用默认 medium，设 `style="width:240px"`
@@ -337,7 +343,9 @@ defineEmits<{ 'update:modelValue': [value: string]; select: [id: string] }>()
 
 ```vue
 <a-segmented />                             <!-- 默认 middle -->
+
 <a-radio-group size="small" button-style="solid" />
+
 <a-switch size="small" />
 ```
 - `a-segmented` 只用于视图/模式切换，不用 size 属性
@@ -356,6 +364,7 @@ defineEmits<{ 'update:modelValue': [value: string]; select: [id: string] }>()
 
 ```vue
 <a-range-picker size="small" />
+
 <a-date-picker size="small" />
 ```
 

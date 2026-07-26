@@ -49,8 +49,8 @@ import { computed } from 'vue'
 import { PlayCircleOutlined, DeleteOutlined } from '@ant-design/icons-vue'
 import type { DubbingTask } from '@/types'
 
-const props = defineProps<{ tasks: DubbingTask[]; loading: boolean }>()
-const emit = defineEmits<{ play: [task: DubbingTask]; delete: [id: string] }>()
+const props = defineProps<{ tasks: DubbingTask[], loading: boolean }>()
+const emit = defineEmits<{ play: [task: DubbingTask], delete: [id: string] }>()
 
 const paginationProps = computed(() => ({
   pageSize: 10,

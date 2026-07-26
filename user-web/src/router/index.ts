@@ -2,6 +2,7 @@ import { createRouter, createWebHistory } from 'vue-router'
 import UserLayout from '@/layouts/UserLayout.vue'
 import { installGuards, manifestToRoutes } from '@shared/web/router'
 import { userAppManifests } from './manifests'
+import { useUserStore } from '@/stores/user'
 
 const router = createRouter({
   history: createWebHistory(),
@@ -15,6 +16,17 @@ const router = createRouter({
   ],
 })
 
-installGuards(router, { appName: '智浚 AI · 用户端' })
+installGuards(router, {
+  appName: '智浚 AI · 用户端',
+  getPermissions: async () => {
+    const store = useUserStore()
+    try {
+      await store.ensureUser()
+    } catch {
+      // 权限加载失败时按无权限处理，已声明 requiresPermission 的页面将被拦截
+    }
+    return store.userInfo?.authorizedScopes ?? []
+  },
+})
 
 export default router

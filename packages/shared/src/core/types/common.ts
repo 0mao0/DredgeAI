@@ -19,5 +19,5 @@ export interface LineChartData {
 
 export interface PieChartData {
   name: string
-  data: { name: string; value: number }[]
+  data: { name: string, value: number }[]
 }

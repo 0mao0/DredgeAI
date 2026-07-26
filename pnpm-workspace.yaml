@@ -1,4 +1,8 @@
+shellEmulator: true
+
+trustPolicy: no-downgrade
+
 packages:
-  - 'user-web'
-  - 'admin-web'
+  - user-web
+  - admin-web
   - 'packages/*'

@@ -52,7 +52,7 @@
         <SectionCard v-if="showResult" title="生成结果" class="op-panel__result-card">
           <transition name="fade" mode="out-in">
             <!-- 生成中：步骤进度 -->
-            <div v-if="generating || producingTask" :key="'producing'" class="result-producing">
+            <div v-if="generating || producingTask" key="producing" class="result-producing">
               <div class="producing-steps">
                 <div
                   v-for="(step, i) in steps"
@@ -69,7 +69,7 @@
                 </div>
               </div>
               <div class="producing-wave" aria-hidden="true">
-                <span v-for="n in 28" :key="n" class="producing-wave__bar" :style="{ animationDelay: (n * 60) + 'ms' }" />
+                <span v-for="n in 28" :key="n" class="producing-wave__bar" :style="{ animationDelay: `${n * 60}ms` }" />
               </div>
               <p class="producing-tip">正在合成语音，预计需要几分钟，请稍候…</p>
             </div>
@@ -83,7 +83,7 @@
             </div>
 
             <!-- 失败 -->
-            <div v-else-if="currentTask && currentTask.status === '已失败'" :key="'failed'" class="result-area">
+            <div v-else-if="currentTask && currentTask.status === '已失败'" key="failed" class="result-area">
               <a-result status="error" title="生成失败" sub-title="请检查文本内容后重试">
                 <template #extra><a-button type="primary" @click="emit('reset')">重新生成</a-button></template>
               </a-result>
@@ -132,11 +132,11 @@ const props = defineProps<{
 const emit = defineEmits<{
   'update:voiceId': [value: string]
   'update:text': [value: string]
-  generate: [text: string]
-  reset: []
-  openRegister: []
-  deleteVoice: [voiceId: string]
-  showFailDetail: [voice: VoiceItem]
+  'generate': [text: string]
+  'reset': []
+  'openRegister': []
+  'deleteVoice': [voiceId: string]
+  'showFailDetail': [voice: VoiceItem]
 }>()
 
 const steps = [

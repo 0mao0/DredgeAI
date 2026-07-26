@@ -158,7 +158,7 @@ function playSample(voice: VoiceItem): void {
   }
 }
 
-async function handleVoiceConfirmed(payload: { voice: VoiceItem; formData: FormData }): Promise<void> {
+async function handleVoiceConfirmed(payload: { voice: VoiceItem, formData: FormData }): Promise<void> {
   try {
     await createAdminVoice(payload.formData)
     message.success('公有音色已添加')

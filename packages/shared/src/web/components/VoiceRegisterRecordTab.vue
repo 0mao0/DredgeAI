@@ -4,8 +4,8 @@
       <p class="read-card__text">{{ recordText }}</p>
       <span class="read-card__dur">
         <svg width="10" height="10" viewBox="0 0 24 24" fill="none">
-          <circle cx="12" cy="12" r="10" stroke="currentColor" stroke-width="2"/>
-          <path d="M12 6V12L16 14" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+          <circle cx="12" cy="12" r="10" stroke="currentColor" stroke-width="2" />
+          <path d="M12 6V12L16 14" stroke="currentColor" stroke-width="2" stroke-linecap="round" />
         </svg>
         ~15秒
       </span>
@@ -21,12 +21,12 @@
         >
           <span class="mic-btn__ring" />
           <svg v-if="!recording" width="18" height="18" viewBox="0 0 24 24" fill="none">
-            <path d="M12 2C10.34 2 9 3.34 9 5V11C9 12.66 10.34 14 12 14C13.66 14 15 12.66 15 11V5C15 3.34 13.66 2 12 2Z" fill="currentColor"/>
-            <path d="M20 11C20 15.08 16.42 18.24 12.5 18.88V22H11.5V18.88C7.58 18.24 4 15.08 4 11H5.5C5.5 14.31 8.69 17 12 17C15.31 17 18.5 14.31 18.5 11H20Z" fill="currentColor" fill-opacity="0.7"/>
+            <path d="M12 2C10.34 2 9 3.34 9 5V11C9 12.66 10.34 14 12 14C13.66 14 15 12.66 15 11V5C15 3.34 13.66 2 12 2Z" fill="currentColor" />
+            <path d="M20 11C20 15.08 16.42 18.24 12.5 18.88V22H11.5V18.88C7.58 18.24 4 15.08 4 11H5.5C5.5 14.31 8.69 17 12 17C15.31 17 18.5 14.31 18.5 11H20Z" fill="currentColor" fill-opacity="0.7" />
           </svg>
           <svg v-else width="18" height="18" viewBox="0 0 24 24" fill="none">
-            <rect x="6" y="4" width="4" height="16" rx="1" fill="currentColor"/>
-            <rect x="14" y="4" width="4" height="16" rx="1" fill="currentColor"/>
+            <rect x="6" y="4" width="4" height="16" rx="1" fill="currentColor" />
+            <rect x="14" y="4" width="4" height="16" rx="1" fill="currentColor" />
           </svg>
         </button>
 
@@ -43,15 +43,15 @@
     <transition name="slide-up">
       <div v-if="recordedBlob" class="file-card" @click="togglePlayRecorded">
         <svg v-if="!playing" class="file-card__play" width="14" height="14" viewBox="0 0 24 24" fill="none">
-          <path d="M8 5V19L19 12L8 5Z" fill="currentColor"/>
+          <path d="M8 5V19L19 12L8 5Z" fill="currentColor" />
         </svg>
         <svg v-else class="file-card__play" width="14" height="14" viewBox="0 0 24 24" fill="none">
-          <rect x="6" y="4" width="4" height="16" rx="1" fill="currentColor"/>
-          <rect x="14" y="4" width="4" height="16" rx="1" fill="currentColor"/>
+          <rect x="6" y="4" width="4" height="16" rx="1" fill="currentColor" />
+          <rect x="14" y="4" width="4" height="16" rx="1" fill="currentColor" />
         </svg>
         <span>录音完成 · 00:{{ String(Math.floor(recordElapsed)).padStart(2, '0') }}</span>
         <button class="file-card__del" @click.stop="clearRecorded">
-          <svg width="12" height="12" viewBox="0 0 24 24" fill="none"><path d="M19 6.41L17.59 5L12 10.59L6.41 5L5 6.41L10.59 12L5 17.59L6.41 19L12 13.41L17.59 19L19 17.59L13.41 12L19 6.41Z" fill="currentColor"/></svg>
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none"><path d="M19 6.41L17.59 5L12 10.59L6.41 5L5 6.41L10.59 12L5 17.59L6.41 19L12 13.41L17.59 19L19 17.59L13.41 12L19 6.41Z" fill="currentColor" /></svg>
         </button>
       </div>
     </transition>
@@ -112,7 +112,7 @@ async function toggleRecord(): Promise<void> {
     mediaRecorder.onstop = () => {
       recordedBlob.value = new Blob(audioChunks, { type: mimeType })
       emit('audioReady', recordedBlob.value)
-      stream.getTracks().forEach(t => t.stop())
+      stream.getTracks().forEach((t) => t.stop())
     }
 
     mediaRecorder.start(100)
@@ -161,7 +161,7 @@ onUnmounted(() => {
   stopPlayback()
   if (blobUrl) URL.revokeObjectURL(blobUrl)
   if (recordTimer) clearInterval(recordTimer)
-  if (mediaRecorder) mediaRecorder.stream?.getTracks().forEach(t => t.stop())
+  if (mediaRecorder) mediaRecorder.stream?.getTracks().forEach((t) => t.stop())
 })
 </script>
 

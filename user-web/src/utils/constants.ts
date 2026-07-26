@@ -1,8 +1,8 @@
 export const STORAGE_TOKEN_KEY = 'DREDGE_AI_TOKEN'
 
-export const ADMIN_WEB_URL = 'http://localhost:5374'
+export const ADMIN_WEB_URL = import.meta.env.VITE_ADMIN_WEB_URL || 'http://localhost:5374'
 
-export const API_BASE_URL = '/api/'
+export const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || '/api/'
 
 // 仅在开发模式启用 mock，生产构建自动关闭，确保真实 API 被调用
 // 如需在 dev 模式下调试真实 API，在 .env.local 中设置 VITE_USE_MOCK=false

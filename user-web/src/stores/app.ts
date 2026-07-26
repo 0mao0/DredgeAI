@@ -4,6 +4,7 @@ import type { AppCard, TaskItem, FileItem } from '@/types'
 import { getAppList } from '@/api/modules/app'
 import { getRecentTasks, getQuickTasks } from '@/api/modules/task'
 import { getRecentFiles } from '@/api/modules/file'
+import { cachedFetch, invalidateRequest } from '@shared/web/composables/useRequest'
 
 export interface SidebarApp {
   route: string
@@ -14,12 +15,12 @@ export interface SidebarApp {
 export const useAppStore = defineStore('app', () => {
   const apps = ref<AppCard[]>([])
   const tasks = ref<TaskItem[]>([])
-  const quickTasks = ref<{ id: string; title: string; tag: string; route: string; icon: string }[]>([])
+  const quickTasks = ref<{ id: string, title: string, tag: string, route: string, icon: string }[]>([])
   const files = ref<FileItem[]>([])
   const visibleAppRoutes = ref<string[]>([])
 
   const authorizedApps = computed(() =>
-    apps.value.filter((a) => a.status === '已授权')
+    apps.value.filter((a) => a.status === '已授权'),
   )
 
   const sidebarApps = computed(() =>
@@ -30,7 +31,7 @@ export const useAppStore = defineStore('app', () => {
         const bi = visibleAppRoutes.value.indexOf(b.route!)
         return ai - bi
       })
-      .map((a): SidebarApp => ({ route: a.route!, title: a.title, icon: a.icon }))
+      .map((a): SidebarApp => ({ route: a.route!, title: a.title, icon: a.icon })),
   )
 
   const sidebarAppsSet = computed(() => new Set(sidebarApps.value.map((a) => a.route)))
@@ -54,8 +55,10 @@ export const useAppStore = defineStore('app', () => {
   /** 默认勾选应用显示在侧边栏：通用3 + 施工2 + 经营2(情报采集子应用) */
   const DEFAULT_VISIBLE_ROUTES = ['/standard-query', '/ai-video', '/ai-dubbing', '/dredge-efficiency', '/ai-bid', '/intelligence/dredge', '/intelligence/tech']
 
-  async function fetchApps(): Promise<void> {
-    apps.value = await getAppList()
+  async function fetchApps(force = false): Promise<void> {
+    const cacheKey = 'user:app-list'
+    if (force) invalidateRequest(cacheKey)
+    apps.value = await cachedFetch(cacheKey, getAppList)
     const routesWithRoute = authorizedApps.value
       .filter((a) => a.route)
       .map((a) => a.route!)
@@ -72,10 +75,20 @@ export const useAppStore = defineStore('app', () => {
   async function fetchFiles(): Promise<void> { files.value = await getRecentFiles() }
 
   return {
-    apps, tasks, quickTasks, files,
-    visibleAppRoutes, authorizedApps, sidebarApps,
-    setVisibleRoutes, toggleAppRoute, isRouteVisible,
-    fetchApps, fetchTasks, fetchQuickTasks, fetchFiles,
+    apps,
+    tasks,
+    quickTasks,
+    files,
+    visibleAppRoutes,
+    authorizedApps,
+    sidebarApps,
+    setVisibleRoutes,
+    toggleAppRoute,
+    isRouteVisible,
+    fetchApps,
+    fetchTasks,
+    fetchQuickTasks,
+    fetchFiles,
   }
 }, {
   persist: { pick: ['visibleAppRoutes'] },

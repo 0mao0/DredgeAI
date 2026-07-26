@@ -1,7 +1,7 @@
 <template>
   <div class="module-placeholder" @click="$router.push('/ai-bid/read')">
     <div class="placeholder-graphic">
-      <swap-outlined />
+      <SwapOutlined />
     </div>
     <h3>多标段对比分析</h3>
     <p>同时对比多份标书的关键指标、报价、技术方案，辅助决策。</p>

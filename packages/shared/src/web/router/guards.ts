@@ -24,6 +24,24 @@ export function createAuthGuard(tokenKey: string, loginPath = '/login'): Navigat
   }
 }
 
+/**
+ * 创建权限守卫：路由声明 meta.requiresPermission 时校验权限码集合。
+ * - 权限码 '*' 为通配（超级管理员）
+ * - getPermissions 支持异步（首次进入时需等待用户资料加载）
+ */
+export function createPermissionGuard(
+  getPermissions: () => string[] | Promise<string[]>,
+  fallback = '/',
+): NavigationGuardWithThis<undefined> {
+  return async (to) => {
+    const required = to.meta.requiresPermission
+    if (!required) return true
+    const perms = await Promise.resolve(getPermissions())
+    if (perms.includes('*') || perms.includes(required)) return true
+    return { path: fallback }
+  }
+}
+
 /** 创建标题守卫：根据路由 meta.title 设置 document.title */
 export function createTitleGuard(appName: string): (to: { meta: { title?: string } }) => void {
   return (to) => {
@@ -32,15 +50,27 @@ export function createTitleGuard(appName: string): (to: { meta: { title?: string
   }
 }
 
-/** 为 router 安装默认守卫组合（auth + title）
+/**
+ * 为 router 安装默认守卫组合（auth + permission + title）
  *  - enableAuth 默认 false：仅当应用存在登录页且 tokenKey 配置时才启用，避免无 login 路由时死循环
+ *  - 传入 getPermissions 即启用权限守卫（消费路由 meta.requiresPermission）
  */
 export function installGuards(
   router: Router,
-  opts: { appName: string; tokenKey?: string; loginPath?: string; enableAuth?: boolean },
+  opts: {
+    appName: string
+    tokenKey?: string
+    loginPath?: string
+    enableAuth?: boolean
+    getPermissions?: () => string[] | Promise<string[]>
+    permissionFallback?: string
+  },
 ): void {
   if (opts.enableAuth && opts.tokenKey) {
     router.beforeEach(createAuthGuard(opts.tokenKey, opts.loginPath))
+  }
+  if (opts.getPermissions) {
+    router.beforeEach(createPermissionGuard(opts.getPermissions, opts.permissionFallback))
   }
   router.afterEach(createTitleGuard(opts.appName))
 }

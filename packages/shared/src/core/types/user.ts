@@ -21,5 +21,5 @@ export interface UserUserInfo {
   phone: string
   avatar?: string
   authorizedScopes: string[]
-  preferences: { theme: 'light' | 'dark'; language: 'zh-CN' | 'en-US' }
+  preferences: { theme: 'light' | 'dark', language: 'zh-CN' | 'en-US' }
 }

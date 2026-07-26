@@ -15,7 +15,7 @@
 </template>
 
 <script setup lang="ts">
-withDefaults(defineProps<{ title?: string; nopad?: boolean; flush?: boolean }>(), { nopad: false, flush: false })
+withDefaults(defineProps<{ title?: string, nopad?: boolean, flush?: boolean }>(), { nopad: false, flush: false })
 </script>
 
 <style scoped lang="less">

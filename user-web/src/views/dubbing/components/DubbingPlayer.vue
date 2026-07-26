@@ -53,8 +53,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onBeforeUnmount } from 'vue'
-import { h } from 'vue'
+import { ref, computed, onBeforeUnmount, h } from 'vue'
 import { PlayCircleFilled, PauseCircleFilled, DownloadOutlined } from '@ant-design/icons-vue'
 import type { DubbingTask } from '@/types'
 

@@ -1,4 +1,5 @@
-/** 子应用：由 admin 模块按采集/业务分类发布后，面向 user-web 的具体可订阅单元。
+/**
+ * 子应用：由 admin 模块按采集/业务分类发布后，面向 user-web 的具体可订阅单元。
  * 仅当模块存在多个面向用户的形态时才定义（如「情报采集」发布为疏浚情报/科技情报）。
  * 普通模块无 subApps，则模块本身即直接作为 user 端应用。
  */
@@ -51,9 +52,11 @@ export interface AppCard {
   pinned?: boolean
 }
 
-/** 应用清单：每个应用/页面对应一份 manifest，描述路由/组件/权限等元数据。
+/**
+ * 应用清单：每个应用/页面对应一份 manifest，描述路由/组件/权限等元数据。
  * 支持嵌套 children 用于分组路由（如 apps/data 分组），
- * 分组节点只需 path/name/title 和 children，无需 component。 */
+ * 分组节点只需 path/name/title 和 children，无需 component。
+ */
 export interface AppManifest {
   /** 唯一 id */
   id: string
@@ -75,6 +78,8 @@ export interface AppManifest {
   category?: '通用' | '经营' | '设计' | '施工'
   /** 可选：用于侧边栏菜单展开的父级 key 列表 */
   parentKeys?: string[]
+  /** 菜单归属：main=主菜单（默认）/ bottom=底部菜单 / hidden=不出现在菜单（如参数化详情页） */
+  menuPlacement?: 'main' | 'bottom' | 'hidden'
   /** 子路由（支持嵌套分组） */
   children?: AppManifest[]
   /** 是否重定向（redirect 路径） */

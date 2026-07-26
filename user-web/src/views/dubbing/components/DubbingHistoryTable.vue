@@ -11,7 +11,7 @@
     <a-table-column title="文本" data-index="text" ellipsis width="180">
       <template #default="{ record }">
         <a-tooltip :title="record.text">
-          <span>{{ record.text.length > 25 ? record.text.slice(0, 25) + '...' : record.text }}</span>
+          <span>{{ record.text.length > 25 ? `${record.text.slice(0, 25)}...` : record.text }}</span>
         </a-tooltip>
       </template>
     </a-table-column>

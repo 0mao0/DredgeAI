@@ -107,21 +107,21 @@
               <span class="app-count">（{{ sidebarApps.length }} / {{ appStore.authorizedApps.length }}）</span>
             </div>
             <div class="category-bar">
-              <span v-for="cat in categoryOptions" :key="cat.key" class="cat-tag" :style="{ color: catColorMap[cat.key], borderColor: catColorMap[cat.key], background: catColorMap[cat.key] + '22' }">{{ cat.label }}<span class="cat-tag-count">({{ cat.count }})</span></span>
+              <span v-for="cat in categoryOptions" :key="cat.key" class="cat-tag" :style="{ color: catColorMap[cat.key], borderColor: catColorMap[cat.key], background: `${catColorMap[cat.key]}22` }">{{ cat.label }}<span class="cat-tag-count">({{ cat.count }})</span></span>
             </div>
           </div>
-          <div class="sc-body">            
-            <div class="app-grid" ref="appListRef">
+          <div class="sc-body">
+            <div ref="appListRef" class="app-grid">
               <div
                 v-for="(app, idx) in filteredApps"
                 :key="app.route || app.id"
                 class="app-card"
                 :class="{
-                  active: !!app.route && appStore.visibleAppRoutes.includes(app.route),
-                  dragging: dragIndex === idx,
+                  'active': !!app.route && appStore.visibleAppRoutes.includes(app.route),
+                  'dragging': dragIndex === idx,
                   'over-top': dragOverIndex === idx && dragOverDir === 'top',
                   'over-bottom': dragOverIndex === idx && dragOverDir === 'bottom',
-                  disabled: !app.route,
+                  'disabled': !app.route,
                 }"
                 :draggable="!!app.route && appStore.visibleAppRoutes.includes(app.route)"
                 @dragstart="onDragStart(idx, $event)"
@@ -130,10 +130,10 @@
                 @drop="onDrop(idx)"
               >
                 <div class="app-card-drag"><HolderOutlined /></div>
-                  <div
-                    class="app-card-icon"
-                    :style="{ '--app-icon-color': catColorMap[app.category] || '#94A3B8' }"
-                  >
+                <div
+                  class="app-card-icon"
+                  :style="{ '--app-icon-color': catColorMap[app.category] || '#94A3B8' }"
+                >
                   <component :is="iconMap[app.icon]" />
                 </div>
                 <div class="app-card-body">
@@ -161,8 +161,13 @@
 <script setup lang="ts">
 import { ref, computed } from 'vue'
 import {
-  HolderOutlined, UserOutlined, TeamOutlined, MailOutlined, PhoneOutlined,
-  AppstoreOutlined, CheckCircleOutlined,
+  HolderOutlined,
+  UserOutlined,
+  TeamOutlined,
+  MailOutlined,
+  PhoneOutlined,
+  AppstoreOutlined,
+  CheckCircleOutlined,
 } from '@ant-design/icons-vue'
 import * as Icons from '@ant-design/icons-vue'
 import { useUserStore } from '@/stores/user'
@@ -241,12 +246,15 @@ function toggleNotif(value: string): void {
 const sidebarApps = computed(() => appStore.sidebarApps)
 
 const catColorMap: Record<string, string> = {
-  '通用': '#3B82F6', '经营': '#10B981', '设计': '#8B5CF6', '施工': '#F59E0B',
+  通用: '#3B82F6',
+  经营: '#10B981',
+  设计: '#8B5CF6',
+  施工: '#F59E0B',
 }
 
 function catPillStyle(category: string) {
   const c = catColorMap[category] || '#94A3B8'
-  return { color: c, borderColor: c, background: c + '22' }
+  return { color: c, borderColor: c, background: `${c}22` }
 }
 
 // 按可见顺序排序，已激活在前、未激活在后

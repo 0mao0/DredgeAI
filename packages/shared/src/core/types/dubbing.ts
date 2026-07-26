@@ -47,9 +47,9 @@ export interface DubbingTask {
 
 export interface DubbingUsageTimeSeries {
   categories: string[]
-  tasks: { name: string; data: number[] }[]
-  tokens: { name: string; data: number[] }[]
-  users: { name: string; data: number[] }[]
+  tasks: { name: string, data: number[] }[]
+  tokens: { name: string, data: number[] }[]
+  users: { name: string, data: number[] }[]
 }
 
 export interface DubbingUsageSummary {

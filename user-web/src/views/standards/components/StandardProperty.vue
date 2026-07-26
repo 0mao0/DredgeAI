@@ -1,10 +1,10 @@
 <template>
   <div class="standard-property">
     <DataSkeleton v-if="loading" />
-    <a-empty v-else-if="!property" description="请先选择标准" />
-    <a-result v-else-if="error" status="error" title="加载失败" :sub-title="error" />
+    <EmptyState v-else-if="!property" title="请先选择标准" />
+    <EmptyState v-else-if="error" type="error" title="加载失败" :description="error" />
     <template v-else>
-      <a-tabs v-model:activeKey="activeTab" class="standard-property__tabs">
+      <a-tabs v-model:active-key="activeTab" class="standard-property__tabs">
         <a-tab-pane key="properties" tab="属性">
           <div class="standard-scroll">
             <a-form :model="form" layout="vertical">
@@ -25,14 +25,14 @@
 
         <a-tab-pane key="ai" tab="AI对话" force-render>
           <div class="standard-chat">
-            <div class="standard-chat__messages" ref="chatBox">
+            <div ref="chatBox" class="standard-chat__messages">
               <div v-for="(msg, i) in chatMessages" :key="i" class="standard-chat__msg" :class="`standard-chat__msg--${msg.role}`">
                 <div class="standard-chat__avatar">{{ msg.role === 'user' ? '我' : 'AI' }}</div>
                 <div class="standard-chat__bubble">{{ msg.content }}</div>
               </div>
             </div>
             <div class="standard-chat__foot">
-              <a-input v-model:value="chatInput" placeholder="向 AI 提问..." @pressEnter="handleChat">
+              <a-input v-model:value="chatInput" placeholder="向 AI 提问..." @press-enter="handleChat">
                 <template #suffix><SendOutlined class="standard-chat__send" @click="handleChat" /></template>
               </a-input>
             </div>
@@ -48,9 +48,10 @@ import { ref, watch, nextTick } from 'vue'
 import { SendOutlined } from '@ant-design/icons-vue'
 import { message } from 'ant-design-vue'
 import DataSkeleton from '@shared/web/components/DataSkeleton.vue'
+import EmptyState from '@shared/web/components/EmptyState.vue'
 import type { StandardProperty } from '@/types'
 
-interface ChatMessage { role: 'user' | 'ai'; content: string }
+interface ChatMessage { role: 'user' | 'ai', content: string }
 
 const props = defineProps<{
   property: StandardProperty | null
@@ -91,21 +92,31 @@ async function handleChat(): Promise<void> {
 }
 
 const industryOptions = [
-  { value: '水利', label: '水利' }, { value: '建筑', label: '建筑' },
-  { value: '交通', label: '交通' }, { value: '环保', label: '环保' }, { value: '能源', label: '能源' },
+  { value: '水利', label: '水利' },
+  { value: '建筑', label: '建筑' },
+  { value: '交通', label: '交通' },
+  { value: '环保', label: '环保' },
+  { value: '能源', label: '能源' },
 ]
 const natureOptions = [{ value: '强制性标准', label: '强制性标准' }, { value: '推荐性标准', label: '推荐性标准' }]
 const levelOptions = [
-  { value: '国家标准', label: '国家标准' }, { value: '行业标准', label: '行业标准' },
-  { value: '地方标准', label: '地方标准' }, { value: '团体标准', label: '团体标准' },
+  { value: '国家标准', label: '国家标准' },
+  { value: '行业标准', label: '行业标准' },
+  { value: '地方标准', label: '地方标准' },
+  { value: '团体标准', label: '团体标准' },
 ]
 const statusOptions = [{ value: '现行', label: '现行' }, { value: '废止', label: '废止' }]
 const issuerOptions = [
-  { value: '国务院', label: '国务院' }, { value: '全国人大常委会', label: '全国人大常委会' },
-  { value: '水利部', label: '水利部' }, { value: '住建部', label: '住建部' }, { value: '生态环境部', label: '生态环境部' },
+  { value: '国务院', label: '国务院' },
+  { value: '全国人大常委会', label: '全国人大常委会' },
+  { value: '水利部', label: '水利部' },
+  { value: '住建部', label: '住建部' },
+  { value: '生态环境部', label: '生态环境部' },
 ]
 const parentOptions = [
-  { value: '国家标准', label: '国家标准' }, { value: '行业标准', label: '行业标准' }, { value: '地方标准', label: '地方标准' },
+  { value: '国家标准', label: '国家标准' },
+  { value: '行业标准', label: '行业标准' },
+  { value: '地方标准', label: '地方标准' },
 ]
 </script>
 
@@ -123,9 +134,15 @@ const parentOptions = [
     display: flex;
     flex-direction: column;
   }
-  :deep(.ant-tabs-nav) { margin-bottom: @spacing-sm; }
-  :deep(.ant-tabs-content-holder) { flex: 1; min-height: 0; overflow: auto; }
-  :deep(.ant-tabs-content) { height: 100%; }
+  :deep(.ant-tabs-nav) { margin-bottom: @spacing-sm; flex-shrink: 0; }
+  :deep(.ant-tabs-content-holder) {
+    flex: 1;
+    min-height: 0;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+  }
+  :deep(.ant-tabs-content) { flex: 1; min-height: 0; height: 100%; }
   :deep(.ant-tabs-tabpane) { height: 100%; }
 }
 

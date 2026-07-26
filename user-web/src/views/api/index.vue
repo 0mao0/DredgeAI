@@ -3,14 +3,15 @@
     <PageHeader title="API 管理" description="管理 API Key、查看模型调用统计">
       <template #extra>
         <a-button type="primary" @click="showCreateModal = true">
-          <plus-outlined />
+          <PlusOutlined />
           创建 Key
         </a-button>
       </template>
     </PageHeader>
 
     <SectionCard nopad class="mb-24">
-      <a-table size="small"
+      <a-table
+        size="small"
         :data-source="apiKeys"
         :columns="columns"
         :pagination="{ pageSize: 10 }"
@@ -22,7 +23,7 @@
           </template>
           <template v-else-if="column.key === 'doc'">
             <a-button type="link" size="small" @click="openDoc(record.docUrl)">
-              <file-text-outlined /> 文档
+              <FileTextOutlined /> 文档
             </a-button>
           </template>
           <template v-else-if="column.key === 'action'">
@@ -37,22 +38,22 @@
 
     <a-row :gutter="16" class="mb-24">
       <a-col :span="12">
-          <MetricCard
-            title="总调用次数"
-            :value="formatNumber(totalCalls)"
-            suffix="次"
-            icon="ThunderboltOutlined"
-            :color="brandColor"
-          />
+        <MetricCard
+          title="总调用次数"
+          :value="formatNumber(totalCalls)"
+          suffix="次"
+          icon="ThunderboltOutlined"
+          :color="brandColor"
+        />
       </a-col>
       <a-col :span="12">
-          <MetricCard
-            title="总 Token 消耗量"
-            :value="formatNumber(totalTokens)"
-            suffix="tokens"
-            icon="DatabaseOutlined"
-            :color="accentColor"
-          />
+        <MetricCard
+          title="总 Token 消耗量"
+          :value="formatNumber(totalTokens)"
+          suffix="tokens"
+          icon="DatabaseOutlined"
+          :color="accentColor"
+        />
       </a-col>
     </a-row>
 
@@ -103,7 +104,7 @@
           <code>{{ createdKey }}</code>
         </div>
         <a-button type="primary" block @click="copyCreatedKey">
-          <copy-outlined /> 复制 Key
+          <CopyOutlined /> 复制 Key
         </a-button>
       </div>
     </a-modal>
@@ -156,7 +157,7 @@ const showCopyModal = ref(false)
 const showEditModal = ref(false)
 const createdKey = ref('')
 const newKey = ref({ name: '', modelType: '' })
-const editTarget = ref<{ id: string; name: string } | null>(null)
+const editTarget = ref<{ id: string, name: string } | null>(null)
 const editName = ref('')
 const chartMode = ref<'model' | 'key' | 'total'>('model')
 const timeRange = ref('7d')
@@ -211,10 +212,13 @@ watch(timeRange, () => fetchTimeSeries())
 function makeBarGradient(hex: string) {
   return {
     type: 'linear' as const,
-    x: 0, y: 0, x2: 0, y2: 1,
+    x: 0,
+    y: 0,
+    x2: 0,
+    y2: 1,
     colorStops: [
       { offset: 0, color: hex },
-      { offset: 1, color: hex + '66' },
+      { offset: 1, color: `${hex}66` },
     ],
   }
 }
@@ -248,24 +252,30 @@ const chartOption = computed(() => {
   if (chartMode.value === 'total') {
     // 总调用次数 = 所有 byModel 数据逐日求和
     const totalData = data.byModel[0]?.data.map((_: number, i: number) =>
-      data.byModel.reduce((sum: number, m: { data: number[] }) => sum + (m.data[i] || 0), 0)
+      data.byModel.reduce((sum: number, m: { data: number[] }) => sum + (m.data[i] || 0), 0),
     ) || []
     return {
-      ...base(), legend: undefined,
+      ...base(),
+      legend: undefined,
       series: [{ type: 'bar', data: totalData, barWidth: '32%', itemStyle: { color: makeBarGradient(brandColor.value), borderRadius: [6, 6, 0, 0] }, animationDuration: 600, animationEasing: 'easeOutQuad' }],
     }
   }
 
-  const series = chartMode.value === 'model' ? data.byModel.map(m => ({ name: m.modelName, data: m.data })) : data.byName
+  const series = chartMode.value === 'model' ? data.byModel.map((m) => ({ name: m.modelName, data: m.data })) : data.byName
   const count = series.length
   return {
     ...base(),
     grid: { left: 40, right: 16, bottom: 44, top: 12 },
     legend: { type: 'scroll', bottom: 0, textStyle: { color: t.legendColor, fontSize: 12 } },
-    series: series.map((s: { name: string; data: number[] }, i: number) => ({
-      name: s.name, type: 'bar', stack: 'total', data: s.data, barWidth: '44%',
+    series: series.map((s: { name: string, data: number[] }, i: number) => ({
+      name: s.name,
+      type: 'bar',
+      stack: 'total',
+      data: s.data,
+      barWidth: '44%',
       itemStyle: { color: makeBarGradient(colors.value[i % colors.value.length]), borderRadius: i === count - 1 ? [6, 6, 0, 0] : 0 },
-      animationDuration: 400 + i * 80, animationEasing: 'easeOutQuad',
+      animationDuration: 400 + i * 80,
+      animationEasing: 'easeOutQuad',
     })),
   }
 })
@@ -279,7 +289,7 @@ function handleDelete(id: string): void {
   message.success('已删除')
 }
 
-function handleEdit(record: { id: string; name: string }): void {
+function handleEdit(record: { id: string, name: string }): void {
   editTarget.value = record
   editName.value = record.name
   showEditModal.value = true
@@ -304,7 +314,7 @@ function handleCreate(): void {
     message.warning('请填写完整信息')
     return
   }
-  createdKey.value = 'sk-dg-' + Array.from({ length: 20 }, () => 'abcdefghijklmnopqrstuvwxyz0123456789'[Math.floor(Math.random() * 36)]).join('')
+  createdKey.value = `sk-dg-${Array.from({ length: 20 }, () => 'abcdefghijklmnopqrstuvwxyz0123456789'[Math.floor(Math.random() * 36)]).join('')}`
   showCreateModal.value = false
   showCopyModal.value = true
 }

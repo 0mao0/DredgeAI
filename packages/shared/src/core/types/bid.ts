@@ -18,5 +18,5 @@ export interface BidReviewSession {
   date: string
   riskCount: number
   status: '已完成' | '进行中'
-  snippets?: { role: 'user' | 'assistant'; content: string }[]
+  snippets?: { role: 'user' | 'assistant', content: string }[]
 }

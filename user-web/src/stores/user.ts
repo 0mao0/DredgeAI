@@ -10,7 +10,12 @@ export const useUserStore = defineStore('user', () => {
     userInfo.value = await getCurrentUser()
   }
 
-  return { userInfo, fetchUser }
+  /** 幂等加载（已加载则跳过），供权限守卫使用 */
+  async function ensureUser(): Promise<void> {
+    if (!userInfo.value) await fetchUser()
+  }
+
+  return { userInfo, fetchUser, ensureUser }
 }, {
   persist: { pick: ['userInfo'] },
 })

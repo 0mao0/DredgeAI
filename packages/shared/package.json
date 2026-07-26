@@ -26,6 +26,7 @@
     "echarts": "^5.5.0",
     "axios": "^1.6.0",
     "nprogress": "^0.2.0",
+    "@types/nprogress": "^0.2.3",
     "pinia": "^2.1.0",
     "pinia-plugin-persistedstate": "^4.0.0"
   }

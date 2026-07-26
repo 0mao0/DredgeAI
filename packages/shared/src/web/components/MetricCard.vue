@@ -5,7 +5,7 @@
       <component :is="iconComp" v-if="iconComp" class="metric-icon" :style="{ color }" />
     </div>
     <div class="metric-value">
-      {{ value }}<span v-if="suffix" class="metric-suffix">{{ suffix }}</span>
+      {{ displayValue }}<span v-if="suffix" class="metric-suffix">{{ suffix }}</span>
     </div>
     <div v-if="trend !== undefined" class="metric-trend" :class="trendUp ? 'up' : 'down'">
       <ArrowUpOutlined v-if="trendUp" />
@@ -20,6 +20,7 @@
 import { computed } from 'vue'
 import { ArrowUpOutlined, ArrowDownOutlined } from '@ant-design/icons-vue'
 import * as Icons from '@ant-design/icons-vue'
+import { useCountUp } from '../composables/useCountUp'
 
 const props = defineProps<{
   title: string
@@ -35,6 +36,11 @@ const iconComp = computed(() => {
   if (!props.icon) return null
   return (Icons as Record<string, unknown>)[props.icon]
 })
+
+// 数值型 value 启用 CountUp 动画，字符串原样展示
+const isNumeric = computed(() => typeof props.value === 'number' && Number.isFinite(props.value))
+const { display } = useCountUp(() => (isNumeric.value ? (props.value as number) : 0))
+const displayValue = computed(() => (isNumeric.value ? display.value : props.value))
 </script>
 
 <style scoped lang="less">
@@ -47,8 +53,12 @@ const iconComp = computed(() => {
   border-top: 3px solid transparent;
   padding: @spacing-xl;
   box-shadow: @shadow-sm;
-  transition: all @transition-base;
-  &:hover { box-shadow: @shadow-md; transform: translateY(-2px); }
+  transition: transform @transition-base, box-shadow @transition-base;
+  &:hover {
+    box-shadow: @shadow-md;
+    transform: translateY(-2px);
+    .metric-icon { transform: rotate(-8deg) scale(1.12); opacity: 1; }
+  }
 }
 .metric-top {
   display: flex;
@@ -63,6 +73,7 @@ const iconComp = computed(() => {
 .metric-icon {
   font-size: 20px;
   opacity: 0.7;
+  transition: transform @transition-base, opacity @transition-base;
 }
 .metric-value {
   font-size: @font-size-3xl;

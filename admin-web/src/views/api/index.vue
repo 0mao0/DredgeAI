@@ -3,16 +3,17 @@
     <PageHeader title="API 管理" description="管理接入的模型、统计平台用量与配置用户限制">
       <template #extra>
         <a-button type="primary" @click="showCreateModal = true">
-          <plus-outlined />
+          <PlusOutlined />
           添加模型
         </a-button>
       </template>
     </PageHeader>
 
-    <a-tabs v-model:activeKey="activeTab" class="api-tabs">
+    <a-tabs v-model:active-key="activeTab" class="api-tabs">
       <a-tab-pane key="keys" tab="模型管理">
         <SectionCard nopad>
-          <a-table size="small"
+          <a-table
+            size="small"
             :data-source="models"
             :columns="modelColumns"
             :pagination="{ pageSize: 10 }"
@@ -27,7 +28,7 @@
               </template>
               <template v-else-if="column.key === 'doc'">
                 <a-button type="link" size="small" @click="openDoc(record.docUrl)">
-                  <file-text-outlined /> 文档
+                  <FileTextOutlined /> 文档
                 </a-button>
               </template>
               <template v-else-if="column.key === 'action'">
@@ -39,7 +40,6 @@
             </template>
           </a-table>
         </SectionCard>
-
       </a-tab-pane>
 
       <a-tab-pane key="stats" tab="统计总览">
@@ -107,7 +107,8 @@
 
       <a-tab-pane key="ranking" tab="用户控制">
         <SectionCard nopad>
-          <a-table size="small"
+          <a-table
+            size="small"
             :data-source="mergedUserData"
             :columns="mergedUserColumns"
             :pagination="{ pageSize: 10 }"
@@ -115,13 +116,13 @@
           >
             <template #bodyCell="{ column, record, index }">
               <template v-if="column.key === 'rank'">
-                <span :class="['rank-badge', { gold: index < 3 }]">{{ index + 1 }}</span>
+                <span class="rank-badge" :class="[{ gold: index < 3 }]">{{ index + 1 }}</span>
               </template>
               <template v-else-if="column.key === 'calls'">
-                 {{ formatNumber(record.calls) }}
+                {{ formatNumber(record.calls) }}
               </template>
               <template v-else-if="column.key === 'tokens'">
-                 {{ formatNumber(record.tokens) }}
+                {{ formatNumber(record.tokens) }}
               </template>
               <template v-else-if="column.key === 'models'">
                 <a-tag :color="record.models.length === 4 ? 'green' : 'orange'">{{ record.models.length === 4 ? '全部' : '部分' }}</a-tag>
@@ -155,7 +156,7 @@
 
     <!-- Edit Modal -->
     <a-modal v-model:open="showEditModal" title="编辑模型" @ok="handleEditOk">
-      <a-form layout="vertical" v-if="editTarget">
+      <a-form v-if="editTarget" layout="vertical">
         <a-form-item label="模型类型" required>
           <a-select v-model:value="editForm.modelType" :options="modelTypeOptions" placeholder="选择模型提供商" />
         </a-form-item>
@@ -173,7 +174,7 @@
 
     <!-- Edit Limits Modal -->
     <a-modal v-model:open="showLimitsModal" title="编辑用户限制" width="600px" @ok="handleLimitsOk">
-      <a-form layout="vertical" v-if="limitsTarget">
+      <a-form v-if="limitsTarget" layout="vertical">
         <a-form-item label="用户">
           <span class="limits-user-name">{{ limitsTarget.name }}</span>
         </a-form-item>
@@ -318,7 +319,7 @@ function emptyModel() {
 const newModel = ref(emptyModel())
 const editTarget = ref<{ id: string } | null>(null)
 const editForm = ref(emptyModel())
-const limitsTarget = ref<{ userId: string; name: string; models: string[]; monthCallsLimit: number; monthCallsWarn: number; monthTokensLimit: number; monthTokensWarn: number } | null>(null)
+const limitsTarget = ref<{ userId: string, name: string, models: string[], monthCallsLimit: number, monthCallsWarn: number, monthTokensLimit: number, monthTokensWarn: number } | null>(null)
 const limitsForm = ref({
   models: [] as string[],
   monthCallsLimit: 0,
@@ -347,10 +348,13 @@ const timeSeriesData = ref<UsageTimeSeries | null>(null)
 function makeBarGradient(hex: string) {
   return {
     type: 'linear' as const,
-    x: 0, y: 0, x2: 0, y2: 1,
+    x: 0,
+    y: 0,
+    x2: 0,
+    y2: 1,
     colorStops: [
       { offset: 0, color: hex },
-      { offset: 1, color: hex + '66' },
+      { offset: 1, color: `${hex}66` },
     ],
   }
 }
@@ -418,23 +422,29 @@ const overviewChartOption = computed(() => {
   if (overviewChartMode.value === 'total') {
     // 总调用次数 = 所有 byModel 数据逐日求和
     const totalData = data.byModel[0]?.data.map((_: number, i: number) =>
-      data.byModel.reduce((sum: number, m: { data: number[] }) => sum + (m.data[i] || 0), 0)
+      data.byModel.reduce((sum: number, m: { data: number[] }) => sum + (m.data[i] || 0), 0),
     ) || []
     return {
-      ...base, legend: undefined,
+      ...base,
+      legend: undefined,
       grid: { left: 40, right: 16, bottom: 24, top: 12 },
       series: [{ type: 'bar' as const, data: totalData, barWidth: '32%', itemStyle: { color: makeBarGradient(brandColor.value), borderRadius: [6, 6, 0, 0] }, animationDuration: 600, animationEasing: 'easeOutQuad' as const }],
     }
   }
 
   // byModel → modelName, byName → name
-  const series = overviewChartMode.value === 'model' ? data.byModel.map(m => ({ name: m.modelName, data: m.data })) : data.byName
+  const series = overviewChartMode.value === 'model' ? data.byModel.map((m) => ({ name: m.modelName, data: m.data })) : data.byName
   return {
     ...base,
     series: series.map((s, i) => ({
-      name: s.name, type: 'bar' as const, stack: 'total', data: s.data, barWidth: '44%',
+      name: s.name,
+      type: 'bar' as const,
+      stack: 'total',
+      data: s.data,
+      barWidth: '44%',
       itemStyle: { color: makeBarGradient(colors.value[i % colors.value.length]), borderRadius: i === series.length - 1 ? [6, 6, 0, 0] : 0 },
-      animationDuration: 400 + i * 80, animationEasing: 'easeOutQuad' as const,
+      animationDuration: 400 + i * 80,
+      animationEasing: 'easeOutQuad' as const,
     })),
   }
 })
@@ -450,8 +460,11 @@ const userRankingChartOption = computed(() => {
     xAxis: { type: 'value' as const, axisLine: { show: false }, axisTick: { show: false }, axisLabel: { color: t.axisColor, fontSize: 11 }, splitLine: { lineStyle: { color: t.splitColor, type: 'dashed' as const } } },
     yAxis: { type: 'category' as const, data: users, axisLine: { show: false }, axisTick: { show: false }, axisLabel: { color: t.axisColor, fontSize: 11 } },
     series: [{
-      type: 'bar' as const, data: vals.map((v, i) => ({ value: v, itemStyle: { color: makeBarGradient(rankColors[i % rankColors.length]), borderRadius: [0, 6, 6, 0] } })),
-      barWidth: '55%', animationDuration: 600, animationEasing: 'easeOutQuad' as const,
+      type: 'bar' as const,
+      data: vals.map((v, i) => ({ value: v, itemStyle: { color: makeBarGradient(rankColors[i % rankColors.length]), borderRadius: [0, 6, 6, 0] } })),
+      barWidth: '55%',
+      animationDuration: 600,
+      animationEasing: 'easeOutQuad' as const,
     }],
   }
 })
@@ -462,7 +475,9 @@ const modelPieOption = computed(() => {
     tooltip: { trigger: 'item' as const, formatter: '{b}: {c} ({d}%)', backgroundColor: t.tooltipBg, borderColor: t.tooltipBorder, borderWidth: 1, textStyle: { color: t.tooltipColor, fontSize: 13 } },
     legend: { bottom: 0, type: 'scroll' as const, textStyle: { color: t.legendColor, fontSize: 12 } },
     series: [{
-      type: 'pie' as const, radius: ['40%', '70%'], center: ['50%', '45%'],
+      type: 'pie' as const,
+      radius: ['40%', '70%'],
+      center: ['50%', '45%'],
       itemStyle: { borderRadius: 6, borderColor: 'transparent', borderWidth: 2 },
       label: { show: false },
       emphasis: { label: { show: true, fontSize: 14, fontWeight: 'bold' as const } },
@@ -508,7 +523,7 @@ function handleDelete(id: string): void {
   message.success('已删除')
 }
 
-function handleEdit(record: { id: string; modelType: string; name: string; status: string; docUrl: string }): void {
+function handleEdit(record: { id: string, modelType: string, name: string, status: string, docUrl: string }): void {
   editTarget.value = record
   editForm.value = { modelType: record.modelType, name: record.name, status: record.status, docUrl: record.docUrl }
   showEditModal.value = true
@@ -549,7 +564,7 @@ function resetNewModel(): void {
   newModel.value = emptyModel()
 }
 
-function handleEditLimits(user: { userId: string; name: string; models: string[]; monthCallsLimit: number; monthCallsWarn: number; monthTokensLimit: number; monthTokensWarn: number }): void {
+function handleEditLimits(user: { userId: string, name: string, models: string[], monthCallsLimit: number, monthCallsWarn: number, monthTokensLimit: number, monthTokensWarn: number }): void {
   limitsTarget.value = user
   limitsForm.value = {
     models: [...user.models],

@@ -17,9 +17,10 @@
       <div class="welcome-right">
         <div class="quick-task-grid">
           <div
-            v-for="task in appStore.quickTasks"
+            v-for="(task, i) in appStore.quickTasks"
             :key="task.id"
             class="quick-task-card"
+            :style="itemStyle(i)"
             @click="router.push(task.route)"
           >
             <component :is="iconMap[task.icon]" class="quick-task-icon" />
@@ -33,7 +34,7 @@
     </div>
 
     <a-row :gutter="[24, 24]" class="main-row">
-      <a-col :span="16">
+      <a-col :xs="24" :lg="16">
         <SectionCard title="最近任务" class="mb-24" flush>
           <a-list :data-source="appStore.tasks" :loading="loading">
             <template #renderItem="{ item }">
@@ -53,7 +54,7 @@
                 </a-list-item-meta>
                 <div class="task-right">
                   <StatusTag :status="item.status" />
-                  <a-progress v-if="item.progress !== undefined" :percent="item.progress" :size="'small'" class="task-progress" />
+                  <a-progress v-if="item.progress !== undefined" :percent="item.progress" size="small" class="task-progress" />
                 </div>
               </a-list-item>
             </template>
@@ -65,7 +66,7 @@
         </SectionCard>
       </a-col>
 
-      <a-col :span="8">
+      <a-col :xs="24" :lg="8">
         <SectionCard title="最近文件" flush>
           <a-list :data-source="appStore.files" :loading="loading" size="small">
             <template #renderItem="{ item }">
@@ -96,10 +97,18 @@
 import { ref, computed, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import {
-  FileSearchOutlined, BookOutlined, EditOutlined,
-  FilePdfOutlined, FileWordOutlined,
-  FileExcelOutlined, FileImageOutlined, FileOutlined,
-  CheckCircleOutlined, SyncOutlined, PauseCircleOutlined, CloseCircleOutlined,
+  FileSearchOutlined,
+  BookOutlined,
+  EditOutlined,
+  FilePdfOutlined,
+  FileWordOutlined,
+  FileExcelOutlined,
+  FileImageOutlined,
+  FileOutlined,
+  CheckCircleOutlined,
+  SyncOutlined,
+  PauseCircleOutlined,
+  CloseCircleOutlined,
 } from '@ant-design/icons-vue'
 import SectionCard from '@shared/web/components/SectionCard.vue'
 import StatusTag from '@/components/StatusTag.vue'
@@ -110,22 +119,27 @@ import { getEfficiencyTrend } from '@/api/modules/chart'
 import type { LineChartData } from '@/types'
 import type { Component } from 'vue'
 import { useCssVar } from '@shared/web/composables/useCssVar'
+import { useStaggerReveal } from '@shared/web/composables/useStaggerReveal'
 
 const router = useRouter()
 const userStore = useUserStore()
 const appStore = useAppStore()
 
+const { itemStyle } = useStaggerReveal(() => appStore.quickTasks.length, 60, 'background 0.2s ease')
+
 const loading = ref(false)
 const chartLoading = ref(false)
 
 const iconMap: Record<string, Component> = {
-  FileSearchOutlined, BookOutlined, EditOutlined,
+  FileSearchOutlined,
+  BookOutlined,
+  EditOutlined,
 }
 const statusIconMap: Record<string, Component> = {
-  '已完成': CheckCircleOutlined,
-  '进行中': SyncOutlined,
-  '已暂停': PauseCircleOutlined,
-  '已失败': CloseCircleOutlined,
+  已完成: CheckCircleOutlined,
+  进行中: SyncOutlined,
+  已暂停: PauseCircleOutlined,
+  已失败: CloseCircleOutlined,
 }
 const fileIconMap: Record<string, Component> = {
   pdf: FilePdfOutlined,
@@ -188,6 +202,12 @@ onMounted(async () => {
   justify-content: space-between;
   color: white;
   box-shadow: @shadow-brand;
+
+  @media (max-width: 992px) {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: @spacing-base;
+  }
 }
 .welcome-title {
   font-size: @font-size-3xl;
@@ -206,6 +226,11 @@ onMounted(async () => {
   grid-template-columns: 1fr 1fr;
   gap: @spacing-md;
   min-width: 360px;
+
+  @media (max-width: 992px) {
+    min-width: 0;
+    width: 100%;
+  }
 }
 .quick-task-card {
   background: rgba(255, 255, 255, 0.15);

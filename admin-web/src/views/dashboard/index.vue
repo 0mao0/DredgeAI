@@ -7,18 +7,18 @@
     </PageHeader>
 
     <a-row :gutter="[16, 16]" class="metrics-row">
-      <a-col :xs="24" :sm="12" :lg="6" v-for="m in metrics" :key="m.id">
+      <a-col v-for="(m, i) in metrics" :key="m.id" :xs="24" :sm="12" :lg="6" :style="itemStyle(i)">
         <MetricCard v-bind="m" />
       </a-col>
     </a-row>
 
     <a-row :gutter="[16, 16]" class="charts-row">
-      <a-col :span="16">
+      <a-col :xs="24" :lg="16">
         <SectionCard title="API 调用趋势" flush>
           <ChartContainer :option="apiCallsChartOption" height="300px" :loading="loading" />
         </SectionCard>
       </a-col>
-      <a-col :span="8">
+      <a-col :xs="24" :lg="8">
         <SectionCard title="应用调用分布" flush>
           <ChartContainer :option="appDistChartOption" height="300px" :loading="loading" />
         </SectionCard>
@@ -53,14 +53,17 @@ import MetricCard from '@shared/web/components/MetricCard.vue'
 import ChartContainer from '@shared/web/components/ChartContainer.vue'
 import { useCssVar } from '@shared/web/composables/useCssVar'
 import { useChartTheme } from '@shared/web/composables/useChartTheme'
+import { useStaggerReveal } from '@shared/web/composables/useStaggerReveal'
+import { useAsync } from '@shared/web/composables/useAsync'
 import type { DashboardMetric, SystemLog } from '@/types'
 import { getDashboardMetrics, getApiCallsTrend, getAppDistribution, getActiveUsersTrend, getRecentLogs } from '@/api/modules/dashboard'
 
 const { chartTheme } = useChartTheme()
 
-const loading = ref(false)
 const metrics = ref<DashboardMetric[]>([])
 const recentLogs = ref<SystemLog[]>([])
+
+const { itemStyle } = useStaggerReveal(() => metrics.value.length)
 
 const brandColor = useCssVar('--color-brand')
 const accentColor = useCssVar('--color-accent')
@@ -70,15 +73,15 @@ const dangerColor = useCssVar('--color-danger')
 
 const colors = computed(() => [brandColor.value, accentColor.value, successColor.value, warningColor.value, dangerColor.value])
 
-const apiCallsTrend = ref<{ categories: string[]; series: { name: string; data: number[] }[] }>({ categories: [], series: [] })
-const appDistribution = ref<{ name: string; data: { name: string; value: number }[] }>({ name: '', data: [] })
-const activeUsersTrend = ref<{ categories: string[]; series: { name: string; data: number[] }[] }>({ categories: [], series: [] })
+const apiCallsTrend = ref<{ categories: string[], series: { name: string, data: number[] }[] }>({ categories: [], series: [] })
+const appDistribution = ref<{ name: string, data: { name: string, value: number }[] }>({ name: '', data: [] })
+const activeUsersTrend = ref<{ categories: string[], series: { name: string, data: number[] }[] }>({ categories: [], series: [] })
 
 const logColumns = [
   { title: '类型', dataIndex: 'type', key: 'type', width: 100 },
   { title: '操作人', dataIndex: 'operator', key: 'operator', width: 100 },
   { title: '内容', dataIndex: 'content', key: 'content', ellipsis: true },
-  { title: '时间', dataIndex: 'createdAt', key: 'createdAt', width: 160 },
+  { title: '时间', dataIndex: 'createdAt', key: 'createdAt', width: 160, responsive: ['md'] },
 ]
 
 const apiCallsChartOption = computed(() => {
@@ -89,11 +92,15 @@ const apiCallsChartOption = computed(() => {
     xAxis: { type: 'category' as const, boundaryGap: false, data: apiCallsTrend.value.categories, axisLine: { show: false }, axisTick: { show: false }, axisLabel: { color: t.axisColor, fontSize: 11 } },
     yAxis: { type: 'value' as const, axisLine: { show: false }, axisTick: { show: false }, axisLabel: { color: t.axisColor, fontSize: 11 }, splitLine: { lineStyle: { color: t.splitColor, type: 'dashed' as const } } },
     series: apiCallsTrend.value.series.map((s) => ({
-      name: s.name, type: 'line' as const, smooth: true, data: s.data,
+      name: s.name,
+      type: 'line' as const,
+      smooth: true,
+      data: s.data,
       lineStyle: { color: brandColor.value, width: 2 },
       itemStyle: { color: brandColor.value },
-      areaStyle: { color: brandColor.value + '18' },
-      animationDuration: 600, animationEasing: 'easeOutQuad' as const,
+      areaStyle: { color: `${brandColor.value}18` },
+      animationDuration: 600,
+      animationEasing: 'easeOutQuad' as const,
     })),
   }
 })
@@ -105,7 +112,9 @@ const appDistChartOption = computed(() => {
     tooltip: { trigger: 'item' as const, formatter: '{b}: {c} ({d}%)', backgroundColor: t.tooltipBg, borderColor: t.tooltipBorder, borderWidth: 1, textStyle: { color: t.tooltipColor, fontSize: 13 } },
     legend: { bottom: 0, type: 'scroll' as const, textStyle: { color: t.legendColor, fontSize: 12 } },
     series: [{
-      type: 'pie' as const, radius: ['40%', '70%'], center: ['50%', '45%'],
+      type: 'pie' as const,
+      radius: ['40%', '70%'],
+      center: ['50%', '45%'],
       data: appDistribution.value.data,
       itemStyle: { borderRadius: 6, borderColor: 'transparent', borderWidth: 2 },
       label: { show: false },
@@ -126,17 +135,20 @@ const activeUsersChartOption = computed(() => {
     xAxis: { type: 'category' as const, boundaryGap: false, data: activeUsersTrend.value.categories, axisLine: { show: false }, axisTick: { show: false }, axisLabel: { color: t.axisColor, fontSize: 11 } },
     yAxis: { type: 'value' as const, axisLine: { show: false }, axisTick: { show: false }, axisLabel: { color: t.axisColor, fontSize: 11 }, splitLine: { lineStyle: { color: t.splitColor, type: 'dashed' as const } } },
     series: activeUsersTrend.value.series.map((s, i) => ({
-      name: s.name, type: 'line' as const, smooth: true, data: s.data,
+      name: s.name,
+      type: 'line' as const,
+      smooth: true,
+      data: s.data,
       lineStyle: { color: seriesColors[i % seriesColors.length], width: 2 },
       itemStyle: { color: seriesColors[i % seriesColors.length] },
-      areaStyle: { color: seriesColors[i % seriesColors.length] + '18' },
-      animationDuration: 400 + i * 80, animationEasing: 'easeOutQuad' as const,
+      areaStyle: { color: `${seriesColors[i % seriesColors.length]}18` },
+      animationDuration: 400 + i * 80,
+      animationEasing: 'easeOutQuad' as const,
     })),
   }
 })
 
-async function fetchData(): Promise<void> {
-  loading.value = true
+const { loading, execute: fetchData } = useAsync(async () => {
   const [m, t, d, a, logs] = await Promise.all([
     getDashboardMetrics(),
     getApiCallsTrend(),
@@ -149,8 +161,7 @@ async function fetchData(): Promise<void> {
   appDistribution.value = d
   activeUsersTrend.value = a
   recentLogs.value = logs
-  loading.value = false
-}
+})
 
 async function refresh(): Promise<void> {
   await fetchData()

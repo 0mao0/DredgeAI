@@ -25,6 +25,7 @@ export function useTheme() {
         colorTextBase: isDark ? '#E2E8F0' : '#1C1917',
         colorBorder: isDark ? '#1E2A3E' : '#E5DFD8',
         colorBgElevated: isDark ? '#1A2438' : '#FFFFFF',
+        colorFillAlter: isDark ? '#182234' : '#FAFAFA',
       },
     }
   })

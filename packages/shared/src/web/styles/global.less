@@ -25,12 +25,29 @@ body {
   &:hover { background: @text-tertiary; }
 }
 
-.fade-enter-active,
-.fade-leave-active {
-  transition: opacity @transition-base, transform @transition-base;
+// 页面切换：fade + 轻微位移（enter 上移 12px 回弹，leave 上移 -6px 淡出）
+.fade-enter-active {
+  transition:
+    opacity 0.35s cubic-bezier(0.22, 1, 0.36, 1),
+    transform 0.35s cubic-bezier(0.22, 1, 0.36, 1);
 }
-.fade-enter-from { opacity: 0; transform: translateY(4px); }
-.fade-leave-to { opacity: 0; }
+.fade-leave-active {
+  transition:
+    opacity 0.2s ease-in,
+    transform 0.2s ease-in;
+}
+.fade-enter-from { opacity: 0; transform: translateY(12px); }
+.fade-leave-to { opacity: 0; transform: translateY(-6px); }
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}
 
 .ant-card {
   border-radius: @radius-lg !important;
@@ -52,4 +69,52 @@ body {
 .ant-table-tbody > tr > td,
 .ant-table-tbody > tr > td.ant-table-cell {
   text-align: center !important;
+}
+
+// 侧边栏菜单：hover 平滑过渡（修复 dark 模式 hover 闪烁）
+.sider-menu {
+  .ant-menu-item,
+  .ant-menu-submenu-title {
+    transition: background 0.15s ease;
+  }
+}
+
+// 侧边栏选中项：左侧 3px 品牌色指示条，替代 antd 默认右侧指示条
+.sider-menu .ant-menu-item-selected {
+  position: relative;
+  &::before {
+    content: '';
+    position: absolute;
+    left: 0;
+    top: 6px;
+    bottom: 6px;
+    width: 3px;
+    border-radius: 0 3px 3px 0;
+    background: @brand-primary;
+    z-index: 1;
+  }
+  &::after { display: none; }
+}
+
+// Dark 模式专属：卡片极淡内发光（玻璃深度）+ 主按钮品牌色 glow
+[data-theme="dark"] {
+  .section-card,
+  .metric-card {
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.03), var(--shadow-sm);
+  }
+  .ant-btn-primary {
+    box-shadow: 0 0 12px color-mix(in srgb, @brand-primary 25%, transparent);
+  }
+}
+
+// 按钮点击：轻微回缩的触觉反馈
+.ant-btn {
+  &:active { transform: scale(0.96); }
+}
+
+// 表格行 hover：主题化底色 + 首列左侧 2px 品牌色边
+.ant-table-tbody > tr {
+  > td { transition: background 0.15s ease; }
+  &:hover > td { background: @surface-hover !important; }
+  &:hover > td:first-child { box-shadow: inset 2px 0 0 @brand-primary; }
 }

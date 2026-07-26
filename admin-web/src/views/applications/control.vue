@@ -125,10 +125,10 @@ const roleOptions = [
 const apps = ref<ApplicationItem[]>([])
 
 const catColorMap: Record<string, string> = {
-  '通用': 'blue',
-  '经营': 'green',
-  '设计': 'purple',
-  '施工': 'gold',
+  通用: 'blue',
+  经营: 'green',
+  设计: 'purple',
+  施工: 'gold',
 }
 function catColor(c: string): string {
   return catColorMap[c] || 'default'

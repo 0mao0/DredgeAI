@@ -3,6 +3,8 @@
    * 系统级主题变量 (System-Level Theme Tokens)
    * 所有模块通过 var(--color-xxx) 引用，主题切换时自动更新
    *
+   * :root 即 Light 默认值，无需重复 [data-theme="light"] 块
+   *
    * Dark 模式参考: glass-dark-ui skill
    *   — bg-0: #020617, bg-1: #0B1220
    *   — text-main: #E2E8F0, text-muted: #94A3B8
@@ -10,35 +12,6 @@
    * Light 模式参考: clean-minimal-beige-light-mode skill
    *   — warm neutrals, beige/paper surfaces
    * ============================================ */
-  --color-brand: #0EA5E9;
-  --color-brand-hover: #0284C7;
-  --color-brand-gradient: linear-gradient(135deg, #0EA5E9 0%, #06B6D4 100%);
-  --color-accent: #06B6D4;
-  --color-success: #10B981;
-  --color-warning: #F59E0B;
-  --color-danger: #EF4444;
-  --color-info: #3B82F6;
-  --color-header-bg: #FCFAF8;
-  --color-content-bg: #F6F3EF;
-  --color-card-bg: #FFFFFF;
-  --color-bg-elevated: #FFFFFF;
-  --color-surface-hover: #F0ECE6;
-  --color-text-primary: #1C1917;
-  --color-text-secondary: #78716C;
-  --color-text-tertiary: #A8A29E;
-  --color-border: #E5DFD8;
-  --color-divider: #F0ECE6;
-  --color-header-text: #1C1917;
-  --color-header-text-secondary: #78716C;
-  --glass-fill: rgba(255, 255, 255, 0.7);
-  --glass-fill-strong: rgba(255, 255, 255, 0.85);
-  --shadow-sm: 0 1px 3px rgb(0 0 0 / 0.06);
-  --shadow-md: 0 4px 12px rgb(0 0 0 / 0.08);
-  --shadow-lg: 0 12px 32px rgb(0 0 0 / 0.10);
-  --shadow-brand: 0 8px 24px rgb(14 165 233 / 0.20);
-}
-
-[data-theme="light"] {
   --color-brand: #0EA5E9;
   --color-brand-hover: #0284C7;
   --color-brand-gradient: linear-gradient(135deg, #0EA5E9 0%, #06B6D4 100%);

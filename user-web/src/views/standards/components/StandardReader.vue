@@ -16,8 +16,8 @@
     </template>
 
     <DataSkeleton v-if="loading" />
-    <a-empty v-else-if="!doc" description="请选择左侧标准查看文档" />
-    <a-result v-else-if="error" status="error" title="加载失败" :sub-title="error" />
+    <EmptyState v-else-if="!doc" title="请选择左侧标准查看文档" />
+    <EmptyState v-else-if="error" type="error" title="加载失败" :description="error" />
 
     <div v-else class="standard-reader__body">
       <!-- Markdown 模式 -->
@@ -64,6 +64,7 @@ import { ref, computed } from 'vue'
 import { FileTextOutlined, FilePdfOutlined } from '@ant-design/icons-vue'
 import SectionCard from '@shared/web/components/SectionCard.vue'
 import DataSkeleton from '@shared/web/components/DataSkeleton.vue'
+import EmptyState from '@shared/web/components/EmptyState.vue'
 import type { StandardDocument } from '@/types'
 
 const props = defineProps<{
@@ -91,7 +92,7 @@ const renderedMd = computed(() => {
 @import '@shared/web/styles/variables.less';
 
 .standard-reader {
-  flex: 1;
+  height: 100%;
   min-height: 0;
   display: flex;
   flex-direction: column;

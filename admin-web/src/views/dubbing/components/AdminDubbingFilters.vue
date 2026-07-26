@@ -28,7 +28,7 @@ import { ref } from 'vue'
 
 defineProps<{ loading: boolean }>()
 const emit = defineEmits<{
-  search: [filters: { keyword: string; status: string; deletedOnly: boolean; dateRange: [string, string] }]
+  search: [filters: { keyword: string, status: string, deletedOnly: boolean, dateRange: [string, string] }]
   reset: []
 }>()
 

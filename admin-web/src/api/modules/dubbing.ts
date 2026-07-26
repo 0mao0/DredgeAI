@@ -29,7 +29,7 @@ export function getAdminVoices(params?: Record<string, string | number>): Promis
   )
 }
 
-export function createAdminVoice(data: FormData | { name: string; gender: string }): Promise<void> {
+export function createAdminVoice(data: FormData | { name: string, gender: string }): Promise<void> {
   return request.post(urls.adminVoices, data)
 }
 

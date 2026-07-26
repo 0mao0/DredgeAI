@@ -5,7 +5,7 @@ import sampleUrl from '@shared/assets/dubbing-sample.mp3'
 
 let nextId = 100
 
-function buildTask(overrides: Partial<DubbingTask> & { id: string; text: string; status: DubbingStatus }): DubbingTask {
+function buildTask(overrides: Partial<DubbingTask> & { id: string, text: string, status: DubbingStatus }): DubbingTask {
   return {
     charCount: overrides.text.length,
     tokenCost: Math.ceil(overrides.text.length / 1.5) + 50,
@@ -59,14 +59,14 @@ export function registerDubbingMock(
     return { items: filtered, totalCount: filtered.length }
   }))
 
-  mock.onGet(new RegExp('/api/dubbing/tasks/([^/]+)$')).reply((config) => {
+  mock.onGet(/\/api\/dubbing\/tasks\/([^/]+)$/).reply((config) => {
     const match = config.url?.match(/\/api\/dubbing\/tasks\/([^/]+)$/)
     const id = match?.[1] || ''
     const task = dubbingTasks.find((t) => t.id === id)
     return task ? [200, task] : [404, { message: 'Task not found' }]
   })
 
-  mock.onDelete(new RegExp('/api/dubbing/tasks/([^/]+)$')).reply((config) => {
+  mock.onDelete(/\/api\/dubbing\/tasks\/([^/]+)$/).reply((config) => {
     const match = config.url?.match(/\/api\/dubbing\/tasks\/([^/]+)$/)
     const id = match?.[1] || ''
     const task = dubbingTasks.find((t) => t.id === id)
@@ -74,7 +74,7 @@ export function registerDubbingMock(
     return [204, undefined]
   })
 
-  mock.onGet(new RegExp('/api/dubbing/tasks/([^/]+)/download$')).reply((config) => {
+  mock.onGet(/\/api\/dubbing\/tasks\/([^/]+)\/download$/).reply((config) => {
     const match = config.url?.match(/\/api\/dubbing\/tasks\/([^/]+)/)
     const id = match?.[1] || ''
     const task = dubbingTasks.find((t) => t.id === id)

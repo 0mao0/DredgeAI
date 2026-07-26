@@ -55,6 +55,6 @@ export interface StandardAIAnalysis {
   id: string
   summary: string
   keyPoints: string[]
-  relatedStandards: { code: string; title: string }[]
+  relatedStandards: { code: string, title: string }[]
   riskWarnings: string[]
 }

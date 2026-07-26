@@ -4,7 +4,7 @@ export interface AbpErrorInfo {
   message: string | null
   details: string | null
   data: Record<string, unknown> | null
-  validationErrors: Array<{ message: string | null; members: string[] | null }> | null
+  validationErrors: Array<{ message: string | null, members: string[] | null }> | null
 }
 
 export interface AbpErrorResponse {

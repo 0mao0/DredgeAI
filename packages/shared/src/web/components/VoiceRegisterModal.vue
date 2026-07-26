@@ -11,14 +11,14 @@
     <div class="modal-header">
       <div class="modal-header__icon">
         <svg width="16" height="16" viewBox="0 0 24 24" fill="none">
-          <path d="M12 2C10.34 2 9 3.34 9 5V11C9 12.66 10.34 14 12 14C13.66 14 15 12.66 15 11V5C15 3.34 13.66 2 12 2Z" fill="currentColor" fill-opacity="0.85"/>
-          <path d="M20 11C20 15.08 16.42 18.24 12.5 18.88V22H11.5V18.88C7.58 18.24 4 15.08 4 11H5.5C5.5 14.31 8.69 17 12 17C15.31 17 18.5 14.31 18.5 11H20Z" fill="currentColor" fill-opacity="0.6"/>
+          <path d="M12 2C10.34 2 9 3.34 9 5V11C9 12.66 10.34 14 12 14C13.66 14 15 12.66 15 11V5C15 3.34 13.66 2 12 2Z" fill="currentColor" fill-opacity="0.85" />
+          <path d="M20 11C20 15.08 16.42 18.24 12.5 18.88V22H11.5V18.88C7.58 18.24 4 15.08 4 11H5.5C5.5 14.31 8.69 17 12 17C15.31 17 18.5 14.31 18.5 11H20Z" fill="currentColor" fill-opacity="0.6" />
         </svg>
       </div>
       <h2 class="modal-header__title">{{ title }}</h2>
       <button class="modal-header__close" @click="emit('update:open', false)">
         <svg width="14" height="14" viewBox="0 0 16 16" fill="none">
-          <path d="M4 4L12 12M12 4L4 12" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
+          <path d="M4 4L12 12M12 4L4 12" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" />
         </svg>
       </button>
     </div>
@@ -37,7 +37,7 @@
     </div>
 
     <transition name="tab-fade" mode="out-in">
-      <div class="content" :key="activeTab">
+      <div :key="activeTab" class="content">
         <VoiceRegisterRecordTab
           v-if="activeTab === 'record'"
           @audio-ready="(blob) => recordAudio = blob"
@@ -78,7 +78,7 @@
           >
             <LoadingOutlined v-if="submitting" spin />
             <svg v-else width="14" height="14" viewBox="0 0 24 24" fill="none">
-              <path d="M5 12H19M12 5V19" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"/>
+              <path d="M5 12H19M12 5V19" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" />
             </svg>
             <span>{{ submitting ? '上传中...' : '上传' }}</span>
           </button>
@@ -105,7 +105,7 @@ const props = withDefaults(defineProps<{
 })
 const emit = defineEmits<{
   'update:open': [value: boolean]
-  confirmed: [payload: { voice: VoiceItem; formData: FormData }]
+  'confirmed': [payload: { voice: VoiceItem, formData: FormData }]
 }>()
 
 const activeTab = ref<'record' | 'upload'>(props.initialTab)
