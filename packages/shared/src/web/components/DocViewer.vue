@@ -36,7 +36,7 @@
 
     <EmptyState v-else-if="error" type="error" :title="error" />
 
-    <div v-else class="doc-viewer__body">
+    <div v-else class="doc-viewer__body" :class="{ 'doc-viewer__body--tight': !!steps }">
       <div v-if="renderMode === 'md'" class="doc-viewer__md">
         <div class="doc-viewer__title">{{ doc.title }}</div>
         <div class="doc-viewer__content" v-html="renderedMd" />
@@ -147,6 +147,7 @@ const renderedMd = computed(() => {
   min-height: 0;
   overflow-y: auto;
   padding: @spacing-xl;
+  &--tight { padding-top: @spacing-sm; }
 }
 
 .doc-viewer__title {
@@ -187,7 +188,7 @@ const renderedMd = computed(() => {
   align-items: center;
   padding: 0 @spacing-xl;
   flex-shrink: 0;
-  height: 20px;
+  height: 16px;
   box-sizing: border-box;
   background: @content-bg;
 }
