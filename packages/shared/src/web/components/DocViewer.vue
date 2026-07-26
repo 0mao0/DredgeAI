@@ -1,5 +1,5 @@
 <template>
-  <SectionCard :title="cardTitle" class="doc-viewer">
+  <SectionCard :title="cardTitle" class="doc-viewer" :nopad="!!steps">
     <template #extra>
       <div class="doc-viewer__icons">
         <FileTextOutlined
@@ -181,22 +181,22 @@ const renderedMd = computed(() => {
   &--on { color: @brand-primary; }
 }
 
-/* 外部 API 进度条（极窄，一行三阶段） */
+/* 外部 API 进度条（附在 PDF 上方，极窄融合） */
 .doc-progress {
   display: flex;
   align-items: center;
-  padding: @spacing-xs @spacing-xl;
-  border-bottom: 1px solid @divider-color;
+  padding: 0 @spacing-xl;
   flex-shrink: 0;
-  height: 32px;
+  height: 20px;
   box-sizing: border-box;
+  background: @content-bg;
 }
 .doc-progress__step {
   display: flex;
   align-items: center;
-  gap: 4px;
+  gap: 3px;
   flex: 1;
-  font-size: @font-size-xs;
+  font-size: 11px;
   color: @text-tertiary;
   position: relative;
   white-space: nowrap;
@@ -205,8 +205,8 @@ const renderedMd = computed(() => {
   &--error { color: @danger; }
 }
 .doc-progress__dot {
-  width: 6px;
-  height: 6px;
+  width: 5px;
+  height: 5px;
   border-radius: 50%;
   background: currentColor;
   flex-shrink: 0;
