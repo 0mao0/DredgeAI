@@ -123,6 +123,7 @@ interface MenuItemNode {
   label?: string | VNode
   icon?: () => VNode
   children?: MenuItemNode[]
+  type?: 'divider'
 }
 
 const menuTree = manifestToMenu(adminAppManifests, adminMenuGroups)
@@ -159,6 +160,13 @@ function appToMenuItem(app: AppMenuItem): MenuItemNode {
 
 const menuItems = computed<MenuItemNode[]>(() => {
   const items = toMenuItems(menuTree)
+
+  // 在基础配置组后插入分隔线
+  const configIdx = items.findIndex((i) => i.key === 'base-config')
+  if (configIdx !== -1) {
+    items.splice(configIdx + 1, 0, { key: 'divider-1', type: 'divider' } as MenuItemNode)
+  }
+
   const dynamic = appMenuItems.value
     .filter((a) => !manifestLeafKeys.has(a.route))
     .map(appToMenuItem)
