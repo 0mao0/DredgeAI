@@ -9,6 +9,8 @@ import { registerAnalyticsMock } from './routes/analytics'
 import { registerProfileMock } from './routes/profile'
 import { registerApiKeyMock } from './routes/apikey'
 import { registerDubbingMock } from './routes/dubbing'
+import { registerOrgUsersMock } from './routes/org-users'
+import { registerRolesMock } from './routes/roles'
 
 /** 注册所有 mock 路由（按模块开关控制） */
 export function registerMock(): void {
@@ -31,6 +33,8 @@ export function registerMock(): void {
     { key: 'profile', register: registerProfileMock },
     { key: 'apikey', register: registerApiKeyMock },
     { key: 'dubbing', register: registerDubbingMock },
+    { key: 'orgUsers', register: registerOrgUsersMock },
+    { key: 'roles', register: registerRolesMock },
   ]
 
   for (const mod of modules) {

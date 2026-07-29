@@ -12,6 +12,8 @@ export const MOCK_MODULES: Record<string, boolean> = {
   profile: true,
   apikey: true,
   dubbing: true,
+  orgUsers: true,
+  roles: true,
 }
 
 export const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || '/api/admin/'

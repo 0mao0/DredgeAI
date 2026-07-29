@@ -23,3 +23,25 @@ export interface UserUserInfo {
   authorizedScopes: string[]
   preferences: { theme: 'light' | 'dark', language: 'zh-CN' | 'en-US' }
 }
+
+/** 组织用户（4A 系统同步） */
+export interface OrgUser {
+  id: string
+  name: string
+  phone: string
+  departments: string[]
+  status: 'active' | 'disabled'
+  roleIds: string[]
+  createdAt: string
+}
+
+/** 角色 */
+export interface Role {
+  id: string
+  name: string
+  description: string
+  menuKeys: string[]
+  appIds: string[]
+  userCount: number
+  createdAt: string
+}

@@ -16,30 +16,39 @@
           <span :class="{ 'index--sub': record.level === 1 }">{{ record.index }}</span>
         </template>
         <template v-else-if="column.key === 'name'">
-          <span class="tree-name" :class="{ 'tree-name--sub': record.level === 1 }">
+          <div class="cell-left">
+            <span class="tree-name" :class="{ 'tree-name--sub': record.level === 1 }">
             <span v-if="record.level === 1" class="tree-connector" />
             <component :is="iconOptionsMap[record.icon] || iconOptionsMap.AppstoreOutlined" class="row-icon" />
             <a-tag :color="catColor(record.category)">{{ record.category }}</a-tag>
             <span class="name-text">{{ record.name }}</span>
             <span v-if="record.level === 0 && hasSub(record)" class="sub-hint">（含 {{ subCount(record) }} 个子应用）</span>
           </span>
+          </div>
         </template>
         <template v-else-if="column.key === 'status'">
-          <a-switch
-            :checked="record.published"
-            checked-children="已发布"
-            un-checked-children="已下架"
-            @change="(v: boolean) => onToggle(record, v)"
-          />
+          <div class="cell-center">
+            <a-popconfirm
+              :title="record.published ? '确认下架该应用？' : '确认发布该应用？'"
+              placement="left"
+              @confirm="onToggle(record, !record.published)"
+            >
+              <a-switch
+                :checked="record.published"
+                checked-children="已发布"
+                un-checked-children="已下架"
+                class="status-switch"
+              />
+            </a-popconfirm>
+          </div>
         </template>
         <template v-else-if="column.key === 'scope'">
-          <a-tag
-            class="scope-tag"
-            :color="record.scope === '部分' ? 'orange' : 'default'"
-            @click="openScope(record)"
-          >
-            {{ record.scope }}<EditOutlined class="scope-edit" />
-          </a-tag>
+          <div class="cell-left">
+            <span class="scope-tags">
+              <a-tag v-for="n in roleTags(record)" :key="n" color="blue">{{ n }}</a-tag>
+              <span v-if="roleTags(record).length === 0" class="no-scope">-</span>
+            </span>
+          </div>
         </template>
         <template v-else-if="column.key === 'setting'">
           <a-button type="link" size="small" @click="openSetting(record)">设置</a-button>
@@ -48,7 +57,14 @@
     </a-table>
 
     <a-modal v-model:open="settingVisible" :title="`${settingTarget?.name} · 设置`" @ok="saveSetting">
-      <a-form layout="vertical">
+      <a-form layout="horizontal" :label-col="{ span: 6 }" :wrapper-col="{ span: 18 }">
+        <a-form-item label="应用类型">
+          <a-select v-model:value="settingCategory" style="width:200px">
+            <a-select-option v-for="c in categories" :key="c.name" :value="c.name">
+              <a-tag :color="c.color">{{ c.name }}</a-tag>
+            </a-select-option>
+          </a-select>
+        </a-form-item>
         <a-form-item label="应用图标">
           <div class="icon-grid">
             <button
@@ -64,29 +80,6 @@
             </button>
           </div>
         </a-form-item>
-        <a-form-item label="应用类型">
-          <a-select v-model:value="settingCategory" style="width:200px">
-            <a-select-option v-for="c in categories" :key="c.name" :value="c.name">
-              <a-tag :color="c.color">{{ c.name }}</a-tag>
-            </a-select-option>
-          </a-select>
-        </a-form-item>
-      </a-form>
-    </a-modal>
-
-    <a-modal v-model:open="scopeVisible" :title="`${scopeTarget?.name} · 授权范围`" @ok="saveScope">
-      <a-form layout="vertical">
-        <a-form-item label="授权方式">
-          <a-radio-group v-model:value="scopeMode" size="small" button-style="solid">
-            <a-radio value="所有">所有用户</a-radio>
-            <a-radio value="部分">按角色指定</a-radio>
-          </a-radio-group>
-        </a-form-item>
-        <a-form-item v-if="scopeMode === '部分'" label="可见角色">
-          <a-checkbox-group v-model:value="scopeRoles" class="role-group">
-            <a-checkbox v-for="r in roleOptions" :key="r.value" :value="r.value">{{ r.label }}</a-checkbox>
-          </a-checkbox-group>
-        </a-form-item>
       </a-form>
     </a-modal>
   </div>
@@ -98,7 +91,6 @@ import { message } from 'ant-design-vue'
 import PageHeader from '@shared/web/components/PageHeader.vue'
 import type { ApplicationItem } from '@/types'
 import * as Icons from '@ant-design/icons-vue'
-import { EditOutlined } from '@ant-design/icons-vue'
 import {
   getApplications,
   getCategoryConfig,
@@ -108,10 +100,10 @@ import {
   setSubAppCategory,
   setApplicationIcon,
   setSubAppIcon,
-  setApplicationScope,
-  setSubAppScope,
 } from '@/api/modules/applications'
+import { getRoles } from '@/api/modules/roles'
 import type { CategoryConfig } from '@/api/modules/applications'
+import type { Role } from '@/types'
 
 interface TreeRow {
   key: string
@@ -121,19 +113,23 @@ interface TreeRow {
   level: 0 | 1
   published: boolean
   icon: string
-  scope: '所有' | '部分'
   parentId?: string
   appId: string
   subId?: string
 }
 
-const roleOptions = [
-  { value: 'super_admin', label: '超级管理员' },
-  { value: 'admin', label: '管理员' },
-  { value: 'operator', label: '运营人员' },
-  { value: 'engineer', label: '工程师' },
-  { value: 'guest', label: '访客' },
-]
+const roles = ref<Role[]>([])
+
+function roleTags(row: TreeRow): string[] {
+  const id = row.subId || row.appId
+  const names: string[] = []
+  for (const r of roles.value) {
+    if (r.appIds.includes('*') || r.appIds.includes(id)) {
+      names.push(r.name)
+    }
+  }
+  return names
+}
 
 const apps = ref<ApplicationItem[]>([])
 const categories = ref<CategoryConfig[]>([])
@@ -175,7 +171,6 @@ const treeRows = computed<TreeRow[]>(() => {
       level: 0,
       published: app.status === '运营中',
       icon: app.icon || 'AppstoreOutlined',
-      scope: app.scope || '所有',
       appId: app.id,
     })
     subs.forEach((sub, si) => {
@@ -187,7 +182,6 @@ const treeRows = computed<TreeRow[]>(() => {
         level: 1,
         published: sub.status === '已发布',
         icon: sub.icon,
-        scope: sub.scope || '所有',
         parentId: app.id,
         appId: app.id,
         subId: sub.id,
@@ -210,11 +204,11 @@ function onExpand(keys: string[]): void {
 }
 
 const columns = [
-  { title: '序号', key: 'index', width: 60 },
-  { title: '应用', key: 'name' },
-  { title: '状态', key: 'status', width: 160 },
-  { title: '授权范围', key: 'scope', width: 130 },
-  { title: '操作', key: 'setting', width: 120 },
+  { title: '序号', key: 'index', width: 60, align: 'center' },
+  { title: '应用', key: 'name', width: 120, align: 'left' },
+  { title: '状态', key: 'status', width: 70, align: 'center' },
+  { title: '授权角色', key: 'scope', width: 160, align: 'left' },
+  { title: '操作', key: 'setting', width: 20, align: 'center' },
 ]
 
 async function onToggle(row: TreeRow, val: boolean): Promise<void> {
@@ -257,36 +251,11 @@ async function saveSetting(): Promise<void> {
   message.success('已保存')
 }
 
-// ---------- 授权范围 ----------
-const scopeVisible = ref(false)
-const scopeTarget = ref<TreeRow | null>(null)
-const scopeMode = ref<'所有' | '部分'>('所有')
-const scopeRoles = ref<string[]>([])
-function openScope(row: TreeRow): void {
-  scopeTarget.value = row
-  scopeMode.value = row.scope
-  scopeRoles.value = []
-  scopeVisible.value = true
-}
-async function saveScope(): Promise<void> {
-  const row = scopeTarget.value
-  if (!row) return
-  const scope = scopeMode.value
-  if (row.level === 1 && row.subId) {
-    await setSubAppScope(row.subId, scope)
-  } else {
-    await setApplicationScope(row.appId, scope)
-  }
-  apps.value = await getApplications()
-  expandedRowKeys.value = apps.value.filter((a) => a.subApps?.length).map((a) => `app-${a.id}`)
-  scopeVisible.value = false
-  message.success(scope === '部分' ? '已设为按角色授权' : '已设为对所有用户开放')
-}
-
 onMounted(async () => {
-  const [appData, catData] = await Promise.all([getApplications(), getCategoryConfig()])
+  const [appData, catData, roleData] = await Promise.all([getApplications(), getCategoryConfig(), getRoles()])
   apps.value = appData
   categories.value = catData
+  roles.value = roleData
   expandedRowKeys.value = apps.value.filter((a) => a.subApps?.length).map((a) => `app-${a.id}`)
 })
 </script>
@@ -321,10 +290,6 @@ onMounted(async () => {
 
 .setting-tip { color: @text-secondary; }
 
-.scope-tag { cursor: pointer; user-select: none; display: inline-flex; align-items: center; gap: 2px; }
-.scope-edit { font-size: 10px; opacity: 0.6; }
-.role-group { display: flex; flex-direction: column; gap: 4px; }
-
 .publish-tree :deep(.ant-table-thead > tr > th) {
   text-align: center;
 }
@@ -358,5 +323,32 @@ onMounted(async () => {
     background: var(--color-brand);
     box-shadow: @shadow-sm;
   }
+}
+
+.scope-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 2px;
+  justify-content: center;
+}
+.no-scope {
+  color: @text-tertiary;
+}
+.cell-center {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.cell-left {
+  display: flex;
+  align-items: center;
+  justify-content: flex-start;
+}
+
+.status-switch.ant-switch-checked {
+  background-color: @success;
+}
+.status-switch:not(.ant-switch-checked) {
+  background-color: @border-color;
 }
 </style>

@@ -59,6 +59,13 @@ export const urls = {
   analyticsErrorRate: '/analytics/error-rate',
   applications: '/applications',
   permissions: '/permissions',
+  orgUsers: '/org-users',
+  orgUserStatus: '/org-users/:id/status',
+  orgUserRoles: '/org-users/:id/roles',
+  roles: '/roles',
+  roleDetail: '/roles/:id',
+  roleUsers: '/roles/:id/users',
+  rolePermissions: '/roles/:id/permissions',
   datasources: '/datasources',
   adminProfile: '/profile',
 } as const

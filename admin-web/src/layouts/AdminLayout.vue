@@ -53,7 +53,7 @@
             <UserOutlined />
             <span>个人中心</span>
             <span v-if="!collapsed" class="profile-spacer" />
-            <ThemeToggle v-if="!collapsed" />
+            <ThemeToggle v-if="!collapsed" @click.stop />
           </div>
         </a-menu-item>
       </a-menu>
