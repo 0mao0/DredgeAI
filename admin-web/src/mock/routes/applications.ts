@@ -1,5 +1,6 @@
 import type MockAdapter from 'axios-mock-adapter'
 import { mockApplications } from '@shared/mock/data/applications'
+import type { ApplicationItem, SubApp } from '@shared/types'
 
 interface CollectionCategory {
   key: string
@@ -26,8 +27,17 @@ const collectionCategories: Record<string, CollectionCategory[]> = {
   ],
 }
 
+const defaultCategories = [
+  { name: '通用', color: 'blue' },
+  { name: '经营', color: 'green' },
+  { name: '设计', color: 'purple' },
+  { name: '施工', color: 'gold' },
+]
+
 export function registerApplicationMock(mock: MockAdapter, wrap: (handler: () => unknown) => () => Promise<[number, unknown]>): void {
   mock.onGet('/api/admin/applications').reply(wrap(() => mockApplications))
+
+  mock.onGet('/api/admin/applications/categories').reply(wrap(() => defaultCategories))
 
   mock.onGet('/api/admin/applications/sub').reply((config) => {
     const appId = config.params?.appId as string | undefined
@@ -48,6 +58,22 @@ export function registerApplicationMock(mock: MockAdapter, wrap: (handler: () =>
     const body = parseBody(config.data) as { appId: string, status: '运营中' | '已下架' }
     const app = mockApplications.find((a) => a.id === body.appId)
     if (app) app.status = body.status
+    return [200, null]
+  })
+
+  mock.onPost('/api/admin/applications/category').reply((config) => {
+    const body = parseBody(config.data) as { appId: string, category: string }
+    const app = mockApplications.find((a) => a.id === body.appId)
+    if (app) app.category = body.category as ApplicationItem['category']
+    return [200, null]
+  })
+
+  mock.onPost('/api/admin/applications/sub/category').reply((config) => {
+    const body = parseBody(config.data) as { subId: string, category: string }
+    for (const app of mockApplications) {
+      const sub = app.subApps?.find((s) => s.id === body.subId)
+      if (sub) sub.category = body.category as SubApp['category']
+    }
     return [200, null]
   })
 

@@ -1,14 +1,7 @@
 <template>
-  <div class="page-container">
-    <PageHeader title="数据分析" description="跨应用数据分析" />
-    <SectionCard title="分析概览">
-      <EmptyState />
-    </SectionCard>
-  </div>
+  <DevelopingHint title="数据分析" description="跨应用数据分析" />
 </template>
 
 <script setup lang="ts">
-import PageHeader from '@shared/web/components/PageHeader.vue'
-import SectionCard from '@shared/web/components/SectionCard.vue'
-import EmptyState from '@shared/web/components/EmptyState.vue'
+import DevelopingHint from '@shared/web/components/DevelopingHint.vue'
 </script>

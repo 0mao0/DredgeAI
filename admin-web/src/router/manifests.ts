@@ -22,7 +22,7 @@ export const adminAppManifests: AppManifest[] = [
     component: () => import('@/views/dashboard/index.vue'),
     defaultVisible: true,
   },
-  // ─── API 管理 ─────────────────────────────────────────
+  // ─── API 管理（底栏） ──────────────────────────────────
   {
     id: 'api',
     route: '/api',
@@ -31,6 +31,7 @@ export const adminAppManifests: AppManifest[] = [
     icon: 'ApiOutlined',
     component: () => import('@/views/api/index.vue'),
     defaultVisible: true,
+    menuPlacement: 'bottom',
   },
   // ─── 应用管理（分组） ──────────────────────────────────
   {
@@ -47,6 +48,7 @@ export const adminAppManifests: AppManifest[] = [
         route: '/applications/analysis',
         name: 'AppAnalysis',
         title: '数据分析',
+        icon: 'BarChartOutlined',
         component: () => import('@/views/applications/analysis.vue'),
         parentKeys: ['apps'],
       },
@@ -55,6 +57,7 @@ export const adminAppManifests: AppManifest[] = [
         route: '/applications/control',
         name: 'AppControl',
         title: '发布管理',
+        icon: 'SendOutlined',
         component: () => import('@/views/applications/control.vue'),
         parentKeys: ['apps'],
       },
@@ -70,6 +73,7 @@ export const adminAppManifests: AppManifest[] = [
     ],
   },
   // ─── AI 配音（独立页） ─────────────────────────────────
+  // 菜单由动态应用列表自动渲染（带分类 tag），route 保持独立注册
   {
     id: 'dubbing',
     route: '/applications/dubbing',
@@ -79,6 +83,7 @@ export const adminAppManifests: AppManifest[] = [
     component: () => import('@/views/dubbing/index.vue'),
     defaultVisible: true,
     parentKeys: ['apps'],
+    menuPlacement: 'hidden',
   },
   // ─── 数据管理（分组） ──────────────────────────────────
   {
@@ -95,6 +100,7 @@ export const adminAppManifests: AppManifest[] = [
         route: '/data/statistics',
         name: 'DataStatistics',
         title: '数据统计',
+        icon: 'FundOutlined',
         component: () => import('@/views/data/statistics.vue'),
         parentKeys: ['data'],
       },
@@ -104,6 +110,7 @@ export const adminAppManifests: AppManifest[] = [
         route: '/data/dynamic',
         name: 'DataDynamic',
         title: '动态数据',
+        icon: 'DotChartOutlined',
         parentKeys: ['data', 'data-dynamic'],
         redirect: '/data/dynamic/monitoring',
         children: [
@@ -112,6 +119,7 @@ export const adminAppManifests: AppManifest[] = [
             route: '/data/dynamic/monitoring',
             name: 'Monitoring',
             title: '监控',
+            icon: 'MonitorOutlined',
             component: () => import('@/views/data/dynamic/monitoring.vue'),
             parentKeys: ['data', 'data-dynamic'],
           },
@@ -120,6 +128,7 @@ export const adminAppManifests: AppManifest[] = [
             route: '/data/dynamic/tide-level',
             name: 'TideLevel',
             title: '潮位',
+            icon: 'FieldNumberOutlined',
             component: () => import('@/views/data/dynamic/tide-level.vue'),
             parentKeys: ['data', 'data-dynamic'],
           },
@@ -131,6 +140,7 @@ export const adminAppManifests: AppManifest[] = [
         route: '/data/static',
         name: 'DataStatic',
         title: '静态数据',
+        icon: 'FolderOutlined',
         parentKeys: ['data', 'data-static'],
         redirect: '/data/static/enterprise',
         children: [
@@ -139,6 +149,7 @@ export const adminAppManifests: AppManifest[] = [
             route: '/data/static/enterprise',
             name: 'Enterprise',
             title: '企业库',
+            icon: 'BankOutlined',
             component: () => import('@/views/data/static/enterprise.vue'),
             parentKeys: ['data', 'data-static'],
           },
@@ -147,6 +158,7 @@ export const adminAppManifests: AppManifest[] = [
             route: '/data/static/standards',
             name: 'Standards',
             title: '标准库',
+            icon: 'AuditOutlined',
             component: () => import('@/views/data/static/standards.vue'),
             parentKeys: ['data', 'data-static'],
           },
@@ -155,6 +167,7 @@ export const adminAppManifests: AppManifest[] = [
             route: '/data/static/reports',
             name: 'Reports',
             title: '报告库',
+            icon: 'SolutionOutlined',
             component: () => import('@/views/data/static/reports.vue'),
             parentKeys: ['data', 'data-static'],
           },
@@ -163,6 +176,7 @@ export const adminAppManifests: AppManifest[] = [
             route: '/data/static/experience',
             name: 'Experience',
             title: '经验库',
+            icon: 'ReadOutlined',
             component: () => import('@/views/data/static/experience.vue'),
             parentKeys: ['data', 'data-static'],
           },

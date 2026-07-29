@@ -5,14 +5,20 @@ import type { AppManifest } from '../../core/types/application'
 /**
  * 将 AppManifest 数组转换为 vue-router 路由记录。
  * 支持：
- * - 嵌套 children（分组路由）
+ * - 嵌套 children（分组路由）：子路由 path 自动计算为相对路径
  * - redirect（重定向）
  * - meta 透传（title、icon、parentKeys 等）
  */
-export function manifestToRoutes(manifests: AppManifest[]): RouteRecordRaw[] {
+export function manifestToRoutes(manifests: AppManifest[], parentPath = ''): RouteRecordRaw[] {
   return manifests.map((m) => {
+    const fullPath = m.route.replace(/^\//, '')
+    // 子路由 path 相对于父路由，计算差值去掉父前缀
+    const path = parentPath
+      ? fullPath.slice(parentPath.length).replace(/^\//, '') || ''
+      : fullPath
+
     const route: Record<string, unknown> = {
-      path: m.route.replace(/^\//, ''),
+      path,
       name: m.name,
       meta: {
         title: m.title,
@@ -25,7 +31,7 @@ export function manifestToRoutes(manifests: AppManifest[]): RouteRecordRaw[] {
 
     if (m.redirect) route.redirect = m.redirect
     if (m.component) route.component = m.component as () => Promise<Component>
-    if (m.children && m.children.length > 0) route.children = manifestToRoutes(m.children)
+    if (m.children && m.children.length > 0) route.children = manifestToRoutes(m.children, fullPath)
 
     return route as unknown as RouteRecordRaw
   })

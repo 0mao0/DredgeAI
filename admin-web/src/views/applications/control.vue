@@ -12,7 +12,10 @@
       class="publish-tree"
     >
       <template #bodyCell="{ column, record }">
-        <template v-if="column.key === 'name'">
+        <template v-if="column.key === 'index'">
+          <span :class="{ 'index--sub': record.level === 1 }">{{ record.index }}</span>
+        </template>
+        <template v-else-if="column.key === 'name'">
           <span class="tree-name" :class="{ 'tree-name--sub': record.level === 1 }">
             <span v-if="record.level === 1" class="tree-connector" />
             <component :is="iconOptionsMap[record.icon] || iconOptionsMap.AppstoreOutlined" class="row-icon" />
@@ -26,7 +29,6 @@
             :checked="record.published"
             checked-children="已发布"
             un-checked-children="已下架"
-            size="small"
             @change="(v: boolean) => onToggle(record, v)"
           />
         </template>
@@ -62,7 +64,13 @@
             </button>
           </div>
         </a-form-item>
-        <p class="setting-tip">更多个性化设置将在后续版本开放。</p>
+        <a-form-item label="应用类型">
+          <a-select v-model:value="settingCategory" style="width:200px">
+            <a-select-option v-for="c in categories" :key="c.name" :value="c.name">
+              <a-tag :color="c.color">{{ c.name }}</a-tag>
+            </a-select-option>
+          </a-select>
+        </a-form-item>
       </a-form>
     </a-modal>
 
@@ -93,16 +101,21 @@ import * as Icons from '@ant-design/icons-vue'
 import { EditOutlined } from '@ant-design/icons-vue'
 import {
   getApplications,
+  getCategoryConfig,
   setSubAppStatus,
   setApplicationStatus,
+  setApplicationCategory,
+  setSubAppCategory,
   setApplicationIcon,
   setSubAppIcon,
   setApplicationScope,
   setSubAppScope,
 } from '@/api/modules/applications'
+import type { CategoryConfig } from '@/api/modules/applications'
 
 interface TreeRow {
   key: string
+  index: string
   name: string
   category: string
   level: 0 | 1
@@ -123,15 +136,14 @@ const roleOptions = [
 ]
 
 const apps = ref<ApplicationItem[]>([])
-
-const catColorMap: Record<string, string> = {
-  通用: 'blue',
-  经营: 'green',
-  设计: 'purple',
-  施工: 'gold',
-}
+const categories = ref<CategoryConfig[]>([])
+const catColorMap = computed(() => {
+  const m: Record<string, string> = {}
+  for (const c of categories.value) m[c.name] = c.color
+  return m
+})
 function catColor(c: string): string {
-  return catColorMap[c] || 'default'
+  return catColorMap.value[c] || 'default'
 }
 
 const iconOptions = [
@@ -151,10 +163,13 @@ const iconOptionsMap: Record<string, unknown> = Object.fromEntries(iconOptions.m
 
 const treeRows = computed<TreeRow[]>(() => {
   const rows: TreeRow[] = []
+  let appIdx = 0
   for (const app of apps.value) {
+    appIdx++
     const subs = app.subApps || []
     rows.push({
       key: `app-${app.id}`,
+      index: String(appIdx),
       name: app.name,
       category: app.category,
       level: 0,
@@ -163,9 +178,10 @@ const treeRows = computed<TreeRow[]>(() => {
       scope: app.scope || '所有',
       appId: app.id,
     })
-    for (const sub of subs) {
+    subs.forEach((sub, si) => {
       rows.push({
         key: `sub-${sub.id}`,
+        index: `${appIdx}.${si + 1}`,
         name: sub.name,
         category: sub.category,
         level: 1,
@@ -176,7 +192,7 @@ const treeRows = computed<TreeRow[]>(() => {
         appId: app.id,
         subId: sub.id,
       })
-    }
+    })
   }
   return rows
 })
@@ -194,10 +210,11 @@ function onExpand(keys: string[]): void {
 }
 
 const columns = [
+  { title: '序号', key: 'index', width: 60 },
   { title: '应用', key: 'name' },
   { title: '状态', key: 'status', width: 160 },
   { title: '授权范围', key: 'scope', width: 130 },
-  { title: '设置', key: 'setting', width: 120 },
+  { title: '操作', key: 'setting', width: 120 },
 ]
 
 async function onToggle(row: TreeRow, val: boolean): Promise<void> {
@@ -216,24 +233,28 @@ async function onToggle(row: TreeRow, val: boolean): Promise<void> {
 const settingVisible = ref(false)
 const settingTarget = ref<TreeRow | null>(null)
 const settingIcon = ref<string>('AppstoreOutlined')
+const settingCategory = ref<string>('')
 function openSetting(row: TreeRow): void {
   settingTarget.value = row
   settingIcon.value = row.icon || 'AppstoreOutlined'
+  settingCategory.value = row.category
   settingVisible.value = true
 }
 
 async function saveSetting(): Promise<void> {
   const row = settingTarget.value
   if (!row) return
-  if (row.level === 1 && row.subId) {
-    await setSubAppIcon(row.subId, settingIcon.value)
-  } else {
-    await setApplicationIcon(row.appId, settingIcon.value)
-  }
+  const subId = row.level === 1 ? row.subId : undefined
+  await Promise.all([
+    subId ? setSubAppIcon(subId, settingIcon.value) : setApplicationIcon(row.appId, settingIcon.value),
+    settingCategory.value !== row.category
+      ? (subId ? setSubAppCategory(subId, settingCategory.value) : setApplicationCategory(row.appId, settingCategory.value))
+      : Promise.resolve(),
+  ])
   apps.value = await getApplications()
   expandedRowKeys.value = apps.value.filter((a) => a.subApps?.length).map((a) => `app-${a.id}`)
   settingVisible.value = false
-  message.success('图标已更新')
+  message.success('已保存')
 }
 
 // ---------- 授权范围 ----------
@@ -263,7 +284,9 @@ async function saveScope(): Promise<void> {
 }
 
 onMounted(async () => {
-  apps.value = await getApplications()
+  const [appData, catData] = await Promise.all([getApplications(), getCategoryConfig()])
+  apps.value = appData
+  categories.value = catData
   expandedRowKeys.value = apps.value.filter((a) => a.subApps?.length).map((a) => `app-${a.id}`)
 })
 </script>
@@ -273,6 +296,7 @@ onMounted(async () => {
 
 .tree-name { display: inline-flex; align-items: center; gap: @spacing-sm; }
 .tree-name--sub { color: @text-secondary; }
+.index--sub { color: @text-tertiary; }
 .row-icon { font-size: 14px; color: @text-secondary; }
 .name-text { font-weight: 500; }
 .sub-hint { font-size: @font-size-xs; color: @text-tertiary; }
@@ -303,6 +327,10 @@ onMounted(async () => {
 
 .publish-tree :deep(.ant-table-thead > tr > th) {
   text-align: center;
+}
+
+.publish-tree :deep(.ant-table-tbody > tr > td:nth-child(3)) {
+  text-align: left !important;
 }
 
 .icon-grid {

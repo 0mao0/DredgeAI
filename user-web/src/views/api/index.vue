@@ -1,88 +1,163 @@
 <template>
   <div class="page-container">
-    <PageHeader title="API 管理" description="管理 API Key、查看模型调用统计">
-      <template #extra>
-        <a-button type="primary" @click="showCreateModal = true">
-          <PlusOutlined />
-          创建 Key
-        </a-button>
-      </template>
-    </PageHeader>
+    <PageHeader title="API 管理" description="管理 API Key、查看模型调用统计" />
 
-    <SectionCard nopad class="mb-24">
-      <a-table
-        size="small"
-        :data-source="apiKeys"
-        :columns="columns"
-        :pagination="{ pageSize: 10 }"
-        row-key="id"
-      >
-        <template #bodyCell="{ column, record }">
-          <template v-if="column.key === 'key'">
-            <code class="key-text">{{ record.key }}</code>
-          </template>
-          <template v-else-if="column.key === 'doc'">
-            <a-button type="link" size="small" @click="openDoc(record.docUrl)">
-              <FileTextOutlined /> 文档
-            </a-button>
-          </template>
-          <template v-else-if="column.key === 'action'">
-            <a-button type="link" size="small" @click="handleEdit(record)">编辑</a-button>
-            <a-popconfirm title="确认删除？" @confirm="handleDelete(record.id)">
-              <a-button type="link" size="small" danger>删除</a-button>
-            </a-popconfirm>
-          </template>
+    <a-tabs v-model:active-key="activeTab" class="api-tabs">
+      <a-tab-pane key="keys" tab="API 管理">
+      <SectionCard nopad class="mb-24">
+        <template #extra>
+          <a-button type="primary" size="small" @click="showCreateModal = true">
+            <PlusOutlined />
+            创建 Key
+          </a-button>
         </template>
-      </a-table>
-    </SectionCard>
+        <a-table
+          size="small"
+          :data-source="apiKeys"
+          :columns="columns"
+          :pagination="{ pageSize: 10 }"
+          row-key="id"
+        >
+          <template #bodyCell="{ column, record }">
+            <template v-if="column.key === 'key'">
+              <code class="key-text">{{ record.key }}</code>
+            </template>
+            <template v-else-if="column.key === 'doc'">
+              <a-button type="link" size="small" @click="openDoc(record.docUrl)">
+                <FileTextOutlined /> 文档
+              </a-button>
+            </template>
+            <template v-else-if="column.key === 'action'">
+              <a-button type="link" size="small" @click="handleEdit(record)">编辑</a-button>
+              <a-popconfirm title="确认删除？" @confirm="handleDelete(record.id)">
+                <a-button type="link" size="small" danger>删除</a-button>
+              </a-popconfirm>
+            </template>
+          </template>
+        </a-table>
+      </SectionCard>
+      </a-tab-pane>
 
-    <a-row :gutter="16" class="mb-24">
-      <a-col :span="12">
-        <MetricCard
-          title="总调用次数"
-          :value="formatNumber(totalCalls)"
-          suffix="次"
-          icon="ThunderboltOutlined"
-          :color="brandColor"
-        />
-      </a-col>
-      <a-col :span="12">
-        <MetricCard
-          title="总 Token 消耗量"
-          :value="formatNumber(totalTokens)"
-          suffix="tokens"
-          icon="DatabaseOutlined"
-          :color="accentColor"
-        />
-      </a-col>
-    </a-row>
-
-    <SectionCard title="调用趋势">
-      <div class="chart-header">
-        <a-radio-group v-model:value="chartMode" size="small">
-          <a-radio-button value="model">按模型</a-radio-button>
-          <a-radio-button value="key">按 API Key</a-radio-button>
-          <a-radio-button value="total">调用次数</a-radio-button>
-        </a-radio-group>
-        <div class="time-range-wrap">
-          <a-radio-group v-model:value="timeRange" size="small">
-            <a-radio-button value="7d">近7日</a-radio-button>
-            <a-radio-button value="30d">近30日</a-radio-button>
-            <a-radio-button value="month">本月</a-radio-button>
-            <a-radio-button value="prevMonth">上月</a-radio-button>
-            <a-radio-button value="custom">自定义</a-radio-button>
-          </a-radio-group>
-          <a-range-picker
-            v-if="timeRange === 'custom'"
-            v-model:value="customDateRange"
+      <a-tab-pane key="calls" tab="调用记录">
+        <SectionCard nopad>
+          <div class="user-filter-bar">
+            <a-input-search
+              v-model:value="callUserKeyword"
+              placeholder="搜索用户"
+              allow-clear
+              style="width:180px"
+            />
+            <a-select
+              v-model:value="callModelFilter"
+              mode="multiple"
+              allow-clear
+              placeholder="模型"
+              :max-tag-count="0"
+              :max-tag-placeholder="callModelFilter.length ? `已选 ${callModelFilter.length}` : '全部'"
+              style="width:140px"
+            >
+              <a-select-option v-for="m in allModelNames" :key="m" :value="m">{{ m }}</a-select-option>
+            </a-select>
+            <a-select v-model:value="callStatusFilter" allow-clear placeholder="状态" style="width:100px">
+              <a-select-option value="成功">成功</a-select-option>
+              <a-select-option value="失败">失败</a-select-option>
+            </a-select>
+          </div>
+          <a-table
             size="small"
-            class="custom-date-picker"
-            :allow-empty="false"
-          />
+            :data-source="callRecords"
+            :columns="callColumns"
+            :pagination="{ pageSize: 15, showTotal: (t: number) => `共 ${t} 条` }"
+            row-key="id"
+          >
+            <template #bodyCell="{ column, record }">
+              <template v-if="column.key === 'userName'">
+                <a-tooltip :title="`${record.department} · ${record.userName} · ${record.userPhone}`">
+                  <span>{{ record.userName }}</span>
+                </a-tooltip>
+              </template>
+              <template v-else-if="column.key === 'latency'">
+                {{ record.latency }}ms
+              </template>
+              <template v-else-if="column.key === 'inputTokens'">
+                {{ (record.inputTokens / 10000).toFixed(1) }} 万
+              </template>
+              <template v-else-if="column.key === 'outputTokens'">
+                {{ (record.outputTokens / 10000).toFixed(1) }} 万
+              </template>
+              <template v-else-if="column.key === 'status'">
+                <a-tag :color="record.status === '成功' ? 'green' : 'red'">{{ record.status }}</a-tag>
+              </template>
+            </template>
+          </a-table>
+        </SectionCard>
+      </a-tab-pane>
+
+      <a-tab-pane key="usage" tab="用量分析">
+        <div class="stats-tab">
+          <a-row :gutter="16" class="mb-24">
+            <a-col :span="12">
+              <MetricCard
+                title="总调用次数"
+                :value="formatNumber(usageTotalCalls)"
+                suffix="次"
+                icon="ThunderboltOutlined"
+                :color="brandColor"
+              />
+            </a-col>
+            <a-col :span="12">
+              <MetricCard
+                title="总 Token 消耗量"
+                :value="formatNumber(usageTotalTokens)"
+                suffix="tokens"
+                icon="DatabaseOutlined"
+                :color="accentColor"
+              />
+            </a-col>
+          </a-row>
+
+          <SectionCard title="调用趋势">
+            <div class="chart-header">
+              <a-radio-group v-model:value="chartMode" size="small">
+                <a-radio-button value="model">按模型</a-radio-button>
+                <a-radio-button value="key">按 API Key</a-radio-button>
+                <a-radio-button value="total">调用次数</a-radio-button>
+              </a-radio-group>
+              <div class="time-range-wrap">
+                <a-radio-group v-model:value="timeRange" size="small">
+                  <a-radio-button value="7d">近7日</a-radio-button>
+                  <a-radio-button value="30d">近30日</a-radio-button>
+                  <a-radio-button value="month">本月</a-radio-button>
+                  <a-radio-button value="prevMonth">上月</a-radio-button>
+                  <a-radio-button value="custom">自定义</a-radio-button>
+                </a-radio-group>
+                <a-range-picker
+                  v-if="timeRange === 'custom'"
+                  v-model:value="customDateRange"
+                  size="small"
+                  class="custom-date-picker"
+                  :allow-empty="false"
+                />
+              </div>
+            </div>
+            <ChartContainer :option="chartOption" height="320px" />
+          </SectionCard>
+
+          <a-row :gutter="24" class="mt-24">
+            <a-col :span="14" class="mb-24">
+              <SectionCard title="模型消耗排名">
+                <ChartContainer :option="modelRankingChartOption" height="340px" />
+              </SectionCard>
+            </a-col>
+            <a-col :span="10" class="mb-24">
+              <SectionCard title="模型用量占比">
+                <ChartContainer :option="modelPieOption" height="340px" />
+              </SectionCard>
+            </a-col>
+          </a-row>
         </div>
-      </div>
-      <ChartContainer :option="chartOption" height="320px" />
-    </SectionCard>
+      </a-tab-pane>
+    </a-tabs>
 
     <a-modal v-model:open="showCreateModal" title="创建 API Key" @ok="handleCreate" @cancel="newKey = { name: '', modelType: '' }">
       <a-form layout="vertical">
@@ -130,8 +205,12 @@ import MetricCard from '@shared/web/components/MetricCard.vue'
 import { useCssVar } from '@shared/web/composables/useCssVar'
 import { useChartTheme } from '@shared/web/composables/useChartTheme'
 import { formatNumber } from '@shared/core/utils/format'
-import { getApiKeyList, getUsageStats, getUsageTimeSeries } from '@/api/modules/apikey'
+import { getApiKeyList, getUsageTimeSeries } from '@/api/modules/apikey'
 import type { ApiKey, UsageTimeSeries } from '@/types'
+
+const activeTab = ref('keys')
+
+// ─── API Key 管理 ──────────────────────────────────────
 
 const columns = [
   { title: '名称', dataIndex: 'name', key: 'name', align: 'center' },
@@ -175,17 +254,14 @@ const colors = computed(() => [brandColor.value, accentColor.value, successColor
 
 // ─── Data Fetching ──────────────────────────────────────
 
-const usageStats = ref({ totalCalls: 0, totalTokens: 0 })
 const timeSeriesData = ref<UsageTimeSeries | null>(null)
 
 onMounted(async () => {
   try {
-    const [keys, stats] = await Promise.all([
+    const [keys] = await Promise.all([
       getApiKeyList(),
-      getUsageStats(),
     ])
     apiKeys.value = keys
-    usageStats.value = stats
   } catch {
     message.error('加载 API 数据失败')
   } finally {
@@ -222,19 +298,6 @@ function makeBarGradient(hex: string) {
     ],
   }
 }
-
-const totalCalls = computed(() => {
-  const data = timeSeriesData.value
-  if (!data) return 0
-  if (chartMode.value === 'total') {
-    // 总调用次数 = 所有模型数据之和
-    return data.byModel.reduce((sum: number, m) => sum + m.data.reduce((a: number, b: number) => a + b, 0), 0)
-  }
-  const series = chartMode.value === 'model' ? data.byModel : data.byName
-  return series.reduce((sum: number, s: { data: number[] }) => sum + s.data.reduce((a: number, b: number) => a + b, 0), 0)
-})
-
-const totalTokens = computed(() => usageStats.value.totalTokens)
 
 const chartOption = computed(() => {
   const data = timeSeriesData.value
@@ -277,6 +340,152 @@ const chartOption = computed(() => {
       animationDuration: 400 + i * 80,
       animationEasing: 'easeOutQuad',
     })),
+  }
+})
+
+// ─── 调用记录 ───────────────────────────────────────────
+
+const allModelNames = ['GPT-4o', 'GPT-4o-mini', 'Claude-3.5-Sonnet', 'DeepSeek-V3']
+
+interface CallRecord {
+  id: string
+  userName: string
+  userPhone: string
+  department: string
+  modelName: string
+  inputTokens: number
+  outputTokens: number
+  latency: number
+  status: '成功' | '失败'
+  time: string
+}
+
+const callUserKeyword = ref('')
+const callModelFilter = ref<string[]>([])
+const callStatusFilter = ref<string | undefined>(undefined)
+
+const mockCallRecords: CallRecord[] = (() => {
+  const now = new Date()
+  const names = ['张三', '李四', '王五', '赵六', '陈七', '刘八', '周九', '吴十']
+  const depts = ['研发部', '产品部', '运营部', '市场部', '数据部']
+  const phones = ['13800138001', '13900139002', '13700137003', '13600136004', '13500135005', '15800158006']
+  const records: CallRecord[] = []
+  for (let i = 0; i < 120; i++) {
+    const d = new Date(now)
+    d.setMinutes(d.getMinutes() - Math.floor(Math.random() * 4320))
+    const userIdx = Math.floor(Math.random() * names.length)
+    const modelNames = ['GPT-4o', 'GPT-4o-mini', 'Claude-3.5-Sonnet', 'DeepSeek-V3']
+    const success = Math.random() > 0.15
+    records.push({
+      id: `call-${i}`,
+      userName: names[userIdx],
+      userPhone: phones[userIdx % phones.length],
+      department: depts[userIdx % depts.length],
+      modelName: modelNames[Math.floor(Math.random() * modelNames.length)],
+      inputTokens: Math.round(100 + Math.random() * 4000),
+      outputTokens: Math.round(100 + Math.random() * 4000),
+      latency: success ? Math.round(300 + Math.random() * 5000) : Math.round(8000 + Math.random() * 12000),
+      status: success ? '成功' : '失败',
+      time: d.toISOString().slice(0, 19).replace('T', ' '),
+    })
+  }
+  return records.sort((a, b) => b.time.localeCompare(a.time))
+})()
+
+const callColumns = [
+  { title: '时间', dataIndex: 'time', key: 'time', width: 160, align: 'center' },
+  { title: '模型', dataIndex: 'modelName', key: 'modelName', align: 'center' },
+  { title: '用户', key: 'userName', width: 100, align: 'center' },
+  { title: '输入 Token', key: 'inputTokens', width: 100, align: 'center' },
+  { title: '输出 Token', key: 'outputTokens', width: 100, align: 'center' },
+  { title: '延迟', key: 'latency', width: 90, align: 'center' },
+  { title: '状态', key: 'status', width: 80, align: 'center' },
+]
+
+const callRecords = computed(() => {
+  let list = mockCallRecords
+  const kw = callUserKeyword.value.toLowerCase().trim()
+  if (kw) list = list.filter((r) => r.userName.includes(kw))
+  if (callModelFilter.value.length > 0 && callModelFilter.value.length < allModelNames.length) {
+    list = list.filter((r) => callModelFilter.value.includes(r.modelName))
+  }
+  if (callStatusFilter.value) {
+    list = list.filter((r) => r.status === callStatusFilter.value)
+  }
+  return list
+})
+
+// ─── 用量分析 ───────────────────────────────────────────
+
+const usageTotalCalls = computed(() => {
+  const data = timeSeriesData.value
+  if (!data) return 0
+  return data.byModel.reduce((sum: number, m) => sum + m.data.reduce((a: number, b: number) => a + b, 0), 0)
+})
+const usageTotalTokens = computed(() => Math.round(usageTotalCalls.value * 760))
+
+const mockModels = [
+  { id: '1', name: 'GPT-4o', consumption: 85600000 },
+  { id: '2', name: 'GPT-4o-mini', consumption: 62300000 },
+  { id: '3', name: 'Claude-3.5-Sonnet', consumption: 51200000 },
+  { id: '4', name: 'DeepSeek-V3', consumption: 38700000 },
+]
+
+function formatConsumption(n: number): string {
+  if (n >= 1e12) return (n / 1e12).toFixed(1) + ' 兆'
+  if (n >= 1e8) return (n / 1e8).toFixed(1) + ' 亿'
+  if (n >= 1e7) return (n / 1e7).toFixed(1) + ' 千万'
+  if (n >= 1e4) return (n / 1e4).toFixed(1) + ' 万'
+  return n.toLocaleString()
+}
+
+const modelRankingChartOption = computed(() => {
+  const t = chartTheme()
+  const sorted = [...mockModels].sort((a, b) => a.consumption - b.consumption)
+  const names = sorted.map((m) => m.name)
+  const vals = sorted.map((m) => m.consumption)
+  const rankColors = [brandColor.value, accentColor.value, successColor.value, warningColor.value, dangerColor.value]
+  return {
+    tooltip: { trigger: 'axis' as const, backgroundColor: t.tooltipBg, borderColor: t.tooltipBorder, borderWidth: 1, textStyle: { color: t.tooltipColor, fontSize: 13 }, valueFormatter: (v: number) => formatConsumption(v) },
+    grid: { left: 8, right: 60, bottom: 24, top: 8, containLabel: true },
+    xAxis: {
+      type: 'value' as const,
+      name: '单位：千万',
+      nameLocation: 'end' as const,
+      nameGap: 6,
+      nameTextStyle: { color: t.axisColor, fontSize: 11 },
+      axisLine: { show: false }, axisTick: { show: false },
+      axisLabel: { color: t.axisColor, fontSize: 11, formatter: (v: number) => String(Math.round(v / 1e7)) },
+      splitLine: { lineStyle: { color: t.splitColor, type: 'dashed' as const } },
+    },
+    yAxis: { type: 'category' as const, data: names, axisLine: { show: false }, axisTick: { show: false }, axisLabel: { color: t.axisColor, fontSize: 12 } },
+    series: [{
+      type: 'bar' as const,
+      data: vals.map((v, i) => ({ value: v, itemStyle: { color: makeBarGradient(rankColors[i % rankColors.length]), borderRadius: [0, 4, 4, 0] } })),
+      barWidth: '50%',
+      label: { show: true, position: 'right' as const, color: t.axisColor, fontSize: 11, formatter: (p: { value: number }) => formatConsumption(p.value) },
+      animationDuration: 600,
+      animationEasing: 'easeOutQuad' as const,
+    }],
+  }
+})
+
+const modelPieOption = computed(() => {
+  const t = chartTheme()
+  return {
+    tooltip: { trigger: 'item' as const, formatter: '{b}: {c} ({d}%)', backgroundColor: t.tooltipBg, borderColor: t.tooltipBorder, borderWidth: 1, textStyle: { color: t.tooltipColor, fontSize: 13 } },
+    legend: { bottom: 0, type: 'scroll' as const, textStyle: { color: t.legendColor, fontSize: 12 } },
+    series: [{
+      type: 'pie' as const,
+      radius: ['40%', '70%'],
+      center: ['50%', '45%'],
+      itemStyle: { borderRadius: 6, borderColor: 'transparent', borderWidth: 2 },
+      label: { show: false },
+      emphasis: { label: { show: true, fontSize: 14, fontWeight: 'bold' as const } },
+      data: mockModels.map((m) => ({ name: m.name, value: m.consumption })),
+      color: colors.value,
+      animationDuration: 600,
+    }],
   }
 })
 
@@ -329,6 +538,39 @@ function copyCreatedKey(): void {
 @import '@shared/web/styles/variables.less';
 
 .mb-24 { margin-bottom: @spacing-xl; }
+.mt-24 { margin-top: @spacing-xl; }
+
+.api-tabs {
+  :deep(.ant-tabs-nav) { margin-bottom: @spacing-sm; }
+  :deep(.ant-tabs-nav-wrap) { padding: 0; }
+  :deep(.ant-tabs-nav-list) { gap: 0; }
+  :deep(.ant-tabs-tab) { padding: 4px 10px; }
+  :deep(.ant-tabs-tab + .ant-tabs-tab) { margin-left: @spacing-md; }
+  :deep(.ant-tabs-content-holder) { margin-top: 0; }
+}
+.page-container :deep(.page-header-left) {
+  display: flex;
+  align-items: baseline;
+  gap: @spacing-sm;
+}
+.page-container :deep(.page-desc) {
+  margin-top: 0;
+  color: @text-tertiary;
+}
+.stats-tab :deep(.section-card-header) {
+  padding: @spacing-md @spacing-xl;
+}
+.stats-tab :deep(.section-card-body) {
+  padding: @spacing-md @spacing-xl;
+}
+.user-filter-bar {
+  display: flex;
+  gap: @spacing-sm;
+  align-items: center;
+  padding: @spacing-md @spacing-xl;
+  border-bottom: 1px solid @border-color;
+  flex-wrap: wrap;
+}
 
 .key-text {
   font-family: 'Consolas', 'Monaco', monospace;

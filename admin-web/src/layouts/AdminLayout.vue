@@ -42,6 +42,12 @@
         class="sider-menu-bottom"
         @click="handleMenuClick"
       >
+        <a-menu-item key="/api">
+          <div class="profile-menu-row">
+            <ApiOutlined />
+            <span>API 管理</span>
+          </div>
+        </a-menu-item>
         <a-menu-item key="/profile">
           <div class="profile-menu-row">
             <UserOutlined />
@@ -73,6 +79,7 @@ import {
   UserOutlined,
   MenuFoldOutlined,
   MenuUnfoldOutlined,
+  ApiOutlined,
 } from '@ant-design/icons-vue'
 import * as Icons from '@ant-design/icons-vue'
 import Logo from '@shared/web/components/Logo.vue'
@@ -99,7 +106,7 @@ const collapsed = computed({
 })
 const selectedKeys = ref<string[]>([route.path])
 
-interface AppMenuItem { id: string, name: string, category: string, catColor: string, route: string }
+interface AppMenuItem { id: string, name: string, category: string, catColor: string, route: string, icon?: string }
 const appMenuItems = ref<AppMenuItem[]>([])
 
 const catColorMap: Record<string, string> = {
@@ -113,7 +120,7 @@ const catColorMap: Record<string, string> = {
 
 interface MenuItemNode {
   key: string
-  label?: unknown
+  label?: string | VNode
   icon?: () => VNode
   children?: MenuItemNode[]
 }
@@ -139,7 +146,8 @@ function toMenuItems(nodes: MenuNode[]): MenuItemNode[] {
 function appToMenuItem(app: AppMenuItem): MenuItemNode {
   return {
     key: app.route,
-    label: () => h('span', { class: 'app-menu-entry' }, [
+    icon: resolveIcon(app.icon),
+    label: h('span', { class: 'app-menu-entry' }, [
       h('span', {
         class: 'app-cat-tag',
         style: { color: app.catColor, borderColor: app.catColor, background: `${app.catColor}22` },
@@ -181,15 +189,16 @@ onMounted(async () => {
       category: a.category,
       catColor: catColorMap[a.category] || '#94A3B8',
       route: a.route || `/applications/${a.id}`,
+      icon: a.icon,
     }))
   } catch {
     message.warning('应用列表加载失败，使用默认菜单')
     appMenuItems.value = [
-      { id: '1', name: '标准查询', category: '通用', catColor: '#3B82F6', route: '/applications/standard' },
-      { id: '2', name: 'AI视频', category: '通用', catColor: '#3B82F6', route: '/applications/ai-video' },
-      { id: '3', name: 'AI 配音', category: '通用', catColor: '#3B82F6', route: '/applications/dubbing' },
-      { id: '4', name: '设计经验', category: '设计', catColor: '#8B5CF6', route: '/applications/design-experience' },
-      { id: '5', name: '施工经验', category: '施工', catColor: '#F59E0B', route: '/applications/construction-experience' },
+      { id: '1', name: '标准查询', category: '通用', catColor: '#3B82F6', route: '/applications/standard', icon: 'BookOutlined' },
+      { id: '2', name: 'AI视频', category: '通用', catColor: '#3B82F6', route: '/applications/ai-video', icon: 'VideoCameraOutlined' },
+      { id: '3', name: 'AI 配音', category: '通用', catColor: '#3B82F6', route: '/applications/dubbing', icon: 'CustomerServiceOutlined' },
+      { id: '4', name: '设计经验', category: '设计', catColor: '#8B5CF6', route: '/applications/design-experience', icon: 'BulbOutlined' },
+      { id: '5', name: '施工经验', category: '施工', catColor: '#F59E0B', route: '/applications/construction-experience', icon: 'ToolOutlined' },
     ]
   }
 })

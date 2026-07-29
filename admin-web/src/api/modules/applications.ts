@@ -21,6 +21,15 @@ export function setApplicationStatus(appId: string, status: '运营中' | '已�
   return request.post('/applications/status', { appId, status })
 }
 
+/** 设置应用类型/分类 */
+export function setApplicationCategory(appId: string, category: string): Promise<void> {
+  return request.post('/applications/category', { appId, category })
+}
+
+export function setSubAppCategory(subId: string, category: string): Promise<void> {
+  return request.post('/applications/sub/category', { subId, category })
+}
+
 /** 设置主应用图标（antd 图标名） */
 export function setApplicationIcon(appId: string, icon: string): Promise<void> {
   return request.post('/applications/icon', { appId, icon })
@@ -39,6 +48,16 @@ export function setApplicationScope(appId: string, scope: '所有' | '部分'): 
 /** 设置子应用授权范围（所有 / 部分） */
 export function setSubAppScope(subId: string, scope: '所有' | '部分'): Promise<void> {
   return request.post('/applications/sub/scope', { subId, scope })
+}
+
+/** 应用分类配置（类型名 + 标签色，由 API 返回，前端不再硬编码） */
+export interface CategoryConfig {
+  name: string
+  color: string
+}
+
+export function getCategoryConfig(): Promise<CategoryConfig[]> {
+  return request.get<CategoryConfig[]>('/applications/categories')
 }
 
 /** 采集分类配置：按分类发布为子应用 */
