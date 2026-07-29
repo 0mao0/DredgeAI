@@ -77,13 +77,13 @@
                 </a-tooltip>
               </template>
               <template v-else-if="column.key === 'latency'">
-                {{ record.latency }}ms
+                {{ (record.latency ?? 0) }}ms
               </template>
               <template v-else-if="column.key === 'inputTokens'">
-                {{ (record.inputTokens / 10000).toFixed(1) }} 万
+                {{ ((record.inputTokens ?? 0) / 10000).toFixed(1) }} 万
               </template>
               <template v-else-if="column.key === 'outputTokens'">
-                {{ (record.outputTokens / 10000).toFixed(1) }} 万
+                {{ ((record.outputTokens ?? 0) / 10000).toFixed(1) }} 万
               </template>
               <template v-else-if="column.key === 'status'">
                 <a-tag :color="record.status === '成功' ? 'green' : 'red'">{{ record.status }}</a-tag>
@@ -222,7 +222,6 @@ const columns = [
 ]
 
 const apiKeys = ref<ApiKey[]>([])
-const loading = ref(true)
 
 const modelOptions = [
   { label: 'GPT-4o', value: 'GPT-4o' },
@@ -264,8 +263,6 @@ onMounted(async () => {
     apiKeys.value = keys
   } catch {
     message.error('加载 API 数据失败')
-  } finally {
-    loading.value = false
   }
   await fetchTimeSeries()
 })

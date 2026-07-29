@@ -12,10 +12,14 @@ import type { CSSProperties } from 'vue'
 export function useStaggerReveal(itemCount: () => number, delay = 60, extraTransition = '') {
   const visible = ref(false)
 
+  // 注意：immediate 回调会在 watch() 返回前同步执行，此时 stop 尚未初始化（TDZ），
+  // 因此 stop() 必须放到 nextTick 中延迟调用。
   const stop = watch(itemCount, (n) => {
     if (n > 0) {
-      stop()
-      void nextTick(() => { visible.value = true })
+      void nextTick(() => {
+        visible.value = true
+        stop()
+      })
     }
   }, { immediate: true })
 

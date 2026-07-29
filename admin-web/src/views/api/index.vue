@@ -83,13 +83,13 @@
                 </a-tooltip>
               </template>
               <template v-else-if="column.key === 'latency'">
-                {{ record.latency }}ms
+                {{ (record.latency ?? 0) }}ms
               </template>
               <template v-else-if="column.key === 'inputTokens'">
-                {{ (record.inputTokens / 10000).toFixed(1) }} 万
+                {{ ((record.inputTokens ?? 0) / 10000).toFixed(1) }} 万
               </template>
               <template v-else-if="column.key === 'outputTokens'">
-                {{ (record.outputTokens / 10000).toFixed(1) }} 万
+                {{ ((record.outputTokens ?? 0) / 10000).toFixed(1) }} 万
               </template>
               <template v-else-if="column.key === 'status'">
                 <a-tag :color="record.status === '成功' ? 'green' : 'red'">{{ record.status }}</a-tag>
@@ -210,7 +210,7 @@
                   {{ formatNumber(record.tokens) }}
                 </template>
                 <template v-else-if="column.key === 'models'">
-                  <a-tag :color="record.modelLimits.length === allModelNames.length ? 'green' : 'orange'">{{ record.modelLimits.length === allModelNames.length ? '全部' : '部分' }}</a-tag>
+                  <a-tag :color="(record.modelLimits?.length ?? 0) === allModelNames.length ? 'green' : 'orange'">{{ (record.modelLimits?.length ?? 0) === allModelNames.length ? '全部' : '部分' }}</a-tag>
                 </template>
               </template>
             </a-table>
@@ -247,7 +247,7 @@
                 {{ index + 1 }}
               </template>
               <template v-else-if="column.key === 'models'">
-                <a-tag :color="record.modelLimits.length === allModelNames.length ? 'green' : 'orange'">{{ record.modelLimits.length === allModelNames.length ? '全部' : '部分' }}</a-tag>
+                <a-tag :color="(record.modelLimits?.length ?? 0) === allModelNames.length ? 'green' : 'orange'">{{ (record.modelLimits?.length ?? 0) === allModelNames.length ? '全部' : '部分' }}</a-tag>
               </template>
               <template v-else-if="column.key === 'callsLimit'">
                 {{ formatLimit(record, 'calls') }}
@@ -552,7 +552,7 @@ const colors = computed(() => [brandColor.value, accentColor.value, successColor
 
 const overviewChartMode = ref<'model' | 'key' | 'total'>('model')
 const overviewTimeRange = ref('7d')
-const overviewCustomDateRange = ref()
+const overviewCustomDateRange = ref<any>(undefined)
 
 /** API 返回的时序数据 */
 const timeSeriesData = ref<UsageTimeSeries | null>(null)
@@ -712,12 +712,7 @@ const modelPieOption = computed(() => {
       itemStyle: { borderRadius: 6, borderColor: 'transparent', borderWidth: 2 },
       label: { show: false },
       emphasis: { label: { show: true, fontSize: 14, fontWeight: 'bold' as const } },
-      data: [
-        { name: 'GPT-4o-mini', value: 478000 },
-        { name: 'GPT-4o', value: 452000 },
-        { name: 'DeepSeek-V3', value: 318000 },
-        { name: 'Claude-3.5-Sonnet', value: 195000 },
-      ],
+      data: [...mockModels].map((m) => ({ name: m.name, value: m.consumption })),
       color: colors.value,
       animationDuration: 600,
     }],
@@ -727,7 +722,7 @@ const modelPieOption = computed(() => {
 // ─── Tab 3: User Rankings & Controls ─────────────────
 
 const allDepartments = ['研发部', '产品部', '运营部', '市场部', '数据部', '技术部', '行政部', '人事部', '财务部', '安全部']
-const allModelNames = ['GPT-4o', 'GPT-4o-mini', 'Claude-3.5-Sonnet', 'DeepSeek-V3']
+const allModelNames = deployedModelOptions.map((m) => m.value)
 
 const userKeyword = ref('')
 const userDepartment = ref<string>('')
@@ -739,8 +734,8 @@ const permissionUsers = computed(() => {
   let list = rawUsers
   const kw = permissionKeyword.value.toLowerCase().trim()
   if (kw) list = list.filter((u) => u.name.includes(kw) || u.department.includes(kw))
-  if (partialOnly.value) list = list.filter((u) => u.modelLimits.length < allModelNames.length)
-  else list = list.filter((u) => u.modelLimits.length === allModelNames.length)
+  if (partialOnly.value) list = list.filter((u) => (u.modelLimits?.length ?? 0) < allModelNames.length)
+  else list = list.filter((u) => (u.modelLimits?.length ?? 0) === allModelNames.length)
   return list
 })
 
@@ -949,7 +944,6 @@ onMounted(() => {
 })
 
 watch(overviewTimeRange, () => { fetchTimeSeries() })
-watch(overviewChartMode, () => { fetchTimeSeries() })
 
 // ─── CRUD Handlers ────────────────────────────────────
 
@@ -1086,31 +1080,6 @@ function handleLimitsOk(): void {
   min-width: 200px;
 }
 
-.stat-card {
-  background: @card-bg;
-  border: 1px solid @border-color;
-  border-radius: @radius-lg;
-  padding: @spacing-lg @spacing-xl;
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-}
-.stat-label {
-  font-size: @font-size-sm;
-  color: @text-secondary;
-}
-.stat-value {
-  font-size: @font-size-2xl;
-  font-weight: @font-weight-bold;
-  color: @text-primary;
-  line-height: 1.2;
-}
-.stat-sub {
-  font-size: @font-size-xs;
-  color: @text-tertiary;
-  margin-top: 2px;
-}
-
 .limits-table {
   margin-top: @spacing-md;
 }
@@ -1170,9 +1139,5 @@ function handleLimitsOk(): void {
     background: @brand-gradient;
     color: #fff;
   }
-}
-
-.model-tag {
-  margin-bottom: 4px;
 }
 </style>
