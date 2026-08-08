@@ -26,6 +26,15 @@ class TestPdfDate:
         assert parse_pdf_date(None) is None
         assert parse_pdf_date("  ") is None
 
+    def test_trailing_junk_passthrough(self):
+        # 尾部垃圾不静默吞掉：原样保留，避免不同垃圾串碰撞出相同日期（假阳性）
+        assert parse_pdf_date("D:2025abc") == "D:2025abc"
+        assert parse_pdf_date("D:20251229164720+08'00'junk") == "D:20251229164720+08'00'junk"
+
+    def test_hour_only_timezone(self):
+        # 小时级时区（分钟缺省）与 +08'00' 同一时刻，须产出同一字符串
+        assert parse_pdf_date("D:20251229164720+08'") == "2025-12-29T16:47:20+08:00"
+
 
 class TestTypeMapping:
     def test_paragraph_and_title(self, ir_doc_a):
@@ -95,6 +104,21 @@ class TestTextSanitize:
         doc = adapt(raw)
         assert doc.blocks[0].text == "2. 1 一般规定"
 
+    def test_non_tag_angle_brackets_preserved(self):
+        # 标书常见「<±5%>」「5<x<10>」等非标签尖括号不得误剥
+        raw = make_raw_doc("d-lt", file_name="lt.pdf", author=None, created_at=None, blocks=[
+            make_raw_block("p1", "偏差<±5%>以内，当 5<x<10>y 时成立"),
+        ])
+        doc = adapt(raw)
+        assert doc.blocks[0].text == "偏差<±5%>以内，当 5<x<10>y 时成立"
+
+    def test_html_entities_unescaped(self):
+        raw = make_raw_doc("d-amp", file_name="amp.pdf", author=None, created_at=None, blocks=[
+            make_raw_block("p1", "A&amp;B 联合体"),
+        ])
+        doc = adapt(raw)
+        assert doc.blocks[0].text == "A&B 联合体"
+
 
 class TestMetaMapping:
     def test_pdf_date_normalized(self):
@@ -126,6 +150,23 @@ class TestOutlineNesting:
         assert len(doc.outline) == 1
         assert doc.outline[0].blockId == "t1"
         assert doc.outline[0].children[0].blockId == "t2"
+
+    def test_outline_parent_cycle_not_lost(self):
+        # 父引用成环（A↔B）：拆环后全部保留为可到达节点，不静默丢失也不递归崩溃
+        raw = make_raw_doc("d-cyc", file_name="cyc.pdf", author=None, created_at=None, blocks=[
+            make_raw_block("tA", "章节A", block_type="title", derived_level=1),
+            make_raw_block("tB", "章节B", block_type="title", derived_level=1, seq=2, y=60),
+        ])
+        raw["meta"]["outlines"] = [
+            {"outline_id": "oA", "title": "章节A", "level": 1, "page_idx": 0,
+             "anchor_block_id": "tA", "parent_outline_id": "oB", "printed_page_label": "1"},
+            {"outline_id": "oB", "title": "章节B", "level": 1, "page_idx": 0,
+             "anchor_block_id": "tB", "parent_outline_id": "oA", "printed_page_label": "1"},
+        ]
+        doc = adapt(raw)
+        found = {n.blockId for n in doc.outline}
+        found |= {c.blockId for n in doc.outline for c in n.children}
+        assert found == {"tA", "tB"}
 
 
 class TestInternalModelGuards:
@@ -201,6 +242,11 @@ class TestRealFixtures:
         assert len(doc.outline) == 1          # 1 根（第 6 章）
         assert len(doc.outline[0].children) == 3  # 6.1/6.2/6.3
         assert doc.outline[0].level == 1
+
+    def test_haigang2_block_count(self, raw_haigang_pair):
+        doc = adapt(raw_haigang_pair[1])
+        assert doc.docId == "doc-c8be9f8b"
+        assert len(doc.blocks) == 197
 
     def test_pingshen_pair_meta(self, raw_pingshen_pair):
         a, b = (adapt(d) for d in raw_pingshen_pair)

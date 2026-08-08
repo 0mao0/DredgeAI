@@ -8,10 +8,13 @@ from __future__ import annotations
 import re
 from datetime import datetime, timedelta, timezone
 
+# 全串锚定：尾部垃圾（如 D:2025abc）整体不匹配 → 原样保留，
+# 避免不同垃圾串碰撞出同一日期（Task 14 createdAt 假阳性）；
+# 时区分钟可缺省（+08'）：与 +08'00' 同一时刻须产出同一字符串（防假阴性）
 _PDF_DATE_RE = re.compile(
     r"^D:(?P<y>\d{4})(?P<mo>\d{2})?(?P<d>\d{2})?"
     r"(?P<h>\d{2})?(?P<mi>\d{2})?(?P<s>\d{2})?"
-    r"(?P<tz>[Zz]|[+-]\d{2}'?\d{2}'?)?"
+    r"(?P<tz>[Zz]|[+-]\d{2}'?(?:\d{2}'?)?)?\s*$"
 )
 
 

@@ -5,6 +5,7 @@
 """
 from __future__ import annotations
 
+import html
 import re
 
 from app.angineer.pdf_date import parse_pdf_date
@@ -34,12 +35,14 @@ _TYPE_MAP = {
     "page_number": "footer",
 }
 
-_TAG_RE = re.compile(r"<[^>]+>")
+# 标签名必需的标签匹配：剥 <sub>/<br/> 等真标签，
+# 保留「偏差<±5%>」「5<x<10>」等非标签尖括号（标书常见，误剥会损毁正文）
+_TAG_RE = re.compile(r"</?[a-zA-Z][a-zA-Z0-9]*(?:\s[^>]*)?/?>")
 
 
 def _strip_html(text: str) -> str:
-    """剥除 HTML 标签（实测标题 plain_text 含 <sub> 等）。"""
-    return _TAG_RE.sub("", text)
+    """剥除 HTML 标签（实测标题 plain_text 含 <sub> 等），并解码实体（&amp; → &）。"""
+    return html.unescape(_TAG_RE.sub("", text))
 
 
 def _block_text(block: RawBlock) -> str:
@@ -89,11 +92,37 @@ def _nest_outlines(outlines: list[RawOutline]) -> list[IrOutlineNode]:
         )
         order.append(oid)
     roots: list[IrOutlineNode] = []
+    parent_of: dict[str, str] = {}
     for o, oid in zip((o for o in outlines if o.anchor_block_id), order):
         parent = o.parent_outline_id
-        if parent and parent in nodes:
-            nodes[parent].children.append(nodes[oid])
-        else:
+        if parent and parent in nodes and parent != oid:
+            # 环检测：parent 祖先链含 oid 则挂载成环（IrDocument 校验会递归崩溃）→ 不挂，提升为根
+            cur: str | None = parent
+            is_cycle = False
+            while cur is not None:
+                if cur == oid:
+                    is_cycle = True
+                    break
+                cur = parent_of.get(cur)
+            if not is_cycle:
+                nodes[parent].children.append(nodes[oid])
+                parent_of[oid] = parent
+                continue
+        roots.append(nodes[oid])
+    # 兜底：未挂在任何根下的节点（成环/悬空）提升为根，不静默丢失
+    reachable: set[int] = set()
+
+    def _collect(node: IrOutlineNode) -> None:
+        if id(node) in reachable:
+            return
+        reachable.add(id(node))
+        for child in node.children:
+            _collect(child)
+
+    for root in roots:
+        _collect(root)
+    for oid in order:
+        if id(nodes[oid]) not in reachable:
             roots.append(nodes[oid])
     return roots
 

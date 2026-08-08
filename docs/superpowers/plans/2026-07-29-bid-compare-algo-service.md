@@ -1,24 +1,38 @@
 # 比标算法服务 Implementation Plan
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
+>
+> **修订：2026-08-08（v2 契约修订）**：算法服务**直接消费 AnGIneer 解析产物**（`doc_blocks_graph.jsonl` + `doc_blocks_graph_meta.json` 内容随请求体传入），不再要求 ABP 预映射为内部适配 IR。服务内新增 `app/angineer/` 适配层承担全部产物 schema 知识。本修订基于对 AnGIneer 源码与 13 份真实 `parsed/` 样本的实测（见「实测事实」节）。
 
-**Goal:** 新建独立 Python 微服务 `compare-algo`，消费 MinerU 产出的 IR（ir.json），产出结构化确定性证据项（Evidence），覆盖 P1 全部能力：IR schema 校验、两两查重（shingling + MinHash/LSH 粗筛 + 块级对齐）、雷同簇聚类、OCR 降权、报价规律分析（等差/尾数/贴近度）、元数据与相同错别字比对、FastAPI 三个分析接口与统一错误处理。
+**Goal:** 新建独立 Python 微服务 `compare-algo`，消费 ABP 主服务转发的 **AnGIneer 解析产物原文**（jsonl 节点数组 + meta 内容），产出结构化确定性证据项（Evidence），覆盖 P1 全部能力：产物校验与适配（类型映射/HTML 标签剥离/PDF 日期归一）、两两查重（shingling + MinHash/LSH 粗筛 + 块级对齐）、雷同簇聚类、OCR 降权、报价规律分析（等差/尾数/贴近度）、元数据与相同错别字比对、FastAPI 三个分析接口与统一错误处理。
 
-**Architecture:** 无状态计算服务，由 ABP 主服务（compare-task）通过 HTTP 调用。请求体为任务内 2~5 份 IR 的 JSON，响应为 Evidence 列表。服务内部分层：`schemas/`（pydantic IR/Evidence/请求响应模型与校验）→ `similarity/`、`pricing/`、`metadata/`（三个确定性分析域，各自纯函数 + service 组装证据）→ `main.py`（FastAPI 接口与异常处理器）。本服务只产出 `aiGenerated=false` 的 `similarity|pricing|metadata` 三类证据；`clause|indicator` 属 compare-ai 语义服务，不在此实现。
+**Architecture:** 无状态计算服务，由 ABP 主服务（compare-task）通过 HTTP 调用。请求体为任务内 2~5 份文档的 AnGIneer 产物 JSON（**AnGIneer 字段名原样**，snake_case），响应为 Evidence 列表（camelCase，逐字遵守 spec §6.1）。服务内部分层：`angineer/`（`raw.py` 原始产物 pydantic 校验 + `adapter.py` 适配为内部分析模型 + `pdf_date.py` PDF 日期归一）→ `schemas/`（`ir.py` 内部分析模型 + `evidence.py` + `api.py`）→ `similarity/`、`pricing/`、`metadata/`（三个确定性分析域，各自纯函数 + service 组装证据，只消费内部模型）→ `main.py`（FastAPI 接口与异常处理器）。本服务只产出 `aiGenerated=false` 的 `similarity|pricing|metadata` 三类证据；`clause|indicator` 属 compare-ai 语义服务，不在此实现。
 
 **Tech Stack:** Python 3.11 + FastAPI + pydantic v2 + datasketch（MinHash/LSH）+ beautifulsoup4/lxml（表格 html）+ pytest + httpx（TestClient）+ uv（包管理，pyproject.toml 单一事实源）
 
 **假设（已在设计中拍板）:**
+
 - 查重算法：段落级 n-gram shingling（中文按字 trigram 为主）→ datasketch MinHash/LSH 粗筛候选对 → difflib 块级精确对齐 → 输出相似度与对齐块列表；雷同簇聚类（≥3 份共同雷同单独标记）。
 - 报价分析：从表格 html 中解析数值（正则 + 千分位/万元单位归一），检测等差、尾数规律、贴近度。
 - 元数据比对：author/creatorTool/createdAt 一致性 + 相同错别字检测（低频错字 n-gram 碰撞）。
-- OCR 降权：`source=ocr` 且 `confidence<0.5` 的块单独标注，不作为强证据（spec §4.5）。
+- OCR 降权：`source=ocr` 且 `confidence<0.5` 的块单独标注，不作为强证据（spec §4.5）；`source/confidence` 为 null 的块不参与降权（v2 §4 降级期关闭，不误伤）。
 - 表格 html 解析用 beautifulsoup4 / lxml。
 - 测试：pytest，TDD（每个任务先写失败测试再实现）。
 - 包管理用 **uv**（`uv sync` / `uv run pytest`），全计划统一，不混用 pip。
-- MinerU 产物由 ABP 主服务传递，本服务不直接对接 MinerU。
+- **请求契约（v2 修订）**：`{taskId, documents: [{docId, blocks, meta}]}`；`blocks` 为 `doc_blocks_graph.jsonl` 逐行节点（字段名原样），`meta` 为 `doc_blocks_graph_meta.json` 的 `{docMeta, outlines, pages}` 子集（`edges/stats` 等忽略）。ABP 主服务从 S3 读产物原文转发，零 C# 映射逻辑。`docId` 为 ABP 文档 id（opaque 字符串，**不要求** block_uid 以其为前缀）。
 - 服务落在本 monorepo 的 `services/compare-algo/`（与 ABP 主服务解耦部署，仅 HTTP 契约耦合）。
-- 唯一事实源：`docs/superpowers/specs/2026-07-29-ai-bid-compare-design.md`（下称 spec），Evidence 字段名逐字遵守 spec §6.1，IR 硬性要求逐字遵守 spec §4。
+- 唯一事实源：`docs/superpowers/specs/2026-07-29-ai-bid-compare-design.md`（下称 spec）的 §6.1（Evidence 字段名逐字遵守）；产物字段语义以 `docs/superpowers/plans/dredgeai-consume-angineer-requirements.md`（2026-08-07 v2，下称 v2 文档）为准，并以本计划「实测事实」节为最终裁决。
+
+**实测事实（2026-08-08 对 AnGIneer 源码 + 13 份真实 parsed/ 样本核验，优先级高于 v2 文档措辞）:**
+
+1. **`source` 词表为 `text` / `ocr` / `table` / `formula` / null**（`solo_engine.py:1225-1257`）：原生文本写作 **`text`**（v2 文档 §四的 `native` 系措辞，以实测为准）；image/chart 块为 null。当前数据中 confidence 全为 1.0（真实 OCR 分数流存在但 hybrid 引擎给 1.0 或缺失→null）。
+2. **`chart` 是真实 block_type**（实测 2 例：有 `image_path`、`plain_text` 为空、source=null）——v2 §3 映射表遗漏，适配层按 `image` 处理。
+3. **`docMeta.createdAt` 是 PDF 原始日期**（如 `D:20251229164720+08'00'`），不是 ISO——适配层归一为 ISO 8601（无法解析/已是 ISO 则原样保留，相等性比对不受影响）。
+4. **标题 `plain_text` 可能含 HTML 标签**（实测 `"2<sub>.</sub> 1 一般规定"`）——适配层统一剥标签。
+5. **bbox 全部 0~1 归一化**（实测 2544 块无 null、无越界）；`pages` 给真实 pt 尺寸（如 612.0×825.0，**浮点**）；块级 `page_width/page_height=1000.0` 是 MinerU 归一化坐标系标记，不使用。
+6. **table_html 全部纯净**（132 表：仅 `table/tr/td` + `rowspan/colspan`，无 th/thead/class/style）；**但 2/132 表格无 `table_html`**（有整表截图）——内部模型放宽为 table 必须有 `imgPath`、html 可选，pricing 跳过无 html 表格。
+7. **真实 fixture 素材**：`doc-12f45ca9`（海港1，38 块）vs `doc-c8be9f8b`（海港2，197 块）为部分雷同对（实测按计划算法 Dice≈0.346 → low 证据）；`doc-020a5d97`/`doc-1d0c4891`（评审办法副本，各 10 块）author 相同、creatorTool 均为 Writer、createdAt 不同（→ author mid + creatorTool low 两条元数据证据，无 createdAt 证据）；两对均经本计划任务断言固化。
+8. AnGIneer HTTP 产物下载白名单不含 content.md/images（仅 jsonl/meta.json/sqlite）；本服务不需要 content.md（有损投影，面向 LLM 语义层）。
 
 ---
 
@@ -26,11 +40,13 @@
 
 | 决策项 | 选择 |
 |---|---|
+| 请求契约 | ABP 转发 AnGIneer 产物原文（`{docId, blocks, meta}`），服务内 `angineer/` 适配层映射为内部模型 |
 | 包管理 | uv（pyproject.toml + `[dependency-groups]` dev） |
 | 服务位置 | `services/compare-algo/`（新目录，不动现有 user-web/admin-web） |
 | 相似度阈值 | LSH 粗筛 0.5；精确 Jaccard 复核 ≥0.5；出证据 Dice ≥0.3；severity high ≥0.8 / mid ≥0.5 / low 其余 |
 | 雷同簇 | Union-Find 归并两两相似度 ≥0.5 的文档，簇 ≥3 份单独出 high 证据 |
-| OCR 降权 | 命中低置信 OCR 块的证据 severity 降一级 + `metrics.ocrSuspect=true` + 文案标注 |
+| OCR 降权 | 命中低置信 OCR 块的证据 severity 降一级 + `metrics.ocrSuspect=true` + 文案标注；`source/confidence` 为 null 的块不参与降权（v2 §4 降级期关闭） |
+| 测试 fixture | 真实样本（海港对 + 评审办法副本对，tests/fixtures/）+ 合成 raw 样本（低置信 OCR/等差报价/相同错别字场景） |
 | 提交 | 每个 Task 一次 git commit（conventional commits） |
 
 ## 目标文件结构
@@ -43,9 +59,14 @@ services/compare-algo/
 │   ├── __init__.py
 │   ├── main.py                  # FastAPI 入口：三接口 + 统一异常处理
 │   ├── ocr.py                   # OCR 低置信判定与 severity 降级（spec §4.5）
+│   ├── angineer/                # AnGIneer 产物适配层（唯一理解产物 schema 的地方）
+│   │   ├── __init__.py
+│   │   ├── raw.py               # 原始产物 pydantic 模型 + 宽松校验（jsonl 节点 / meta）
+│   │   ├── adapter.py           # 产物 → 内部分析模型（类型映射/剥标签/日期归一/outline 嵌套化）
+│   │   └── pdf_date.py          # PDF 原始日期 D:YYYY... 解析归一为 ISO 8601
 │   ├── schemas/
 │   │   ├── __init__.py
-│   │   ├── ir.py                # IR pydantic 模型 + spec §4.3 硬性校验
+│   │   ├── ir.py                # 内部分析模型（camelCase IrDocument，分析引擎消费）
 │   │   ├── evidence.py          # Evidence 模型 + build_evidence 组装器
 │   │   └── api.py               # AnalyzeRequest/AnalyzeResponse/ErrorResponse
 │   ├── similarity/
@@ -65,9 +86,16 @@ services/compare-algo/
 │       ├── __init__.py
 │       └── service.py           # 元数据比对 + 相同错别字 n-gram 碰撞
 └── tests/
-    ├── conftest.py              # 3 份虚拟标书 IR fixture（A/B 雷同+同作者+同错别字+等差报价，C 独立）
+    ├── __init__.py
+    ├── conftest.py              # 合成 raw fixture（3 份虚拟标书）+ 真实 fixture 加载器
+    ├── fixtures/                # 裁剪后的真实 AnGIneer 产物（Task 2 生成）
+    │   ├── haigang1.json        # doc-12f45ca9（38 块，部分雷同一端）
+    │   ├── haigang2.json        # doc-c8be9f8b（197 块，部分雷同另一端）
+    │   ├── pingshen_a.json      # doc-020a5d97（10 块，副本对 A）
+    │   └── pingshen_b.json      # doc-1d0c4891（10 块，副本对 B）
     ├── test_smoke.py
-    ├── test_ir_schema.py
+    ├── test_angineer_raw.py
+    ├── test_angineer_adapter.py
     ├── test_evidence.py
     ├── test_ocr.py
     ├── test_shingle.py
@@ -88,6 +116,8 @@ services/compare-algo/
 - 所有命令的工作目录为仓库根目录 `D:/AI/DredgeAI`，pytest 命令前缀 `cd services/compare-algo &&`。
 - 模块内 import 一律用绝对导入（`from app.xxx import ...`），pytest 通过 pyproject 的 `pythonpath = ["."]` 解析。
 - Evidence 一律通过 `build_evidence(...)` 组装，禁止手工拼 dict。
+- **全部 AnGIneer 产物字段名/取值知识只允许出现在 `app/angineer/` 包内**；下游分析引擎只消费 `app/schemas/ir.py` 的 camelCase 内部模型，禁止直接读取 snake_case 产物字段。
+- 请求/产物层用 AnGIneer 字段名原样（snake_case）；内部模型与 Evidence 响应用 camelCase（Evidence 逐字遵守 spec §6.1）。
 
 ---
 
@@ -96,6 +126,7 @@ services/compare-algo/
 **Files:**
 - Create: `services/compare-algo/pyproject.toml`
 - Create: `services/compare-algo/app/__init__.py`（空文件）
+- Create: `services/compare-algo/app/angineer/__init__.py`（空文件）
 - Create: `services/compare-algo/app/schemas/__init__.py`（空文件）
 - Create: `services/compare-algo/app/similarity/__init__.py`（空文件）
 - Create: `services/compare-algo/app/pricing/__init__.py`（空文件）
@@ -119,7 +150,7 @@ uv --version
 [project]
 name = "compare-algo"
 version = "0.1.0"
-description = "比标算法服务：消费 MinerU IR，产出确定性 Evidence"
+description = "比标算法服务：消费 AnGIneer 解析产物（ABP 转发），产出确定性 Evidence"
 requires-python = ">=3.11"
 dependencies = [
     "fastapi>=0.115",
@@ -144,8 +175,8 @@ testpaths = ["tests"]
 - [ ] **Step 3: 创建包目录与空 `__init__.py`**
 
 ```bash
-mkdir -p services/compare-algo/app/schemas services/compare-algo/app/similarity services/compare-algo/app/pricing services/compare-algo/app/metadata services/compare-algo/tests
-touch services/compare-algo/app/__init__.py services/compare-algo/app/schemas/__init__.py services/compare-algo/app/similarity/__init__.py services/compare-algo/app/pricing/__init__.py services/compare-algo/app/metadata/__init__.py services/compare-algo/tests/__init__.py
+mkdir -p services/compare-algo/app/angineer services/compare-algo/app/schemas services/compare-algo/app/similarity services/compare-algo/app/pricing services/compare-algo/app/metadata services/compare-algo/tests/fixtures
+touch services/compare-algo/app/__init__.py services/compare-algo/app/angineer/__init__.py services/compare-algo/app/schemas/__init__.py services/compare-algo/app/similarity/__init__.py services/compare-algo/app/pricing/__init__.py services/compare-algo/app/metadata/__init__.py services/compare-algo/tests/__init__.py
 ```
 
 - [ ] **Step 4: 写冒烟测试**
@@ -173,34 +204,507 @@ git add services/compare-algo && git commit -m "chore(compare-algo): 项目脚�
 
 ---
 
-## Task 2: IR pydantic schema 校验器（spec §4.2/§4.3 硬性要求）
+## Task 2: 真实产物 fixture 准备（裁剪脚本 + tests/fixtures/）
 
 **Files:**
-- Create: `services/compare-algo/tests/conftest.py`（3 份虚拟标书 fixture，后续所有 Task 复用）
-- Create: `services/compare-algo/tests/test_ir_schema.py`
-- Create: `services/compare-algo/app/schemas/ir.py`
+- Create: `services/compare-algo/tests/fixtures/haigang1.json`
+- Create: `services/compare-algo/tests/fixtures/haigang2.json`
+- Create: `services/compare-algo/tests/fixtures/pingshen_a.json`
+- Create: `services/compare-algo/tests/fixtures/pingshen_b.json`
 
-覆盖的硬性要求（spec §4.3）：bbox 页面实际像素坐标（非负、x1≥x0、不超出 `pages[].width/height`）；每块必带 `source`/`confidence`（native 必须 1.0；低置信照常接收）；`blockId` 文档内唯一；outline 引用必须存在；table 必须同时给 `html`+`imgPath` 且 html 纯净（仅 table/tr/td/th、仅 rowspan/colspan 属性）；equation 必须给 LaTeX 文本；image/seal/equation 必须给 `imgPath`；meta 四字段可 null 不可省略。
+**前置条件**：本机存在 AnGIneer 仓库数据目录 `D:/AI/AnGIneer/data/knowledge_base/libraries/default/documents/`（含 4 份样本的 `parsed/`）。若样本被清理，按 README（Task 17）重新解析或换样本后同步更新 Task 4/16 的断言值。
+
+**裁剪规则**：只保留适配层读取的节点字段（`content_json`、`caption_*`、`markdown_line_*` 等一律剔除，减重且防误用）；meta 只保留 `docMeta`/`outlines`/`pages`。产物形态 = 请求体 documents 元素形态（`{docId, blocks, meta}`），conftest 加载后可直接 POST（Task 16）。
+
+- [ ] **Step 1: 运行裁剪命令生成 4 份 fixture**
+
+```bash
+python -c "
+import json, pathlib
+SRC = pathlib.Path(r'D:/AI/AnGIneer/data/knowledge_base/libraries/default/documents')
+DST = pathlib.Path('services/compare-algo/tests/fixtures')
+KEEP = ['block_uid','block_type','page_idx','block_seq','plain_text','bbox','derived_level','parent_uid','source','confidence','image_path','table_html','math_content','formula_body','formula_number']
+DOCS = {'haigang1':'doc-12f45ca9','haigang2':'doc-c8be9f8b','pingshen_a':'doc-020a5d97','pingshen_b':'doc-1d0c4891'}
+DST.mkdir(parents=True, exist_ok=True)
+for name, doc in DOCS.items():
+    parsed = SRC / doc / 'parsed'
+    blocks = [{k: b.get(k) for k in KEEP} for b in map(json.loads, open(parsed/'doc_blocks_graph.jsonl', encoding='utf-8'))]
+    meta = json.load(open(parsed/'doc_blocks_graph_meta.json', encoding='utf-8'))
+    payload = {'docId': doc, 'blocks': blocks, 'meta': {'docMeta': meta['docMeta'], 'outlines': meta['outlines'], 'pages': meta['pages']}}
+    (DST / f'{name}.json').write_text(json.dumps(payload, ensure_ascii=False, indent=1), encoding='utf-8')
+    print(name, len(blocks), 'blocks')
+"
+```
+
+预期输出：
+
+```
+haigang1 38 blocks
+haigang2 197 blocks
+pingshen_a 10 blocks
+pingshen_b 10 blocks
+```
+
+- [ ] **Step 2: 抽样核对 fixture 内容（固化断言值）**
+
+```bash
+python -c "
+import json
+base = pathlib = __import__('pathlib').Path('services/compare-algo/tests/fixtures')
+h1 = json.loads((base/'haigang1.json').read_text(encoding='utf-8'))
+print('h1 meta:', json.dumps(h1['meta']['docMeta'], ensure_ascii=False))
+print('h1 outlines:', len(h1['meta']['outlines']), '| pages:', h1['meta']['pages'])
+print('h1 types:', sorted({b['block_type'] for b in h1['blocks']}))
+pa = json.loads((base/'pingshen_a.json').read_text(encoding='utf-8'))
+pb = json.loads((base/'pingshen_b.json').read_text(encoding='utf-8'))
+print('pingshen author 相同:', pa['meta']['docMeta']['author'] == pb['meta']['docMeta']['author'], pa['meta']['docMeta']['author'])
+print('pingshen tool:', pa['meta']['docMeta']['creatorTool'], '| createdAt 不同:', pa['meta']['docMeta']['createdAt'] != pb['meta']['docMeta']['createdAt'])
+"
+```
+
+预期（实测值，Task 4/16 断言以此为据）：
+- haigang1：`creatorTool="Adobe Acrobat 9.3.2"`，`createdAt="D:20251229164720+08'00'"`（PDF 原始日期），outlines 4 条（1 根 + 3 子），pages 2 页 612.0×825.0，block_type ∈ {title, paragraph, page_header, page_number, equation_interline}
+- pingshen 对：author 相同（非空），creatorTool 均为 `Writer`，createdAt 不同
+
+- [ ] **Step 3: 提交**
+
+```bash
+git add services/compare-algo && git commit -m "test(compare-algo): 真实 AnGIneer 产物 fixture（海港部分雷同对 + 评审办法副本对）"
+```
+
+## Task 3: AnGIneer 原始产物 schema（raw.py 宽松校验）
+
+**Files:**
+- Create: `services/compare-algo/app/angineer/raw.py`
+- Create: `services/compare-algo/tests/test_angineer_raw.py`
+
+校验原则：**宽松但守底线**——只校验适配层读取的字段，未知字段一律忽略（`extra="ignore"`，产物后续增补字段不破坏契约）；`docId` 为 opaque 字符串（ABP 文档 id），**不校验** block_uid 前缀一致性。校验失败抛 `pydantic.ValidationError`（含字段路径），Task 16 统一转 422 `IR_VALIDATION_FAILED`。
+
+硬性校验项：每文档 `blocks` 非空且 `block_uid` 非空唯一；`block_type` 非空字符串；`page_idx >= 0`；`bbox` 允许 null，存在时必须为 0~1 归一化（非负、x1≥x0、y1≥y0、≤1，像素坐标拒收）；`source` 只允许 `text|ocr|table|formula|null`（实测词表，`"native"` 等未知值拒收）；`confidence∈[0,1]` 或 null；`table_html` 存在时必须纯净（仅 table/tr/td/th、仅 rowspan/colspan 属性——实测 132 表全满足）；`meta.docMeta` 六字段（fileName/pageCount/author/creatorTool/createdAt/modifiedAt）可 null 不可省略；`meta.pages` 至少 1 页且 width/height 为正浮点；`meta.outlines` 可为空列表。
+
+- [ ] **Step 1: 写失败测试**
+
+`services/compare-algo/tests/test_angineer_raw.py`：
+
+```python
+import json
+import pathlib
+
+import pytest
+from pydantic import ValidationError
+
+from app.angineer.raw import validate_raw_document
+
+FIXTURES = pathlib.Path(__file__).parent / "fixtures"
+
+
+def load_fixture(name: str) -> dict:
+    return json.loads((FIXTURES / f"{name}.json").read_text(encoding="utf-8"))
+
+
+def _minimal_raw() -> dict:
+    return {
+        "docId": "d1",
+        "blocks": [
+            {
+                "block_uid": "d1:0:1",
+                "block_type": "paragraph",
+                "page_idx": 0,
+                "block_seq": 1,
+                "plain_text": "正文内容",
+                "bbox": [0.04, 0.06, 0.5, 0.1],
+                "derived_level": None,
+                "parent_uid": None,
+                "source": "text",
+                "confidence": 1.0,
+                "image_path": None,
+                "table_html": None,
+                "math_content": None,
+                "formula_body": None,
+                "formula_number": None,
+            }
+        ],
+        "meta": {
+            "docMeta": {
+                "fileName": "a.pdf",
+                "pageCount": 1,
+                "author": None,
+                "creatorTool": None,
+                "createdAt": None,
+                "modifiedAt": None,
+            },
+            "outlines": [],
+            "pages": [{"pageIdx": 0, "width": 612.0, "height": 825.0}],
+        },
+    }
+
+
+class TestRealFixtures:
+    """真实产物必须通过校验（Task 2 裁剪样本）。"""
+
+    @pytest.mark.parametrize("name", ["haigang1", "haigang2", "pingshen_a", "pingshen_b"])
+    def test_real_fixture_valid(self, name):
+        doc = validate_raw_document(load_fixture(name))
+        assert doc.docId.startswith("doc-")
+        assert len(doc.blocks) > 0
+
+
+def test_minimal_raw_passes():
+    doc = validate_raw_document(_minimal_raw())
+    assert doc.blocks[0].block_uid == "d1:0:1"
+
+
+def test_unknown_extra_fields_ignored():
+    # 产物后续增补字段不破坏契约（实测节点有 content_json/caption_* 等 40+ 字段）
+    data = _minimal_raw()
+    data["blocks"][0]["content_json"] = {"paragraph_content": []}
+    data["blocks"][0]["some_future_field"] = 123
+    data["meta"]["edges"] = []
+    doc = validate_raw_document(data)
+    assert doc.blocks[0].plain_text == "正文内容"
+
+
+def test_docid_is_opaque_no_prefix_check():
+    # docId 为 ABP 文档 id，不要求 block_uid 以其为前缀
+    data = _minimal_raw()
+    data["docId"] = "abp-guid-0001"
+    doc = validate_raw_document(data)
+    assert doc.docId == "abp-guid-0001"
+
+
+def test_missing_block_uid_rejected():
+    data = _minimal_raw()
+    del data["blocks"][0]["block_uid"]
+    with pytest.raises(ValidationError):
+        validate_raw_document(data)
+
+
+def test_duplicate_block_uid_rejected():
+    data = _minimal_raw()
+    data["blocks"].append(dict(data["blocks"][0]))
+    with pytest.raises(ValidationError):
+        validate_raw_document(data)
+
+
+def test_pixel_bbox_rejected():
+    data = _minimal_raw()
+    data["blocks"][0]["bbox"] = [0, 0, 1000, 1000]
+    with pytest.raises(ValidationError):
+        validate_raw_document(data)
+
+
+def test_bbox_above_one_or_inverted_rejected():
+    for bad in ([0, 0, 1.5, 0.5], [0.5, 0, 0.1, 0.1], [-0.1, 0, 0.5, 0.1]):
+        data = _minimal_raw()
+        data["blocks"][0]["bbox"] = bad
+        with pytest.raises(ValidationError):
+            validate_raw_document(data)
+
+
+def test_null_bbox_accepted():
+    # 实测无此情况，但页面尺寸缺失时 AnGIneer 会给 null，宽松接收
+    data = _minimal_raw()
+    data["blocks"][0]["bbox"] = None
+    doc = validate_raw_document(data)
+    assert doc.blocks[0].bbox is None
+
+
+def test_source_vocabulary_enforced():
+    # 实测词表 text/ocr/table/formula/null；v2 文档措辞 "native" 拒收
+    data = _minimal_raw()
+    data["blocks"][0]["source"] = "native"
+    with pytest.raises(ValidationError):
+        validate_raw_document(data)
+
+
+def test_null_source_and_confidence_accepted():
+    data = _minimal_raw()
+    data["blocks"][0]["source"] = None
+    data["blocks"][0]["confidence"] = None
+    doc = validate_raw_document(data)
+    assert doc.blocks[0].source is None
+
+
+def test_confidence_out_of_range_rejected():
+    data = _minimal_raw()
+    data["blocks"][0]["confidence"] = 1.5
+    with pytest.raises(ValidationError):
+        validate_raw_document(data)
+
+
+def test_docmeta_field_must_be_present_even_if_null():
+    # v2 §5-7：可 null 不可省略
+    data = _minimal_raw()
+    del data["meta"]["docMeta"]["author"]
+    with pytest.raises(ValidationError):
+        validate_raw_document(data)
+
+
+def test_pages_required_and_positive_float():
+    data = _minimal_raw()
+    data["meta"]["pages"] = []
+    with pytest.raises(ValidationError):
+        validate_raw_document(data)
+    data = _minimal_raw()
+    data["meta"]["pages"] = [{"pageIdx": 0, "width": 0, "height": 825.0}]
+    with pytest.raises(ValidationError):
+        validate_raw_document(data)
+
+
+def test_table_html_purity_enforced():
+    for bad_html in (
+        '<table class="t"><tr><td>1</td></tr></table>',
+        '<table><tr><td style="color:red">1</td></tr></table>',
+        '<table><thead><tr><td>1</td></tr></thead></table>',
+    ):
+        data = _minimal_raw()
+        data["blocks"][0]["block_type"] = "table"
+        data["blocks"][0]["plain_text"] = ""
+        data["blocks"][0]["table_html"] = bad_html
+        data["blocks"][0]["image_path"] = "images/t.jpg"
+        with pytest.raises(ValidationError):
+            validate_raw_document(data)
+
+
+def test_table_html_with_rowspan_colspan_passes():
+    data = _minimal_raw()
+    data["blocks"][0]["block_type"] = "table"
+    data["blocks"][0]["plain_text"] = ""
+    data["blocks"][0]["table_html"] = (
+        '<table><tr><td rowspan="2">a</td><td colspan="2">b</td></tr>'
+        "<tr><td>c</td><td>d</td></tr></table>"
+    )
+    data["blocks"][0]["image_path"] = "images/t.jpg"
+    doc = validate_raw_document(data)
+    assert doc.blocks[0].table_html is not None
+```
+
+运行确认失败（此时 `app/angineer/raw.py` 尚不存在，collection 报 ImportError 即视为失败）：
+
+```bash
+cd services/compare-algo && uv run pytest tests/test_angineer_raw.py -q
+```
+
+- [ ] **Step 2: 实现 `app/angineer/raw.py`**
+
+`services/compare-algo/app/angineer/raw.py`：
+
+```python
+"""AnGIneer 原始产物 pydantic 模型（宽松校验）。
+
+对应 doc_blocks_graph.jsonl 节点 + doc_blocks_graph_meta.json 的 {docMeta, outlines, pages}。
+只校验适配层读取的字段，未知字段忽略（产物增补字段不破坏契约）。
+docId 为 opaque 字符串（ABP 文档 id），不校验 block_uid 前缀。
+校验失败抛 pydantic.ValidationError（含字段路径），由 API 层统一转 422。
+"""
+from __future__ import annotations
+
+from typing import Literal, Optional
+
+from lxml import html as lxml_html
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
+
+# table html 纯净结构（实测 132 表仅 table/tr/td + rowspan/colspan）
+_ALLOWED_TABLE_TAGS = {"table", "tr", "td", "th"}
+_ALLOWED_TABLE_ATTRS = {"rowspan", "colspan"}
+
+# 实测词表（solo_engine.py:1225-1257）：原生文本 = "text"（v2 文档 "native" 系措辞）
+RawSource = Literal["text", "ocr", "table", "formula"]
+
+
+class RawBlock(BaseModel):
+    model_config = ConfigDict(extra="ignore")
+
+    block_uid: str = Field(min_length=1)
+    block_type: str = Field(min_length=1)
+    page_idx: int = Field(ge=0)
+    block_seq: int = Field(default=0, ge=0)
+    plain_text: Optional[str] = None
+    # 0~1 归一化；页面尺寸缺失时 AnGIneer 给 null，宽松接收
+    bbox: Optional[tuple[float, float, float, float]] = None
+    derived_level: Optional[int] = None
+    parent_uid: Optional[str] = None
+    source: Optional[RawSource] = None
+    confidence: Optional[float] = Field(default=None, ge=0.0, le=1.0)
+    image_path: Optional[str] = None
+    table_html: Optional[str] = None
+    math_content: Optional[str] = None
+    formula_body: Optional[str] = None
+    formula_number: Optional[str] = None
+
+    @field_validator("bbox")
+    @classmethod
+    def _check_bbox(cls, v):
+        if v is None:
+            return v
+        x0, y0, x1, y1 = v
+        if x0 < 0 or y0 < 0:
+            raise ValueError(f"bbox {list(v)} 坐标不得为负")
+        if x1 < x0 or y1 < y0:
+            raise ValueError(f"bbox {list(v)} 必须满足 x1>=x0 且 y1>=y0")
+        if max(v) > 1.0:
+            raise ValueError(f"bbox {list(v)} 超出 0~1 归一化区间（疑似像素坐标）")
+        return v
+
+    @field_validator("table_html")
+    @classmethod
+    def _check_table_html_purity(cls, v):
+        if v is None:
+            return v
+        try:
+            root = lxml_html.fromstring(v)
+        except Exception as exc:
+            raise ValueError(f"table_html 不是合法 HTML：{exc}") from exc
+        for el in root.iter():
+            tag = el.tag if isinstance(el.tag, str) else ""
+            if tag not in _ALLOWED_TABLE_TAGS:
+                raise ValueError(f"table_html 含非法标签 <{tag}>，仅允许 table/tr/td/th")
+            for attr in el.attrib:
+                if attr not in _ALLOWED_TABLE_ATTRS:
+                    raise ValueError(f"table_html 含非法属性 {attr!r}，仅允许 rowspan/colspan")
+        return v
+
+
+class RawDocMeta(BaseModel):
+    model_config = ConfigDict(extra="ignore")
+
+    # v2 §5-7：全部可 null 不可省略（Optional 无默认值 = 必填可空）
+    fileName: Optional[str]
+    pageCount: Optional[int]
+    author: Optional[str]
+    creatorTool: Optional[str]
+    createdAt: Optional[str]
+    modifiedAt: Optional[str]
+
+
+class RawOutline(BaseModel):
+    model_config = ConfigDict(extra="ignore")
+
+    outline_id: Optional[str] = None
+    title: str = ""
+    level: Optional[int] = None
+    page_idx: int = Field(ge=0)
+    anchor_block_id: Optional[str] = None
+    parent_outline_id: Optional[str] = None
+    printed_page_label: Optional[str] = None
+
+
+class RawPage(BaseModel):
+    model_config = ConfigDict(extra="ignore")
+
+    pageIdx: int = Field(ge=0)
+    width: float = Field(gt=0)   # 实测为浮点（如 612.0）
+    height: float = Field(gt=0)
+
+
+class RawMeta(BaseModel):
+    model_config = ConfigDict(extra="ignore")  # edges/stats/generated_at/build_id 忽略
+
+    docMeta: RawDocMeta
+    outlines: list[RawOutline] = Field(default_factory=list)
+    pages: list[RawPage] = Field(min_length=1)
+
+
+class RawDocumentEnvelope(BaseModel):
+    """请求体 documents 元素：{docId, blocks, meta}。"""
+
+    model_config = ConfigDict(extra="ignore")
+
+    docId: str = Field(min_length=1)  # opaque：ABP 文档 id
+    blocks: list[RawBlock] = Field(min_length=1)
+    meta: RawMeta
+
+    @model_validator(mode="after")
+    def _check_block_uid_unique(self) -> "RawDocumentEnvelope":
+        ids = [b.block_uid for b in self.blocks]
+        dups = sorted({i for i in ids if ids.count(i) > 1})
+        if dups:
+            raise ValueError(f"block_uid 重复：{dups}")
+        return self
+
+
+def validate_raw_document(data: dict) -> RawDocumentEnvelope:
+    """产物校验入口：不合格抛 pydantic.ValidationError（含具体字段路径）。"""
+    return RawDocumentEnvelope.model_validate(data)
+```
+
+- [ ] **Step 3: 运行测试确认通过**
+
+```bash
+cd services/compare-algo && uv run pytest tests/test_angineer_raw.py -q
+```
+
+预期：全部 passed（含 4 份真实 fixture）。
+
+- [ ] **Step 4: 提交**
+
+```bash
+git add services/compare-algo && git commit -m "feat(compare-algo): AnGIneer 原始产物宽松校验 schema（实测词表/纯净表格/bbox 归一）"
+```
+
+---
+
+## Task 4: 适配器与内部分析模型（adapter.py + pdf_date.py + ir.py + conftest）
+
+**Files:**
+- Create: `services/compare-algo/app/angineer/pdf_date.py`
+- Create: `services/compare-algo/app/angineer/adapter.py`
+- Create: `services/compare-algo/app/schemas/ir.py`
+- Create: `services/compare-algo/tests/conftest.py`（合成 raw fixture + 真实 fixture 加载器，后续所有 Task 复用）
+- Create: `services/compare-algo/tests/test_angineer_adapter.py`
+
+适配规则（v2 §2/§3 + 实测事实裁决）：
+
+| 内部模型 | 取值 |
+|---|---|
+| `blockId` | `block_uid` 原样 |
+| `pageIdx` | `page_idx` |
+| `bbox` | `bbox`（0~1 或 null，原样） |
+| `type` | title→`title`，paragraph→`para`，list→`list`，table→`table`，equation_interline→`equation`，image/figure/**chart**→`image`，page_header→`header`，page_footer/page_number→`footer`；未知类型 → `para`（保守当正文，不丢内容） |
+| `text` | `plain_text` 剥 HTML 标签；equation 取 `math_content` 或 `formula_body`（LaTeX） |
+| `textLevel` | 标题块 = `derived_level`（null→0）；非标题固定 0 |
+| `source`/`confidence` | 原样（text/ocr/table/formula/null） |
+| `table.html`/`imgPath` | `table_html` / `image_path` |
+| `imgPath`（image/equation） | `image_path` |
+| `outline` | `meta.outlines` 扁平（parent_outline_id）→ 嵌套 `children`；`blockId` ← `anchor_block_id`；标题剥标签 |
+| `meta.createdAt`/`modifiedAt` | PDF 原始日期 → ISO 8601（`pdf_date.parse_pdf_date`；ISO/不可解析原样保留，null→null） |
+| `pages` | `meta.pages` 原样（真实 pt 尺寸，浮点） |
+
+内部模型硬规则（适配输出必须满足，违例抛 ValidationError → API 层 422）：`blockId` 唯一；outline 引用必须存在；`pageIdx` 必须存在于 `pages`；table 必须有 `imgPath`（html 可选——实测 2/132 无 html）；image/equation 必须有 `imgPath`（实测全部有）；equation 的 `text` 必须非空（LaTeX）；`source="text"` 时 `confidence` 非 null 则必须 1.0。
 
 - [ ] **Step 1: 写测试 fixture（conftest.py）与失败测试，运行确认失败**
 
 `services/compare-algo/tests/conftest.py`：
 
 ```python
-"""测试 fixture：3 份虚拟标书 IR。
+"""测试 fixture。
+
+合成 fixture：3 份虚拟标书，以 **AnGIneer 原始产物形态**（snake_case）构造，
+经 validate_raw_document + adapt_document 得到内部模型——全链路走适配层，
+与生产路径一致（Task 16 的 ir_payload 直接复用 raw 形态）。
 
 - doc-a / doc-b：共享一段雷同承诺文本（内含故意错别字「保证今」，各出现一次）、
   同一作者「张三」、同一 createdAt、报价 1,000,000 / 1,010,000（与 doc-c 构成等差）。
 - doc-b 另有一个 source=ocr 且 confidence=0.3 的低置信块，文本与 doc-a 的 b004 完全相同，
-  用于 OCR 降权测试（spec §4.5）。
+  用于 OCR 降权测试（spec §4.5；真实数据 confidence 全 1.0，此场景只能靠合成）。
 - doc-c：内容、作者、时间均独立，报价 1,020,000（三份构成公差 10,000 的等差数列）。
 - 三份 creatorTool 均为 "Microsoft Word"（全相同 → 低危线索）。
+
+真实 fixture：tests/fixtures/ 下 4 份裁剪产物（Task 2 生成），
+raw_haigang_pair（部分雷同对）/ raw_pingshen_pair（元数据一致对）。
 """
+import json
+import pathlib
+
 import pytest
 
-from app.schemas.ir import IrDocument, validate_ir_document
+from app.angineer.adapter import adapt_document
+from app.angineer.raw import validate_raw_document
+from app.schemas.ir import IrDocument
 
-PAGE = {"pageIdx": 0, "width": 1190, "height": 1684}
+FIXTURES = pathlib.Path(__file__).parent / "fixtures"
+
+PAGE = {"pageIdx": 0, "width": 1190.0, "height": 1684.0}
 
 SHARED_PARAGRAPH = (
     "我公司郑重承诺，若我方中标，将在合同签订后三十个日历日内进场施工，"
@@ -218,47 +722,53 @@ C_PARA_1 = "本集团致力于智慧园区整体解决方案的研发与交付�
 C_PARA_2 = "我们拥有完全自主的知识产权与成熟实施经验。"
 
 
-def make_block(
-    block_id: str,
+def make_raw_block(
+    uid: str,
     text: str,
     *,
-    type: str = "para",
-    source: str = "native",
-    confidence: float = 1.0,
+    block_type: str = "paragraph",
+    source: str | None = "text",
+    confidence: float | None = 1.0,
     page_idx: int = 0,
+    seq: int = 1,
     y: int = 0,
-    table: dict | None = None,
+    derived_level: int | None = None,
+    table_html: str | None = None,
+    image_path: str | None = None,
+    math_content: str | None = None,
 ) -> dict:
-    block: dict = {
-        "blockId": block_id,
-        "pageIdx": page_idx,
-        "bbox": [50, 100 + y, 1140, 140 + y],
-        "type": type,
-        "text": text,
-        "textLevel": 1 if type == "title" else 0,
+    return {
+        "block_uid": uid,
+        "block_type": block_type,
+        "page_idx": page_idx,
+        "block_seq": seq,
+        "plain_text": text,
+        # AnGIneer bbox 为 0~1 归一化（此处由像素坐标 ÷ 页面尺寸 1190×1684 换算）
+        "bbox": [50 / 1190, (100 + y) / 1684, 1140 / 1190, (140 + y) / 1684],
+        "derived_level": derived_level,
+        "parent_uid": None,
         "source": source,
         "confidence": confidence,
-    }
-    if table is not None:
-        block["table"] = table
-    return block
-
-
-def price_table(total: str) -> dict:
-    return {
-        "html": (
-            "<table>"
-            "<tr><th>项目</th><th>金额</th></tr>"
-            "<tr><td>分部分项工程费</td><td>800,000.00</td></tr>"
-            "<tr><td>措施费</td><td>100,000.00</td></tr>"
-            f"<tr><td>投标总价（元）</td><td>{total}</td></tr>"
-            "</table>"
-        ),
-        "imgPath": "images/price.jpg",
+        "image_path": image_path,
+        "table_html": table_html,
+        "math_content": math_content,
+        "formula_body": None,
+        "formula_number": None,
     }
 
 
-def make_ir(
+def price_table_html(total: str) -> str:
+    return (
+        "<table>"
+        "<tr><td>项目</td><td>金额</td></tr>"
+        "<tr><td>分部分项工程费</td><td>800,000.00</td></tr>"
+        "<tr><td>措施费</td><td>100,000.00</td></tr>"
+        f"<tr><td>投标总价（元）</td><td>{total}</td></tr>"
+        "</table>"
+    )
+
+
+def make_raw_doc(
     doc_id: str,
     *,
     file_name: str,
@@ -267,303 +777,476 @@ def make_ir(
     blocks: list[dict],
 ) -> dict:
     return {
-        "schemaVersion": "1.0",
         "docId": doc_id,
-        "meta": {
-            "fileName": file_name,
-            "pageCount": 1,
-            "author": author,
-            "creatorTool": "Microsoft Word",
-            "createdAt": created_at,
-            "modifiedAt": None,
-        },
-        "pages": [dict(PAGE)],
-        "outline": [],
         "blocks": blocks,
+        "meta": {
+            "docMeta": {
+                "fileName": file_name,
+                "pageCount": 1,
+                "author": author,
+                "creatorTool": "Microsoft Word",
+                "createdAt": created_at,
+                "modifiedAt": None,
+            },
+            "outlines": [],
+            "pages": [dict(PAGE)],
+        },
     }
 
 
+def adapt(raw: dict) -> IrDocument:
+    """raw dict → 校验 → 适配 → 内部模型（测试统一入口，与生产路径一致）。"""
+    return adapt_document(validate_raw_document(raw))
+
+
+def load_raw_fixture(name: str) -> dict:
+    return json.loads((FIXTURES / f"{name}.json").read_text(encoding="utf-8"))
+
+
 @pytest.fixture()
-def ir_doc_a() -> IrDocument:
-    return validate_ir_document(make_ir(
+def raw_doc_a() -> dict:
+    return make_raw_doc(
         "doc-a",
         file_name="A公司投标文件.pdf",
         author="张三",
         created_at="2026-07-01T10:00:00",
         blocks=[
-            make_block("b001", "投标函", type="title", y=0),
-            make_block("b002", A_INTRO, y=60),
-            make_block("b003", SHARED_PARAGRAPH, y=120),
-            make_block("b004", A_SEAL_LINE, y=180),
-            make_block("b005", "", type="table", y=240, table=price_table("1,000,000.00")),
+            make_raw_block("b001", "投标函", block_type="title", derived_level=1, y=0),
+            make_raw_block("b002", A_INTRO, seq=2, y=60),
+            make_raw_block("b003", SHARED_PARAGRAPH, seq=3, y=120),
+            make_raw_block("b004", A_SEAL_LINE, seq=4, y=180),
+            make_raw_block("b005", "", block_type="table", seq=5, y=240,
+                           table_html=price_table_html("1,000,000.00"),
+                           image_path="images/price.jpg"),
         ],
-    ))
+    )
 
 
 @pytest.fixture()
-def ir_doc_b() -> IrDocument:
-    return validate_ir_document(make_ir(
+def raw_doc_b() -> dict:
+    return make_raw_doc(
         "doc-b",
         file_name="B公司投标文件.pdf",
         author="张三",
         created_at="2026-07-01T10:00:00",
         blocks=[
-            make_block("b001", "投标函", type="title", y=0),
-            make_block("b002", B_INTRO, y=60),
-            make_block("b003", SHARED_PARAGRAPH, y=120),
-            make_block("b004", "", type="table", y=180, table=price_table("1,010,000.00")),
+            make_raw_block("b001", "投标函", block_type="title", derived_level=1, y=0),
+            make_raw_block("b002", B_INTRO, seq=2, y=60),
+            make_raw_block("b003", SHARED_PARAGRAPH, seq=3, y=120),
+            make_raw_block("b004", "", block_type="table", seq=4, y=180,
+                           table_html=price_table_html("1,010,000.00"),
+                           image_path="images/price.jpg"),
             # 低置信 OCR 块，文本与 doc-a 的 b004 完全相同 → 雷同但须降权（spec §4.5）
-            make_block("b005", A_SEAL_LINE, source="ocr", confidence=0.3, y=240),
+            make_raw_block("b005", A_SEAL_LINE, source="ocr", confidence=0.3, seq=5, y=240),
         ],
-    ))
+    )
 
 
 @pytest.fixture()
-def ir_doc_c() -> IrDocument:
-    return validate_ir_document(make_ir(
+def raw_doc_c() -> dict:
+    return make_raw_doc(
         "doc-c",
         file_name="C公司投标文件.pdf",
         author="李四",
         created_at="2026-07-02T09:30:00",
         blocks=[
-            make_block("b001", C_TITLE, type="title", y=0),
-            make_block("b002", C_PARA_1, y=60),
-            make_block("b003", C_PARA_2, y=120),
-            make_block("b004", "", type="table", y=180, table=price_table("1,020,000.00")),
+            make_raw_block("b001", C_TITLE, block_type="title", derived_level=1, y=0),
+            make_raw_block("b002", C_PARA_1, seq=2, y=60),
+            make_raw_block("b003", C_PARA_2, seq=3, y=120),
+            make_raw_block("b004", "", block_type="table", seq=4, y=180,
+                           table_html=price_table_html("1,020,000.00"),
+                           image_path="images/price.jpg"),
         ],
-    ))
+    )
 
 
 @pytest.fixture()
-def ir_docs(ir_doc_a: IrDocument, ir_doc_b: IrDocument, ir_doc_c: IrDocument) -> list[IrDocument]:
+def ir_doc_a(raw_doc_a) -> IrDocument:
+    return adapt(raw_doc_a)
+
+
+@pytest.fixture()
+def ir_doc_b(raw_doc_b) -> IrDocument:
+    return adapt(raw_doc_b)
+
+
+@pytest.fixture()
+def ir_doc_c(raw_doc_c) -> IrDocument:
+    return adapt(raw_doc_c)
+
+
+@pytest.fixture()
+def ir_docs(ir_doc_a, ir_doc_b, ir_doc_c) -> list[IrDocument]:
     return [ir_doc_a, ir_doc_b, ir_doc_c]
 
 
 @pytest.fixture()
-def ir_payload(ir_docs: list[IrDocument]) -> dict:
-    """可直接 POST 的请求体（Task 14 接口测试用）。"""
-    return {"taskId": "task-001", "documents": [d.model_dump(mode="json") for d in ir_docs]}
+def ir_payload(raw_doc_a, raw_doc_b, raw_doc_c) -> dict:
+    """可直接 POST 的请求体（raw 产物形态，Task 16 接口测试用）。"""
+    return {"taskId": "task-001", "documents": [raw_doc_a, raw_doc_b, raw_doc_c]}
+
+
+@pytest.fixture()
+def raw_haigang_pair() -> list[dict]:
+    return [load_raw_fixture("haigang1"), load_raw_fixture("haigang2")]
+
+
+@pytest.fixture()
+def raw_pingshen_pair() -> list[dict]:
+    return [load_raw_fixture("pingshen_a"), load_raw_fixture("pingshen_b")]
 ```
 
-`services/compare-algo/tests/test_ir_schema.py`：
+`services/compare-algo/tests/test_angineer_adapter.py`：
 
 ```python
 import pytest
 from pydantic import ValidationError
 
-from app.schemas.ir import validate_ir_document
+from app.angineer.pdf_date import parse_pdf_date
+
+from tests.conftest import adapt, make_raw_block, make_raw_doc
 
 
-def _minimal_ir() -> dict:
-    return {
-        "schemaVersion": "1.0",
-        "docId": "d1",
-        "meta": {
-            "fileName": "a.pdf",
-            "pageCount": 1,
-            "author": None,
-            "creatorTool": None,
-            "createdAt": None,
-            "modifiedAt": None,
-        },
-        "pages": [{"pageIdx": 0, "width": 100, "height": 100}],
-        "outline": [],
-        "blocks": [
-            {
-                "blockId": "b1",
-                "pageIdx": 0,
-                "bbox": [0, 0, 50, 10],
-                "type": "para",
-                "text": "正文内容",
-                "textLevel": 0,
-                "source": "native",
-                "confidence": 1.0,
-            }
-        ],
-    }
+class TestPdfDate:
+    def test_full_pdf_date(self):
+        assert parse_pdf_date("D:20251229164720+08'00'") == "2025-12-29T16:47:20+08:00"
+
+    def test_zulu_timezone(self):
+        assert parse_pdf_date("D:20250102030405Z") == "2025-01-02T03:04:05+00:00"
+
+    def test_partial_date_defaults(self):
+        assert parse_pdf_date("D:2025") == "2025-01-01T00:00:00"
+
+    def test_iso_passthrough(self):
+        assert parse_pdf_date("2026-07-01T10:00:00") == "2026-07-01T10:00:00"
+
+    def test_unparseable_passthrough(self):
+        assert parse_pdf_date("not-a-date") == "not-a-date"
+
+    def test_none_and_empty(self):
+        assert parse_pdf_date(None) is None
+        assert parse_pdf_date("  ") is None
+
+    def test_trailing_junk_passthrough(self):
+        # 尾部垃圾不静默吞掉：原样保留，避免不同垃圾串碰撞出相同日期（假阳性）
+        assert parse_pdf_date("D:2025abc") == "D:2025abc"
+        assert parse_pdf_date("D:20251229164720+08'00'junk") == "D:20251229164720+08'00'junk"
+
+    def test_hour_only_timezone(self):
+        # 小时级时区（分钟缺省）与 +08'00' 同一时刻，须产出同一字符串
+        assert parse_pdf_date("D:20251229164720+08'") == "2025-12-29T16:47:20+08:00"
 
 
-def test_fixture_docs_are_valid(ir_docs):
-    assert [d.docId for d in ir_docs] == ["doc-a", "doc-b", "doc-c"]
+class TestTypeMapping:
+    def test_paragraph_and_title(self, ir_doc_a):
+        types = {b.blockId: b.type for b in ir_doc_a.blocks}
+        assert types["b001"] == "title"
+        assert types["b002"] == "para"
+
+    def test_title_text_level_from_derived_level(self, ir_doc_a):
+        title = next(b for b in ir_doc_a.blocks if b.type == "title")
+        assert title.textLevel == 1
+        para = next(b for b in ir_doc_a.blocks if b.type == "para")
+        assert para.textLevel == 0
+
+    def test_table_mapping(self, ir_doc_a):
+        table = next(b for b in ir_doc_a.blocks if b.type == "table")
+        assert table.table is not None
+        assert table.table.html.startswith("<table>")
+        assert table.table.imgPath == "images/price.jpg"
+
+    def test_equation_uses_math_content(self):
+        raw = make_raw_doc("d-eq", file_name="e.pdf", author=None, created_at=None, blocks=[
+            make_raw_block("e1", "", block_type="equation_interline",
+                           math_content="E=mc^2", image_path="images/e.png"),
+        ])
+        doc = adapt(raw)
+        assert doc.blocks[0].type == "equation"
+        assert doc.blocks[0].text == "E=mc^2"
+
+    def test_chart_mapped_to_image(self):
+        # 实测 chart：有 image_path、文本为空、source=null（v2 §3 补充映射）
+        raw = make_raw_doc("d-chart", file_name="c.pdf", author=None, created_at=None, blocks=[
+            make_raw_block("c1", "", block_type="chart", source=None, confidence=None,
+                           image_path="images/chart.jpg"),
+        ])
+        doc = adapt(raw)
+        assert doc.blocks[0].type == "image"
+        assert doc.blocks[0].imgPath == "images/chart.jpg"
+
+    def test_furniture_mapping(self):
+        raw = make_raw_doc("d-f", file_name="f.pdf", author=None, created_at=None, blocks=[
+            make_raw_block("h1", "页眉文本", block_type="page_header"),
+            make_raw_block("f1", "45", block_type="page_number", seq=2, y=1500),
+            make_raw_block("f2", "页脚文本", block_type="page_footer", seq=3, y=1520),
+            make_raw_block("p1", "正文", seq=4, y=200),
+        ])
+        doc = adapt(raw)
+        types = {b.blockId: b.type for b in doc.blocks}
+        assert types["h1"] == "header"
+        assert types["f1"] == "footer"  # page_number 归入 footer（v2 §3：归入或忽略）
+        assert types["f2"] == "footer"
+
+    def test_unknown_type_falls_back_to_para(self):
+        raw = make_raw_doc("d-u", file_name="u.pdf", author=None, created_at=None, blocks=[
+            make_raw_block("u1", "某种未知块内容", block_type="some_future_type"),
+        ])
+        doc = adapt(raw)
+        assert doc.blocks[0].type == "para"
+        assert doc.blocks[0].text == "某种未知块内容"
 
 
-def test_minimal_ir_passes():
-    doc = validate_ir_document(_minimal_ir())
-    assert doc.docId == "d1"
+class TestTextSanitize:
+    def test_html_tags_stripped(self):
+        # 实测标题含 <sub> 等标签
+        raw = make_raw_doc("d-h", file_name="h.pdf", author=None, created_at=None, blocks=[
+            make_raw_block("t1", "2<sub>.</sub> 1 一般规定", block_type="title", derived_level=2),
+        ])
+        doc = adapt(raw)
+        assert doc.blocks[0].text == "2. 1 一般规定"
+
+    def test_non_tag_angle_brackets_preserved(self):
+        # 标书常见「<±5%>」「5<x<10>」等非标签尖括号不得误剥
+        raw = make_raw_doc("d-lt", file_name="lt.pdf", author=None, created_at=None, blocks=[
+            make_raw_block("p1", "偏差<±5%>以内，当 5<x<10>y 时成立"),
+        ])
+        doc = adapt(raw)
+        assert doc.blocks[0].text == "偏差<±5%>以内，当 5<x<10>y 时成立"
+
+    def test_html_entities_unescaped(self):
+        raw = make_raw_doc("d-amp", file_name="amp.pdf", author=None, created_at=None, blocks=[
+            make_raw_block("p1", "A&amp;B 联合体"),
+        ])
+        doc = adapt(raw)
+        assert doc.blocks[0].text == "A&B 联合体"
 
 
-def test_meta_field_must_be_present_even_if_null():
-    # spec §4.2：提取不到给 null，不省略字段
-    data = _minimal_ir()
-    del data["meta"]["author"]
-    with pytest.raises(ValidationError):
-        validate_ir_document(data)
+class TestMetaMapping:
+    def test_pdf_date_normalized(self):
+        raw = make_raw_doc("d-m", file_name="m.pdf", author=None,
+                           created_at="D:20251229164720+08'00'", blocks=[
+                               make_raw_block("p1", "正文"),
+                           ])
+        doc = adapt(raw)
+        assert doc.meta.createdAt == "2025-12-29T16:47:20+08:00"
+
+    def test_iso_date_passthrough(self, ir_doc_a):
+        assert ir_doc_a.meta.createdAt == "2026-07-01T10:00:00"
 
 
-def test_bbox_out_of_page_rejected():
-    # spec §4.3.1：bbox 必须是页面实际像素坐标
-    data = _minimal_ir()
-    data["blocks"][0]["bbox"] = [0, 0, 1000, 1000]  # 页面仅 100x100
-    with pytest.raises(ValidationError):
-        validate_ir_document(data)
+class TestOutlineNesting:
+    def test_flat_outlines_to_nested(self):
+        raw = make_raw_doc("d-o", file_name="o.pdf", author=None, created_at=None, blocks=[
+            make_raw_block("t1", "第一章", block_type="title", derived_level=1),
+            make_raw_block("t2", "第一节", block_type="title", derived_level=2, seq=2, y=60),
+            make_raw_block("p1", "正文", seq=3, y=120),
+        ])
+        raw["meta"]["outlines"] = [
+            {"outline_id": "o1", "title": "第一章", "level": 1, "page_idx": 0,
+             "anchor_block_id": "t1", "parent_outline_id": None, "printed_page_label": "1"},
+            {"outline_id": "o2", "title": "第一节", "level": 2, "page_idx": 0,
+             "anchor_block_id": "t2", "parent_outline_id": "o1", "printed_page_label": "1"},
+        ]
+        doc = adapt(raw)
+        assert len(doc.outline) == 1
+        assert doc.outline[0].blockId == "t1"
+        assert doc.outline[0].children[0].blockId == "t2"
+
+    def test_outline_parent_cycle_not_lost(self):
+        # 父引用成环（A↔B）：拆环后全部保留为可到达节点，不静默丢失也不递归崩溃
+        raw = make_raw_doc("d-cyc", file_name="cyc.pdf", author=None, created_at=None, blocks=[
+            make_raw_block("tA", "章节A", block_type="title", derived_level=1),
+            make_raw_block("tB", "章节B", block_type="title", derived_level=1, seq=2, y=60),
+        ])
+        raw["meta"]["outlines"] = [
+            {"outline_id": "oA", "title": "章节A", "level": 1, "page_idx": 0,
+             "anchor_block_id": "tA", "parent_outline_id": "oB", "printed_page_label": "1"},
+            {"outline_id": "oB", "title": "章节B", "level": 1, "page_idx": 0,
+             "anchor_block_id": "tB", "parent_outline_id": "oA", "printed_page_label": "1"},
+        ]
+        doc = adapt(raw)
+        found = {n.blockId for n in doc.outline}
+        found |= {c.blockId for n in doc.outline for c in n.children}
+        assert found == {"tA", "tB"}
 
 
-def test_bbox_negative_or_inverted_rejected():
-    for bad in ([-1, 0, 50, 10], [50, 0, 10, 10], [0, 20, 50, 10]):
-        data = _minimal_ir()
-        data["blocks"][0]["bbox"] = bad
+class TestInternalModelGuards:
+    def test_table_requires_imgpath(self):
+        raw = make_raw_doc("d-t", file_name="t.pdf", author=None, created_at=None, blocks=[
+            make_raw_block("t1", "", block_type="table",
+                           table_html="<table><tr><td>1</td></tr></table>"),
+        ])
         with pytest.raises(ValidationError):
-            validate_ir_document(data)
+            adapt(raw)
 
+    def test_table_without_html_allowed(self):
+        # 实测 2/132 表格无 table_html（有整表截图）：合法，pricing 跳过
+        raw = make_raw_doc("d-t2", file_name="t.pdf", author=None, created_at=None, blocks=[
+            make_raw_block("p1", "正文"),
+            make_raw_block("t1", "", block_type="table", seq=2, y=60,
+                           image_path="images/t.jpg"),
+        ])
+        doc = adapt(raw)
+        table = next(b for b in doc.blocks if b.type == "table")
+        assert table.table is not None
+        assert table.table.html is None
+        assert table.table.imgPath == "images/t.jpg"
 
-def test_confidence_out_of_range_rejected():
-    data = _minimal_ir()
-    data["blocks"][0]["confidence"] = 1.5
-    with pytest.raises(ValidationError):
-        validate_ir_document(data)
-
-
-def test_native_confidence_must_be_1():
-    # spec §4.2：native 文本给 1.0
-    data = _minimal_ir()
-    data["blocks"][0]["confidence"] = 0.8
-    with pytest.raises(ValidationError):
-        validate_ir_document(data)
-
-
-def test_low_confidence_ocr_block_accepted():
-    # spec §4.3.2：低置信块照常交付，不得静默丢弃
-    data = _minimal_ir()
-    data["blocks"][0]["source"] = "ocr"
-    data["blocks"][0]["confidence"] = 0.3
-    doc = validate_ir_document(data)
-    assert doc.blocks[0].confidence == 0.3
-
-
-def test_table_requires_html_and_imgpath():
-    # spec §4.3.4：表格必须同时给 html 与整表截图
-    data = _minimal_ir()
-    data["blocks"][0]["type"] = "table"
-    data["blocks"][0]["text"] = ""
-    with pytest.raises(ValidationError):
-        validate_ir_document(data)
-
-
-def test_table_html_purity_rejects_class_style_and_foreign_tags():
-    data = _minimal_ir()
-    data["blocks"][0]["type"] = "table"
-    data["blocks"][0]["text"] = ""
-    for bad_html in (
-        '<table class="t"><tr><td>1</td></tr></table>',
-        '<table><tr><td style="color:red">1</td></tr></table>',
-        '<table><thead><tr><td>1</td></tr></thead></table>',
-    ):
-        data["blocks"][0]["table"] = {"html": bad_html, "imgPath": "images/t.jpg"}
+    def test_image_requires_imgpath(self):
+        raw = make_raw_doc("d-i", file_name="i.pdf", author=None, created_at=None, blocks=[
+            make_raw_block("i1", "", block_type="image"),
+        ])
         with pytest.raises(ValidationError):
-            validate_ir_document(data)
+            adapt(raw)
 
-
-def test_table_html_with_rowspan_colspan_passes():
-    data = _minimal_ir()
-    data["blocks"][0]["type"] = "table"
-    data["blocks"][0]["text"] = ""
-    data["blocks"][0]["table"] = {
-        "html": '<table><tr><td rowspan="2">a</td><td colspan="2">b</td></tr><tr><td>c</td><td>d</td></tr></table>',
-        "imgPath": "images/t.jpg",
-    }
-    doc = validate_ir_document(data)
-    assert doc.blocks[0].table is not None
-
-
-def test_equation_requires_latex_text():
-    # spec §4.3.6：行间公式 text 必须给 LaTeX 源码，不允许只给截图
-    data = _minimal_ir()
-    data["blocks"][0]["type"] = "equation"
-    data["blocks"][0]["text"] = ""
-    data["blocks"][0]["imgPath"] = "images/e.png"
-    with pytest.raises(ValidationError):
-        validate_ir_document(data)
-
-
-def test_equation_with_latex_passes():
-    data = _minimal_ir()
-    data["blocks"][0]["type"] = "equation"
-    data["blocks"][0]["text"] = "E=mc^2"
-    data["blocks"][0]["imgPath"] = "images/e.png"
-    doc = validate_ir_document(data)
-    assert doc.blocks[0].text == "E=mc^2"
-
-
-def test_image_and_seal_require_imgpath():
-    for t in ("image", "seal"):
-        data = _minimal_ir()
-        data["blocks"][0]["type"] = t
-        data["blocks"][0]["text"] = ""
+    def test_equation_requires_latex(self):
+        raw = make_raw_doc("d-e", file_name="e.pdf", author=None, created_at=None, blocks=[
+            make_raw_block("e1", "", block_type="equation_interline",
+                           image_path="images/e.png"),
+        ])
         with pytest.raises(ValidationError):
-            validate_ir_document(data)
+            adapt(raw)
+
+    def test_text_source_confidence_must_be_1(self):
+        # source=text（原生文本）confidence 非 null 时必须 1.0
+        raw = make_raw_doc("d-s", file_name="s.pdf", author=None, created_at=None, blocks=[
+            make_raw_block("p1", "正文", source="text", confidence=0.8),
+        ])
+        with pytest.raises(ValidationError):
+            adapt(raw)
+
+    def test_page_idx_must_exist_in_pages(self):
+        raw = make_raw_doc("d-p", file_name="p.pdf", author=None, created_at=None, blocks=[
+            make_raw_block("p1", "正文", page_idx=5),
+        ])
+        with pytest.raises(ValidationError):
+            adapt(raw)
 
 
-def test_duplicate_block_id_rejected():
-    data = _minimal_ir()
-    data["blocks"].append(dict(data["blocks"][0]))
-    with pytest.raises(ValidationError):
-        validate_ir_document(data)
+class TestRealFixtures:
+    """真实产物适配结果固化（实测值来自 Task 2 Step 2）。"""
 
+    def test_haigang1_block_types_and_meta(self, raw_haigang_pair):
+        doc = adapt(raw_haigang_pair[0])
+        assert doc.docId == "doc-12f45ca9"
+        assert len(doc.blocks) == 38
+        from collections import Counter
+        counts = Counter(b.type for b in doc.blocks)
+        assert counts == {"para": 29, "title": 4, "header": 2, "footer": 2, "equation": 1}
+        assert doc.meta.creatorTool == "Adobe Acrobat 9.3.2"
+        assert doc.meta.createdAt == "2025-12-29T16:47:20+08:00"  # PDF 日期已归一
+        assert len(doc.pages) == 2
+        assert doc.pages[0].width == 612.0
 
-def test_outline_unknown_block_id_rejected():
-    data = _minimal_ir()
-    data["outline"] = [{"title": "第一章", "level": 1, "blockId": "nope", "children": []}]
-    with pytest.raises(ValidationError):
-        validate_ir_document(data)
+    def test_haigang1_outline_nested(self, raw_haigang_pair):
+        doc = adapt(raw_haigang_pair[0])
+        assert len(doc.outline) == 1          # 1 根（第 6 章）
+        assert len(doc.outline[0].children) == 3  # 6.1/6.2/6.3
+        assert doc.outline[0].level == 1
 
+    def test_haigang2_block_count(self, raw_haigang_pair):
+        doc = adapt(raw_haigang_pair[1])
+        assert doc.docId == "doc-c8be9f8b"
+        assert len(doc.blocks) == 197
 
-def test_block_page_idx_must_exist_in_pages():
-    data = _minimal_ir()
-    data["blocks"][0]["pageIdx"] = 5
-    with pytest.raises(ValidationError):
-        validate_ir_document(data)
+    def test_pingshen_pair_meta(self, raw_pingshen_pair):
+        a, b = (adapt(d) for d in raw_pingshen_pair)
+        assert a.meta.author and a.meta.author == b.meta.author
+        assert a.meta.creatorTool == b.meta.creatorTool == "Writer"
+        assert a.meta.createdAt != b.meta.createdAt  # 实测不同，不应出 createdAt 证据
 ```
 
-运行确认失败（此时 `app/schemas/ir.py` 尚不存在，collection 报 ImportError 即视为失败）：
+运行确认失败（此时三个实现文件尚不存在，collection 报 ImportError 即视为失败）：
 
 ```bash
-cd services/compare-algo && uv run pytest tests/test_ir_schema.py -q
+cd services/compare-algo && uv run pytest tests/test_angineer_adapter.py -q
 ```
 
-- [ ] **Step 2: 实现 `app/schemas/ir.py`**
+- [ ] **Step 2: 实现 `app/angineer/pdf_date.py`**
+
+`services/compare-algo/app/angineer/pdf_date.py`：
+
+```python
+"""PDF 原始日期归一：D:YYYYMMDDHHmmSSOHH'mm' → ISO 8601。
+
+实测 docMeta.createdAt 为 PDF 原始日期串（如 D:20251229164720+08'00'）。
+已是 ISO 或无法解析的输入原样返回（元数据比对是相等性分组，原样不影响正确性）。
+"""
+from __future__ import annotations
+
+import re
+from datetime import datetime, timedelta, timezone
+
+# 全串锚定：尾部垃圾（如 D:2025abc）整体不匹配 → 原样保留，
+# 避免不同垃圾串碰撞出同一日期（Task 14 createdAt 假阳性）；
+# 时区分钟可缺省（+08'）：与 +08'00' 同一时刻须产出同一字符串（防假阴性）
+_PDF_DATE_RE = re.compile(
+    r"^D:(?P<y>\d{4})(?P<mo>\d{2})?(?P<d>\d{2})?"
+    r"(?P<h>\d{2})?(?P<mi>\d{2})?(?P<s>\d{2})?"
+    r"(?P<tz>[Zz]|[+-]\d{2}'?(?:\d{2}'?)?)?\s*$"
+)
+
+
+def parse_pdf_date(value: str | None) -> str | None:
+    if value is None:
+        return None
+    text = value.strip()
+    if not text:
+        return None
+    m = _PDF_DATE_RE.match(text)
+    if not m:
+        return value  # ISO 或其他格式：原样保留
+    g = m.groupdict()
+    try:
+        dt = datetime(
+            int(g["y"]), int(g["mo"] or 1), int(g["d"] or 1),
+            int(g["h"] or 0), int(g["mi"] or 0), int(g["s"] or 0),
+        )
+    except ValueError:
+        return value
+    tz = g.get("tz")
+    if tz:
+        if tz in ("Z", "z"):
+            dt = dt.replace(tzinfo=timezone.utc)
+        else:
+            sign = 1 if tz[0] == "+" else -1
+            digits = re.sub(r"\D", "", tz[1:])
+            hours = int(digits[:2] or 0)
+            minutes = int(digits[2:4] or 0)
+            dt = dt.replace(tzinfo=timezone(sign * timedelta(hours=hours, minutes=minutes)))
+    return dt.isoformat()
+```
+
+- [ ] **Step 3: 实现 `app/schemas/ir.py`（内部分析模型）**
 
 `services/compare-algo/app/schemas/ir.py`：
 
 ```python
-"""IR（ir.json）pydantic 校验模型。
+"""内部分析模型（camelCase）：三个分析域（similarity/pricing/metadata）的唯一输入。
 
-契约见 spec §4.2（字段名逐字遵守），硬性要求见 spec §4.3。
-校验不合格抛 pydantic.ValidationError，错误中带具体字段路径。
+由 app/angineer/adapter.py 从 AnGIneer 产物适配生成，不直接出现在请求契约中。
+校验规则是适配输出的底线守卫；产物级宽松校验在 app/angineer/raw.py。
 """
 from __future__ import annotations
 
 from typing import Literal, Optional
 
-from lxml import html as lxml_html
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
-# spec §4.3.4：纯净结构（仅 table/tr/td/th，无样式无 class），仅允许合并单元格属性
-_ALLOWED_TABLE_TAGS = {"table", "tr", "td", "th"}
-_ALLOWED_TABLE_ATTRS = {"rowspan", "colspan"}
-
+# seal 为保留类型（spec §4.3.5）：AnGIneer 当前不产出
 BlockType = Literal["title", "para", "table", "list", "image", "equation", "seal", "header", "footer"]
-BlockSource = Literal["native", "ocr"]
+# 实测词表（AnGIneer solo_engine.py）：原生文本 = "text"
+BlockSource = Literal["text", "ocr", "table", "formula"]
 
 
 class IrMeta(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
-    fileName: str
-    pageCount: int = Field(ge=1)
-    # spec §4.2：提取不到给 null，不省略字段（Optional 无默认值 = 必填可空）
+    fileName: Optional[str]
+    pageCount: Optional[int]
     author: Optional[str]
     creatorTool: Optional[str]
-    createdAt: Optional[str]
+    createdAt: Optional[str]   # 适配层已归一为 ISO 8601（或原样保留）
     modifiedAt: Optional[str]
 
 
@@ -571,8 +1254,8 @@ class IrPage(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     pageIdx: int = Field(ge=0)
-    width: int = Field(gt=0)
-    height: int = Field(gt=0)
+    width: float = Field(gt=0)   # 真实 pt 尺寸，浮点（如 612.0）
+    height: float = Field(gt=0)
 
 
 class IrOutlineNode(BaseModel):
@@ -587,64 +1270,50 @@ class IrOutlineNode(BaseModel):
 class IrTable(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
-    html: str
+    # 实测 2/132 表格无 table_html（有整表截图）：html 可选，imgPath 必须
+    html: Optional[str] = None
     imgPath: str
-
-    @field_validator("html")
-    @classmethod
-    def _check_html_purity(cls, v: str) -> str:
-        try:
-            root = lxml_html.fromstring(v)
-        except Exception as exc:
-            raise ValueError(f"table.html 不是合法 HTML：{exc}") from exc
-        for el in root.iter():
-            tag = el.tag if isinstance(el.tag, str) else ""
-            if tag not in _ALLOWED_TABLE_TAGS:
-                raise ValueError(f"table.html 含非法标签 <{tag}>，仅允许 table/tr/td/th")
-            for attr in el.attrib:
-                if attr not in _ALLOWED_TABLE_ATTRS:
-                    raise ValueError(f"table.html 含非法属性 {attr!r}，仅允许 rowspan/colspan")
-        return v
 
 
 class IrBlock(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
-    blockId: str = Field(min_length=1)
+    blockId: str = Field(min_length=1)  # = AnGIneer block_uid（v2 §2）
     pageIdx: int = Field(ge=0)
-    bbox: tuple[float, float, float, float]
+    bbox: Optional[tuple[float, float, float, float]] = None  # 0~1 归一化
     type: BlockType
     text: str = ""
     textLevel: int = Field(default=0, ge=0)
-    source: BlockSource
-    confidence: float = Field(ge=0.0, le=1.0)
+    # v2 §4：允许 null；为 null 时 OCR 降权自动关闭
+    source: Optional[BlockSource] = None
+    confidence: Optional[float] = Field(default=None, ge=0.0, le=1.0)
     table: Optional[IrTable] = None
     imgPath: Optional[str] = None
 
     @field_validator("bbox")
     @classmethod
-    def _check_bbox_shape(cls, v: tuple[float, float, float, float]) -> tuple[float, float, float, float]:
+    def _check_bbox_shape(cls, v):
+        if v is None:
+            return v
         x0, y0, x1, y1 = v
-        if x0 < 0 or y0 < 0:
-            raise ValueError(f"bbox {list(v)} 坐标不得为负")
-        if x1 < x0 or y1 < y0:
-            raise ValueError(f"bbox {list(v)} 必须满足 x1>=x0 且 y1>=y0")
+        if x0 < 0 or y0 < 0 or x1 < x0 or y1 < y0 or max(v) > 1.0:
+            raise ValueError(f"bbox {list(v)} 非法（须 0~1 归一化且 x1>=x0, y1>=y0）")
         return v
 
     @model_validator(mode="after")
     def _check_type_requirements(self) -> "IrBlock":
-        # spec §4.2：native 文本 confidence 给 1.0
-        if self.source == "native" and self.confidence != 1.0:
-            raise ValueError(f"block {self.blockId}：source=native 时 confidence 必须为 1.0")
-        # spec §4.3.4：table 必须同时给 html 与整表截图
-        if self.type == "table" and self.table is None:
-            raise ValueError(f"block {self.blockId}：type=table 必须提供 table(html+imgPath)")
+        # source=text（原生文本）时 confidence 非 null 则必须 1.0
+        if self.source == "text" and self.confidence is not None and self.confidence != 1.0:
+            raise ValueError(f"block {self.blockId}：source=text 时 confidence 必须为 1.0")
+        # table 必须给整表截图（html 可选：实测 2/132 无 html，pricing 跳过）
+        if self.type == "table" and (self.table is None or not self.table.imgPath):
+            raise ValueError(f"block {self.blockId}：type=table 必须提供 table.imgPath")
         if self.type != "table" and self.table is not None:
             raise ValueError(f"block {self.blockId}：非 table 类型不得携带 table 字段")
-        # spec §4.2：image / seal / equation 必须给 imgPath
+        # image / seal / equation 必须给 imgPath（实测全部有）
         if self.type in ("image", "seal", "equation") and not self.imgPath:
             raise ValueError(f"block {self.blockId}：type={self.type} 必须提供 imgPath")
-        # spec §4.3.6：行间公式 text 必须给 LaTeX 源码
+        # 行间公式 text 必须给 LaTeX 源码（映射自 math_content/formula_body）
         if self.type == "equation" and not self.text.strip():
             raise ValueError(f"block {self.blockId}：equation 块的 text 必须给 LaTeX 源码")
         return self
@@ -653,8 +1322,7 @@ class IrBlock(BaseModel):
 class IrDocument(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
-    schemaVersion: str
-    docId: str = Field(min_length=1)
+    docId: str = Field(min_length=1)  # opaque：ABP 文档 id
     meta: IrMeta
     pages: list[IrPage] = Field(min_length=1)
     outline: list[IrOutlineNode] = Field(default_factory=list)
@@ -662,7 +1330,7 @@ class IrDocument(BaseModel):
 
     @model_validator(mode="after")
     def _check_document(self) -> "IrDocument":
-        # spec §4.2：blockId 文档内唯一
+        # blockId 文档内唯一
         ids = [b.blockId for b in self.blocks]
         dups = sorted({i for i in ids if ids.count(i) > 1})
         if dups:
@@ -678,45 +1346,184 @@ class IrDocument(BaseModel):
         for node in walk(self.outline):
             if node.blockId not in block_id_set:
                 raise ValueError(f"outline 引用了不存在的 blockId：{node.blockId}")
-        # pageIdx 必须存在；bbox 不得超出页面像素尺寸（spec §4.3.1：不接受归一化坐标）
+        # pageIdx 必须存在；pages 保留页面真实尺寸（前端还原/打印用，不参与 bbox 校验）
         page_map = {p.pageIdx: p for p in self.pages}
         if len(page_map) != len(self.pages):
             raise ValueError("pages 中 pageIdx 重复")
         for b in self.blocks:
-            page = page_map.get(b.pageIdx)
-            if page is None:
+            if b.pageIdx not in page_map:
                 raise ValueError(f"block {b.blockId} 的 pageIdx={b.pageIdx} 在 pages 中不存在")
-            x0, y0, x1, y1 = b.bbox
-            if x1 > page.width or y1 > page.height:
-                raise ValueError(
-                    f"block {b.blockId} 的 bbox {list(b.bbox)} 超出页面 {b.pageIdx} 尺寸 "
-                    f"{page.width}x{page.height}（bbox 必须是页面实际像素坐标）"
-                )
         return self
-
-
-def validate_ir_document(data: dict) -> IrDocument:
-    """IR schema 校验入口：不合格抛 pydantic.ValidationError（含具体字段路径）。"""
-    return IrDocument.model_validate(data)
 ```
 
-- [ ] **Step 3: 运行测试确认通过**
+- [ ] **Step 4: 实现 `app/angineer/adapter.py`**
+
+`services/compare-algo/app/angineer/adapter.py`：
+
+```python
+"""AnGIneer 产物 → 内部分析模型 适配器。
+
+全部产物字段知识收敛在 app/angineer/ 包内；下游引擎只消费 IrDocument。
+适配输出经 IrDocument 校验，违例抛 pydantic.ValidationError（API 层转 422）。
+"""
+from __future__ import annotations
+
+import html
+import re
+
+from app.angineer.pdf_date import parse_pdf_date
+from app.angineer.raw import RawBlock, RawDocumentEnvelope, RawOutline
+from app.schemas.ir import (
+    IrBlock,
+    IrDocument,
+    IrMeta,
+    IrOutlineNode,
+    IrPage,
+    IrTable,
+)
+
+# v2 §3 类型映射 + 实测补充：chart→image（v2 表遗漏，实测存在）；
+# page_number→footer（v2：归入 header/footer 或忽略）；未知类型→para（不丢内容）
+_TYPE_MAP = {
+    "title": "title",
+    "paragraph": "para",
+    "list": "list",
+    "table": "table",
+    "equation_interline": "equation",
+    "image": "image",
+    "figure": "image",
+    "chart": "image",
+    "page_header": "header",
+    "page_footer": "footer",
+    "page_number": "footer",
+}
+
+# 标签名必需的标签匹配：剥 <sub>/<br/> 等真标签，
+# 保留「偏差<±5%>」「5<x<10>」等非标签尖括号（标书常见，误剥会损毁正文）
+_TAG_RE = re.compile(r"</?[a-zA-Z][a-zA-Z0-9]*(?:\s[^>]*)?/?>")
+
+
+def _strip_html(text: str) -> str:
+    """剥除 HTML 标签（实测标题 plain_text 含 <sub> 等），并解码实体（&amp; → &）。"""
+    return html.unescape(_TAG_RE.sub("", text))
+
+
+def _block_text(block: RawBlock) -> str:
+    if block.block_type == "equation_interline":
+        # 行间公式给 LaTeX 源码（math_content 含 \tag 编号，formula_body 更纯净，优先）
+        return (block.formula_body or block.math_content or "").strip()
+    return _strip_html(block.plain_text or "")
+
+
+def _adapt_block(block: RawBlock) -> IrBlock:
+    mapped_type = _TYPE_MAP.get(block.block_type, "para")
+    table = None
+    img_path = None
+    if mapped_type == "table":
+        table = IrTable(html=block.table_html, imgPath=block.image_path or "")
+    elif mapped_type in ("image", "equation"):
+        img_path = block.image_path
+    text_level = 0
+    if mapped_type == "title" and block.derived_level:
+        text_level = block.derived_level
+    return IrBlock(
+        blockId=block.block_uid,
+        pageIdx=block.page_idx,
+        bbox=block.bbox,
+        type=mapped_type,
+        text=_block_text(block),
+        textLevel=text_level,
+        source=block.source,
+        confidence=block.confidence,
+        table=table,
+        imgPath=img_path,
+    )
+
+
+def _nest_outlines(outlines: list[RawOutline]) -> list[IrOutlineNode]:
+    """AnGIneer 扁平 outlines（parent_outline_id）→ 嵌套 children（v2 §5-6 二选一）。"""
+    nodes: dict[str, IrOutlineNode] = {}
+    order: list[str] = []
+    for o in outlines:
+        if not o.anchor_block_id:
+            continue  # 无锚点的 outline 无法定位，跳过
+        oid = o.outline_id or f"__auto_{len(order)}"
+        nodes[oid] = IrOutlineNode(
+            title=_strip_html(o.title),
+            level=max(1, o.level or 1),
+            blockId=o.anchor_block_id,
+        )
+        order.append(oid)
+    roots: list[IrOutlineNode] = []
+    parent_of: dict[str, str] = {}
+    for o, oid in zip((o for o in outlines if o.anchor_block_id), order):
+        parent = o.parent_outline_id
+        if parent and parent in nodes and parent != oid:
+            # 环检测：parent 祖先链含 oid 则挂载成环（IrDocument 校验会递归崩溃）→ 不挂，提升为根
+            cur: str | None = parent
+            is_cycle = False
+            while cur is not None:
+                if cur == oid:
+                    is_cycle = True
+                    break
+                cur = parent_of.get(cur)
+            if not is_cycle:
+                nodes[parent].children.append(nodes[oid])
+                parent_of[oid] = parent
+                continue
+        roots.append(nodes[oid])
+    # 兜底：未挂在任何根下的节点（成环/悬空）提升为根，不静默丢失
+    reachable: set[int] = set()
+
+    def _collect(node: IrOutlineNode) -> None:
+        if id(node) in reachable:
+            return
+        reachable.add(id(node))
+        for child in node.children:
+            _collect(child)
+
+    for root in roots:
+        _collect(root)
+    for oid in order:
+        if id(nodes[oid]) not in reachable:
+            roots.append(nodes[oid])
+    return roots
+
+
+def adapt_document(raw: RawDocumentEnvelope) -> IrDocument:
+    """产物 → 内部分析模型。输出经 IrDocument 校验，违例抛 ValidationError。"""
+    meta = raw.meta.docMeta
+    return IrDocument(
+        docId=raw.docId,
+        meta=IrMeta(
+            fileName=meta.fileName,
+            pageCount=meta.pageCount,
+            author=meta.author,
+            creatorTool=meta.creatorTool,
+            createdAt=parse_pdf_date(meta.createdAt),
+            modifiedAt=parse_pdf_date(meta.modifiedAt),
+        ),
+        pages=[IrPage(pageIdx=p.pageIdx, width=p.width, height=p.height) for p in raw.meta.pages],
+        outline=_nest_outlines(raw.meta.outlines),
+        blocks=[_adapt_block(b) for b in raw.blocks],
+    )
+```
+
+- [ ] **Step 5: 运行测试确认通过**
 
 ```bash
-cd services/compare-algo && uv run pytest tests/test_ir_schema.py -q
+cd services/compare-algo && uv run pytest tests/test_angineer_adapter.py -q
 ```
 
-预期：全部 passed。
+预期：全部 passed（含真实 fixture 断言）。
 
-- [ ] **Step 4: 提交**
+- [ ] **Step 6: 提交**
 
 ```bash
-git add services/compare-algo && git commit -m "feat(compare-algo): IR pydantic schema 校验器（bbox/source/confidence/表格纯净度/公式 LaTeX）"
+git add services/compare-algo && git commit -m "feat(compare-algo): AnGIneer 产物适配层（类型映射/PDF 日期/outline 嵌套）与内部分析模型"
 ```
 
----
-
-## Task 3: Evidence 模型与组装器（spec §6.1 字段逐字）
+## Task 5: Evidence 模型与组装器（spec §6.1 字段逐字）
 
 **Files:**
 - Create: `services/compare-algo/app/schemas/evidence.py`
@@ -912,7 +1719,7 @@ git add services/compare-algo && git commit -m "feat(compare-algo): Evidence 模
 
 ---
 
-## Task 4: OCR 低置信降权工具（spec §4.5）
+## Task 6: OCR 低置信降权工具（spec §4.5）
 
 **Files:**
 - Create: `services/compare-algo/app/ocr.py`
@@ -940,9 +1747,15 @@ def test_is_low_confidence_ocr(ir_doc_a, ir_doc_b):
     a_b4 = next(b for b in ir_doc_a.blocks if b.blockId == "b004")
     b_b5 = next(b for b in ir_doc_b.blocks if b.blockId == "b005")
     b_b3 = next(b for b in ir_doc_b.blocks if b.blockId == "b003")
-    assert is_low_confidence_ocr(a_b4) is False      # native
+    assert is_low_confidence_ocr(a_b4) is False      # source=text（原生）
     assert is_low_confidence_ocr(b_b5) is True       # ocr + 0.3
-    assert is_low_confidence_ocr(b_b3) is False      # native
+    assert is_low_confidence_ocr(b_b3) is False      # source=text（原生）
+
+
+def test_null_source_confidence_block_not_low(ir_doc_a):
+    # v2 §4：source/confidence 为 null 的块不参与降权（AnGIneer 补齐前降级关闭）
+    block = ir_doc_a.blocks[0].model_copy(update={"source": None, "confidence": None})
+    assert is_low_confidence_ocr(block) is False
 
 
 def test_low_confidence_ocr_block_ids(ir_doc_b):
@@ -980,7 +1793,12 @@ _SEVERITY_ORDER: list[Severity] = ["low", "mid", "high"]
 
 
 def is_low_confidence_ocr(block: IrBlock) -> bool:
-    return block.source == "ocr" and block.confidence < OCR_LOW_CONFIDENCE_THRESHOLD
+    # v2 §4：source/confidence 允许 null，缺失时不参与降权（不误伤）
+    return (
+        block.source == "ocr"
+        and block.confidence is not None
+        and block.confidence < OCR_LOW_CONFIDENCE_THRESHOLD
+    )
 
 
 def low_confidence_ocr_block_ids(doc: IrDocument) -> set[str]:
@@ -1007,7 +1825,7 @@ git add services/compare-algo && git commit -m "feat(compare-algo): OCR 低置�
 
 ---
 
-## Task 5: 文本规范化与字级 n-gram shingling
+## Task 7: 文本规范化与字级 n-gram shingling
 
 **Files:**
 - Create: `services/compare-algo/app/similarity/shingle.py`
@@ -1054,6 +1872,15 @@ def test_block_shingles_skips_non_text_types(ir_doc_a):
     assert block_shingles(para) == char_ngrams(para.text)
 
 
+def test_block_shingles_skips_furniture():
+    # header/footer（页眉页脚页码）不查重：真实数据中不同文档常共享同一规范名页眉，
+    # 参与会产生伪雷同（实测海港1/海港2 页眉相同）
+    class _B:
+        type = "header"
+        text = "海港航道设计规范"
+    assert block_shingles(_B()) == set()
+
+
 def test_block_shingles_includes_equation_latex():
     class _B:
         type = "equation"
@@ -1088,7 +1915,8 @@ import re
 
 _KEEP_RE = re.compile(r"[一-鿿A-Za-z0-9]+")
 
-# 参与文本查重的块类型；table 由 pricing 域单独处理，header/footer 不查重
+# 参与文本查重的块类型；table 由 pricing 域单独处理，header/footer（页眉页脚页码）不查重
+# （实测：不同文档常共享同一规范名页眉，参与会产生伪雷同）
 SHINGLABLE_TYPES = ("title", "para", "list", "equation")
 
 DEFAULT_NGRAM = 3
@@ -1136,7 +1964,7 @@ git add services/compare-algo && git commit -m "feat(compare-algo): 文本规范
 
 ---
 
-## Task 6: MinHash/LSH 粗筛候选块对
+## Task 8: MinHash/LSH 粗筛候选块对
 
 **Files:**
 - Create: `services/compare-algo/app/similarity/minhash.py`
@@ -1194,7 +2022,7 @@ def test_find_candidate_pairs_no_doc_c_involved(ir_docs):
 
 
 def test_find_candidate_pairs_ocr_block_is_candidate(ir_docs):
-    # doc-b b005（OCR 低置信）与 doc-a b004 文本相同 → 仍是候选（降权在 Task 9 处理）
+    # doc-b b005（OCR 低置信）与 doc-a b004 文本相同 → 仍是候选（降权在 Task 11 处理）
     pairs = find_candidate_pairs(build_block_index(ir_docs))
     assert any({p.block_id_a, p.block_id_b} == {"b004", "b005"}
                and {p.doc_id_a, p.doc_id_b} == {"doc-a", "doc-b"} for p in pairs)
@@ -1294,9 +2122,7 @@ cd services/compare-algo && uv run pytest tests/test_minhash.py -q
 git add services/compare-algo && git commit -m "feat(compare-algo): datasketch MinHash/LSH 粗筛跨文档候选块对"
 ```
 
----
-
-## Task 7: 块级精确对齐与相似度计算（difflib 单调对齐）
+## Task 9: 块级精确对齐与相似度计算（difflib 单调对齐）
 
 **Files:**
 - Create: `services/compare-algo/app/similarity/align.py`
@@ -1467,7 +2293,7 @@ git add services/compare-algo && git commit -m "feat(compare-algo): difflib 块�
 
 ---
 
-## Task 8: 雷同簇聚类（Union-Find，≥3 份共同雷同）
+## Task 10: 雷同簇聚类（Union-Find，≥3 份共同雷同）
 
 **Files:**
 - Create: `services/compare-algo/app/similarity/cluster.py`
@@ -1574,7 +2400,7 @@ git add services/compare-algo && git commit -m "feat(compare-algo): Union-Find �
 
 ---
 
-## Task 9: similarity 证据组装 service（含 OCR 降权接入）
+## Task 11: similarity 证据组装 service（含 OCR 降权接入 + 真实样本对）
 
 **Files:**
 - Create: `services/compare-algo/app/similarity/service.py`
@@ -1587,7 +2413,13 @@ git add services/compare-algo && git commit -m "feat(compare-algo): Union-Find �
 `services/compare-algo/tests/test_similarity_service.py`：
 
 ```python
+from app.angineer.adapter import adapt_document
+from app.angineer.raw import validate_raw_document
 from app.similarity.service import analyze_similarity
+
+
+def _adapt_all(raw_docs):
+    return [adapt_document(validate_raw_document(d)) for d in raw_docs]
 
 
 def test_fixture_pair_evidence(ir_docs):
@@ -1643,6 +2475,35 @@ def test_similarity_thresholds(ir_doc_a):
     # 这里验证阈值常量存在且单调
     from app.similarity import service
     assert service.SEVERITY_HIGH > service.SEVERITY_MID > service.EVIDENCE_MIN_SIMILARITY > 0
+
+
+def test_real_haigang_pair_low_evidence(raw_haigang_pair):
+    """真实部分雷同对（海港1 vs 海港2）：实测 Dice≈0.346 → 恰好一条 low 证据。
+
+    实测值（2026-08-08 按本计划算法离线演算）：34 个候选块对全部通过单调对齐，
+    Dice = 0.3460（≥0.3 出证据，<0.5 为 low）。MinHash/LSH 为近似召回，
+    边界块对可能有少量出入，故相似度断言给区间而非精确值。
+    """
+    docs = _adapt_all(raw_haigang_pair)
+    evidences = analyze_similarity("task-real", docs)
+    pair_evidences = [e for e in evidences if not e.metrics.get("cluster")]
+    assert len(pair_evidences) == 1
+    e = pair_evidences[0]
+    assert e.docIds == ["doc-12f45ca9", "doc-c8be9f8b"]
+    assert 0.3 <= e.metrics["similarity"] < 0.5
+    assert e.severity == "low"
+    assert e.metrics["ocrSuspect"] is False  # 真实数据 confidence 全 1.0，不降权
+    assert e.metrics["matchedBlockCount"] >= 20
+
+
+def test_real_pingshen_pair_identical(raw_pingshen_pair):
+    """评审办法副本对（内容完全一致）：Dice=1.0 → high 证据。"""
+    docs = _adapt_all(raw_pingshen_pair)
+    evidences = analyze_similarity("task-real", docs)
+    assert len(evidences) == 1
+    e = evidences[0]
+    assert e.metrics["similarity"] == 1.0
+    assert e.severity == "high"
 ```
 
 运行确认失败：
@@ -1764,12 +2625,10 @@ cd services/compare-algo && uv run pytest tests/test_similarity_service.py -q
 - [ ] **Step 4: 提交**
 
 ```bash
-git add services/compare-algo && git commit -m "feat(compare-algo): similarity 证据组装 service（OCR 降权 + 雷同簇）"
+git add services/compare-algo && git commit -m "feat(compare-algo): similarity 证据组装 service（OCR 降权 + 雷同簇 + 真实样本断言）"
 ```
 
----
-
-## Task 10: 报价表格解析与数值归一
+## Task 12: 报价表格解析与数值归一
 
 **Files:**
 - Create: `services/compare-algo/app/pricing/number_norm.py`
@@ -1865,6 +2724,18 @@ def test_fixture_price_tables(ir_doc_a):
     table_block = next(b for b in ir_doc_a.blocks if b.type == "table")
     grid = parse_table_html(table_block.table.html)
     assert extract_total_amount(grid) == 1000000.0
+
+
+def test_real_fixture_table_parse(raw_haigang_pair):
+    """真实表格 html 可解析（海港2 含多张纯净表格）。"""
+    from app.angineer.adapter import adapt_document
+    from app.angineer.raw import validate_raw_document
+    doc = adapt_document(validate_raw_document(raw_haigang_pair[1]))
+    tables = [b for b in doc.blocks if b.type == "table" and b.table and b.table.html]
+    assert len(tables) > 0
+    for t in tables:
+        grid = parse_table_html(t.table.html)
+        assert all(isinstance(row, list) for row in grid)
 ```
 
 运行确认失败：
@@ -1913,7 +2784,7 @@ def parse_amount(raw: str | None) -> float | None:
 ```python
 """表格 html 解析：rowspan/colspan 展开为完整网格（占位格填同一值）。
 
-输入 html 已通过 IR schema 纯净度校验（仅 table/tr/td/th），此处不做安全过滤。
+输入 html 已通过产物 schema 纯净度校验（仅 table/tr/td/th），此处不做安全过滤。
 """
 from bs4 import BeautifulSoup
 
@@ -1990,7 +2861,7 @@ git add services/compare-algo && git commit -m "feat(compare-algo): 报价表格
 
 ---
 
-## Task 11: 报价规律检测与 pricing 证据组装
+## Task 13: 报价规律检测与 pricing 证据组装
 
 **Files:**
 - Create: `services/compare-algo/app/pricing/patterns.py`
@@ -2097,6 +2968,27 @@ def test_less_than_two_priced_docs_no_evidence(ir_doc_a):
         "blocks": [b for b in ir_doc_a.blocks if b.type != "table"],
     })
     assert analyze_pricing("task-001", [ir_doc_a, no_table]) == []
+
+
+def test_table_without_html_skipped(ir_doc_a):
+    # 实测 2/132 表格无 table_html（有截图）：无法解析金额，跳过不参与报价比对
+    no_html = ir_doc_a.model_copy(update={
+        "docId": "doc-nh",
+        "blocks": [
+            b.model_copy(update={"table": b.table.model_copy(update={"html": None})})
+            if b.type == "table" else b
+            for b in ir_doc_a.blocks
+        ],
+    })
+    assert analyze_pricing("task-001", [ir_doc_a, no_html]) == []
+
+
+def test_real_haigang_pair_no_pricing_evidence(raw_haigang_pair):
+    """海港1 无表格 → 可报价文档不足 2 份，不出证据（真实数据负路径）。"""
+    from app.angineer.adapter import adapt_document
+    from app.angineer.raw import validate_raw_document
+    docs = [adapt_document(validate_raw_document(d)) for d in raw_haigang_pair]
+    assert analyze_pricing("task-real", docs) == []
 ```
 
 运行确认失败：
@@ -2191,10 +3083,13 @@ from app.schemas.ir import IrDocument
 
 
 def _best_price_block(doc: IrDocument) -> tuple[str, float] | None:
-    """取文档中投标总价最大的表格块，返回 (blockId, total)；无表格或无金额返回 None。"""
+    """取文档中投标总价最大的表格块，返回 (blockId, total)。
+
+    无表格、表格无 html（实测 2/132，仅有截图）或无金额时返回 None。
+    """
     best: tuple[str, float] | None = None
     for block in doc.blocks:
-        if block.type != "table" or block.table is None:
+        if block.type != "table" or block.table is None or block.table.html is None:
             continue
         total = extract_total_amount(parse_table_html(block.table.html))
         if total is not None and (best is None or total > best[1]):
@@ -2269,22 +3164,28 @@ cd services/compare-algo && uv run pytest tests/test_pricing_patterns.py tests/t
 git add services/compare-algo && git commit -m "feat(compare-algo): 报价规律检测（等差/尾数/贴近度）与 pricing 证据组装"
 ```
 
----
-
-## Task 12: 元数据比对（author / createdAt / creatorTool）
+## Task 14: 元数据比对（author / createdAt / creatorTool，含 PDF 日期归一集成）
 
 **Files:**
-- Create: `services/compare-algo/app/metadata/service.py`（本 Task 先实现 `compare_meta_fields`，Task 13 追加 `detect_shared_typos` 与 `analyze_metadata`）
+- Create: `services/compare-algo/app/metadata/service.py`（本 Task 先实现 `compare_meta_fields`，Task 15 追加 `detect_shared_typos` 与 `analyze_metadata`）
 - Create: `services/compare-algo/tests/test_metadata.py`
 
-规则：author 相同（非 null，≥2 份）→ mid；createdAt 完全相同（非 null，≥2 份）→ mid；creatorTool 全部文档相同 → low（常见工具相同仅作弱线索）。
+规则：author 相同（非 null，≥2 份）→ mid；createdAt 完全相同（非 null，≥2 份，适配层已归一 ISO）→ mid；creatorTool 全部文档相同 → low（常见工具相同仅作弱线索）。
 
-- [ ] **Step 1: 写失败测试（先只写元数据部分，错别字测试在 Task 13 追加）**
+- [ ] **Step 1: 写失败测试（先只写元数据部分，错别字测试在 Task 15 追加）**
 
 `services/compare-algo/tests/test_metadata.py`：
 
 ```python
+from app.angineer.adapter import adapt_document
+from app.angineer.raw import validate_raw_document
 from app.metadata.service import compare_meta_fields
+
+from tests.conftest import make_raw_block, make_raw_doc
+
+
+def _adapt_all(raw_docs):
+    return [adapt_document(validate_raw_document(d)) for d in raw_docs]
 
 
 def _by_metric_key(evidences, key):
@@ -2309,6 +3210,20 @@ def test_created_at_match_mid(ir_docs):
     assert e.metrics["value"] == "2026-07-01T10:00:00"
 
 
+def test_created_at_pdf_dates_normalized_and_matched():
+    # 真实产物 createdAt 为 PDF 原始日期：适配层归一 ISO 后参与相等性比对
+    raw_x = make_raw_doc("doc-x", file_name="x.pdf", author=None,
+                         created_at="D:20260701100000+08'00'",
+                         blocks=[make_raw_block("p1", "甲方正文内容")])
+    raw_y = make_raw_doc("doc-y", file_name="y.pdf", author=None,
+                         created_at="D:20260701100000+08'00'",
+                         blocks=[make_raw_block("p1", "乙方正文内容")])
+    evidences = compare_meta_fields("task-001", _adapt_all([raw_x, raw_y]))
+    e = _by_metric_key(evidences, "field")["createdAt"]
+    assert e.severity == "mid"
+    assert e.metrics["value"] == "2026-07-01T10:00:00+08:00"
+
+
 def test_creator_tool_all_same_low(ir_docs):
     evidences = compare_meta_fields("task-001", ir_docs)
     e = _by_metric_key(evidences, "field")["creatorTool"]
@@ -2324,7 +3239,7 @@ def test_meta_evidence_locations_have_empty_block_ids(ir_docs):
 
 
 def test_null_meta_fields_ignored(ir_doc_a):
-    # author 为 null 的文档不参与比对（spec §4.2：提取不到给 null）
+    # author 为 null 的文档不参与比对（v2 §5-7：提取不到给 null）
     doc_x = ir_doc_a.model_copy(update={"docId": "doc-x"})
     doc_x.meta.author = None
     doc_y = ir_doc_a.model_copy(update={"docId": "doc-y"})
@@ -2334,8 +3249,21 @@ def test_null_meta_fields_ignored(ir_doc_a):
 
 
 def test_fixture_metadata_evidence_count(ir_docs):
-    # author + createdAt + creatorTool = 3 条（错别字证据在 Task 13 加入）
+    # author + createdAt + creatorTool = 3 条（错别字证据在 Task 15 加入）
     assert len(compare_meta_fields("task-001", ir_docs)) == 3
+
+
+def test_real_pingshen_pair_metadata(raw_pingshen_pair):
+    """评审办法副本对（实测）：author 相同 + creatorTool 均 Writer + createdAt 不同。
+
+    → author mid + creatorTool low，两条证据，无 createdAt 证据。
+    """
+    evidences = compare_meta_fields("task-real", _adapt_all(raw_pingshen_pair))
+    by_field = _by_metric_key(evidences, "field")
+    assert set(by_field) == {"author", "creatorTool"}
+    assert by_field["author"].severity == "mid"
+    assert by_field["creatorTool"].severity == "low"
+    assert by_field["author"].docIds == ["doc-020a5d97", "doc-1d0c4891"]
 ```
 
 运行确认失败：
@@ -2355,7 +3283,7 @@ from app.schemas.ir import IrDocument
 
 
 def _group_by_meta(documents: list[IrDocument], attr: str) -> dict[str, list[IrDocument]]:
-    """按 meta 字段值分组；None/空串不参与（spec §4.2：提取不到给 null）。"""
+    """按 meta 字段值分组；None/空串不参与（v2 §5-7：提取不到给 null）。"""
     groups: dict[str, list[IrDocument]] = {}
     for d in documents:
         v = getattr(d.meta, attr)
@@ -2412,7 +3340,7 @@ def compare_meta_fields(task_id: str, documents: list[IrDocument]) -> list[Evide
     return evidences
 ```
 
-- [ ] **Step 3: 运行测试确认通过（Task 13 的错别字断言此时尚未加入）**
+- [ ] **Step 3: 运行测试确认通过（Task 15 的错别字断言此时尚未加入）**
 
 ```bash
 cd services/compare-algo && uv run pytest tests/test_metadata.py -q
@@ -2421,12 +3349,12 @@ cd services/compare-algo && uv run pytest tests/test_metadata.py -q
 - [ ] **Step 4: 提交**
 
 ```bash
-git add services/compare-algo && git commit -m "feat(compare-algo): 元数据 author/createdAt/creatorTool 一致性比对"
+git add services/compare-algo && git commit -m "feat(compare-algo): 元数据 author/createdAt/creatorTool 一致性比对（PDF 日期归一集成）"
 ```
 
 ---
 
-## Task 13: 相同错别字检测（低频错字 n-gram 碰撞）
+## Task 15: 相同错别字检测（低频错字 n-gram 碰撞）
 
 **Files:**
 - Modify: `services/compare-algo/app/metadata/service.py`（追加 `detect_shared_typos` 与 `analyze_metadata`）
@@ -2439,22 +3367,20 @@ git add services/compare-algo && git commit -m "feat(compare-algo): 元数据 au
 在 `services/compare-algo/tests/test_metadata.py` 末尾追加：
 
 ```python
-# ---------- Task 13：相同错别字检测 ----------
+# ---------- Task 15：相同错别字检测 ----------
 
 from app.metadata.service import analyze_metadata, detect_shared_typos
-from app.schemas.ir import validate_ir_document
-
-from tests.conftest import make_block, make_ir
 
 
 def _typo_doc(doc_id: str, text: str):
-    return validate_ir_document(make_ir(
+    raw = make_raw_doc(
         doc_id,
         file_name=f"{doc_id}.pdf",
         author=None,
         created_at=None,
-        blocks=[make_block("b001", text)],
-    ))
+        blocks=[make_raw_block("b001", text)],
+    )
+    return adapt_document(validate_raw_document(raw))
 
 
 def test_shared_typo_detected():
@@ -2509,7 +3435,7 @@ def test_analyze_metadata_combines_both(ir_docs):
     assert kinds == {"author", "createdAt", "creatorTool", "shared-typo"}
 ```
 
-注意：Task 12 顶部已 import `compare_meta_fields`，此处追加 `analyze_metadata` 与 `detect_shared_typos` 的 import（`analyze_metadata` 在本 Task 才实现）。
+注意：Task 14 顶部已 import `compare_meta_fields`、`adapt_document`、`validate_raw_document`、`make_raw_block`、`make_raw_doc`，此处只需追加 `analyze_metadata` 与 `detect_shared_typos` 的 import。
 
 运行确认失败：
 
@@ -2627,16 +3553,14 @@ cd services/compare-algo && uv run pytest tests/test_metadata.py -q
 git add services/compare-algo && git commit -m "feat(compare-algo): 相同错别字低频 n-gram 碰撞检测与 metadata 证据组装"
 ```
 
----
-
-## Task 14: FastAPI 三个接口与统一错误处理
+## Task 16: FastAPI 三个接口与统一错误处理（产物契约）
 
 **Files:**
 - Create: `services/compare-algo/app/schemas/api.py`
 - Create: `services/compare-algo/app/main.py`
 - Create: `services/compare-algo/tests/test_api.py`
 
-接口（tech 决策已拍板）：`POST /analyze/similarity`、`POST /analyze/pricing`、`POST /analyze/metadata`，请求体 `{taskId, documents: [IR, ...]}`（2~5 份），响应 `{evidences: [...]}`。IR schema 校验不合格返回 422 + 具体字段路径（`code=IR_VALIDATION_FAILED`，`details[].path/message`）；未知异常返回 500 + `code=INTERNAL_ERROR`，不泄露堆栈给调用方（记日志）。
+接口（tech 决策已拍板）：`POST /analyze/similarity`、`POST /analyze/pricing`、`POST /analyze/metadata`，请求体 `{taskId, documents: [{docId, blocks, meta}, ...]}`（**AnGIneer 产物形态**，2~5 份），响应 `{evidences: [...]}`。处理流水线：产物校验（`RawDocumentEnvelope`）→ 适配（`adapt_document`）→ 分析 → 证据。产物校验或适配输出校验不合格返回 422 + 具体字段路径（`code=IR_VALIDATION_FAILED`，`details[].path/message`）；未知异常返回 500 + `code=INTERNAL_ERROR`，不泄露堆栈给调用方（记日志）。
 
 - [ ] **Step 1: 写失败测试**
 
@@ -2691,9 +3615,8 @@ def test_metadata_endpoint(ir_payload):
     assert all(e["type"] == "metadata" for e in evidences)
 
 
-def test_invalid_ir_returns_422_with_field_path(ir_payload):
-    # bbox 超出页面尺寸 → 422；跨字段校验（bbox vs 页面尺寸）在文档级 model_validator 中报出，
-    # 因此 path 定位到出问题的文档，具体字段信息在 message 中
+def test_invalid_bbox_returns_422_with_field_path(ir_payload):
+    # bbox 超出 0~1 归一化区间（疑似像素坐标）→ 422；块级校验在字段级 validator 中报出
     ir_payload["documents"][0]["blocks"][0]["bbox"] = [0, 0, 99999, 10]
     r = client.post("/analyze/similarity", json=ir_payload)
     assert r.status_code == 422
@@ -2703,11 +3626,18 @@ def test_invalid_ir_returns_422_with_field_path(ir_payload):
     assert any("bbox" in d["message"] for d in body["details"])
 
 
-def test_missing_meta_field_returns_422(ir_payload):
-    del ir_payload["documents"][0]["meta"]["author"]  # 可 null 不可省略
+def test_missing_docmeta_field_returns_422(ir_payload):
+    del ir_payload["documents"][0]["meta"]["docMeta"]["author"]  # 可 null 不可省略
     r = client.post("/analyze/metadata", json=ir_payload)
     assert r.status_code == 422
     assert r.json()["code"] == "IR_VALIDATION_FAILED"
+
+
+def test_unknown_source_value_returns_422(ir_payload):
+    # 实测词表 text/ocr/table/formula/null；其他值（如 v2 文档措辞 "native"）拒收
+    ir_payload["documents"][0]["blocks"][0]["source"] = "native"
+    r = client.post("/analyze/similarity", json=ir_payload)
+    assert r.status_code == 422
 
 
 def test_single_document_rejected(ir_payload):
@@ -2732,6 +3662,25 @@ def test_duplicate_doc_ids_rejected(ir_payload):
 def test_empty_body_rejected():
     r = client.post("/analyze/similarity", json={})
     assert r.status_code == 422
+
+
+def test_real_fixtures_end_to_end(raw_haigang_pair, raw_pingshen_pair):
+    """真实产物端到端：海港对出 low 雷同证据；评审办法对出 2 条元数据证据。"""
+    r = client.post("/analyze/similarity", json={
+        "taskId": "task-real", "documents": raw_haigang_pair,
+    })
+    assert r.status_code == 200
+    evidences = r.json()["evidences"]
+    assert len(evidences) == 1
+    assert evidences[0]["severity"] == "low"
+    assert evidences[0]["docIds"] == ["doc-12f45ca9", "doc-c8be9f8b"]
+
+    r = client.post("/analyze/metadata", json={
+        "taskId": "task-real", "documents": raw_pingshen_pair,
+    })
+    assert r.status_code == 200
+    kinds = {e["metrics"].get("field") for e in r.json()["evidences"]}
+    assert kinds == {"author", "creatorTool"}
 ```
 
 运行确认失败：
@@ -2745,16 +3694,16 @@ cd services/compare-algo && uv run pytest tests/test_api.py -q
 `services/compare-algo/app/schemas/api.py`：
 
 ```python
-"""请求/响应与错误模型。文档份数约束 2~5（spec §1）。"""
+"""请求/响应与错误模型。请求为 AnGIneer 产物形态（v2 修订）；文档份数约束 2~5（spec §1）。"""
 from pydantic import BaseModel, Field, model_validator
 
+from app.angineer.raw import RawDocumentEnvelope
 from app.schemas.evidence import Evidence
-from app.schemas.ir import IrDocument
 
 
 class AnalyzeRequest(BaseModel):
     taskId: str = Field(min_length=1)
-    documents: list[IrDocument] = Field(min_length=2, max_length=5)
+    documents: list[RawDocumentEnvelope] = Field(min_length=2, max_length=5)
 
     @model_validator(mode="after")
     def _check_unique_doc_ids(self) -> "AnalyzeRequest":
@@ -2787,15 +3736,18 @@ class ErrorResponse(BaseModel):
 ```python
 """compare-algo FastAPI 入口：三个分析接口 + 统一错误处理。
 
-无状态计算服务，由 ABP 主服务调用；MinerU 产物（IR）随请求体传入，
-本服务不直接对接 MinerU。
+无状态计算服务，由 ABP 主服务调用；请求体为 AnGIneer 解析产物原文
+（doc_blocks_graph.jsonl 节点 + meta 的 {docMeta, outlines, pages}），
+本服务不直接对接 AnGIneer/MinerU。产物经 app/angineer/ 适配层转为内部模型后分析。
 """
 import logging
 
 from fastapi import FastAPI, Request
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
+from pydantic import ValidationError
 
+from app.angineer.adapter import adapt_document
 from app.metadata.service import analyze_metadata
 from app.pricing.service import analyze_pricing
 from app.schemas.api import (
@@ -2811,21 +3763,32 @@ logger = logging.getLogger("compare-algo")
 app = FastAPI(title="compare-algo", version="0.1.0")
 
 
-@app.exception_handler(RequestValidationError)
-async def validation_exception_handler(request: Request, exc: RequestValidationError) -> JSONResponse:
-    """IR schema 校验不合格 → 422 + 具体字段错误（tech 决策）。"""
+def _validation_error_body(errors) -> ErrorResponse:
     details = [
         ErrorDetail(
             path=".".join(str(p) for p in e.get("loc", ())),
             message=e.get("msg", ""),
         )
-        for e in exc.errors()
+        for e in errors
     ]
-    body = ErrorResponse(
+    return ErrorResponse(
         code="IR_VALIDATION_FAILED",
-        message="IR schema 校验失败，详见 details",
+        message="产物校验失败，详见 details",
         details=details,
     )
+
+
+@app.exception_handler(RequestValidationError)
+async def validation_exception_handler(request: Request, exc: RequestValidationError) -> JSONResponse:
+    """请求体（产物）校验不合格 → 422 + 具体字段错误（tech 决策）。"""
+    body = _validation_error_body(exc.errors())
+    return JSONResponse(status_code=422, content=body.model_dump())
+
+
+@app.exception_handler(ValidationError)
+async def adapt_exception_handler(request: Request, exc: ValidationError) -> JSONResponse:
+    """适配输出违反内部模型底线（如 outline 引用缺失）→ 422。"""
+    body = _validation_error_body(exc.errors())
     return JSONResponse(status_code=422, content=body.model_dump())
 
 
@@ -2842,19 +3805,23 @@ def healthz() -> dict[str, str]:
     return {"status": "ok"}
 
 
+def _adapt(req: AnalyzeRequest):
+    return [adapt_document(d) for d in req.documents]
+
+
 @app.post("/analyze/similarity", response_model=AnalyzeResponse)
 def post_analyze_similarity(req: AnalyzeRequest) -> AnalyzeResponse:
-    return AnalyzeResponse(evidences=analyze_similarity(req.taskId, req.documents))
+    return AnalyzeResponse(evidences=analyze_similarity(req.taskId, _adapt(req)))
 
 
 @app.post("/analyze/pricing", response_model=AnalyzeResponse)
 def post_analyze_pricing(req: AnalyzeRequest) -> AnalyzeResponse:
-    return AnalyzeResponse(evidences=analyze_pricing(req.taskId, req.documents))
+    return AnalyzeResponse(evidences=analyze_pricing(req.taskId, _adapt(req)))
 
 
 @app.post("/analyze/metadata", response_model=AnalyzeResponse)
 def post_analyze_metadata(req: AnalyzeRequest) -> AnalyzeResponse:
-    return AnalyzeResponse(evidences=analyze_metadata(req.taskId, req.documents))
+    return AnalyzeResponse(evidences=analyze_metadata(req.taskId, _adapt(req)))
 ```
 
 - [ ] **Step 4: 运行测试确认通过**
@@ -2866,12 +3833,12 @@ cd services/compare-algo && uv run pytest tests/test_api.py -q
 - [ ] **Step 5: 提交**
 
 ```bash
-git add services/compare-algo && git commit -m "feat(compare-algo): FastAPI 三个分析接口与统一错误处理（422 字段级错误）"
+git add services/compare-algo && git commit -m "feat(compare-algo): FastAPI 三个分析接口（产物契约）与统一错误处理（422 字段级错误）"
 ```
 
 ---
 
-## Task 15: 全量回归、README 与端到端冒烟
+## Task 17: 全量回归、README 与端到端冒烟
 
 **Files:**
 - Create: `services/compare-algo/README.md`
@@ -2882,7 +3849,7 @@ git add services/compare-algo && git commit -m "feat(compare-algo): FastAPI 三�
 cd services/compare-algo && uv run pytest -q
 ```
 
-预期：全部 passed（含 conftest fixture 驱动的三域集成测试）。
+预期：全部 passed（含合成 fixture 三域集成测试 + 4 份真实产物 fixture 的适配/分析/接口断言）。
 
 - [ ] **Step 2: 写 README**
 
@@ -2891,9 +3858,11 @@ cd services/compare-algo && uv run pytest -q
 ````markdown
 # compare-algo 比标算法服务
 
-无状态确定性计算服务：消费 MinerU IR（由 ABP 主服务随请求体传入，本服务不直接对接 MinerU），
-产出 `aiGenerated=false` 的 Evidence（similarity / pricing / metadata）。
-契约见 `docs/superpowers/specs/2026-07-29-ai-bid-compare-design.md` §4（IR）、§6.1（Evidence）。
+无状态确定性计算服务：消费 ABP 主服务转发的 AnGIneer 解析产物原文
+（`doc_blocks_graph.jsonl` 节点 + `doc_blocks_graph_meta.json` 的 `{docMeta, outlines, pages}`，
+本服务不直接对接 AnGIneer/MinerU），产出 `aiGenerated=false` 的 Evidence（similarity / pricing / metadata）。
+产物字段语义见 `docs/superpowers/plans/dredgeai-consume-angineer-requirements.md`（v2）与计划「实测事实」节，
+Evidence 契约见 `docs/superpowers/specs/2026-07-29-ai-bid-compare-design.md` §6.1。
 
 ## 环境
 
@@ -2921,9 +3890,19 @@ uv run pytest -q
 | POST | /analyze/pricing | 报价规律（等差/尾数/贴近度） |
 | POST | /analyze/metadata | 元数据一致性 + 相同错别字 |
 
-请求体：`{"taskId": "...", "documents": [<ir.json>, ...]}`（2~5 份 IR）。
+请求体：`{"taskId": "...", "documents": [{"docId", "blocks": [...], "meta": {...}}, ...]}`（2~5 份，
+AnGIneer 产物字段名原样；`docId` 为 opaque 的 ABP 文档 id）。
 响应：`{"evidences": [Evidence, ...]}`。
-IR 校验不合格：422 `{"code": "IR_VALIDATION_FAILED", "message": "...", "details": [{"path", "message"}]}`。
+校验不合格：422 `{"code": "IR_VALIDATION_FAILED", "message": "...", "details": [{"path", "message"}]}`。
+
+注意：请求体大小与文档体量正相关（实测 1965 块文档约 2~3MB），5 份上限约 15MB，内部 HTTP 调用可接受。
+
+## 测试 fixture
+
+- `tests/conftest.py`：3 份合成标书（raw 产物形态），覆盖低置信 OCR 降权、等差报价、相同错别字场景。
+- `tests/fixtures/*.json`：4 份真实 AnGIneer 产物裁剪样本（海港1/海港2 部分雷同对、评审办法副本对）。
+  重新生成方法见计划 `docs/superpowers/plans/2026-07-29-bid-compare-algo-service.md` Task 2
+  （需要本机 AnGIneer 数据目录；字段裁剪清单以该 Task 为准）。
 ````
 
 - [ ] **Step 3: 启动服务做端到端冒烟**
@@ -2933,37 +3912,46 @@ cd services/compare-algo && uv run uvicorn app.main:app --port 8100 &
 sleep 3
 curl -s http://127.0.0.1:8100/healthz
 # 预期输出 {"status":"ok"}
+curl -s -X POST http://127.0.0.1:8100/analyze/similarity -H "Content-Type: application/json" \
+  -d @<(python -c "import json,pathlib;f=pathlib.Path('tests/fixtures');print(json.dumps({'taskId':'smoke','documents':[json.loads((f/'haigang1.json').read_text(encoding='utf-8')),json.loads((f/'haigang2.json').read_text(encoding='utf-8'))]}))")
+# 预期输出含 1 条 similarity 证据（severity=low）
 kill %1
 ```
 
 - [ ] **Step 4: 提交**
 
 ```bash
-git add services/compare-algo && git commit -m "docs(compare-algo): README（启动/测试/接口契约）"
+git add services/compare-algo && git commit -m "docs(compare-algo): README（启动/测试/接口契约/fixture 再生）"
 ```
 
 ---
 
-## 自查：spec §4 硬性要求 → 任务覆盖映射
+## 自查：硬性要求 → 任务覆盖映射
 
-| spec 条款 | 覆盖位置 |
+| spec/v2/实测 条款 | 覆盖位置 |
 |---|---|
-| §4.2 字段定义（meta 四字段可 null 不可省略、pages、outline、blocks） | Task 2 `IrMeta`/`IrPage`/`IrOutlineNode`/`IrBlock` + `test_meta_field_must_be_present_even_if_null` |
-| §4.3.1 bbox 页面实际像素坐标（拒绝归一化/越界/负值/倒置） | Task 2 `_check_bbox_shape` + `IrDocument._check_document` + 3 个 bbox 测试 |
-| §4.3.2 每块必带 source/confidence；低置信照常交付不丢弃 | Task 2 字段约束 + `test_low_confidence_ocr_block_accepted`；降权在 Task 4/9 |
-| §4.3.3 blockId 文档内唯一、blocks 阅读顺序 | Task 2 唯一性校验；阅读顺序在 Task 7 `_shinglable_positions` 按 blocks 原序对齐（blockId 跨重跑稳定性无法机器校验，属提供方承诺，不落任务） |
-| §4.3.4 表格必须 html+整表截图；html 纯净（仅 table/tr/td/th、仅 rowspan/colspan） | Task 2 `IrTable._check_html_purity` + 纯净度正/反测试；解析在 Task 10 |
-| §4.3.5 印章单独 seal 类型 | Task 2 `BlockType` Literal 含 `seal` + `test_image_and_seal_require_imgpath` |
-| §4.3.6 行间公式独立成块且 text 给 LaTeX（参与查重） | Task 2 equation 校验 + Task 5 `SHINGLABLE_TYPES` 含 equation（LaTeX 进 shingle） |
-| §4.3.7 文本按段落级聚合，查重对齐以段落为单位 | Task 5 块级 shingle + Task 7 块级对齐（聚合本身属提供方侧，不可机器校验） |
-| §4.5 OCR 低置信降权/单独标注 | Task 4 判定与降级 + Task 9 `ocrSuspect` 接入（severity 降级 + 文案标注） |
-| §6.1 Evidence 字段逐字 + aiGenerated 标记 | Task 3 模型与 `build_evidence`（恒 False）+ Task 14 接口字段集合断言 |
-| §1 标书 2~5 份 | Task 14 `AnalyzeRequest.documents` min/max + 两个边界测试 |
-| tech 决策：查重流水线/报价规律/元数据+错别字/三接口/422 字段错误 | Task 5~9 / Task 10~11 / Task 12~13 / Task 14 |
+| v2 修订契约：直收 AnGIneer 产物（`{docId, blocks, meta}`），docId opaque | Task 3 `RawDocumentEnvelope`（`test_docid_is_opaque_no_prefix_check`）+ Task 16 `AnalyzeRequest` |
+| 产物宽松校验：未知字段忽略、词表外 source 拒收、bbox 0~1 或 null、docMeta 可 null 不可省略、pages 非空正浮点 | Task 3 `raw.py` + `test_angineer_raw.py` 全量用例 |
+| 实测 source 词表 `text/ocr/table/formula/null`（v2 "native" 系措辞） | Task 3 `RawSource` Literal + `test_source_vocabulary_enforced`；Task 4 `BlockSource` |
+| 实测 chart→image、未知类型→para、page_number→footer | Task 4 `_TYPE_MAP` + `test_chart_mapped_to_image` / `test_unknown_type_falls_back_to_para` / `test_furniture_mapping` |
+| 标题剥 HTML 标签（实测含 `<sub>`） | Task 4 `_strip_html` + `test_html_tags_stripped` |
+| PDF 原始日期 → ISO（不可解析/ISO 原样） | Task 4 `pdf_date.py` + `TestPdfDate` 6 用例 + Task 14 `test_created_at_pdf_dates_normalized_and_matched` |
+| outline 扁平→嵌套、锚点存在性 | Task 4 `_nest_outlines` + `TestOutlineNesting` + `IrDocument._check_document` |
+| table 必须有 imgPath、html 可选（实测 2/132 无 html）；html 纯净 | Task 3 纯净度校验；Task 4 `IrBlock` 守卫 + `test_table_without_html_allowed`；pricing 跳过在 Task 13 `_best_price_block` + `test_table_without_html_skipped` |
+| v2 §4 source/confidence 可 null（降权关闭）；source=text 时 confidence 必须 1.0；低置信照常交付 | Task 3/4 字段约束与正反测试；降权在 Task 6/11 |
+| v2 §2 blockId=block_uid 文档内唯一；blocks 阅读顺序 | Task 3 唯一性校验；阅读顺序在 Task 9 `_shinglable_positions` 按 blocks 原序对齐 |
+| 真实数据页眉跨文档相同 → furniture 不查重（防伪雷同） | Task 7 `SHINGLABLE_TYPES` 排除 header/footer + `test_block_shingles_skips_furniture` |
+| §4.3.7 文本按段落级聚合，查重对齐以段落为单位 | Task 7 块级 shingle + Task 9 块级对齐（聚合由 doc_blocks_graph 天然按块给出） |
+| §4.5 OCR 低置信降权/单独标注（null 时降权关闭） | Task 6 判定与降级（null 安全） + Task 11 `ocrSuspect` 接入（severity 降级 + 文案标注） |
+| §6.1 Evidence 字段逐字 + aiGenerated 标记 | Task 5 模型与 `build_evidence`（恒 False）+ Task 16 接口字段集合断言 |
+| §1 标书 2~5 份 | Task 16 `AnalyzeRequest.documents` min/max + 两个边界测试 |
+| 真实产物端到端（海港对 low 雷同 / 评审办法对元数据 / 海港对 pricing 负路径） | Task 11 `test_real_haigang_pair_low_evidence` 等 + Task 14 `test_real_pingshen_pair_metadata` + Task 16 `test_real_fixtures_end_to_end` |
+| tech 决策：查重流水线/报价规律/元数据+错别字/三接口/422 字段错误 | Task 7~11 / Task 12~13 / Task 14~15 / Task 16 |
 
 ## 明确不做（与 spec §2 及任务范围对齐）
 
 - 不产出 `clause` / `indicator` 证据（compare-ai 语义服务职责）；Evidence 模型保留完整 Literal 仅为契约兼容。
 - 不做公式语义等价判断（spec §2 非目标）。
-- 不做任务状态机、IR 持久化、报告生成/导出（compare-task / report 服务职责）。
+- 不做任务状态机、产物下载/存储、报告生成/导出（compare-task / report 服务职责）。
+- 不消费 `content.md` / `images/` / `mineru_raw/*`（content.md 是面向 LLM 语义层的有损投影；images 由前端按 imgPath 自取）。
 - 相似度矩阵（`/matrix`）由 ABP 主服务基于本服务返回的 pair evidence.metrics.similarity 组装，本服务不单独出矩阵接口。
