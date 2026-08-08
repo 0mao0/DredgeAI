@@ -1,0 +1,248 @@
+{
+ "docId": "doc-1d0c4891",
+ "blocks": [
+  {
+   "block_uid": "doc-1d0c4891:0:1",
+   "block_type": "title",
+   "page_idx": 0,
+   "block_seq": 1,
+   "plain_text": "产品一：上航数联（智慧工地底座平台）",
+   "bbox": [
+    0.144,
+    0.096,
+    0.507,
+    0.114
+   ],
+   "derived_level": null,
+   "parent_uid": null,
+   "source": "text",
+   "confidence": 1.0,
+   "image_path": null,
+   "table_html": null,
+   "math_content": null,
+   "formula_body": null,
+   "formula_number": null
+  },
+  {
+   "block_uid": "doc-1d0c4891:0:2",
+   "block_type": "paragraph",
+   "page_idx": 0,
+   "block_seq": 2,
+   "plain_text": "产品名称：上航数联 - 智慧工地数字底座平台",
+   "bbox": [
+    0.144,
+    0.134,
+    0.566,
+    0.151
+   ],
+   "derived_level": null,
+   "parent_uid": null,
+   "source": "text",
+   "confidence": 1.0,
+   "image_path": null,
+   "table_html": null,
+   "math_content": null,
+   "formula_body": null,
+   "formula_number": null
+  },
+  {
+   "block_uid": "doc-1d0c4891:0:3",
+   "block_type": "title",
+   "page_idx": 0,
+   "block_seq": 3,
+   "plain_text": "产品描述：",
+   "bbox": [
+    0.144,
+    0.171,
+    0.24,
+    0.187
+   ],
+   "derived_level": null,
+   "parent_uid": null,
+   "source": "text",
+   "confidence": 1.0,
+   "image_path": null,
+   "table_html": null,
+   "math_content": null,
+   "formula_body": null,
+   "formula_number": null
+  },
+  {
+   "block_uid": "doc-1d0c4891:0:4",
+   "block_type": "paragraph",
+   "page_idx": 0,
+   "block_seq": 4,
+   "plain_text": "本平台是面向基建工程的一体化数字底座，融合物联网、视频监控、船舶/ 车辆联网技术，实现工地作业全要素（人员、船舶、车辆、安全、装载）实时管控。具备项目全周期数据看板、多端设备接入、过程闭环管理能力，已在渣土消纳等项目落地应用，可快速复制推广至同类工程场景。",
+   "bbox": [
+    0.142,
+    0.208,
+    0.838,
+    0.338
+   ],
+   "derived_level": null,
+   "parent_uid": null,
+   "source": "text",
+   "confidence": 1.0,
+   "image_path": null,
+   "table_html": null,
+   "math_content": null,
+   "formula_body": null,
+   "formula_number": null
+  },
+  {
+   "block_uid": "doc-1d0c4891:0:5",
+   "block_type": "image",
+   "page_idx": 0,
+   "block_seq": 5,
+   "plain_text": "",
+   "bbox": [
+    0.147,
+    0.344,
+    0.847,
+    0.59
+   ],
+   "derived_level": null,
+   "parent_uid": null,
+   "source": null,
+   "confidence": 1.0,
+   "image_path": "images/9362ce84430eee9553b9dada9ab4085f17291f2057135a32c44c958e816a5eb7.jpg",
+   "table_html": null,
+   "math_content": null,
+   "formula_body": null,
+   "formula_number": null
+  },
+  {
+   "block_uid": "doc-1d0c4891:0:6",
+   "block_type": "title",
+   "page_idx": 0,
+   "block_seq": 6,
+   "plain_text": "产品二：智浚数算（AI 数据结构化应用一体化平台）",
+   "bbox": [
+    0.146,
+    0.652,
+    0.618,
+    0.67
+   ],
+   "derived_level": null,
+   "parent_uid": null,
+   "source": "ocr",
+   "confidence": 1.0,
+   "image_path": null,
+   "table_html": null,
+   "math_content": null,
+   "formula_body": null,
+   "formula_number": null
+  },
+  {
+   "block_uid": "doc-1d0c4891:0:7",
+   "block_type": "paragraph",
+   "page_idx": 0,
+   "block_seq": 7,
+   "plain_text": "产品名称：智浚数算 - AI 数据结构化与应用一体化平台",
+   "bbox": [
+    0.144,
+    0.69,
+    0.655,
+    0.707
+   ],
+   "derived_level": null,
+   "parent_uid": null,
+   "source": "text",
+   "confidence": 1.0,
+   "image_path": null,
+   "table_html": null,
+   "math_content": null,
+   "formula_body": null,
+   "formula_number": null
+  },
+  {
+   "block_uid": "doc-1d0c4891:0:8",
+   "block_type": "title",
+   "page_idx": 0,
+   "block_seq": 8,
+   "plain_text": "产品描述：",
+   "bbox": [
+    0.146,
+    0.727,
+    0.242,
+    0.744
+   ],
+   "derived_level": null,
+   "parent_uid": null,
+   "source": "ocr",
+   "confidence": 1.0,
+   "image_path": null,
+   "table_html": null,
+   "math_content": null,
+   "formula_body": null,
+   "formula_number": null
+  },
+  {
+   "block_uid": "doc-1d0c4891:0:9",
+   "block_type": "paragraph",
+   "page_idx": 0,
+   "block_seq": 9,
+   "plain_text": "本平台是面向工程领域的 AI 技术底座，集成 17 类算法、12个模型，提供图像/文本/数值数据结构化、模型管理、算法编排与调用能力。支持目标检测、OCR识别、大语言模型等能力封装，可快速构建工程 AI 应用，已完成功能验证，具备标准化复制推广条件。",
+   "bbox": [
+    0.144,
+    0.764,
+    0.838,
+    0.894
+   ],
+   "derived_level": null,
+   "parent_uid": null,
+   "source": "text",
+   "confidence": 1.0,
+   "image_path": null,
+   "table_html": null,
+   "math_content": null,
+   "formula_body": null,
+   "formula_number": null
+  },
+  {
+   "block_uid": "doc-1d0c4891:1:1",
+   "block_type": "table",
+   "page_idx": 1,
+   "block_seq": 1,
+   "plain_text": "",
+   "bbox": [
+    0.147,
+    0.083,
+    0.847,
+    0.347
+   ],
+   "derived_level": null,
+   "parent_uid": null,
+   "source": "table",
+   "confidence": 1.0,
+   "image_path": "images/9d67a7c32d8bc1472bf0ed39a264687a4fbe20bc462d8ba0b09971081f8894f8.jpg",
+   "table_html": "<table><tr><td>序号</td><td>名称</td><td>关联模型</td><td>操作</td></tr><tr><td>5</td><td>对比-规范对比算法_v0.1</td><td></td><td>E</td></tr><tr><td>6</td><td>人员检测算法_v1.0</td><td>人员检测模型</td><td>E</td></tr><tr><td>7</td><td>道路养护算法</td><td>道路目标检测模型</td><td>E</td></tr><tr><td>8</td><td>船舶证书数据提取算法</td><td>OCR识别</td><td>E</td></tr><tr><td>9</td><td>船员证书数据提取算法</td><td>OCR识别</td><td>E</td></tr><tr><td>10</td><td>轨迹插值算法</td><td></td><td>E</td></tr></table>",
+   "math_content": null,
+   "formula_body": null,
+   "formula_number": null
+  }
+ ],
+ "meta": {
+  "docMeta": {
+   "fileName": "推广产品.pdf",
+   "pageCount": 2,
+   "author": "飞",
+   "creatorTool": "Writer",
+   "createdAt": "D:20260808112722+08'00'",
+   "modifiedAt": null
+  },
+  "outlines": [],
+  "pages": [
+   {
+    "pageIdx": 0,
+    "width": 595.0,
+    "height": 841.0
+   },
+   {
+    "pageIdx": 1,
+    "width": 595.0,
+    "height": 841.0
+   }
+  ]
+ }
+}
