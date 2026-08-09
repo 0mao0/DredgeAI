@@ -3619,6 +3619,7 @@ cd services/compare-algo && uv run pytest tests/test_metadata.py -q
 from app.display import display_names
 from app.schemas.evidence import Evidence, EvidenceLocation, Severity, build_evidence
 from app.schemas.ir import IrDocument
+from app.similarity.shingle import SHINGLABLE_TYPES, normalize_text
 
 
 def _group_by_meta(documents: list[IrDocument], attr: str) -> dict[str, list[IrDocument]]:
@@ -3711,6 +3712,8 @@ git add services/compare-algo && git commit -m "feat(compare-algo): 元数据 au
 
 原理（tech 决策：低频错字 n-gram 碰撞）：单文档内「全文仅出现一次的字符」多为生僻字或错别字；包含该字符且在全文仅出现一次的 6-gram 是「可疑异常串」。可疑串在 ≥2 份文档中逐字相同 = 「错得一样」，原生文本下是围标强证据（spec §4.5 的设计意图）。
 
+校准（评审修复）：可疑串仅统计 `source=="text"` 的原生文本块（ocr/table/formula/null 全排除——同一识别器对同一模板可能犯同样的错，且实测 confidence 全 1.0，置信度过滤识别不出）；碰撞窗口以组合内 docId 排序首文档为参照，同块内重叠窗口合并为极大连续段去重计「处」（一个错字被 ~n 个窗口覆盖，窗口数≠错字数）；≥2 处 → high（强文案），仅 1 处 → mid（疑似文案，可能为套话/正式用语巧合）；title/description 附涉及文件（`display_names`）。
+
 - [ ] **Step 1: 追加失败测试**
 
 在 `services/compare-algo/tests/test_metadata.py` 末尾追加：
@@ -3718,34 +3721,60 @@ git add services/compare-algo && git commit -m "feat(compare-algo): 元数据 au
 ```python
 # ---------- Task 15：相同错别字检测 ----------
 
-from app.metadata.service import analyze_metadata, detect_shared_typos
 
-
-def _typo_doc(doc_id: str, text: str):
+def _typo_doc(doc_id: str, text: str, *, source: str | None = "text", confidence: float | None = 1.0):
     raw = make_raw_doc(
         doc_id,
         file_name=f"{doc_id}.pdf",
         author=None,
         created_at=None,
-        blocks=[make_raw_block("b001", text)],
+        blocks=[make_raw_block("b001", text, source=source, confidence=confidence)],
+    )
+    return adapt_document(validate_raw_document(raw))
+
+
+def _typo_doc_multi(doc_id: str, texts: list[str]):
+    raw = make_raw_doc(
+        doc_id,
+        file_name=f"{doc_id}.pdf",
+        author=None,
+        created_at=None,
+        blocks=[make_raw_block(f"b{i:03d}", t) for i, t in enumerate(texts, 1)],
     )
     return adapt_document(validate_raw_document(raw))
 
 
 def test_shared_typo_detected():
-    # 「保证今」为故意错别字（金→今），两份文档各出现一次
+    # 「保证今」为故意错别字（金→今），两份文档各出现一次 → 去重为 1 处站点，mid
     doc_x = _typo_doc("doc-x", "我方缴纳履约保证今拾万元整。")
     doc_y = _typo_doc("doc-y", "贵方缴纳履约保证今拾万元整。")
     evidences = detect_shared_typos("task-001", [doc_x, doc_y])
     assert len(evidences) == 1
     e = evidences[0]
     assert e.type == "metadata"
-    assert e.severity == "high"
+    assert e.severity == "mid"
     assert e.docIds == ["doc-x", "doc-y"]
     assert e.metrics["pattern"] == "shared-typo"
-    assert e.metrics["sharedNgramCount"] >= 1
+    assert e.metrics["sharedNgramCount"] == 1
     assert any("今" in s for s in e.metrics["samples"])
+    assert "涉及文件：doc-x.pdf、doc-y.pdf。" in e.description
     assert e.aiGenerated is False
+
+
+def test_shared_typo_two_sites_high():
+    # 两处独立错字站点（不同块，窗口互不重叠）→ 2 处 → high
+    doc_x = _typo_doc_multi("doc-x", ["我方缴纳履约保证今拾万元整。", "本工程骏工验收合格后退还保修金。"])
+    doc_y = _typo_doc_multi("doc-y", ["贵方缴纳履约保证今拾万元整。", "本工程骏工验收合格后退还保修金。"])
+    evidences = detect_shared_typos("task-001", [doc_x, doc_y])
+    assert len(evidences) == 1
+    e = evidences[0]
+    assert e.severity == "high"
+    assert e.metrics["sharedNgramCount"] == 2
+    assert len(e.metrics["samples"]) == 2
+    assert any("今" in s for s in e.metrics["samples"])
+    assert {l.docId: l.blockIds for l in e.locations} == {
+        "doc-x": ["b001", "b002"], "doc-y": ["b001", "b002"],
+    }
 
 
 def test_shared_typo_locations_point_to_blocks():
@@ -3768,12 +3797,50 @@ def test_repeated_common_ngram_not_flagged():
     assert detect_shared_typos("task-001", [doc_x, doc_y]) == []
 
 
+def test_shared_typo_ocr_blocks_ignored():
+    # OCR 块不参与（高/低置信度均）：同一识别器对同一模板可能犯同样的错
+    for confidence in (1.0, 0.3):
+        doc_x = _typo_doc("doc-x", "我方缴纳履约保证今拾万元整。", source="ocr", confidence=confidence)
+        doc_y = _typo_doc("doc-y", "贵方缴纳履约保证今拾万元整。", source="ocr", confidence=confidence)
+        assert detect_shared_typos("task-001", [doc_x, doc_y]) == []
+
+
+def test_shared_typo_null_source_blocks_ignored():
+    # source 缺失（图片/图表块等）同样不参与错别字碰撞
+    doc_x = _typo_doc("doc-x", "我方缴纳履约保证今拾万元整。", source=None, confidence=None)
+    doc_y = _typo_doc("doc-y", "贵方缴纳履约保证今拾万元整。", source=None, confidence=None)
+    assert detect_shared_typos("task-001", [doc_x, doc_y]) == []
+
+
+def test_shared_typo_three_way_single_evidence():
+    # ≥3 份碰撞：归并为一条证据，docIds 含全部 3 份
+    doc_x = _typo_doc("doc-x", "我方缴纳履约保证今拾万元整。")
+    doc_y = _typo_doc("doc-y", "贵方缴纳履约保证今拾万元整。")
+    doc_z = _typo_doc("doc-z", "他方缴纳履约保证今拾万元整。")
+    evidences = detect_shared_typos("task-001", [doc_x, doc_y, doc_z])
+    assert len(evidences) == 1
+    assert evidences[0].docIds == ["doc-x", "doc-y", "doc-z"]
+    assert evidences[0].metrics["sharedNgramCount"] == 1
+
+
+def test_formal_numeral_boilerplate_at_most_mid():
+    # 回归：大写金额套话「人民币壹佰万元整」多窗口碰撞 → 合并为 1 处，mid 封顶（不得 high）
+    doc_x = _typo_doc("doc-x", "投标报价为人民币壹佰万元整，详见附表。")
+    doc_y = _typo_doc("doc-y", "投标总价为人民币壹佰万元整，详见附表。")
+    evidences = detect_shared_typos("task-001", [doc_x, doc_y])
+    assert len(evidences) == 1
+    assert evidences[0].severity == "mid"
+    assert evidences[0].metrics["sharedNgramCount"] == 1
+
+
 def test_fixture_shared_typo(ir_docs):
-    # doc-a/doc-b 共享段内含「保证今」；doc-c 独立
+    # doc-a/doc-b 共享段内含「保证今」；doc-c 独立。71 个碰撞窗口去重为 1 处 → mid
     evidences = detect_shared_typos("task-001", ir_docs)
     assert len(evidences) == 1
     assert evidences[0].docIds == ["doc-a", "doc-b"]
-    assert evidences[0].metrics["sharedNgramCount"] >= 6  # 6 个窗口覆盖「今」
+    assert evidences[0].severity == "mid"
+    assert evidences[0].metrics["sharedNgramCount"] == 1
+    assert len(evidences[0].metrics["samples"]) == 1
 
 
 def test_analyze_metadata_combines_both(ir_docs):
@@ -3784,7 +3851,7 @@ def test_analyze_metadata_combines_both(ir_docs):
     assert kinds == {"author", "createdAt", "creatorTool", "shared-typo"}
 ```
 
-注意：Task 14 顶部已 import `compare_meta_fields`、`adapt_document`、`validate_raw_document`、`make_raw_block`、`make_raw_doc`，此处只需追加 `analyze_metadata` 与 `detect_shared_typos` 的 import。
+注意：Task 14 顶部已 import `adapt_document`、`validate_raw_document`、`make_raw_block`、`make_raw_doc`；`analyze_metadata` / `compare_meta_fields` / `detect_shared_typos` 统一并入顶部 `from app.metadata.service import ...` 一行（import 全部归位文件顶部，无 mid-file import）。
 
 运行确认失败：
 
@@ -3794,28 +3861,29 @@ cd services/compare-algo && uv run pytest tests/test_metadata.py -q
 
 - [ ] **Step 2: 在 `app/metadata/service.py` 末尾追加实现**
 
+（import 全部归位文件顶部：`from app.similarity.shingle import SHINGLABLE_TYPES, normalize_text` 已并入顶部 import 区——见 Task 14 代码块头部；本检测器不依赖 `app.ocr`，原生文本限定在 `eligible` 过滤中表达。）
+
 在 `services/compare-algo/app/metadata/service.py` 末尾追加：
 
 ```python
 # ---------- 相同错别字检测：低频错字 n-gram 碰撞 ----------
 
-from app.ocr import is_low_confidence_ocr
-from app.similarity.shingle import SHINGLABLE_TYPES, normalize_text
-
 TYPO_NGRAM = 6
 _TYPO_SAMPLES_MAX = 10
 
 
-def _block_typo_ngrams(doc: IrDocument, n: int = TYPO_NGRAM) -> dict[str, set[str]]:
-    """blockId -> 可疑异常 n-gram 集合。
+def _block_typo_ngrams(doc: IrDocument, n: int = TYPO_NGRAM) -> dict[str, dict[str, int]]:
+    """blockId -> {可疑异常 n-gram: 块内起始偏移}。
 
     可疑 = 该 gram 在全文仅出现一次，且包含「全文仅出现一次的字符」
     （生僻字/错别字特征；常规用字会多次出现，被自然过滤）。
-    低置信 OCR 块不参与（spec §4.5：OCR「错得一样」可能只是识别器犯了同样的错）。
+    仅统计原生文本块（source == "text"）：OCR/表格/公式块中「错得一样」
+    可能只是同一识别器对同一模板犯了同样的错（实测事实 #1：真实数据
+    confidence 全 1.0，置信度过滤识别不出 OCR 误碰撞），非强证据。
     """
     eligible = [
         b for b in doc.blocks
-        if b.type in SHINGLABLE_TYPES and not is_low_confidence_ocr(b)
+        if b.type in SHINGLABLE_TYPES and b.source == "text"
     ]
     full_text = "".join(normalize_text(b.text) for b in eligible)
     if len(full_text) < n:
@@ -3827,11 +3895,11 @@ def _block_typo_ngrams(doc: IrDocument, n: int = TYPO_NGRAM) -> dict[str, set[st
     char_freq: dict[str, int] = {}
     for ch in full_text:
         char_freq[ch] = char_freq.get(ch, 0) + 1
-    result: dict[str, set[str]] = {}
+    result: dict[str, dict[str, int]] = {}
     for b in eligible:
         text = normalize_text(b.text)
         grams = {
-            text[i : i + n]
+            text[i : i + n]: i
             for i in range(max(0, len(text) - n + 1))
             if gram_freq.get(text[i : i + n], 0) == 1
             and any(char_freq[c] == 1 for c in text[i : i + n])
@@ -3844,44 +3912,73 @@ def _block_typo_ngrams(doc: IrDocument, n: int = TYPO_NGRAM) -> dict[str, set[st
 def detect_shared_typos(
     task_id: str, documents: list[IrDocument], n: int = TYPO_NGRAM
 ) -> list[Evidence]:
-    """相同错别字：可疑 n-gram 在 ≥2 份文档中逐字碰撞 → high 证据。
+    """相同错别字：可疑 n-gram 在 ≥2 份文档中逐字碰撞 → metadata 证据。
 
     同一文档组合的多条碰撞归并为一条证据，locations 定位到含碰撞串的块。
+    去重站点计数：以组合内 docId 排序首文档为参照，同块内窗口起点落在当前
+    连续段覆盖区间内的碰撞合并为极大连续段，每段计 1 处——一个错字会被
+    ~n 个滑动窗口同时覆盖，窗口数不等于错字数。≥2 处 → high（「错得一样」
+    强证据）；仅 1 处 → mid（套话/正式用语巧合可能，文案降为疑似）。
+    samples 每处取中间窗口为代表；样本为规范化文本（标点/空白已剥离），
+    前端高亮需先做同样规范化再定位。
     """
-    gram_index: dict[str, dict[str, str]] = {}  # gram -> {docId: blockId}
+    names = display_names(documents)
+    gram_index: dict[str, dict[str, tuple[str, int]]] = {}  # gram -> {docId: (blockId, start)}
     for d in documents:
         for block_id, grams in _block_typo_ngrams(d, n).items():
-            for g in grams:
-                gram_index.setdefault(g, {})[d.docId] = block_id
+            for g, start in grams.items():
+                gram_index.setdefault(g, {})[d.docId] = (block_id, start)
 
-    by_docs: dict[tuple[str, ...], list[tuple[str, dict[str, str]]]] = {}
+    by_docs: dict[tuple[str, ...], list[tuple[str, dict[str, tuple[str, int]]]]] = {}
     for g, m in gram_index.items():
         if len(m) >= 2:
             by_docs.setdefault(tuple(sorted(m)), []).append((g, m))
 
     evidences: list[Evidence] = []
     for doc_ids, hits in sorted(by_docs.items()):
+        ref = doc_ids[0]
+        spans = sorted((m[ref][0], m[ref][1], g) for g, m in hits)
+        runs: list[list[str]] = []  # 极大连续段（段内为按起点升序的 gram）
+        run_block = ""
+        run_end = -1
+        for block_id, start, g in spans:
+            if block_id == run_block and start < run_end:
+                runs[-1].append(g)
+                run_end = max(run_end, start + n)
+            else:
+                runs.append([g])
+                run_block = block_id
+                run_end = start + n
+        site_count = len(runs)
         locations = [
             EvidenceLocation(
                 docId=doc_id,
-                blockIds=sorted({m[doc_id] for _, m in hits}),
+                blockIds=sorted({m[doc_id][0] for _, m in hits}),
             )
             for doc_id in doc_ids
         ]
-        samples = sorted({g for g, _ in hits})[:_TYPO_SAMPLES_MAX]
+        samples = [run[len(run) // 2] for run in runs][:_TYPO_SAMPLES_MAX]
+        if site_count >= 2:
+            severity: Severity = "high"
+            title = f"{len(doc_ids)} 份标书出现相同错别字/低频异常串（{site_count} 处）"
+            description = "多份标书出现逐字相同的低频异常字串；原生文本中「错得一样」是围标强证据。"
+        else:
+            severity = "mid"
+            title = f"{len(doc_ids)} 份标书疑似相同错别字/低频用字（{site_count} 处）"
+            description = "多份标书出现逐字相同的低频异常字串；仅单处命中，可能为行业套话或正式用语巧合，建议人工复核。"
         evidences.append(build_evidence(
             task_id=task_id,
             type="metadata",
-            severity="high",
+            severity=severity,
             doc_ids=list(doc_ids),
             locations=locations,
             metrics={
                 "pattern": "shared-typo",
-                "sharedNgramCount": len(hits),
+                "sharedNgramCount": site_count,
                 "samples": samples,
             },
-            title=f"{len(doc_ids)} 份标书出现相同错别字/低频异常串（{len(hits)} 处）",
-            description="多份标书出现逐字相同的低频异常字串；原生文本中「错得一样」是围标强证据。",
+            title=title,
+            description=f"{description}涉及文件：{'、'.join(names[doc_id] for doc_id in doc_ids)}。",
         ))
     return evidences
 

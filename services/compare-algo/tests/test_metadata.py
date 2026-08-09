@@ -1,6 +1,6 @@
 from app.angineer.adapter import adapt_document
 from app.angineer.raw import validate_raw_document
-from app.metadata.service import compare_meta_fields
+from app.metadata.service import analyze_metadata, compare_meta_fields, detect_shared_typos
 
 from tests.conftest import make_raw_block, make_raw_doc
 
@@ -120,34 +120,60 @@ def test_real_pingshen_pair_metadata(raw_pingshen_pair):
 
 # ---------- Task 15：相同错别字检测 ----------
 
-from app.metadata.service import analyze_metadata, detect_shared_typos
 
-
-def _typo_doc(doc_id: str, text: str):
+def _typo_doc(doc_id: str, text: str, *, source: str | None = "text", confidence: float | None = 1.0):
     raw = make_raw_doc(
         doc_id,
         file_name=f"{doc_id}.pdf",
         author=None,
         created_at=None,
-        blocks=[make_raw_block("b001", text)],
+        blocks=[make_raw_block("b001", text, source=source, confidence=confidence)],
+    )
+    return adapt_document(validate_raw_document(raw))
+
+
+def _typo_doc_multi(doc_id: str, texts: list[str]):
+    raw = make_raw_doc(
+        doc_id,
+        file_name=f"{doc_id}.pdf",
+        author=None,
+        created_at=None,
+        blocks=[make_raw_block(f"b{i:03d}", t) for i, t in enumerate(texts, 1)],
     )
     return adapt_document(validate_raw_document(raw))
 
 
 def test_shared_typo_detected():
-    # 「保证今」为故意错别字（金→今），两份文档各出现一次
+    # 「保证今」为故意错别字（金→今），两份文档各出现一次 → 去重为 1 处站点，mid
     doc_x = _typo_doc("doc-x", "我方缴纳履约保证今拾万元整。")
     doc_y = _typo_doc("doc-y", "贵方缴纳履约保证今拾万元整。")
     evidences = detect_shared_typos("task-001", [doc_x, doc_y])
     assert len(evidences) == 1
     e = evidences[0]
     assert e.type == "metadata"
-    assert e.severity == "high"
+    assert e.severity == "mid"
     assert e.docIds == ["doc-x", "doc-y"]
     assert e.metrics["pattern"] == "shared-typo"
-    assert e.metrics["sharedNgramCount"] >= 1
+    assert e.metrics["sharedNgramCount"] == 1
     assert any("今" in s for s in e.metrics["samples"])
+    assert "涉及文件：doc-x.pdf、doc-y.pdf。" in e.description
     assert e.aiGenerated is False
+
+
+def test_shared_typo_two_sites_high():
+    # 两处独立错字站点（不同块，窗口互不重叠）→ 2 处 → high
+    doc_x = _typo_doc_multi("doc-x", ["我方缴纳履约保证今拾万元整。", "本工程骏工验收合格后退还保修金。"])
+    doc_y = _typo_doc_multi("doc-y", ["贵方缴纳履约保证今拾万元整。", "本工程骏工验收合格后退还保修金。"])
+    evidences = detect_shared_typos("task-001", [doc_x, doc_y])
+    assert len(evidences) == 1
+    e = evidences[0]
+    assert e.severity == "high"
+    assert e.metrics["sharedNgramCount"] == 2
+    assert len(e.metrics["samples"]) == 2
+    assert any("今" in s for s in e.metrics["samples"])
+    assert {l.docId: l.blockIds for l in e.locations} == {
+        "doc-x": ["b001", "b002"], "doc-y": ["b001", "b002"],
+    }
 
 
 def test_shared_typo_locations_point_to_blocks():
@@ -170,12 +196,50 @@ def test_repeated_common_ngram_not_flagged():
     assert detect_shared_typos("task-001", [doc_x, doc_y]) == []
 
 
+def test_shared_typo_ocr_blocks_ignored():
+    # OCR 块不参与（高/低置信度均）：同一识别器对同一模板可能犯同样的错
+    for confidence in (1.0, 0.3):
+        doc_x = _typo_doc("doc-x", "我方缴纳履约保证今拾万元整。", source="ocr", confidence=confidence)
+        doc_y = _typo_doc("doc-y", "贵方缴纳履约保证今拾万元整。", source="ocr", confidence=confidence)
+        assert detect_shared_typos("task-001", [doc_x, doc_y]) == []
+
+
+def test_shared_typo_null_source_blocks_ignored():
+    # source 缺失（图片/图表块等）同样不参与错别字碰撞
+    doc_x = _typo_doc("doc-x", "我方缴纳履约保证今拾万元整。", source=None, confidence=None)
+    doc_y = _typo_doc("doc-y", "贵方缴纳履约保证今拾万元整。", source=None, confidence=None)
+    assert detect_shared_typos("task-001", [doc_x, doc_y]) == []
+
+
+def test_shared_typo_three_way_single_evidence():
+    # ≥3 份碰撞：归并为一条证据，docIds 含全部 3 份
+    doc_x = _typo_doc("doc-x", "我方缴纳履约保证今拾万元整。")
+    doc_y = _typo_doc("doc-y", "贵方缴纳履约保证今拾万元整。")
+    doc_z = _typo_doc("doc-z", "他方缴纳履约保证今拾万元整。")
+    evidences = detect_shared_typos("task-001", [doc_x, doc_y, doc_z])
+    assert len(evidences) == 1
+    assert evidences[0].docIds == ["doc-x", "doc-y", "doc-z"]
+    assert evidences[0].metrics["sharedNgramCount"] == 1
+
+
+def test_formal_numeral_boilerplate_at_most_mid():
+    # 回归：大写金额套话「人民币壹佰万元整」多窗口碰撞 → 合并为 1 处，mid 封顶（不得 high）
+    doc_x = _typo_doc("doc-x", "投标报价为人民币壹佰万元整，详见附表。")
+    doc_y = _typo_doc("doc-y", "投标总价为人民币壹佰万元整，详见附表。")
+    evidences = detect_shared_typos("task-001", [doc_x, doc_y])
+    assert len(evidences) == 1
+    assert evidences[0].severity == "mid"
+    assert evidences[0].metrics["sharedNgramCount"] == 1
+
+
 def test_fixture_shared_typo(ir_docs):
-    # doc-a/doc-b 共享段内含「保证今」；doc-c 独立
+    # doc-a/doc-b 共享段内含「保证今」；doc-c 独立。71 个碰撞窗口去重为 1 处 → mid
     evidences = detect_shared_typos("task-001", ir_docs)
     assert len(evidences) == 1
     assert evidences[0].docIds == ["doc-a", "doc-b"]
-    assert evidences[0].metrics["sharedNgramCount"] >= 6  # 6 个窗口覆盖「今」
+    assert evidences[0].severity == "mid"
+    assert evidences[0].metrics["sharedNgramCount"] == 1
+    assert len(evidences[0].metrics["samples"]) == 1
 
 
 def test_analyze_metadata_combines_both(ir_docs):
