@@ -58,6 +58,7 @@ services/compare-algo/
 ├── app/
 │   ├── __init__.py
 │   ├── main.py                  # FastAPI 入口：三接口 + 统一异常处理
+│   ├── display.py               # 面向用户的文档标识（fileName 优先，回退 docId）
 │   ├── ocr.py                   # OCR 低置信判定与 severity 降级（spec §4.5）
 │   ├── angineer/                # AnGIneer 产物适配层（唯一理解产物 schema 的地方）
 │   │   ├── __init__.py
@@ -2684,6 +2685,7 @@ cd services/compare-algo && uv run pytest tests/test_similarity_service.py -q
 
 ```python
 """查重证据组装：similarity 类证据，aiGenerated=false。"""
+from app.display import display_names
 from app.ocr import downgrade_severity, low_confidence_ocr_block_ids
 from app.schemas.evidence import Evidence, EvidenceLocation, Severity, build_evidence
 from app.schemas.ir import IrDocument
@@ -2703,11 +2705,6 @@ def _severity_of(similarity: float) -> Severity:
     if similarity >= SEVERITY_MID:
         return "mid"
     return "low"
-
-
-def _display_names(documents: list[IrDocument]) -> dict[str, str]:
-    """面向用户的文档标识：优先 fileName，缺失/空串时回退 docId（通用约定）。"""
-    return {d.docId: (d.meta.fileName or d.docId) for d in documents}
 
 
 def _is_ocr_suspect(r: PairSimilarityResult, ocr_ids: dict[str, set[str]]) -> bool:
@@ -2766,7 +2763,7 @@ def analyze_similarity(task_id: str, documents: list[IrDocument]) -> list[Eviden
 
     doc_map = {d.docId: d for d in documents}
     ocr_ids = {d.docId: low_confidence_ocr_block_ids(d) for d in documents}
-    names = _display_names(documents)
+    names = display_names(documents)
 
     results: list[PairSimilarityResult] = []
     for (a, b), group in sorted(by_doc_pair.items()):
@@ -3398,6 +3395,7 @@ def detect_closeness(amounts: list[float], max_spread: float = 0.01) -> Closenes
 
 ```python
 """报价分析证据组装：pricing 类证据，aiGenerated=false。"""
+from app.display import display_names
 from app.pricing.patterns import (
     detect_arithmetic_progression,
     detect_closeness,
@@ -3406,11 +3404,6 @@ from app.pricing.patterns import (
 from app.pricing.table_parse import extract_total_amount, parse_table_html
 from app.schemas.evidence import Evidence, EvidenceLocation, build_evidence
 from app.schemas.ir import IrDocument
-
-
-def _display_names(documents: list[IrDocument]) -> dict[str, str]:
-    """面向用户的文档标识：优先 fileName，缺失/空串时回退 docId（通用约定）。"""
-    return {d.docId: (d.meta.fileName or d.docId) for d in documents}
 
 
 def _best_price_block(doc: IrDocument) -> tuple[str, float] | None:
@@ -3441,7 +3434,7 @@ def analyze_pricing(task_id: str, documents: list[IrDocument]) -> list[Evidence]
     amounts = [bp[1] for _, bp in priced]
     amount_map = {doc_id: bp[1] for doc_id, bp in priced}
     locations = [EvidenceLocation(docId=doc_id, blockIds=[bp[0]]) for doc_id, bp in priced]
-    names = _display_names(documents)
+    names = display_names(documents)
     name_str = "、".join(names[doc_id] for doc_id in doc_ids)
 
     evidences: list[Evidence] = []
@@ -3623,12 +3616,18 @@ cd services/compare-algo && uv run pytest tests/test_metadata.py -q
 
 ```python
 """元数据比对：author / createdAt 一致性 + creatorTool 弱线索。metadata 类证据。"""
+from app.display import display_names
 from app.schemas.evidence import Evidence, EvidenceLocation, Severity, build_evidence
 from app.schemas.ir import IrDocument
 
 
 def _group_by_meta(documents: list[IrDocument], attr: str) -> dict[str, list[IrDocument]]:
-    """按 meta 字段值分组；None/空串不参与（v2 §5-7：提取不到给 null）。"""
+    """按 meta 字段值分组；None/空串不参与（v2 §5-7：提取不到给 null）。
+
+    相等性为归一后的字符串相等：createdAt 由适配层统一归一 ISO（真实 AnGIneer
+    数据全为 PDF 原始日期，归一路径一致）；混合格式的同一时刻字符串
+    （如 "...Z" 透传 vs "...+00:00" 归一）不会归并为一组——真实数据下可接受。
+    """
     groups: dict[str, list[IrDocument]] = {}
     for d in documents:
         v = getattr(d.meta, attr)
@@ -3645,6 +3644,7 @@ def _meta_evidence(
     severity: Severity,
     title: str,
     description: str,
+    names: dict[str, str],
 ) -> Evidence:
     ordered = sorted(docs, key=lambda d: d.docId)
     return build_evidence(
@@ -3655,11 +3655,12 @@ def _meta_evidence(
         locations=[EvidenceLocation(docId=d.docId) for d in ordered],
         metrics={"field": field, "value": value},
         title=title,
-        description=description,
+        description=f"{description}涉及文件：{'、'.join(names[d.docId] for d in ordered)}。",
     )
 
 
 def compare_meta_fields(task_id: str, documents: list[IrDocument]) -> list[Evidence]:
+    names = display_names(documents)
     evidences: list[Evidence] = []
     for author, docs in sorted(_group_by_meta(documents, "author").items()):
         if len(docs) >= 2:
@@ -3667,6 +3668,7 @@ def compare_meta_fields(task_id: str, documents: list[IrDocument]) -> list[Evide
                 task_id, "author", author, docs, "mid",
                 f"{len(docs)} 份标书文件作者相同（{author}）",
                 "文件元数据作者一致，疑似同一台设备/同一人编制。",
+                names,
             ))
     for created, docs in sorted(_group_by_meta(documents, "createdAt").items()):
         if len(docs) >= 2:
@@ -3674,6 +3676,7 @@ def compare_meta_fields(task_id: str, documents: list[IrDocument]) -> list[Evide
                 task_id, "createdAt", created, docs, "mid",
                 f"{len(docs)} 份标书创建时间完全相同（{created}）",
                 "文件创建时间完全一致，疑似同一批次生成。",
+                names,
             ))
     for tool, docs in sorted(_group_by_meta(documents, "creatorTool").items()):
         if len(docs) == len(documents) and len(docs) >= 2:
@@ -3681,6 +3684,7 @@ def compare_meta_fields(task_id: str, documents: list[IrDocument]) -> list[Evide
                 task_id, "creatorTool", tool, docs, "low",
                 f"全部标书使用同一编制工具（{tool}）",
                 "编制工具一致仅为弱线索，需结合其他证据判断。",
+                names,
             ))
     return evidences
 ```

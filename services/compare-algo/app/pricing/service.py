@@ -1,4 +1,5 @@
 """报价分析证据组装：pricing 类证据，aiGenerated=false。"""
+from app.display import display_names
 from app.pricing.patterns import (
     detect_arithmetic_progression,
     detect_closeness,
@@ -7,11 +8,6 @@ from app.pricing.patterns import (
 from app.pricing.table_parse import extract_total_amount, parse_table_html
 from app.schemas.evidence import Evidence, EvidenceLocation, build_evidence
 from app.schemas.ir import IrDocument
-
-
-def _display_names(documents: list[IrDocument]) -> dict[str, str]:
-    """面向用户的文档标识：优先 fileName，缺失/空串时回退 docId（通用约定）。"""
-    return {d.docId: (d.meta.fileName or d.docId) for d in documents}
 
 
 def _best_price_block(doc: IrDocument) -> tuple[str, float] | None:
@@ -42,7 +38,7 @@ def analyze_pricing(task_id: str, documents: list[IrDocument]) -> list[Evidence]
     amounts = [bp[1] for _, bp in priced]
     amount_map = {doc_id: bp[1] for doc_id, bp in priced}
     locations = [EvidenceLocation(docId=doc_id, blockIds=[bp[0]]) for doc_id, bp in priced]
-    names = _display_names(documents)
+    names = display_names(documents)
     name_str = "、".join(names[doc_id] for doc_id in doc_ids)
 
     evidences: list[Evidence] = []

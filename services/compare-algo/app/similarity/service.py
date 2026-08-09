@@ -1,4 +1,5 @@
 """查重证据组装：similarity 类证据，aiGenerated=false。"""
+from app.display import display_names
 from app.ocr import downgrade_severity, low_confidence_ocr_block_ids
 from app.schemas.evidence import Evidence, EvidenceLocation, Severity, build_evidence
 from app.schemas.ir import IrDocument
@@ -18,11 +19,6 @@ def _severity_of(similarity: float) -> Severity:
     if similarity >= SEVERITY_MID:
         return "mid"
     return "low"
-
-
-def _display_names(documents: list[IrDocument]) -> dict[str, str]:
-    """面向用户的文档标识：优先 fileName，缺失/空串时回退 docId（通用约定）。"""
-    return {d.docId: (d.meta.fileName or d.docId) for d in documents}
 
 
 def _is_ocr_suspect(r: PairSimilarityResult, ocr_ids: dict[str, set[str]]) -> bool:
@@ -81,7 +77,7 @@ def analyze_similarity(task_id: str, documents: list[IrDocument]) -> list[Eviden
 
     doc_map = {d.docId: d for d in documents}
     ocr_ids = {d.docId: low_confidence_ocr_block_ids(d) for d in documents}
-    names = _display_names(documents)
+    names = display_names(documents)
 
     results: list[PairSimilarityResult] = []
     for (a, b), group in sorted(by_doc_pair.items()):
