@@ -2,11 +2,15 @@
 
 输入 html 已通过产物 schema 纯净度校验（仅 table/tr/td/th），此处不做安全过滤。
 """
+import re
+
 from bs4 import BeautifulSoup
 
 from app.pricing.number_norm import parse_amount
 
 _TOTAL_KEYWORDS = ("总价", "合计", "投标报价", "总报价", "总金额")
+# 紧凑型日期（8 位裸数字，如 20251229）：fallback max() 须排除，否则会压过真实报价
+_COMPACT_DATE_RE = re.compile(r"^(19|20)\d{6}$")
 
 
 def parse_table_html(html: str) -> list[list[str]]:
@@ -49,7 +53,10 @@ def extract_amounts(grid: list[list[str]]) -> list[float]:
 
 
 def extract_total_amount(grid: list[list[str]]) -> float | None:
-    """优先取含 总价/合计/报价 关键词行中的最大金额；否则取全表最大金额。"""
+    """优先取含 总价/合计/报价 关键词行中的最大金额；否则取全表最大金额。
+
+    fallback max() 排除紧凑型日期（如 20251229），避免 8 位裸数字虚高总价。
+    """
     keyword_amounts: list[float] = []
     for row in grid:
         if any(k in "".join(row) for k in _TOTAL_KEYWORDS):
@@ -59,5 +66,9 @@ def extract_total_amount(grid: list[list[str]]) -> float | None:
                     keyword_amounts.append(v)
     if keyword_amounts:
         return max(keyword_amounts)
-    amounts = extract_amounts(grid)
+    amounts = [
+        v for row in grid for cell in row
+        if not _COMPACT_DATE_RE.match(cell.strip())
+        and (v := parse_amount(cell)) is not None
+    ]
     return max(amounts) if amounts else None

@@ -20,6 +20,10 @@ class TestParseAmount:
         assert parse_amount("100万") == 1000000.0
         assert parse_amount("3.5万元") == 35000.0
 
+    def test_wan_float_artifact_rounded(self):
+        # 9876.54 * 10000 浮点伪影须归一到分（2 位小数）
+        assert parse_amount("9876.54万") == 98765400.0
+
     def test_embedded_in_label(self):
         assert parse_amount("小写：1,000,000.00 元") == 1000000.0
 
@@ -72,6 +76,14 @@ class TestExtractTotalAmount:
 
     def test_no_amounts_returns_none(self):
         assert extract_total_amount([["项目", "说明"], ["工期", "一年"]]) is None
+
+    def test_fallback_ignores_compact_date(self):
+        # 无关键词行时，紧凑型日期（8 位裸数字，如 20251229）不得作为总价候选
+        grid = [["日期", "20251229"], ["金额", "500000"]]
+        assert extract_total_amount(grid) == 500000.0
+
+    def test_fallback_only_compact_date_returns_none(self):
+        assert extract_total_amount([["日期", "20251229"]]) is None
 
     def test_extract_amounts_collects_all(self):
         grid = [["a", "100"], ["200", "c"]]

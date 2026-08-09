@@ -2862,6 +2862,10 @@ class TestParseAmount:
         assert parse_amount("100万") == 1000000.0
         assert parse_amount("3.5万元") == 35000.0
 
+    def test_wan_float_artifact_rounded(self):
+        # 9876.54 * 10000 浮点伪影须归一到分（2 位小数）
+        assert parse_amount("9876.54万") == 98765400.0
+
     def test_embedded_in_label(self):
         assert parse_amount("小写：1,000,000.00 元") == 1000000.0
 
@@ -2914,6 +2918,14 @@ class TestExtractTotalAmount:
 
     def test_no_amounts_returns_none(self):
         assert extract_total_amount([["项目", "说明"], ["工期", "一年"]]) is None
+
+    def test_fallback_ignores_compact_date(self):
+        # 无关键词行时，紧凑型日期（8 位裸数字，如 20251229）不得作为总价候选
+        grid = [["日期", "20251229"], ["金额", "500000"]]
+        assert extract_total_amount(grid) == 500000.0
+
+    def test_fallback_only_compact_date_returns_none(self):
+        assert extract_total_amount([["日期", "20251229"]]) is None
 
     def test_extract_amounts_collects_all(self):
         grid = [["a", "100"], ["200", "c"]]
@@ -2974,7 +2986,8 @@ def parse_amount(raw: str | None) -> float | None:
         value = float(m.group(0).replace(",", ""))
     except ValueError:
         return None
-    return value * multiplier
+    # round 到分：消除「万」换算浮点伪影（9876.54万 → 98765400.00000001）
+    return round(value * multiplier, 2)
 ```
 
 - [ ] **Step 3: 实现 `app/pricing/table_parse.py`**
@@ -2986,11 +2999,15 @@ def parse_amount(raw: str | None) -> float | None:
 
 输入 html 已通过产物 schema 纯净度校验（仅 table/tr/td/th），此处不做安全过滤。
 """
+import re
+
 from bs4 import BeautifulSoup
 
 from app.pricing.number_norm import parse_amount
 
 _TOTAL_KEYWORDS = ("总价", "合计", "投标报价", "总报价", "总金额")
+# 紧凑型日期（8 位裸数字，如 20251229）：fallback max() 须排除，否则会压过真实报价
+_COMPACT_DATE_RE = re.compile(r"^(19|20)\d{6}$")
 
 
 def parse_table_html(html: str) -> list[list[str]]:
@@ -3033,7 +3050,10 @@ def extract_amounts(grid: list[list[str]]) -> list[float]:
 
 
 def extract_total_amount(grid: list[list[str]]) -> float | None:
-    """优先取含 总价/合计/报价 关键词行中的最大金额；否则取全表最大金额。"""
+    """优先取含 总价/合计/报价 关键词行中的最大金额；否则取全表最大金额。
+
+    fallback max() 排除紧凑型日期（如 20251229），避免 8 位裸数字虚高总价。
+    """
     keyword_amounts: list[float] = []
     for row in grid:
         if any(k in "".join(row) for k in _TOTAL_KEYWORDS):
@@ -3043,7 +3063,11 @@ def extract_total_amount(grid: list[list[str]]) -> float | None:
                     keyword_amounts.append(v)
     if keyword_amounts:
         return max(keyword_amounts)
-    amounts = extract_amounts(grid)
+    amounts = [
+        v for row in grid for cell in row
+        if not _COMPACT_DATE_RE.match(cell.strip())
+        and (v := parse_amount(cell)) is not None
+    ]
     return max(amounts) if amounts else None
 ```
 
@@ -3071,7 +3095,7 @@ git add services/compare-algo && git commit -m "feat(compare-algo): 报价表格
 
 检测规则（tech 决策：等差、尾数规律、贴近度）：
 - 等差：≥3 份，升序相邻差值的相对偏差 ≤1% → high；
-- 尾数：≥3 份，整数部分末两位完全相同 → mid；
+- 尾数：≥3 份，整数部分末两位完全相同 → mid（全 0 尾如 "00" 属百元取整常态，排除以免误报）；
 - 贴近度：≥2 份，(max-min)/max ≤1% → high（≤0.5% 时）/ mid。
 
 - [ ] **Step 1: 写失败测试**
@@ -3108,9 +3132,13 @@ class TestArithmeticProgression:
 
 class TestTailPattern:
     def test_same_tail(self):
-        r = detect_tail_pattern([10000, 20000, 30000])
+        r = detect_tail_pattern([10067, 20067, 30067])
         assert r is not None
-        assert r.tail == "00"
+        assert r.tail == "67"
+
+    def test_trivial_zero_tail_excluded(self):
+        # 末两位 "00" 是百元取整常态，不构成尾数规律
+        assert detect_tail_pattern([10000, 20000, 30000]) is None
 
     def test_different_tails(self):
         assert detect_tail_pattern([10001, 20002, 30003]) is None
@@ -3141,7 +3169,7 @@ from app.pricing.service import analyze_pricing
 def test_fixture_arithmetic_evidence(ir_docs):
     evidences = analyze_pricing("task-001", ir_docs)
     # 1,000,000 / 1,010,000 / 1,020,000：等差（公差 10,000），
-    # 贴近度 20000/1020000≈1.96% > 1% 不触发，尾数 00/10/20 不同不触发
+    # 贴近度 20000/1020000≈1.96% > 1% 不触发，尾数全为 "00"（百元取整常态）排除不触发
     assert len(evidences) == 1
     e = evidences[0]
     assert e.type == "pricing"
@@ -3181,6 +3209,24 @@ def test_table_without_html_skipped(ir_doc_a):
         ],
     })
     assert analyze_pricing("task-001", [ir_doc_a, no_html]) == []
+
+
+def test_malformed_span_table_skipped(ir_doc_a, ir_doc_b):
+    """畸形 rowspan="abc" 的表格解析抛 ValueError → 跳过该表，不拖垮整个请求。"""
+    bad = ir_doc_a.model_copy(update={
+        "docId": "doc-bad",
+        "blocks": [
+            b.model_copy(update={"table": b.table.model_copy(update={
+                "html": '<table><tr><td rowspan="abc">总价</td><td>9,999,999.00</td></tr></table>'
+            })})
+            if b.type == "table" else b
+            for b in ir_doc_a.blocks
+        ],
+    })
+    # bad 的唯一报价表畸形 → 不参与；doc-a/doc-b 正常比对（贴近度 0.99% ≤ 1% 出证据）
+    evidences = analyze_pricing("task-001", [bad, ir_doc_a, ir_doc_b])
+    assert evidences
+    assert all("doc-bad" not in e.docIds for e in evidences)
 
 
 def test_real_haigang_pair_no_pricing_evidence(raw_haigang_pair):
@@ -3237,11 +3283,14 @@ class TailPattern:
 
 
 def detect_tail_pattern(amounts: list[float], tail_len: int = 2) -> TailPattern | None:
-    """≥3 份报价整数部分末 tail_len 位完全相同（尾数规律，疑似同源编制）。"""
+    """≥3 份报价整数部分末 tail_len 位完全相同（尾数规律，疑似同源编制）。
+
+    末位全 0（如 "00"，百元取整）是报价常态而非规律，排除以免误报。
+    """
     if len(amounts) < 3:
         return None
     tails = [str(int(a)).zfill(tail_len)[-tail_len:] for a in amounts]
-    if len(set(tails)) == 1:
+    if len(set(tails)) == 1 and tails[0] != "0" * tail_len:
         return TailPattern(tail=tails[0], amounts=sorted(amounts))
     return None
 
@@ -3285,13 +3334,18 @@ from app.schemas.ir import IrDocument
 def _best_price_block(doc: IrDocument) -> tuple[str, float] | None:
     """取文档中投标总价最大的表格块，返回 (blockId, total)。
 
-    无表格、表格无 html（实测 2/132，仅有截图）或无金额时返回 None。
+    无表格、表格无 html（实测 2/132，仅有截图）或无金额时返回 None；
+    畸形 html（如 rowspan="abc"）解析抛 ValueError，跳过该表不拖垮整个请求。
     """
     best: tuple[str, float] | None = None
     for block in doc.blocks:
         if block.type != "table" or block.table is None or block.table.html is None:
             continue
-        total = extract_total_amount(parse_table_html(block.table.html))
+        try:
+            grid = parse_table_html(block.table.html)
+        except ValueError:
+            continue
+        total = extract_total_amount(grid)
         if total is not None and (best is None or total > best[1]):
             best = (block.blockId, total)
     return best

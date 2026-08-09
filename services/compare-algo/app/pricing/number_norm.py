@@ -23,4 +23,5 @@ def parse_amount(raw: str | None) -> float | None:
         value = float(m.group(0).replace(",", ""))
     except ValueError:
         return None
-    return value * multiplier
+    # round 到分：消除「万」换算浮点伪影（9876.54万 → 98765400.00000001）
+    return round(value * multiplier, 2)
