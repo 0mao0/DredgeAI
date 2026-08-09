@@ -2874,6 +2874,11 @@ class TestParseAmount:
         assert parse_amount("无报价") is None
         assert parse_amount(None) is None
 
+    def test_compact_date_token_rejected(self):
+        # 8 位紧凑日期 token（19/20 开头，如 20251229）不识别为金额，含嵌入文本场景
+        assert parse_amount("20251229") is None
+        assert parse_amount("开标日期：20251229") is None
+
 
 class TestParseTableHtml:
     def test_simple_grid(self):
@@ -2927,6 +2932,16 @@ class TestExtractTotalAmount:
     def test_fallback_only_compact_date_returns_none(self):
         assert extract_total_amount([["日期", "20251229"]]) is None
 
+    def test_fallback_embedded_compact_date_ignored(self):
+        # 嵌入文本中的紧凑日期同样不得作为 fallback 总价候选
+        grid = [["开标日期：20251229"], ["金额", "500000"]]
+        assert extract_total_amount(grid) == 500000.0
+
+    def test_keyword_row_embedded_compact_date_ignored(self):
+        # 关键词行内嵌入紧凑日期：不得压过同行的真实报价
+        grid = [["投标总价（开标日期：20251229）", "500,000.00"]]
+        assert extract_total_amount(grid) == 500000.0
+
     def test_extract_amounts_collects_all(self):
         grid = [["a", "100"], ["200", "c"]]
         assert extract_amounts(grid) == [100.0, 200.0]
@@ -2965,13 +2980,18 @@ cd services/compare-algo && uv run pytest tests/test_pricing_parse.py -q
 import re
 
 _AMOUNT_RE = re.compile(r"-?\d[\d,]*(?:\.\d+)?")
+# 紧凑型日期（8 位数字，19/20 开头，如 20251229）：非金额，token 级排除
+_COMPACT_DATE_RE = re.compile(r"^(19|20)\d{6}$")
 
 
 def parse_amount(raw: str | None) -> float | None:
     """从单元格文本解析金额（单位：元）。无法解析返回 None。
 
-    已知局限：含「万」的非金额文本（如「10万平方米」）也会被 ×10000，
-    报价表场景可接受，后续如出现误判再引入列语义判断。
+    已知局限：
+    - 含「万」的非金额文本（如「10万平方米」）也会被 ×10000，
+      报价表场景可接受，后续如出现误判再引入列语义判断。
+    - 恰好 8 位且 19/20 开头的金额（19,000,000~20,999,999，无小数/单位）
+      会被误判为紧凑日期而排除；真实报价多带千分位文本以外的格式特征，风险可接受。
     """
     if raw is None:
         return None
@@ -2982,8 +3002,11 @@ def parse_amount(raw: str | None) -> float | None:
     m = _AMOUNT_RE.search(text.replace("￥", "").replace("¥", ""))
     if not m:
         return None
+    token = m.group(0).replace(",", "")
+    if _COMPACT_DATE_RE.match(token):
+        return None
     try:
-        value = float(m.group(0).replace(",", ""))
+        value = float(token)
     except ValueError:
         return None
     # round 到分：消除「万」换算浮点伪影（9876.54万 → 98765400.00000001）
@@ -2999,15 +3022,11 @@ def parse_amount(raw: str | None) -> float | None:
 
 输入 html 已通过产物 schema 纯净度校验（仅 table/tr/td/th），此处不做安全过滤。
 """
-import re
-
 from bs4 import BeautifulSoup
 
 from app.pricing.number_norm import parse_amount
 
 _TOTAL_KEYWORDS = ("总价", "合计", "投标报价", "总报价", "总金额")
-# 紧凑型日期（8 位裸数字，如 20251229）：fallback max() 须排除，否则会压过真实报价
-_COMPACT_DATE_RE = re.compile(r"^(19|20)\d{6}$")
 
 
 def parse_table_html(html: str) -> list[list[str]]:
@@ -3052,7 +3071,7 @@ def extract_amounts(grid: list[list[str]]) -> list[float]:
 def extract_total_amount(grid: list[list[str]]) -> float | None:
     """优先取含 总价/合计/报价 关键词行中的最大金额；否则取全表最大金额。
 
-    fallback max() 排除紧凑型日期（如 20251229），避免 8 位裸数字虚高总价。
+    紧凑型日期（如 20251229）已在 parse_amount 的 token 级排除，两处 max() 均免疫。
     """
     keyword_amounts: list[float] = []
     for row in grid:
@@ -3063,11 +3082,7 @@ def extract_total_amount(grid: list[list[str]]) -> float | None:
                     keyword_amounts.append(v)
     if keyword_amounts:
         return max(keyword_amounts)
-    amounts = [
-        v for row in grid for cell in row
-        if not _COMPACT_DATE_RE.match(cell.strip())
-        and (v := parse_amount(cell)) is not None
-    ]
+    amounts = extract_amounts(grid)
     return max(amounts) if amounts else None
 ```
 
@@ -3164,6 +3179,21 @@ class TestCloseness:
 
 ```python
 from app.pricing.service import analyze_pricing
+from tests.conftest import price_table_html
+
+
+def _with_price(doc, doc_id, total):
+    """复制文档并替换报价表金额 / docId（构造指定价差场景）。"""
+    return doc.model_copy(update={
+        "docId": doc_id,
+        "blocks": [
+            b.model_copy(update={"table": b.table.model_copy(update={
+                "html": price_table_html(total)
+            })})
+            if b.type == "table" else b
+            for b in doc.blocks
+        ],
+    })
 
 
 def test_fixture_arithmetic_evidence(ir_docs):
@@ -3177,14 +3207,58 @@ def test_fixture_arithmetic_evidence(ir_docs):
     assert e.aiGenerated is False
     assert e.metrics["pattern"] == "arithmetic"
     assert e.metrics["commonDiff"] == 10000
+    assert e.metrics["maxDeviation"] == 0
     assert e.metrics["amounts"] == {"doc-a": 1000000.0, "doc-b": 1010000.0, "doc-c": 1020000.0}
     assert e.docIds == ["doc-a", "doc-b", "doc-c"]
+    # 标题具名（meta.fileName，、连接），不暴露 opaque docId
+    assert e.title == "A公司投标文件.pdf、B公司投标文件.pdf、C公司投标文件.pdf 报价呈等差规律（公差约 10,000 元）"
 
 
 def test_pricing_locations_point_to_table_blocks(ir_docs):
     e = analyze_pricing("task-001", ir_docs)[0]
     loc = {l.docId: l.blockIds for l in e.locations}
     assert loc == {"doc-a": ["b005"], "doc-b": ["b004"], "doc-c": ["b004"]}
+
+
+def test_closeness_mid_severity(ir_doc_a, ir_doc_b):
+    # 1,000,000 vs 1,010,000：spread 10000/1010000≈0.99% ∈ (0.5%, 1%] → mid
+    evidences = analyze_pricing("task-001", [ir_doc_a, ir_doc_b])
+    assert len(evidences) == 1
+    e = evidences[0]
+    assert e.metrics["pattern"] == "closeness"
+    assert e.severity == "mid"
+
+
+def test_closeness_high_severity_under_half_percent(ir_doc_a):
+    # 1,000,000 vs 1,004,000：spread 4000/1004000≈0.398% ≤ 0.5% → high
+    close_doc = _with_price(ir_doc_a, "doc-close", "1,004,000.00")
+    evidences = analyze_pricing("task-001", [ir_doc_a, close_doc])
+    assert len(evidences) == 1
+    e = evidences[0]
+    assert e.metrics["pattern"] == "closeness"
+    assert e.severity == "high"
+
+
+def test_closeness_boundary_half_percent_is_high(ir_doc_a):
+    # spread 恰好 0.5%（995,000 vs 1,000,000）：≤ 边界归 high
+    boundary_doc = _with_price(ir_doc_a, "doc-bnd", "995,000.00")
+    evidences = analyze_pricing("task-001", [ir_doc_a, boundary_doc])
+    assert len(evidences) == 1
+    e = evidences[0]
+    assert e.metrics["pattern"] == "closeness"
+    assert e.severity == "high"
+
+
+def test_closeness_severity_uses_unrounded_spread(ir_doc_a):
+    # spread=0.0050004：6dp 舍入后为 0.005（误归 high），未舍入 > 0.5% → mid
+    d1 = _with_price(ir_doc_a, "doc-r1", "10,000,000.00")
+    d2 = _with_price(ir_doc_a, "doc-r2", "9,949,996.00")
+    evidences = analyze_pricing("task-001", [d1, d2])
+    assert len(evidences) == 1
+    e = evidences[0]
+    assert e.metrics["pattern"] == "closeness"
+    assert e.metrics["spreadRatio"] == 0.005
+    assert e.severity == "mid"
 
 
 def test_less_than_two_priced_docs_no_evidence(ir_doc_a):
@@ -3223,10 +3297,13 @@ def test_malformed_span_table_skipped(ir_doc_a, ir_doc_b):
             for b in ir_doc_a.blocks
         ],
     })
-    # bad 的唯一报价表畸形 → 不参与；doc-a/doc-b 正常比对（贴近度 0.99% ≤ 1% 出证据）
+    # bad 的唯一报价表畸形 → 不参与；doc-a/doc-b 贴近度 0.99% ∈ (0.5%, 1%] → closeness mid
     evidences = analyze_pricing("task-001", [bad, ir_doc_a, ir_doc_b])
-    assert evidences
-    assert all("doc-bad" not in e.docIds for e in evidences)
+    assert len(evidences) == 1
+    e = evidences[0]
+    assert e.metrics["pattern"] == "closeness"
+    assert e.severity == "mid"
+    assert "doc-bad" not in e.docIds
 
 
 def test_real_haigang_pair_no_pricing_evidence(raw_haigang_pair):
@@ -3331,6 +3408,11 @@ from app.schemas.evidence import Evidence, EvidenceLocation, build_evidence
 from app.schemas.ir import IrDocument
 
 
+def _display_names(documents: list[IrDocument]) -> dict[str, str]:
+    """面向用户的文档标识：优先 fileName，缺失/空串时回退 docId（通用约定）。"""
+    return {d.docId: (d.meta.fileName or d.docId) for d in documents}
+
+
 def _best_price_block(doc: IrDocument) -> tuple[str, float] | None:
     """取文档中投标总价最大的表格块，返回 (blockId, total)。
 
@@ -3359,6 +3441,8 @@ def analyze_pricing(task_id: str, documents: list[IrDocument]) -> list[Evidence]
     amounts = [bp[1] for _, bp in priced]
     amount_map = {doc_id: bp[1] for doc_id, bp in priced}
     locations = [EvidenceLocation(docId=doc_id, blockIds=[bp[0]]) for doc_id, bp in priced]
+    names = _display_names(documents)
+    name_str = "、".join(names[doc_id] for doc_id in doc_ids)
 
     evidences: list[Evidence] = []
     ap = detect_arithmetic_progression(amounts)
@@ -3369,8 +3453,13 @@ def analyze_pricing(task_id: str, documents: list[IrDocument]) -> list[Evidence]
             severity="high",
             doc_ids=doc_ids,
             locations=locations,
-            metrics={"pattern": "arithmetic", "commonDiff": ap.common_diff, "amounts": amount_map},
-            title=f"{len(doc_ids)} 份报价呈等差规律（公差约 {ap.common_diff:,.0f} 元）",
+            metrics={
+                "pattern": "arithmetic",
+                "commonDiff": ap.common_diff,
+                "maxDeviation": ap.max_deviation,
+                "amounts": amount_map,
+            },
+            title=f"{name_str} 报价呈等差规律（公差约 {ap.common_diff:,.0f} 元）",
             description="多份投标报价构成等差数列，疑似人为排布，属围串标强信号。",
         ))
     tail = detect_tail_pattern(amounts)
@@ -3382,15 +3471,17 @@ def analyze_pricing(task_id: str, documents: list[IrDocument]) -> list[Evidence]
             doc_ids=doc_ids,
             locations=locations,
             metrics={"pattern": "tail", "tail": tail.tail, "amounts": amount_map},
-            title=f"{len(doc_ids)} 份报价尾数完全相同（末两位 {tail.tail}）",
+            title=f"{name_str} 报价尾数完全相同（末两位 {tail.tail}）",
             description="多份报价尾数规律一致，疑似同源编制。",
         ))
     close = detect_closeness(amounts)
     if close is not None:
+        # severity 按未舍入的 spread 判定，避免 6dp 舍入在 0.5% 边界跨档
+        spread_raw = (close.max_amount - close.min_amount) / close.max_amount
         evidences.append(build_evidence(
             task_id=task_id,
             type="pricing",
-            severity="high" if close.spread_ratio <= 0.005 else "mid",
+            severity="high" if spread_raw <= 0.005 else "mid",
             doc_ids=doc_ids,
             locations=locations,
             metrics={
@@ -3400,7 +3491,7 @@ def analyze_pricing(task_id: str, documents: list[IrDocument]) -> list[Evidence]
                 "maxAmount": close.max_amount,
                 "amounts": amount_map,
             },
-            title=f"{len(doc_ids)} 份报价异常贴近（最大偏差 {close.spread_ratio:.2%}）",
+            title=f"{name_str} 报价异常贴近（最大偏差 {close.spread_ratio:.2%}）",
             description="多份报价贴近度异常，疑似协同报价。",
         ))
     return evidences

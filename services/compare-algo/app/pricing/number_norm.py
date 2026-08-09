@@ -2,13 +2,18 @@
 import re
 
 _AMOUNT_RE = re.compile(r"-?\d[\d,]*(?:\.\d+)?")
+# 紧凑型日期（8 位数字，19/20 开头，如 20251229）：非金额，token 级排除
+_COMPACT_DATE_RE = re.compile(r"^(19|20)\d{6}$")
 
 
 def parse_amount(raw: str | None) -> float | None:
     """从单元格文本解析金额（单位：元）。无法解析返回 None。
 
-    已知局限：含「万」的非金额文本（如「10万平方米」）也会被 ×10000，
-    报价表场景可接受，后续如出现误判再引入列语义判断。
+    已知局限：
+    - 含「万」的非金额文本（如「10万平方米」）也会被 ×10000，
+      报价表场景可接受，后续如出现误判再引入列语义判断。
+    - 恰好 8 位且 19/20 开头的金额（19,000,000~20,999,999，无小数/单位）
+      会被误判为紧凑日期而排除；真实报价多带千分位文本以外的格式特征，风险可接受。
     """
     if raw is None:
         return None
@@ -19,8 +24,11 @@ def parse_amount(raw: str | None) -> float | None:
     m = _AMOUNT_RE.search(text.replace("￥", "").replace("¥", ""))
     if not m:
         return None
+    token = m.group(0).replace(",", "")
+    if _COMPACT_DATE_RE.match(token):
+        return None
     try:
-        value = float(m.group(0).replace(",", ""))
+        value = float(token)
     except ValueError:
         return None
     # round 到分：消除「万」换算浮点伪影（9876.54万 → 98765400.00000001）

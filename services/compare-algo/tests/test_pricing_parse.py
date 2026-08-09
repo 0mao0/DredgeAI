@@ -32,6 +32,11 @@ class TestParseAmount:
         assert parse_amount("无报价") is None
         assert parse_amount(None) is None
 
+    def test_compact_date_token_rejected(self):
+        # 8 位紧凑日期 token（19/20 开头，如 20251229）不识别为金额，含嵌入文本场景
+        assert parse_amount("20251229") is None
+        assert parse_amount("开标日期：20251229") is None
+
 
 class TestParseTableHtml:
     def test_simple_grid(self):
@@ -84,6 +89,16 @@ class TestExtractTotalAmount:
 
     def test_fallback_only_compact_date_returns_none(self):
         assert extract_total_amount([["日期", "20251229"]]) is None
+
+    def test_fallback_embedded_compact_date_ignored(self):
+        # 嵌入文本中的紧凑日期同样不得作为 fallback 总价候选
+        grid = [["开标日期：20251229"], ["金额", "500000"]]
+        assert extract_total_amount(grid) == 500000.0
+
+    def test_keyword_row_embedded_compact_date_ignored(self):
+        # 关键词行内嵌入紧凑日期：不得压过同行的真实报价
+        grid = [["投标总价（开标日期：20251229）", "500,000.00"]]
+        assert extract_total_amount(grid) == 500000.0
 
     def test_extract_amounts_collects_all(self):
         grid = [["a", "100"], ["200", "c"]]

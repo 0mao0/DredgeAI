@@ -9,6 +9,11 @@ from app.schemas.evidence import Evidence, EvidenceLocation, build_evidence
 from app.schemas.ir import IrDocument
 
 
+def _display_names(documents: list[IrDocument]) -> dict[str, str]:
+    """面向用户的文档标识：优先 fileName，缺失/空串时回退 docId（通用约定）。"""
+    return {d.docId: (d.meta.fileName or d.docId) for d in documents}
+
+
 def _best_price_block(doc: IrDocument) -> tuple[str, float] | None:
     """取文档中投标总价最大的表格块，返回 (blockId, total)。
 
@@ -37,6 +42,8 @@ def analyze_pricing(task_id: str, documents: list[IrDocument]) -> list[Evidence]
     amounts = [bp[1] for _, bp in priced]
     amount_map = {doc_id: bp[1] for doc_id, bp in priced}
     locations = [EvidenceLocation(docId=doc_id, blockIds=[bp[0]]) for doc_id, bp in priced]
+    names = _display_names(documents)
+    name_str = "、".join(names[doc_id] for doc_id in doc_ids)
 
     evidences: list[Evidence] = []
     ap = detect_arithmetic_progression(amounts)
@@ -47,8 +54,13 @@ def analyze_pricing(task_id: str, documents: list[IrDocument]) -> list[Evidence]
             severity="high",
             doc_ids=doc_ids,
             locations=locations,
-            metrics={"pattern": "arithmetic", "commonDiff": ap.common_diff, "amounts": amount_map},
-            title=f"{len(doc_ids)} 份报价呈等差规律（公差约 {ap.common_diff:,.0f} 元）",
+            metrics={
+                "pattern": "arithmetic",
+                "commonDiff": ap.common_diff,
+                "maxDeviation": ap.max_deviation,
+                "amounts": amount_map,
+            },
+            title=f"{name_str} 报价呈等差规律（公差约 {ap.common_diff:,.0f} 元）",
             description="多份投标报价构成等差数列，疑似人为排布，属围串标强信号。",
         ))
     tail = detect_tail_pattern(amounts)
@@ -60,15 +72,17 @@ def analyze_pricing(task_id: str, documents: list[IrDocument]) -> list[Evidence]
             doc_ids=doc_ids,
             locations=locations,
             metrics={"pattern": "tail", "tail": tail.tail, "amounts": amount_map},
-            title=f"{len(doc_ids)} 份报价尾数完全相同（末两位 {tail.tail}）",
+            title=f"{name_str} 报价尾数完全相同（末两位 {tail.tail}）",
             description="多份报价尾数规律一致，疑似同源编制。",
         ))
     close = detect_closeness(amounts)
     if close is not None:
+        # severity 按未舍入的 spread 判定，避免 6dp 舍入在 0.5% 边界跨档
+        spread_raw = (close.max_amount - close.min_amount) / close.max_amount
         evidences.append(build_evidence(
             task_id=task_id,
             type="pricing",
-            severity="high" if close.spread_ratio <= 0.005 else "mid",
+            severity="high" if spread_raw <= 0.005 else "mid",
             doc_ids=doc_ids,
             locations=locations,
             metrics={
@@ -78,7 +92,7 @@ def analyze_pricing(task_id: str, documents: list[IrDocument]) -> list[Evidence]
                 "maxAmount": close.max_amount,
                 "amounts": amount_map,
             },
-            title=f"{len(doc_ids)} 份报价异常贴近（最大偏差 {close.spread_ratio:.2%}）",
+            title=f"{name_str} 报价异常贴近（最大偏差 {close.spread_ratio:.2%}）",
             description="多份报价贴近度异常，疑似协同报价。",
         ))
     return evidences
