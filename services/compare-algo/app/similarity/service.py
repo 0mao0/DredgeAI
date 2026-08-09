@@ -1,0 +1,97 @@
+"""查重证据组装：similarity 类证据，aiGenerated=false。"""
+from app.ocr import downgrade_severity, low_confidence_ocr_block_ids
+from app.schemas.evidence import Evidence, EvidenceLocation, Severity, build_evidence
+from app.schemas.ir import IrDocument
+from app.similarity.align import PairSimilarityResult, align_document_pair
+from app.similarity.cluster import find_similarity_clusters
+from app.similarity.minhash import build_block_index, find_candidate_pairs
+
+EVIDENCE_MIN_SIMILARITY = 0.3   # 低于该值不出证据
+SEVERITY_HIGH = 0.8
+SEVERITY_MID = 0.5
+CLUSTER_MIN_SIMILARITY = 0.5    # 簇归并阈值
+
+
+def _severity_of(similarity: float) -> Severity:
+    if similarity >= SEVERITY_HIGH:
+        return "high"
+    if similarity >= SEVERITY_MID:
+        return "mid"
+    return "low"
+
+
+def _pair_evidence(task_id: str, r: PairSimilarityResult, suspect: bool) -> Evidence:
+    severity = _severity_of(r.similarity)
+    if suspect:
+        severity = downgrade_severity(severity)
+    avg_jac = round(sum(m.jaccard for m in r.matches) / len(r.matches), 4)
+    return build_evidence(
+        task_id=task_id,
+        type="similarity",
+        severity=severity,
+        doc_ids=[r.doc_id_a, r.doc_id_b],
+        locations=[
+            EvidenceLocation(docId=r.doc_id_a, blockIds=sorted({m.block_id_a for m in r.matches})),
+            EvidenceLocation(docId=r.doc_id_b, blockIds=sorted({m.block_id_b for m in r.matches})),
+        ],
+        metrics={
+            "similarity": r.similarity,
+            "avgBlockJaccard": avg_jac,
+            "matchedBlockCount": len(r.matches),
+            "ocrSuspect": suspect,
+        },
+        title=f"{r.doc_id_a} 与 {r.doc_id_b} 存在文本雷同（相似度 {r.similarity:.0%}）",
+        description="两份文档存在大段雷同。"
+        + ("部分雷同块来自扫描件 OCR 低置信识别，准确率可能受影响，已降权处理。" if suspect else ""),
+    )
+
+
+def analyze_similarity(task_id: str, documents: list[IrDocument]) -> list[Evidence]:
+    index = build_block_index(documents)
+    pairs = find_candidate_pairs(index)
+    by_doc_pair: dict[tuple[str, str], list] = {}
+    for p in pairs:
+        by_doc_pair.setdefault((p.doc_id_a, p.doc_id_b), []).append(p)
+
+    doc_map = {d.docId: d for d in documents}
+    ocr_ids = {d.docId: low_confidence_ocr_block_ids(d) for d in documents}
+
+    results: list[PairSimilarityResult] = []
+    for (a, b), group in sorted(by_doc_pair.items()):
+        results.append(align_document_pair(doc_map[a], doc_map[b], group))
+
+    evidences: list[Evidence] = []
+    for r in results:
+        if r.similarity < EVIDENCE_MIN_SIMILARITY or not r.matches:
+            continue
+        suspect = any(
+            m.block_id_a in ocr_ids[r.doc_id_a] or m.block_id_b in ocr_ids[r.doc_id_b]
+            for m in r.matches
+        )
+        evidences.append(_pair_evidence(task_id, r, suspect))
+
+    for members in find_similarity_clusters(results, CLUSTER_MIN_SIMILARITY):
+        sub = [
+            r for r in results
+            if r.doc_id_a in members and r.doc_id_b in members and r.matches
+        ]
+        avg_sim = round(sum(r.similarity for r in sub) / len(sub), 4)
+        locations: list[EvidenceLocation] = []
+        for m in members:
+            block_ids = sorted(
+                {mm.block_id_a for r in sub if r.doc_id_a == m for mm in r.matches}
+                | {mm.block_id_b for r in sub if r.doc_id_b == m for mm in r.matches}
+            )
+            if block_ids:
+                locations.append(EvidenceLocation(docId=m, blockIds=block_ids))
+        evidences.append(build_evidence(
+            task_id=task_id,
+            type="similarity",
+            severity="high",
+            doc_ids=members,
+            locations=locations,
+            metrics={"cluster": True, "memberCount": len(members), "avgSimilarity": avg_sim},
+            title=f"{len(members)} 份标书存在共同雷同（{', '.join(members)}）",
+            description="≥3 份标书经两两高相似传递归并构成雷同簇，是围串标强信号。",
+        ))
+    return evidences
