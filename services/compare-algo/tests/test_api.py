@@ -1,6 +1,9 @@
+import asyncio
+import logging
+
 from fastapi.testclient import TestClient
 
-from app.main import BodySizeLimitMiddleware, app
+from app.main import BodySizeLimitMiddleware, _max_body_bytes, app
 
 client = TestClient(app)
 
@@ -144,3 +147,88 @@ def test_oversized_body_rejected_413(ir_payload):
     r = limited.post("/analyze/similarity", json=ir_payload)
     assert r.status_code == 413
     assert r.json()["code"] == "REQUEST_TOO_LARGE"
+    assert "content-length" in r.headers
+
+
+def test_response_validation_failure_returns_500_not_422(monkeypatch, ir_payload):
+    # 服务端产出违反响应契约（ResponseValidationError）是服务端 bug → 500，
+    # 不得按调用方数据错误处理；handler 捕获后不再向上抛（TestClient 默认
+    # raise_server_exceptions=True，若异常穿透中间件本用例会直接 error）
+    monkeypatch.setattr(
+        "app.main.AnalyzeResponse",
+        lambda **kwargs: {"evidences": [{"unexpected": "garbage"}]},
+    )
+    r = client.post("/analyze/similarity", json=ir_payload)
+    assert r.status_code == 500
+    assert r.json()["code"] == "INTERNAL_ERROR"
+
+
+def test_max_body_bytes_defaults_without_env(monkeypatch):
+    monkeypatch.delenv("COMPARE_ALGO_MAX_BODY_BYTES", raising=False)
+    assert _max_body_bytes() == 50 * 1024 * 1024
+
+
+def test_max_body_bytes_valid_env(monkeypatch):
+    monkeypatch.setenv("COMPARE_ALGO_MAX_BODY_BYTES", "1048576")
+    assert _max_body_bytes() == 1048576
+
+
+def test_max_body_bytes_invalid_env_falls_back_with_warning(monkeypatch, caplog):
+    # "50MB" 非纯数字 → 回退默认并告警（不得静默）
+    monkeypatch.setenv("COMPARE_ALGO_MAX_BODY_BYTES", "50MB")
+    with caplog.at_level(logging.WARNING, logger="compare-algo"):
+        assert _max_body_bytes() == 50 * 1024 * 1024
+    assert any("COMPARE_ALGO_MAX_BODY_BYTES" in r.message for r in caplog.records)
+    caplog.clear()
+    # "²".isdigit() 为 True 但 int("²") 抛 ValueError → 同样回退并告警
+    monkeypatch.setenv("COMPARE_ALGO_MAX_BODY_BYTES", "²")
+    with caplog.at_level(logging.WARNING, logger="compare-algo"):
+        assert _max_body_bytes() == 50 * 1024 * 1024
+    assert any("COMPARE_ALGO_MAX_BODY_BYTES" in r.message for r in caplog.records)
+
+
+def test_middleware_client_disconnect_returns_early():
+    # 客户端中途断开：不得把截断的 body 回放给下游
+    downstream_called = False
+
+    async def downstream(scope, receive, send):
+        nonlocal downstream_called
+        downstream_called = True
+
+    mw = BodySizeLimitMiddleware(downstream, max_body_bytes=1024)
+    messages = iter([
+        {"type": "http.request", "body": b"partial", "more_body": True},
+        {"type": "http.disconnect"},
+    ])
+
+    async def receive():
+        return next(messages)
+
+    async def send(message):
+        pass
+
+    asyncio.run(mw({"type": "http", "headers": []}, receive, send))
+    assert not downstream_called
+
+
+def test_oversized_declared_content_length_fast_path():
+    # 快路径：声明的 Content-Length 已超限 → 直接 413（带 Content-Length 头），
+    # 不读取 body；字节计数仍是对 chunk/谎报场景的真正防线
+    async def downstream(scope, receive, send):
+        raise AssertionError("声明超限时不应进入下游")
+
+    mw = BodySizeLimitMiddleware(downstream, max_body_bytes=1024)
+    sent = []
+
+    async def receive():
+        raise AssertionError("声明超限时不应读取 body")
+
+    async def send(message):
+        sent.append(message)
+
+    scope = {"type": "http", "headers": [(b"content-length", b"2048")]}
+    asyncio.run(mw(scope, receive, send))
+    assert sent[0]["type"] == "http.response.start"
+    assert sent[0]["status"] == 413
+    header_names = [k for k, _ in sent[0]["headers"]]
+    assert b"content-length" in header_names

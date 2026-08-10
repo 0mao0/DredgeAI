@@ -4053,9 +4053,12 @@ git add services/compare-algo && git commit -m "feat(compare-algo): 相同错别
 `services/compare-algo/tests/test_api.py`：
 
 ```python
+import asyncio
+import logging
+
 from fastapi.testclient import TestClient
 
-from app.main import BodySizeLimitMiddleware, app
+from app.main import BodySizeLimitMiddleware, _max_body_bytes, app
 
 client = TestClient(app)
 
@@ -4199,6 +4202,91 @@ def test_oversized_body_rejected_413(ir_payload):
     r = limited.post("/analyze/similarity", json=ir_payload)
     assert r.status_code == 413
     assert r.json()["code"] == "REQUEST_TOO_LARGE"
+    assert "content-length" in r.headers
+
+
+def test_response_validation_failure_returns_500_not_422(monkeypatch, ir_payload):
+    # 服务端产出违反响应契约（ResponseValidationError）是服务端 bug → 500，
+    # 不得按调用方数据错误处理；handler 捕获后不再向上抛（TestClient 默认
+    # raise_server_exceptions=True，若异常穿透中间件本用例会直接 error）
+    monkeypatch.setattr(
+        "app.main.AnalyzeResponse",
+        lambda **kwargs: {"evidences": [{"unexpected": "garbage"}]},
+    )
+    r = client.post("/analyze/similarity", json=ir_payload)
+    assert r.status_code == 500
+    assert r.json()["code"] == "INTERNAL_ERROR"
+
+
+def test_max_body_bytes_defaults_without_env(monkeypatch):
+    monkeypatch.delenv("COMPARE_ALGO_MAX_BODY_BYTES", raising=False)
+    assert _max_body_bytes() == 50 * 1024 * 1024
+
+
+def test_max_body_bytes_valid_env(monkeypatch):
+    monkeypatch.setenv("COMPARE_ALGO_MAX_BODY_BYTES", "1048576")
+    assert _max_body_bytes() == 1048576
+
+
+def test_max_body_bytes_invalid_env_falls_back_with_warning(monkeypatch, caplog):
+    # "50MB" 非纯数字 → 回退默认并告警（不得静默）
+    monkeypatch.setenv("COMPARE_ALGO_MAX_BODY_BYTES", "50MB")
+    with caplog.at_level(logging.WARNING, logger="compare-algo"):
+        assert _max_body_bytes() == 50 * 1024 * 1024
+    assert any("COMPARE_ALGO_MAX_BODY_BYTES" in r.message for r in caplog.records)
+    caplog.clear()
+    # "²".isdigit() 为 True 但 int("²") 抛 ValueError → 同样回退并告警
+    monkeypatch.setenv("COMPARE_ALGO_MAX_BODY_BYTES", "²")
+    with caplog.at_level(logging.WARNING, logger="compare-algo"):
+        assert _max_body_bytes() == 50 * 1024 * 1024
+    assert any("COMPARE_ALGO_MAX_BODY_BYTES" in r.message for r in caplog.records)
+
+
+def test_middleware_client_disconnect_returns_early():
+    # 客户端中途断开：不得把截断的 body 回放给下游
+    downstream_called = False
+
+    async def downstream(scope, receive, send):
+        nonlocal downstream_called
+        downstream_called = True
+
+    mw = BodySizeLimitMiddleware(downstream, max_body_bytes=1024)
+    messages = iter([
+        {"type": "http.request", "body": b"partial", "more_body": True},
+        {"type": "http.disconnect"},
+    ])
+
+    async def receive():
+        return next(messages)
+
+    async def send(message):
+        pass
+
+    asyncio.run(mw({"type": "http", "headers": []}, receive, send))
+    assert not downstream_called
+
+
+def test_oversized_declared_content_length_fast_path():
+    # 快路径：声明的 Content-Length 已超限 → 直接 413（带 Content-Length 头），
+    # 不读取 body；字节计数仍是对 chunk/谎报场景的真正防线
+    async def downstream(scope, receive, send):
+        raise AssertionError("声明超限时不应进入下游")
+
+    mw = BodySizeLimitMiddleware(downstream, max_body_bytes=1024)
+    sent = []
+
+    async def receive():
+        raise AssertionError("声明超限时不应读取 body")
+
+    async def send(message):
+        sent.append(message)
+
+    scope = {"type": "http", "headers": [(b"content-length", b"2048")]}
+    asyncio.run(mw(scope, receive, send))
+    assert sent[0]["type"] == "http.response.start"
+    assert sent[0]["status"] == 413
+    header_names = [k for k, _ in sent[0]["headers"]]
+    assert b"content-length" in header_names
 ```
 
 运行确认失败：
@@ -4262,7 +4350,7 @@ import logging
 import os
 
 from fastapi import FastAPI, Request
-from fastapi.exceptions import RequestValidationError
+from fastapi.exceptions import RequestValidationError, ResponseValidationError
 from fastapi.responses import JSONResponse
 from pydantic import ValidationError
 
@@ -4283,8 +4371,9 @@ logger = logging.getLogger("compare-algo")
 class BodySizeLimitMiddleware:
     """请求体大小限制（parse-DoS 防御）：超过限额直接 413，不进入 JSON 解析。
 
-    纯 ASGI 实现：完整接收 body（含 chunked/无 Content-Length 的情况）并计数，
-    未超限时原样回放给下游。
+    纯 ASGI 实现：声明的 Content-Length 超限走快路径直接拒绝；否则完整接收
+    body（含 chunked/无 Content-Length 的情况）并计数，未超限时原样回放给下游；
+    接收途中客户端断开（http.disconnect）直接返回，不回放截断的 body。
     """
 
     def __init__(self, app, max_body_bytes: int):
@@ -4295,25 +4384,28 @@ class BodySizeLimitMiddleware:
         if scope["type"] != "http":
             await self.app(scope, receive, send)
             return
+        # 快路径：声明的 Content-Length 已超限直接 413，不读 body；
+        # 下方字节计数仍是真正的防线（chunked / 无 Content-Length / 谎报）
+        declared = _header_value(scope, b"content-length")
+        if declared is not None:
+            try:
+                if int(declared) > self.max_body_bytes:
+                    await self._send_413(send)
+                    return
+            except ValueError:
+                pass  # 非法 Content-Length 交由字节计数兜底
         chunks: list[bytes] = []
         size = 0
         while True:
             message = await receive()
+            if message["type"] == "http.disconnect":
+                return  # 客户端断开：不再向下游回放截断的 body
             if message["type"] != "http.request":
                 break
             chunks.append(message.get("body", b""))
             size += len(chunks[-1])
             if size > self.max_body_bytes:
-                payload = ErrorResponse(
-                    code="REQUEST_TOO_LARGE",
-                    message=f"请求体超过大小限制（{self.max_body_bytes} 字节）",
-                ).model_dump_json().encode()
-                await send({
-                    "type": "http.response.start",
-                    "status": 413,
-                    "headers": [(b"content-type", b"application/json")],
-                })
-                await send({"type": "http.response.body", "body": payload})
+                await self._send_413(send)
                 return
             if not message.get("more_body", False):
                 break
@@ -4329,12 +4421,43 @@ class BodySizeLimitMiddleware:
 
         await self.app(scope, replay_receive, send)
 
+    async def _send_413(self, send):
+        payload = ErrorResponse(
+            code="REQUEST_TOO_LARGE",
+            message=f"请求体超过大小限制（{self.max_body_bytes} 字节）",
+        ).model_dump_json().encode()
+        await send({
+            "type": "http.response.start",
+            "status": 413,
+            "headers": [
+                (b"content-type", b"application/json"),
+                (b"content-length", str(len(payload)).encode()),
+            ],
+        })
+        await send({"type": "http.response.body", "body": payload})
+
+
+def _header_value(scope: dict, name: bytes) -> bytes | None:
+    for key, value in scope.get("headers", []):
+        if key.lower() == name:
+            return value
+    return None
+
+
+_DEFAULT_MAX_BODY_BYTES = 50 * 1024 * 1024  # 默认 50MB（实测 5 份真实文档产物 ≈ 15MB）
+
 
 def _max_body_bytes() -> int:
     raw = os.environ.get("COMPARE_ALGO_MAX_BODY_BYTES", "")
-    if raw.isdigit():
+    try:
         return int(raw)
-    return 50 * 1024 * 1024  # 默认 50MB（实测 5 份真实文档产物 ≈ 15MB）
+    except ValueError:
+        if raw:  # 未设置属正常；设置了却解析不了才告警（"50MB"、"²" 等）
+            logger.warning(
+                "COMPARE_ALGO_MAX_BODY_BYTES=%r 无法解析为整数，回退默认 %d 字节",
+                raw, _DEFAULT_MAX_BODY_BYTES,
+            )
+        return _DEFAULT_MAX_BODY_BYTES
 
 
 app = FastAPI(title="compare-algo", version="0.1.0")
@@ -4371,6 +4494,23 @@ async def adapt_exception_handler(request: Request, exc: ValidationError) -> JSO
     """适配输出违反内部模型底线（如 outline 引用缺失）→ 422。"""
     body = _validation_error_body(exc.errors())
     return JSONResponse(status_code=422, content=body.model_dump())
+
+
+@app.exception_handler(ResponseValidationError)
+async def response_validation_exception_handler(
+    request: Request, exc: ResponseValidationError
+) -> JSONResponse:
+    """服务端产出违反响应契约是服务端 bug → 500，不让调用方按 422 背锅。
+
+    必须显式注册：旧版 FastAPI 的响应校验失败抛 pydantic ValidationError，
+    会落入上方适配层 422 处理器；新版抛 ResponseValidationError 则由通用
+    Exception 处理器兜底并向上重抛。此处统一按 500 处理并记录违规详情。
+    """
+    logger.error(
+        "response validation failed on %s: %s", request.url.path, exc,
+    )
+    body = ErrorResponse(code="INTERNAL_ERROR", message="内部分析失败，请联系算法服务负责人")
+    return JSONResponse(status_code=500, content=body.model_dump())
 
 
 @app.exception_handler(Exception)
