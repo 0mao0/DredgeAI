@@ -1,9 +1,15 @@
 ﻿using Microsoft.EntityFrameworkCore;
 using Volo.Abp.AuditLogging.EntityFrameworkCore;
 using Volo.Abp.BackgroundJobs.EntityFrameworkCore;
+using DredgeAI.BidCompare.Clauses;
+using DredgeAI.BidCompare.CompareTasks;
+using DredgeAI.BidCompare.Documents;
+using DredgeAI.BidCompare.Evidences;
+using DredgeAI.BidCompare.Exports;
 using Volo.Abp.Data;
 using Volo.Abp.DependencyInjection;
 using Volo.Abp.EntityFrameworkCore;
+using Volo.Abp.EntityFrameworkCore.Modeling;
 using Volo.Abp.FeatureManagement.EntityFrameworkCore;
 using Volo.Abp.Identity;
 using Volo.Abp.Identity.EntityFrameworkCore;
@@ -53,6 +59,12 @@ public class BidCompareDbContext :
 
     #endregion
 
+    public DbSet<CompareTask> CompareTasks { get; set; }
+    public DbSet<CompareDocument> CompareDocuments { get; set; }
+    public DbSet<EvidenceItem> EvidenceItems { get; set; }
+    public DbSet<ClauseTemplate> ClauseTemplates { get; set; }
+    public DbSet<ExportJob> ExportJobs { get; set; }
+
     public BidCompareDbContext(DbContextOptions<BidCompareDbContext> options)
         : base(options)
     {
@@ -76,11 +88,61 @@ public class BidCompareDbContext :
 
         /* Configure your own tables/entities inside here */
 
-        //builder.Entity<YourEntity>(b =>
-        //{
-        //    b.ToTable(BidCompareConsts.DbTablePrefix + "YourEntities", BidCompareConsts.DbSchema);
-        //    b.ConfigureByConvention(); //auto configure for the base class props
-        //    //...
-        //});
+        builder.Entity<CompareTask>(b =>
+        {
+            b.ToTable("BcCompareTasks");
+            b.ConfigureByConvention();
+            b.Property(x => x.Name).IsRequired().HasMaxLength(128);
+            b.Property(x => x.Status).IsRequired();
+            b.Property(x => x.ClauseSnapshotJson).HasColumnType("text");
+            b.Property(x => x.ReportJson).HasColumnType("text");
+            b.Property(x => x.ProgressStage).IsRequired().HasMaxLength(32);
+            b.Property(x => x.ProgressMessage).HasMaxLength(1024);
+            b.Property(x => x.FailureReason).HasMaxLength(2048);
+            b.HasIndex(x => x.Status);
+        });
+
+        builder.Entity<CompareDocument>(b =>
+        {
+            b.ToTable("BcCompareDocuments");
+            b.ConfigureByConvention();
+            b.Property(x => x.FileName).IsRequired().HasMaxLength(256);
+            b.Property(x => x.FileExtension).IsRequired().HasMaxLength(16);
+            b.Property(x => x.OriginStorageKey).IsRequired().HasMaxLength(512);
+            b.Property(x => x.IrStorageKey).HasMaxLength(512);
+            b.Property(x => x.DocMdStorageKey).HasMaxLength(512);
+            b.Property(x => x.ParseError).HasMaxLength(2048);
+            b.HasIndex(x => x.TaskId);
+        });
+
+        builder.Entity<EvidenceItem>(b =>
+        {
+            b.ToTable("BcEvidenceItems");
+            b.ConfigureByConvention();
+            b.Property(x => x.DocIdsJson).IsRequired().HasColumnType("text");
+            b.Property(x => x.LocationsJson).IsRequired().HasColumnType("text");
+            b.Property(x => x.MetricsJson).HasColumnType("text");
+            b.Property(x => x.Title).IsRequired().HasMaxLength(512);
+            b.Property(x => x.Description).IsRequired().HasMaxLength(4000);
+            b.HasIndex(x => new { x.TaskId, x.Type });
+            b.HasIndex(x => new { x.TaskId, x.Severity });
+        });
+
+        builder.Entity<ClauseTemplate>(b =>
+        {
+            b.ToTable("BcClauseTemplates");
+            b.ConfigureByConvention();
+            b.Property(x => x.Text).IsRequired().HasMaxLength(2000);
+            b.Property(x => x.Category).HasMaxLength(64);
+        });
+
+        builder.Entity<ExportJob>(b =>
+        {
+            b.ToTable("BcExportJobs");
+            b.ConfigureByConvention();
+            b.Property(x => x.FileStorageKey).HasMaxLength(512);
+            b.Property(x => x.Error).HasMaxLength(2048);
+            b.HasIndex(x => x.TaskId);
+        });
     }
 }
