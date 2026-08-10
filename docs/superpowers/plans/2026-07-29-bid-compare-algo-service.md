@@ -2002,6 +2002,7 @@ from app.similarity.minhash import (
     build_minhash,
     find_candidate_pairs,
 )
+from tests.conftest import adapt, make_raw_block, make_raw_doc
 
 
 def test_build_minhash_deterministic():
@@ -2047,6 +2048,19 @@ def test_find_candidate_pairs_ocr_block_is_candidate(ir_docs):
     pairs = find_candidate_pairs(build_block_index(ir_docs))
     assert any({p.block_id_a, p.block_id_b} == {"b004", "b005"}
                and {p.doc_id_a, p.doc_id_b} == {"doc-a", "doc-b"} for p in pairs)
+
+
+def test_lsh_key_separator_no_collision_with_slash_in_ids():
+    # doc_id/block_id 含 "/" 时，"/" 拼接会让 ("a/b","c") 与 ("a","b/c") 都映射到
+    # "a/b/c" 而互相覆盖；不可打印分隔符 \x1f 不与 id 字符碰撞
+    text = "本工程采用框架剪力墙结构体系抗震设防烈度为七度"
+    doc1 = adapt(make_raw_doc("a/b", file_name="1.pdf", author=None, created_at=None,
+                              blocks=[make_raw_block("c", text)]))
+    doc2 = adapt(make_raw_doc("a", file_name="2.pdf", author=None, created_at=None,
+                              blocks=[make_raw_block("b/c", text)]))
+    pairs = find_candidate_pairs(build_block_index([doc1, doc2]))
+    assert len(pairs) == 1
+    assert {pairs[0].doc_id_a, pairs[0].doc_id_b} == {"a/b", "a"}
 ```
 
 运行确认失败：
@@ -2084,7 +2098,7 @@ def build_minhash(shingles: set[str], num_perm: int = NUM_PERM) -> LeanMinHash:
     return LeanMinHash(mh)
 
 
-def build_block_index(documents, n: int = DEFAULT_NGRAM, num_perm: int = NUM_PERM) -> dict:
+def build_block_index(documents, n: int = DEFAULT_NGRAM) -> dict:
     """为所有可查重块构建 {BlockKey: (shingles, LeanMinHash)} 索引。"""
     index: dict[BlockKey, tuple[set[str], LeanMinHash]] = {}
     for doc in documents:
@@ -2093,9 +2107,16 @@ def build_block_index(documents, n: int = DEFAULT_NGRAM, num_perm: int = NUM_PER
             if shingles:
                 index[BlockKey(doc.docId, block.blockId)] = (
                     shingles,
-                    build_minhash(shingles, num_perm),
+                    build_minhash(shingles),
                 )
     return index
+
+
+_KEY_SEP = "\x1f"  # LSH 键分隔符：不可打印字符，id 含 "/" 时也不会碰撞
+
+
+def _lsh_key(key: BlockKey) -> str:
+    return f"{key.doc_id}{_KEY_SEP}{key.block_id}"
 
 
 def find_candidate_pairs(
@@ -2106,15 +2127,15 @@ def find_candidate_pairs(
     """LSH 粗筛跨文档候选块对，再用精确 Jaccard 复核。只保留跨文档对。"""
     lsh = MinHashLSH(threshold=threshold, num_perm=NUM_PERM)
     keys = list(index.keys())
-    str_to_key = {f"{k.doc_id}/{k.block_id}": k for k in keys}
+    str_to_key = {_lsh_key(k): k for k in keys}
     with lsh.insertion_session() as session:
         for key in keys:
-            session.insert(f"{key.doc_id}/{key.block_id}", index[key][1])
+            session.insert(_lsh_key(key), index[key][1])
 
     seen: set[tuple[str, str]] = set()
     pairs: list[CandidatePair] = []
     for key in keys:
-        skey = f"{key.doc_id}/{key.block_id}"
+        skey = _lsh_key(key)
         for other_s in lsh.query(index[key][1]):
             other = str_to_key[other_s]
             if other.doc_id == key.doc_id:
@@ -2149,7 +2170,7 @@ git add services/compare-algo && git commit -m "feat(compare-algo): datasketch M
 - Create: `services/compare-algo/app/similarity/align.py`
 - Create: `services/compare-algo/tests/test_align.py`
 
-设计：候选块对按 A 侧阅读顺序排列后，用 `difflib.SequenceMatcher` 在 B 侧位置序列上取最长公共子序列（等价最长递增子序列），剔除交叉冲突的匹配；相似度为 Dice 系数 =（双方匹配字符数之和）/（双方可查重字符数之和），全文完全雷同时为 1.0。
+设计：候选块对按 A 侧阅读顺序排列后，用 `difflib.SequenceMatcher` 在 B 侧位置序列上求不交叉的单调递增匹配链（启发式，不保证全局最长，本场景不需要最优），剔除交叉冲突的匹配；相似度为 Dice 系数 =（双方匹配字符数之和）/（双方可查重字符数之和），全文完全雷同时为 1.0。
 
 - [ ] **Step 1: 写失败测试**
 
@@ -2227,7 +2248,8 @@ cd services/compare-algo && uv run pytest tests/test_align.py -q
 """块级精确对齐与相似度计算。
 
 候选块对按 A 侧阅读顺序排列后，用 difflib.SequenceMatcher 在 B 侧位置序列上
-取最长公共子序列（即最长单调递增匹配链），剔除交叉冲突。
+求不交叉的单调递增匹配链，剔除交叉冲突。SequenceMatcher 是启发式：产出合法的
+不交叉链，但不保证全局最长——本场景只需稳定剔除交叉冲突，不要求最优。
 相似度为 Dice 系数：(matched_a + matched_b) / (total_a + total_b)，按规范化字符数计。
 """
 from dataclasses import dataclass, field
@@ -2272,7 +2294,7 @@ def align_document_pair(
     norm_len_a = {b.blockId: len(normalize_text(b.text)) for b in doc_a.blocks}
     norm_len_b = {b.blockId: len(normalize_text(b.text)) for b in doc_b.blocks}
 
-    # 按 A 侧阅读顺序排列候选对，在 B 侧位置序列上取最长单调链
+    # 按 A 侧阅读顺序排列候选对，在 B 侧位置序列上取不交叉单调链（启发式）
     ordered = sorted(pairs, key=lambda p: (pos_a.get(p.block_id_a, 0), pos_b.get(p.block_id_b, 0)))
     seq_b = [pos_b.get(p.block_id_b, -1) for p in ordered]
     keep: set[int] = set()
@@ -2436,6 +2458,7 @@ git add services/compare-algo && git commit -m "feat(compare-algo): Union-Find �
 ```python
 from app.angineer.adapter import adapt_document
 from app.angineer.raw import validate_raw_document
+from app.similarity.align import BlockMatch, PairSimilarityResult
 from app.similarity.service import analyze_similarity
 from tests.conftest import adapt, make_raw_block, make_raw_doc
 
@@ -2502,11 +2525,31 @@ def test_cluster_evidence_for_3_similar_docs(ir_doc_a):
     assert "doc-a" not in ce.title
 
 
-def test_similarity_thresholds(ir_doc_a):
-    # 相似度 < 0.3 不出证据：只保留一个极小重合块无法构造（候选 Jaccard 0.5 已过滤），
-    # 这里验证阈值常量存在且单调
+def test_similarity_thresholds(monkeypatch, ir_docs):
+    # 常量单调性钉
     from app.similarity import service
     assert service.SEVERITY_HIGH > service.SEVERITY_MID > service.EVIDENCE_MIN_SIMILARITY > 0
+
+    # 0.3 出证据 cutoff 的行为钉：monkeypatch 对齐层返回合成相似度（0.3 边界的
+    # 低相似场景无法经 LSH 候选真实构造——候选 Jaccard 0.5 已过滤，故钉在 service 边界）
+    def fake_align(sim: float):
+        def _fake(doc_a, doc_b, pairs):
+            return PairSimilarityResult(
+                doc_a.docId,
+                doc_b.docId,
+                sim,
+                [BlockMatch(p.block_id_a, p.block_id_b, p.jaccard) for p in pairs],
+            )
+        return _fake
+
+    monkeypatch.setattr(service, "align_document_pair", fake_align(0.29))
+    assert analyze_similarity("task-threshold", ir_docs) == []  # <0.3 不出证据
+
+    monkeypatch.setattr(service, "align_document_pair", fake_align(0.31))
+    evidences = analyze_similarity("task-threshold", ir_docs)
+    assert len(evidences) == 1  # ≥0.3 出证据
+    assert evidences[0].metrics["similarity"] == 0.31
+    assert evidences[0].severity == "low"
 
 
 def test_real_haigang_pair_low_evidence(raw_haigang_pair):
@@ -3559,6 +3602,15 @@ def test_author_match_mid(ir_docs):
     assert e.aiGenerated is False
 
 
+def test_author_value_stripped_before_grouping(ir_doc_a, ir_doc_b):
+    # 元数据值首尾空白不影响分组（"张三 " 与 "张三" 归并），metrics 用 strip 后的值
+    ir_doc_b.meta.author = "张三 "
+    evidences = compare_meta_fields("task-001", [ir_doc_a, ir_doc_b])
+    e = _by_metric_key(evidences, "field")["author"]
+    assert e.docIds == ["doc-a", "doc-b"]
+    assert e.metrics["value"] == "张三"
+
+
 def test_created_at_match_mid(ir_docs):
     evidences = compare_meta_fields("task-001", ir_docs)
     e = _by_metric_key(evidences, "field")["createdAt"]
@@ -3644,15 +3696,16 @@ from app.similarity.shingle import SHINGLABLE_TYPES, normalize_text
 def _group_by_meta(documents: list[IrDocument], attr: str) -> dict[str, list[IrDocument]]:
     """按 meta 字段值分组；None/空串不参与（v2 §5-7：提取不到给 null）。
 
-    相等性为归一后的字符串相等：createdAt 由适配层统一归一 ISO（真实 AnGIneer
-    数据全为 PDF 原始日期，归一路径一致）；混合格式的同一时刻字符串
-    （如 "...Z" 透传 vs "...+00:00" 归一）不会归并为一组——真实数据下可接受。
+    值先 strip 再分组：「张三 」与「张三」归并为一组，展示/metrics 用 strip 后的值；
+    纯空白串视同缺失。相等性为归一后的字符串相等：createdAt 由适配层统一归一
+    ISO（真实 AnGIneer 数据全为 PDF 原始日期，归一路径一致）；混合格式的同一时刻
+    字符串（如 "...Z" 透传 vs "...+00:00" 归一）不会归并为一组——真实数据下可接受。
     """
     groups: dict[str, list[IrDocument]] = {}
     for d in documents:
         v = getattr(d.meta, attr)
-        if v:
-            groups.setdefault(v, []).append(d)
+        if v and v.strip():
+            groups.setdefault(v.strip(), []).append(d)
     return groups
 
 
@@ -4094,6 +4147,19 @@ def test_pricing_endpoint(ir_payload):
     assert evidences[0]["metrics"]["pattern"] == "arithmetic"
 
 
+def test_similarity_endpoint_ocr_downgrade_pinned(ir_payload):
+    # 合成 fixture：doc-a/doc-b 雷同（Dice>0.8 本应 high）但命中 doc-b 低置信 OCR 块
+    # → 端点级钉：severity 降 mid + ocrSuspect=true（service 层已覆盖，此处钉接口透出）
+    r = client.post("/analyze/similarity", json=ir_payload)
+    assert r.status_code == 200
+    evidences = r.json()["evidences"]
+    assert len(evidences) == 1
+    e = evidences[0]
+    assert e["severity"] == "mid"
+    assert e["metrics"]["ocrSuspect"] is True
+    assert e["metrics"]["similarity"] > 0.8
+
+
 def test_metadata_endpoint(ir_payload):
     r = client.post("/analyze/metadata", json=ir_payload)
     assert r.status_code == 200
@@ -4194,6 +4260,20 @@ def test_duplicate_block_uid_returns_422_with_document_path(ir_payload):
     assert body["code"] == "IR_VALIDATION_FAILED"
     assert any(d["path"].startswith("documents") for d in body["details"])
     assert any("doc-a" in d["message"] for d in body["details"])
+
+
+def test_adapter_level_validation_error_returns_422(ir_payload):
+    # 幽灵 outline 锚点：产物层校验通过（raw 不查锚点存在性），适配为 IrDocument 时
+    # _check_document 抛 pydantic ValidationError → 适配层 422（与请求体校验同码不同源）
+    ir_payload["documents"][0]["meta"]["outlines"] = [{
+        "outline_id": "o1", "title": "幽灵章节", "level": 1,
+        "page_idx": 0, "anchor_block_id": "no-such-block",
+    }]
+    r = client.post("/analyze/similarity", json=ir_payload)
+    assert r.status_code == 422
+    body = r.json()
+    assert body["code"] == "IR_VALIDATION_FAILED"
+    assert any("blockId" in d["message"] for d in body["details"])
 
 
 def test_oversized_body_rejected_413(ir_payload):

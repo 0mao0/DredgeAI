@@ -4,6 +4,7 @@ from app.similarity.minhash import (
     build_minhash,
     find_candidate_pairs,
 )
+from tests.conftest import adapt, make_raw_block, make_raw_doc
 
 
 def test_build_minhash_deterministic():
@@ -49,3 +50,16 @@ def test_find_candidate_pairs_ocr_block_is_candidate(ir_docs):
     pairs = find_candidate_pairs(build_block_index(ir_docs))
     assert any({p.block_id_a, p.block_id_b} == {"b004", "b005"}
                and {p.doc_id_a, p.doc_id_b} == {"doc-a", "doc-b"} for p in pairs)
+
+
+def test_lsh_key_separator_no_collision_with_slash_in_ids():
+    # doc_id/block_id 含 "/" 时，"/" 拼接会让 ("a/b","c") 与 ("a","b/c") 都映射到
+    # "a/b/c" 而互相覆盖；不可打印分隔符 \x1f 不与 id 字符碰撞
+    text = "本工程采用框架剪力墙结构体系抗震设防烈度为七度"
+    doc1 = adapt(make_raw_doc("a/b", file_name="1.pdf", author=None, created_at=None,
+                              blocks=[make_raw_block("c", text)]))
+    doc2 = adapt(make_raw_doc("a", file_name="2.pdf", author=None, created_at=None,
+                              blocks=[make_raw_block("b/c", text)]))
+    pairs = find_candidate_pairs(build_block_index([doc1, doc2]))
+    assert len(pairs) == 1
+    assert {pairs[0].doc_id_a, pairs[0].doc_id_b} == {"a/b", "a"}

@@ -39,6 +39,19 @@ def test_pricing_endpoint(ir_payload):
     assert evidences[0]["metrics"]["pattern"] == "arithmetic"
 
 
+def test_similarity_endpoint_ocr_downgrade_pinned(ir_payload):
+    # 合成 fixture：doc-a/doc-b 雷同（Dice>0.8 本应 high）但命中 doc-b 低置信 OCR 块
+    # → 端点级钉：severity 降 mid + ocrSuspect=true（service 层已覆盖，此处钉接口透出）
+    r = client.post("/analyze/similarity", json=ir_payload)
+    assert r.status_code == 200
+    evidences = r.json()["evidences"]
+    assert len(evidences) == 1
+    e = evidences[0]
+    assert e["severity"] == "mid"
+    assert e["metrics"]["ocrSuspect"] is True
+    assert e["metrics"]["similarity"] > 0.8
+
+
 def test_metadata_endpoint(ir_payload):
     r = client.post("/analyze/metadata", json=ir_payload)
     assert r.status_code == 200
@@ -139,6 +152,20 @@ def test_duplicate_block_uid_returns_422_with_document_path(ir_payload):
     assert body["code"] == "IR_VALIDATION_FAILED"
     assert any(d["path"].startswith("documents") for d in body["details"])
     assert any("doc-a" in d["message"] for d in body["details"])
+
+
+def test_adapter_level_validation_error_returns_422(ir_payload):
+    # 幽灵 outline 锚点：产物层校验通过（raw 不查锚点存在性），适配为 IrDocument 时
+    # _check_document 抛 pydantic ValidationError → 适配层 422（与请求体校验同码不同源）
+    ir_payload["documents"][0]["meta"]["outlines"] = [{
+        "outline_id": "o1", "title": "幽灵章节", "level": 1,
+        "page_idx": 0, "anchor_block_id": "no-such-block",
+    }]
+    r = client.post("/analyze/similarity", json=ir_payload)
+    assert r.status_code == 422
+    body = r.json()
+    assert body["code"] == "IR_VALIDATION_FAILED"
+    assert any("blockId" in d["message"] for d in body["details"])
 
 
 def test_oversized_body_rejected_413(ir_payload):

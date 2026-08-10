@@ -22,7 +22,7 @@ def build_minhash(shingles: set[str], num_perm: int = NUM_PERM) -> LeanMinHash:
     return LeanMinHash(mh)
 
 
-def build_block_index(documents, n: int = DEFAULT_NGRAM, num_perm: int = NUM_PERM) -> dict:
+def build_block_index(documents, n: int = DEFAULT_NGRAM) -> dict:
     """为所有可查重块构建 {BlockKey: (shingles, LeanMinHash)} 索引。"""
     index: dict[BlockKey, tuple[set[str], LeanMinHash]] = {}
     for doc in documents:
@@ -31,9 +31,16 @@ def build_block_index(documents, n: int = DEFAULT_NGRAM, num_perm: int = NUM_PER
             if shingles:
                 index[BlockKey(doc.docId, block.blockId)] = (
                     shingles,
-                    build_minhash(shingles, num_perm),
+                    build_minhash(shingles),
                 )
     return index
+
+
+_KEY_SEP = "\x1f"  # LSH 键分隔符：不可打印字符，id 含 "/" 时也不会碰撞
+
+
+def _lsh_key(key: BlockKey) -> str:
+    return f"{key.doc_id}{_KEY_SEP}{key.block_id}"
 
 
 def find_candidate_pairs(
@@ -44,15 +51,15 @@ def find_candidate_pairs(
     """LSH 粗筛跨文档候选块对，再用精确 Jaccard 复核。只保留跨文档对。"""
     lsh = MinHashLSH(threshold=threshold, num_perm=NUM_PERM)
     keys = list(index.keys())
-    str_to_key = {f"{k.doc_id}/{k.block_id}": k for k in keys}
+    str_to_key = {_lsh_key(k): k for k in keys}
     with lsh.insertion_session() as session:
         for key in keys:
-            session.insert(f"{key.doc_id}/{key.block_id}", index[key][1])
+            session.insert(_lsh_key(key), index[key][1])
 
     seen: set[tuple[str, str]] = set()
     pairs: list[CandidatePair] = []
     for key in keys:
-        skey = f"{key.doc_id}/{key.block_id}"
+        skey = _lsh_key(key)
         for other_s in lsh.query(index[key][1]):
             other = str_to_key[other_s]
             if other.doc_id == key.doc_id:

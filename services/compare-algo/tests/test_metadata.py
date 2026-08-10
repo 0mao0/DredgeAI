@@ -44,6 +44,15 @@ def test_author_multiple_groups_each_evidence():
     assert by_value["乙"].docIds == ["doc-y", "doc-z"]
 
 
+def test_author_value_stripped_before_grouping(ir_doc_a, ir_doc_b):
+    # 元数据值首尾空白不影响分组（"张三 " 与 "张三" 归并），metrics 用 strip 后的值
+    ir_doc_b.meta.author = "张三 "
+    evidences = compare_meta_fields("task-001", [ir_doc_a, ir_doc_b])
+    e = _by_metric_key(evidences, "field")["author"]
+    assert e.docIds == ["doc-a", "doc-b"]
+    assert e.metrics["value"] == "张三"
+
+
 def test_created_at_match_mid(ir_docs):
     evidences = compare_meta_fields("task-001", ir_docs)
     e = _by_metric_key(evidences, "field")["createdAt"]

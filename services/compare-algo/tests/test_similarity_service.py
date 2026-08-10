@@ -1,5 +1,6 @@
 from app.angineer.adapter import adapt_document
 from app.angineer.raw import validate_raw_document
+from app.similarity.align import BlockMatch, PairSimilarityResult
 from app.similarity.service import analyze_similarity
 from tests.conftest import adapt, make_raw_block, make_raw_doc
 
@@ -66,11 +67,31 @@ def test_cluster_evidence_for_3_similar_docs(ir_doc_a):
     assert "doc-a" not in ce.title
 
 
-def test_similarity_thresholds(ir_doc_a):
-    # 相似度 < 0.3 不出证据：只保留一个极小重合块无法构造（候选 Jaccard 0.5 已过滤），
-    # 这里验证阈值常量存在且单调
+def test_similarity_thresholds(monkeypatch, ir_docs):
+    # 常量单调性钉
     from app.similarity import service
     assert service.SEVERITY_HIGH > service.SEVERITY_MID > service.EVIDENCE_MIN_SIMILARITY > 0
+
+    # 0.3 出证据 cutoff 的行为钉：monkeypatch 对齐层返回合成相似度（0.3 边界的
+    # 低相似场景无法经 LSH 候选真实构造——候选 Jaccard 0.5 已过滤，故钉在 service 边界）
+    def fake_align(sim: float):
+        def _fake(doc_a, doc_b, pairs):
+            return PairSimilarityResult(
+                doc_a.docId,
+                doc_b.docId,
+                sim,
+                [BlockMatch(p.block_id_a, p.block_id_b, p.jaccard) for p in pairs],
+            )
+        return _fake
+
+    monkeypatch.setattr(service, "align_document_pair", fake_align(0.29))
+    assert analyze_similarity("task-threshold", ir_docs) == []  # <0.3 不出证据
+
+    monkeypatch.setattr(service, "align_document_pair", fake_align(0.31))
+    evidences = analyze_similarity("task-threshold", ir_docs)
+    assert len(evidences) == 1  # ≥0.3 出证据
+    assert evidences[0].metrics["similarity"] == 0.31
+    assert evidences[0].severity == "low"
 
 
 def test_real_haigang_pair_low_evidence(raw_haigang_pair):

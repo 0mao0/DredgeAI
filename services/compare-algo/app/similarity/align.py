@@ -1,7 +1,8 @@
 """块级精确对齐与相似度计算。
 
 候选块对按 A 侧阅读顺序排列后，用 difflib.SequenceMatcher 在 B 侧位置序列上
-取最长公共子序列（即最长单调递增匹配链），剔除交叉冲突。
+求不交叉的单调递增匹配链，剔除交叉冲突。SequenceMatcher 是启发式：产出合法的
+不交叉链，但不保证全局最长——本场景只需稳定剔除交叉冲突，不要求最优。
 相似度为 Dice 系数：(matched_a + matched_b) / (total_a + total_b)，按规范化字符数计。
 """
 from dataclasses import dataclass, field
@@ -46,7 +47,7 @@ def align_document_pair(
     norm_len_a = {b.blockId: len(normalize_text(b.text)) for b in doc_a.blocks}
     norm_len_b = {b.blockId: len(normalize_text(b.text)) for b in doc_b.blocks}
 
-    # 按 A 侧阅读顺序排列候选对，在 B 侧位置序列上取最长单调链
+    # 按 A 侧阅读顺序排列候选对，在 B 侧位置序列上取不交叉单调链（启发式）
     ordered = sorted(pairs, key=lambda p: (pos_a.get(p.block_id_a, 0), pos_b.get(p.block_id_b, 0)))
     seq_b = [pos_b.get(p.block_id_b, -1) for p in ordered]
     keep: set[int] = set()

@@ -8,15 +8,16 @@ from app.similarity.shingle import SHINGLABLE_TYPES, normalize_text
 def _group_by_meta(documents: list[IrDocument], attr: str) -> dict[str, list[IrDocument]]:
     """按 meta 字段值分组；None/空串不参与（v2 §5-7：提取不到给 null）。
 
-    相等性为归一后的字符串相等：createdAt 由适配层统一归一 ISO（真实 AnGIneer
-    数据全为 PDF 原始日期，归一路径一致）；混合格式的同一时刻字符串
-    （如 "...Z" 透传 vs "...+00:00" 归一）不会归并为一组——真实数据下可接受。
+    值先 strip 再分组：「张三 」与「张三」归并为一组，展示/metrics 用 strip 后的值；
+    纯空白串视同缺失。相等性为归一后的字符串相等：createdAt 由适配层统一归一
+    ISO（真实 AnGIneer 数据全为 PDF 原始日期，归一路径一致）；混合格式的同一时刻
+    字符串（如 "...Z" 透传 vs "...+00:00" 归一）不会归并为一组——真实数据下可接受。
     """
     groups: dict[str, list[IrDocument]] = {}
     for d in documents:
         v = getattr(d.meta, attr)
-        if v:
-            groups.setdefault(v, []).append(d)
+        if v and v.strip():
+            groups.setdefault(v.strip(), []).append(d)
     return groups
 
 

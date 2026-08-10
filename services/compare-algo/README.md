@@ -64,6 +64,22 @@ AnGIneer 产物字段名原样；`docId` 为 opaque 的 ABP 文档 id）。
   尾数（`tail`）多条证据；similarity 同一文档集可同时产出两两雷同与雷同簇（`metrics.cluster=true`）证据。
   消费方按 `type` + `docIds` / `metrics.pattern` / `metrics.cluster` 分组，不得假设一次调用至多一条证据。
 
+### Evidence metrics 目录
+
+消费方契约（相似度矩阵由 ABP 主服务基于两两证据的 `metrics.similarity` 组装，本服务不出矩阵接口）：
+
+| 证据 | metrics 键 |
+|---|---|
+| similarity 两两雷同 | `similarity`（Dice 系数）、`avgBlockJaccard`、`matchedBlockCount`、`ocrSuspect` |
+| similarity 雷同簇（≥3 份） | `cluster`（恒 `true`）、`memberCount`、`avgSimilarity`、`ocrSuspect` |
+| pricing 等差 | `pattern`="arithmetic"、`commonDiff`、`maxDeviation`、`amounts` |
+| pricing 尾数 | `pattern`="tail"、`tail`（整数部分末两位字符串）、`amounts` |
+| pricing 贴近度 | `pattern`="closeness"、`spreadRatio`、`minAmount`、`maxAmount`、`amounts` |
+| metadata 字段一致 | `field`（author / createdAt / creatorTool）、`value` |
+| metadata 相同错别字 | `pattern`="shared-typo"、`sharedNgramCount`、`samples`（规范化文本，见已知限制） |
+
+其中 `amounts` 为 `{docId: 投标总价}` 映射；`ocrSuspect=true` 表示证据已按 spec §4.5 降权并标注。
+
 ## 测试 fixture
 
 - `tests/conftest.py`：3 份合成标书（raw 产物形态），覆盖低置信 OCR 降权、等差报价、相同错别字场景。
