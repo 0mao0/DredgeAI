@@ -10,6 +10,7 @@ using DredgeAI.BidCompare.BackgroundJobs;
 using DredgeAI.BidCompare.Clauses;
 using DredgeAI.BidCompare.Documents;
 using DredgeAI.BidCompare.Evidences;
+using DredgeAI.BidCompare.Exports;
 using DredgeAI.BidCompare.Ir;
 using DredgeAI.BidCompare.Reports;
 using DredgeAI.BidCompare.Reporting;
@@ -42,6 +43,7 @@ public class CompareTaskAppService : ApplicationService, ICompareTaskAppService
     private readonly IRepository<CompareTask, Guid> _taskRepository;
     private readonly IRepository<CompareDocument, Guid> _documentRepository;
     private readonly IRepository<EvidenceItem, Guid> _evidenceRepository;
+    private readonly IRepository<ExportJob, Guid> _exportJobRepository;
     private readonly IFileStorage _fileStorage;
     private readonly IBackgroundJobManager _backgroundJobManager;
     private readonly ILlmGateway _llmGateway;
@@ -51,6 +53,7 @@ public class CompareTaskAppService : ApplicationService, ICompareTaskAppService
         IRepository<CompareTask, Guid> taskRepository,
         IRepository<CompareDocument, Guid> documentRepository,
         IRepository<EvidenceItem, Guid> evidenceRepository,
+        IRepository<ExportJob, Guid> exportJobRepository,
         IFileStorage fileStorage,
         IBackgroundJobManager backgroundJobManager,
         ILlmGateway llmGateway,
@@ -59,6 +62,7 @@ public class CompareTaskAppService : ApplicationService, ICompareTaskAppService
         _taskRepository = taskRepository;
         _documentRepository = documentRepository;
         _evidenceRepository = evidenceRepository;
+        _exportJobRepository = exportJobRepository;
         _fileStorage = fileStorage;
         _backgroundJobManager = backgroundJobManager;
         _llmGateway = llmGateway;
@@ -321,6 +325,45 @@ public class CompareTaskAppService : ApplicationService, ICompareTaskAppService
         await _taskRepository.UpdateAsync(task, autoSave: true);
         return report;
     }
+
+    public async Task<ExportJobDto> RequestExportAsync(Guid id, ExportRequestDto input)
+    {
+        var task = await _taskRepository.GetAsync(id);
+        if (task.Status != CompareTaskStatus.Done)
+        {
+            throw new BusinessException(BidCompareErrorCodes.ReportNotReady).WithData("taskId", id);
+        }
+
+        var job = new ExportJob(GuidGenerator.Create(), id, input.Format);
+        await _exportJobRepository.InsertAsync(job, autoSave: true);
+        await _backgroundJobManager.EnqueueAsync(new ExportReportArgs { ExportJobId = job.Id });
+        return MapToDto(job, downloadUrl: null);
+    }
+
+    public async Task<ExportJobDto> GetExportJobAsync(Guid id, Guid jobId)
+    {
+        await _taskRepository.GetAsync(id);
+        var job = await _exportJobRepository.GetAsync(jobId);
+        if (job.TaskId != id)
+        {
+            throw new BusinessException(BidCompareErrorCodes.ExportJobNotFound).WithData("jobId", jobId);
+        }
+
+        var downloadUrl = job.Status == ExportJobStatus.Succeeded && job.FileStorageKey != null
+            ? await _fileStorage.GetPresignedUrlAsync(job.FileStorageKey, TimeSpan.FromHours(1))
+            : null;
+        return MapToDto(job, downloadUrl);
+    }
+
+    private static ExportJobDto MapToDto(ExportJob job, string? downloadUrl) => new()
+    {
+        JobId = job.Id,
+        TaskId = job.TaskId,
+        Format = job.Format,
+        Status = job.Status,
+        DownloadUrl = downloadUrl,
+        Error = job.Error
+    };
 
     /// <summary>解析 LLM 条款提取响应：剥离 ```json 围栏后按数组解析，异常即抛 IrValidationFailed。</summary>
     internal static List<ClauseDto> ParseClauseDrafts(string llmResponse)

@@ -83,6 +83,16 @@ public class CompareTaskController : AbpControllerBase
     [HttpGet("{id}/report")]
     public Task<Reports.CompareReportDto> GetReportAsync(Guid id)
         => _appService.GetReportAsync(id);
+
+    /// <summary>POST /api/compare/tasks/{id}/export 生成导出文件 { format } → 异步 → 下载 URL</summary>
+    [HttpPost("{id}/export")]
+    public Task<Exports.ExportJobDto> RequestExportAsync(Guid id, [FromBody] Exports.ExportRequestDto input)
+        => _appService.RequestExportAsync(id, input);
+
+    /// <summary>GET /api/compare/tasks/{id}/exports/{jobId}（补充路由：导出轮询，spec §6.2）</summary>
+    [HttpGet("{id}/exports/{jobId}")]
+    public Task<Exports.ExportJobDto> GetExportJobAsync(Guid id, Guid jobId)
+        => _appService.GetExportJobAsync(id, jobId);
 }
 
 public class UploadDocumentForm

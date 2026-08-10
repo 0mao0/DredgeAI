@@ -6,6 +6,8 @@ using DredgeAI.BidCompare.AI;
 using DredgeAI.BidCompare.Analysis;
 using DredgeAI.BidCompare.AnGineer;
 using DredgeAI.BidCompare.BackgroundJobs;
+using DredgeAI.BidCompare.Exports;
+using DredgeAI.BidCompare.Reporting;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Cors;
 using Microsoft.AspNetCore.Extensions.DependencyInjection;
@@ -92,6 +94,8 @@ public class BidCompareHttpApiHostModule : AbpModule
         Configure<AnGineerOptions>(configuration.GetSection("AnGIneer"));
         Configure<AlgoServiceOptions>(configuration.GetSection("AlgoService"));
         Configure<LlmOptions>(configuration.GetSection("Llm"));
+        Configure<ReportExportOptions>(configuration.GetSection("Export"));
+        Configure<LibreOfficeOptions>(configuration.GetSection("LibreOffice"));
         context.Services.AddHttpClient();
     }
 

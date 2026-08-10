@@ -3,6 +3,8 @@ using DredgeAI.BidCompare.AnGineer;
 using DredgeAI.BidCompare.Analysis;
 using DredgeAI.BidCompare.AI;
 using DredgeAI.BidCompare.Storage;
+using DredgeAI.BidCompare.Exports;
+using DredgeAI.BidCompare.Reporting;
 using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
@@ -34,6 +36,8 @@ public class BidCompareApplicationTestModule : AbpModule
         context.Services.Replace(ServiceDescriptor.Singleton<IAnGineerClient, FakeAnGineerClient>());
         context.Services.Replace(ServiceDescriptor.Singleton<ICompareAlgoClient, FakeCompareAlgoClient>());
         context.Services.Replace(ServiceDescriptor.Singleton<ILlmGateway, FakeLlmGateway>());
+        context.Services.Replace(ServiceDescriptor.Singleton<IPdfConverter, FakePdfConverter>());
+        context.Services.Replace(ServiceDescriptor.Singleton<IWordReportRenderer, FakeWordReportRenderer>());
         // [Task8] IAnGineerClient / [Task9] ICompareAlgoClient / [Task11] ILlmGateway / [Task14] IPdfConverter 的 Fake 在此追加
 
         ConfigureInMemorySqlite(context.Services);
