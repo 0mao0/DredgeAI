@@ -11,6 +11,8 @@ using DredgeAI.BidCompare.Clauses;
 using DredgeAI.BidCompare.Documents;
 using DredgeAI.BidCompare.Evidences;
 using DredgeAI.BidCompare.Ir;
+using DredgeAI.BidCompare.Reports;
+using DredgeAI.BidCompare.Reporting;
 using DredgeAI.BidCompare.Storage;
 using Volo.Abp;
 using Volo.Abp.Application.Dtos;
@@ -43,6 +45,7 @@ public class CompareTaskAppService : ApplicationService, ICompareTaskAppService
     private readonly IFileStorage _fileStorage;
     private readonly IBackgroundJobManager _backgroundJobManager;
     private readonly ILlmGateway _llmGateway;
+    private readonly ReportBuilder _reportBuilder;
 
     public CompareTaskAppService(
         IRepository<CompareTask, Guid> taskRepository,
@@ -50,7 +53,8 @@ public class CompareTaskAppService : ApplicationService, ICompareTaskAppService
         IRepository<EvidenceItem, Guid> evidenceRepository,
         IFileStorage fileStorage,
         IBackgroundJobManager backgroundJobManager,
-        ILlmGateway llmGateway)
+        ILlmGateway llmGateway,
+        ReportBuilder reportBuilder)
     {
         _taskRepository = taskRepository;
         _documentRepository = documentRepository;
@@ -58,6 +62,7 @@ public class CompareTaskAppService : ApplicationService, ICompareTaskAppService
         _fileStorage = fileStorage;
         _backgroundJobManager = backgroundJobManager;
         _llmGateway = llmGateway;
+        _reportBuilder = reportBuilder;
     }
 
     public async Task<CompareTaskDto> CreateAsync(CreateCompareTaskDto input)
@@ -296,6 +301,25 @@ public class CompareTaskAppService : ApplicationService, ICompareTaskAppService
 
         var documents = await GetTaskDocumentsAsync(id);
         return MapToDto(task, documents);
+    }
+
+    public async Task<CompareReportDto> GetReportAsync(Guid id)
+    {
+        var task = await _taskRepository.GetAsync(id);
+
+        if (task.ReportJson != null)
+        {
+            return JsonSerializer.Deserialize<CompareReportDto>(task.ReportJson, SnapshotJsonOptions)!;
+        }
+        if (task.Status != CompareTaskStatus.Done)
+        {
+            throw new BusinessException(BidCompareErrorCodes.ReportNotReady).WithData("taskId", id);
+        }
+
+        var report = await _reportBuilder.BuildAsync(id);
+        task.SetReport(JsonSerializer.Serialize(report, SnapshotJsonOptions), Clock.Now);
+        await _taskRepository.UpdateAsync(task, autoSave: true);
+        return report;
     }
 
     /// <summary>解析 LLM 条款提取响应：剥离 ```json 围栏后按数组解析，异常即抛 IrValidationFailed。</summary>

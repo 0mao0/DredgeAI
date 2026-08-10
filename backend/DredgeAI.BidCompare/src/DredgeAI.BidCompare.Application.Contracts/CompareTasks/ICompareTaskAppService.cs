@@ -7,6 +7,7 @@ using DredgeAI.BidCompare.Clauses;
 using DredgeAI.BidCompare.Documents;
 using DredgeAI.BidCompare.Evidences;
 using DredgeAI.BidCompare.Ir;
+using DredgeAI.BidCompare.Reports;
 using Volo.Abp.Application.Dtos;
 using Volo.Abp.Application.Services;
 using Volo.Abp.Validation;
@@ -35,4 +36,6 @@ public interface ICompareTaskAppService : IApplicationService
     Task<List<ClauseDto>> ExtractClausesAsync(Guid id);
 
     Task<CompareTaskDto> ConfirmClausesAsync(Guid id, ConfirmClausesInput input);
+
+    Task<CompareReportDto> GetReportAsync(Guid id);
 }

@@ -78,6 +78,11 @@ public class CompareTaskController : AbpControllerBase
     [HttpPut("{id}/clauses")]
     public Task<CompareTaskDto> ConfirmClausesAsync(Guid id, [FromBody] Clauses.ConfirmClausesInput input)
         => _appService.ConfirmClausesAsync(id, input);
+
+    /// <summary>GET /api/compare/tasks/{id}/report 结构化报告 JSON</summary>
+    [HttpGet("{id}/report")]
+    public Task<Reports.CompareReportDto> GetReportAsync(Guid id)
+        => _appService.GetReportAsync(id);
 }
 
 public class UploadDocumentForm
