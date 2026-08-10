@@ -95,8 +95,8 @@ public class CompareDocumentsJobTests : BidCompareApplicationTestBase<BidCompare
         await RunCompareJobAsync(taskId);
 
         var detail = await _appService.GetAsync(taskId);
-        detail.Status.ShouldBe(CompareTaskStatus.Done); // P1 无 AI 阶段，比对完成即 Done
-        detail.Progress.Percent.ShouldBe(100);
+        detail.Status.ShouldBe(CompareTaskStatus.Analyzing); // P1 尾部：比对完成进入 AI 分析（Done 由 AiAnalysisJob 收尾）
+        detail.Progress.Percent.ShouldBe(80);
 
         var list = await _appService.GetEvidencesAsync(taskId, new GetEvidenceListInput { MaxResultCount = 10 });
         list.TotalCount.ShouldBe(2);

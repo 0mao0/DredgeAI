@@ -33,6 +33,7 @@ public class CompareDocumentsJob : AsyncBackgroundJob<CompareDocumentsArgs>, ITr
     private readonly ICompareAlgoClient _algoClient;
     private readonly IAsyncQueryableExecuter _asyncExecuter;
     private readonly IGuidGenerator _guidGenerator;
+    private readonly IBackgroundJobManager _backgroundJobManager;
 
     public CompareDocumentsJob(
         IRepository<CompareTask, Guid> taskRepository,
@@ -41,7 +42,8 @@ public class CompareDocumentsJob : AsyncBackgroundJob<CompareDocumentsArgs>, ITr
         IFileStorage fileStorage,
         ICompareAlgoClient algoClient,
         IAsyncQueryableExecuter asyncExecuter,
-        IGuidGenerator guidGenerator)
+        IGuidGenerator guidGenerator,
+        IBackgroundJobManager backgroundJobManager)
     {
         _taskRepository = taskRepository;
         _documentRepository = documentRepository;
@@ -50,6 +52,7 @@ public class CompareDocumentsJob : AsyncBackgroundJob<CompareDocumentsArgs>, ITr
         _algoClient = algoClient;
         _asyncExecuter = asyncExecuter;
         _guidGenerator = guidGenerator;
+        _backgroundJobManager = backgroundJobManager;
     }
 
     public override async Task ExecuteAsync(CompareDocumentsArgs args)
@@ -108,9 +111,9 @@ public class CompareDocumentsJob : AsyncBackgroundJob<CompareDocumentsArgs>, ITr
         }
 
         task.MarkAnalyzing();
-        task.MarkDone();
-        task.UpdateProgress("done", 100, null);
+        task.UpdateProgress("analyzing", 80, "AI 分析中");
         await _taskRepository.UpdateAsync(task, autoSave: true, cancellationToken: cancellationToken);
+        await _backgroundJobManager.EnqueueAsync(new AiAnalysisArgs { TaskId = args.TaskId });
     }
 
     private static async Task<string> ReadAllAsync(Stream stream, CancellationToken cancellationToken)
