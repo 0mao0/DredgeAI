@@ -4,6 +4,7 @@ using System.IO;
 using System.Linq;
 using System.Text.Json;
 using System.Threading.Tasks;
+using DredgeAI.BidCompare.Analysis;
 using DredgeAI.BidCompare.BackgroundJobs;
 using DredgeAI.BidCompare.Clauses;
 using DredgeAI.BidCompare.Documents;
@@ -173,6 +174,75 @@ public class CompareTaskAppService : ApplicationService, ICompareTaskAppService
         await using var stream = await _fileStorage.GetAsync(document.IrStorageKey);
         var ir = await JsonSerializer.DeserializeAsync<DocumentIrDto>(stream, SnapshotJsonOptions);
         return ir!;
+    }
+
+    public async Task<PagedResultDto<EvidenceDto>> GetEvidencesAsync(Guid id, GetEvidenceListInput input)
+    {
+        await _taskRepository.GetAsync(id);
+
+        var queryable = await _evidenceRepository.GetQueryableAsync();
+        queryable = queryable
+            .Where(e => e.TaskId == id)
+            .WhereIf(input.Type.HasValue, e => e.Type == input.Type!.Value)
+            .WhereIf(input.Severity.HasValue, e => e.Severity == input.Severity!.Value);
+
+        // 文档对过滤涉及 JSON 负载，原型规模（单任务证据量有限）在内存过滤后再分页
+        var entities = await AsyncExecuter.ToListAsync(queryable.OrderBy(e => e.Severity).ThenBy(e => e.CreationTime));
+        var dtos = entities.Select(EvidenceMapper.ToDto).ToList();
+
+        if (input.DocIdA.HasValue && input.DocIdB.HasValue)
+        {
+            dtos = dtos.Where(e => e.DocIds.Contains(input.DocIdA.Value) && e.DocIds.Contains(input.DocIdB.Value)).ToList();
+        }
+
+        return new PagedResultDto<EvidenceDto>(
+            dtos.Count,
+            dtos.Skip(input.SkipCount).Take(input.MaxResultCount).ToList());
+    }
+
+    public async Task<SimilarityMatrixDto> GetMatrixAsync(Guid id)
+    {
+        await _taskRepository.GetAsync(id);
+
+        var docQueryable = await _documentRepository.GetQueryableAsync();
+        var docs = await AsyncExecuter.ToListAsync(docQueryable
+            .Where(d => d.TaskId == id && d.Role == DocumentRole.Bid && d.ParseStatus == DocumentParseStatus.Parsed)
+            .OrderBy(d => d.CreationTime));
+
+        var evQueryable = await _evidenceRepository.GetQueryableAsync();
+        var similarityEvidences = await AsyncExecuter.ToListAsync(
+            evQueryable.Where(e => e.TaskId == id && e.Type == EvidenceType.Similarity));
+
+        var pairs = similarityEvidences
+            .Select(e => (DocIds: EvidenceMapper.DeserializeDocIds(e.DocIdsJson),
+                          Similarity: EvidenceMapper.ReadSimilarity(e.MetricsJson)))
+            .ToList();
+
+        var cells = new List<SimilarityMatrixCellDto>();
+        foreach (var a in docs)
+        {
+            foreach (var b in docs)
+            {
+                var similarity = a.Id == b.Id
+                    ? 1.0
+                    : pairs.Where(p => p.Similarity.HasValue && p.DocIds.Contains(a.Id) && p.DocIds.Contains(b.Id))
+                           .Select(p => p.Similarity!.Value)
+                           .DefaultIfEmpty(0.0)
+                           .Max();
+                cells.Add(new SimilarityMatrixCellDto
+                {
+                    DocAId = a.Id,
+                    DocBId = b.Id,
+                    Similarity = Math.Round(similarity, 4)
+                });
+            }
+        }
+
+        return new SimilarityMatrixDto
+        {
+            DocIds = docs.Select(d => d.Id).ToList(),
+            Cells = cells
+        };
     }
 
     internal static List<ClauseSnapshotItem> BuildSnapshot(IEnumerable<ClauseInputDto> clauses)

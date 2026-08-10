@@ -57,6 +57,16 @@ public class CompareTaskController : AbpControllerBase
     [HttpGet("{id}/ir/{docId}")]
     public Task<Ir.DocumentIrDto> GetDocumentIrAsync(Guid id, Guid docId)
         => _appService.GetDocumentIrAsync(id, docId);
+
+    /// <summary>GET /api/compare/tasks/{id}/evidences 证据项列表（按类型/严重度/文档对过滤）</summary>
+    [HttpGet("{id}/evidences")]
+    public Task<PagedResultDto<Evidences.EvidenceDto>> GetEvidencesAsync(Guid id, [FromQuery] Evidences.GetEvidenceListInput input)
+        => _appService.GetEvidencesAsync(id, input);
+
+    /// <summary>GET /api/compare/tasks/{id}/matrix 两两相似度矩阵（N×N，热力图用）</summary>
+    [HttpGet("{id}/matrix")]
+    public Task<Analysis.SimilarityMatrixDto> GetMatrixAsync(Guid id)
+        => _appService.GetMatrixAsync(id);
 }
 
 public class UploadDocumentForm

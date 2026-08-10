@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
+using DredgeAI.BidCompare.Analysis;
 using DredgeAI.BidCompare.AnGineer;
 using DredgeAI.BidCompare.BackgroundJobs;
 using Microsoft.AspNetCore.Builder;
@@ -88,6 +89,7 @@ public class BidCompareHttpApiHostModule : AbpModule
         Configure<S3StorageOptions>(configuration.GetSection("Storage:S3"));
         Configure<AnGineerPollOptions>(configuration.GetSection("AnGIneer"));
         Configure<AnGineerOptions>(configuration.GetSection("AnGIneer"));
+        Configure<AlgoServiceOptions>(configuration.GetSection("AlgoService"));
         context.Services.AddHttpClient();
     }
 

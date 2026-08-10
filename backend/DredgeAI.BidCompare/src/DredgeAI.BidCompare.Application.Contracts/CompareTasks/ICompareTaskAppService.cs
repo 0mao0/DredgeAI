@@ -1,7 +1,9 @@
 using System;
 using System.IO;
 using System.Threading.Tasks;
+using DredgeAI.BidCompare.Analysis;
 using DredgeAI.BidCompare.Documents;
+using DredgeAI.BidCompare.Evidences;
 using DredgeAI.BidCompare.Ir;
 using Volo.Abp.Application.Dtos;
 using Volo.Abp.Application.Services;
@@ -23,4 +25,8 @@ public interface ICompareTaskAppService : IApplicationService
     Task<CompareDocumentDto> UploadDocumentAsync(Guid id, DocumentRole role, string fileName, Stream content);
 
     Task<DocumentIrDto> GetDocumentIrAsync(Guid id, Guid docId);
+
+    Task<PagedResultDto<EvidenceDto>> GetEvidencesAsync(Guid id, GetEvidenceListInput input);
+
+    Task<SimilarityMatrixDto> GetMatrixAsync(Guid id);
 }
