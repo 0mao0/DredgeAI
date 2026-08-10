@@ -2,6 +2,8 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
+using DredgeAI.BidCompare.AnGineer;
+using DredgeAI.BidCompare.BackgroundJobs;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Cors;
 using Microsoft.AspNetCore.Extensions.DependencyInjection;
@@ -84,6 +86,9 @@ public class BidCompareHttpApiHostModule : AbpModule
         });
 
         Configure<S3StorageOptions>(configuration.GetSection("Storage:S3"));
+        Configure<AnGineerPollOptions>(configuration.GetSection("AnGIneer"));
+        Configure<AnGineerOptions>(configuration.GetSection("AnGIneer"));
+        context.Services.AddHttpClient();
     }
 
     private void ConfigureAuthentication(ServiceConfigurationContext context)

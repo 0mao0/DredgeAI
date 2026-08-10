@@ -1,0 +1,176 @@
+using System.Collections.Generic;
+using System.Linq;
+using System.Text.Json;
+using System.Text.Json.Serialization;
+
+namespace DredgeAI.BidCompare.Documents;
+
+/// <summary>
+/// AnGIneer 产物 → 内部适配 IR 映射（v2 文档 §2 字段映射 + §3 类型映射）。
+/// 输入 doc_blocks_graph.jsonl 与 doc_blocks_graph_meta.json 的文本内容；
+/// 输出内部适配 IR JSON（blockId=block_uid、bbox 0~1 归一化直收、source/confidence 可空透传）。
+/// 纯静态无依赖，Domain 层单测覆盖。
+/// </summary>
+public static class AnGineerIrMapper
+{
+    // v2 §3 类型映射表；page_number 忽略（或归入 header/footer，此处按「忽略」处理）
+    private static readonly Dictionary<string, string> TypeMap = new()
+    {
+        ["title"] = "title",
+        ["paragraph"] = "para",
+        ["list"] = "list",
+        ["table"] = "table",
+        ["equation_interline"] = "equation",
+        ["image"] = "image",
+        ["figure"] = "image",
+        ["page_header"] = "header",
+        ["page_footer"] = "footer"
+    };
+
+    public static string MapToIrJson(string graphJsonl, string metaJson, string docId)
+    {
+        var meta = JsonSerializer.Deserialize<MetaDoc>(metaJson) ?? new MetaDoc();
+
+        var blocks = new List<Dictionary<string, object?>>();
+        foreach (var line in graphJsonl.Split('\n', System.StringSplitOptions.RemoveEmptyEntries | System.StringSplitOptions.TrimEntries))
+        {
+            var node = JsonSerializer.Deserialize<GraphNode>(line)
+                ?? throw new JsonException("doc_blocks_graph.jsonl 存在空行");
+            var rawType = node.BlockType ?? "";
+            if (rawType == "page_number")
+            {
+                continue; // v2 §3：忽略
+            }
+            var type = TypeMap.TryGetValue(rawType, out var mapped) ? mapped : "para";
+
+            var block = new Dictionary<string, object?>
+            {
+                ["blockId"] = node.BlockUid,
+                ["pageIdx"] = node.PageIdx,
+                ["bbox"] = node.Bbox,
+                ["type"] = type,
+                ["text"] = ReadText(node, type),
+                // v2 §2：标题块 textLevel=derived_level，非标题固定 0
+                ["textLevel"] = type == "title" ? node.DerivedLevel ?? 1 : 0,
+                ["source"] = node.Source,       // v2 §4：补齐前为 null，透传
+                ["confidence"] = node.Confidence
+            };
+            if (type == "table")
+            {
+                block["table"] = new Dictionary<string, object?>
+                {
+                    ["html"] = node.TableHtml,
+                    ["imgPath"] = node.ImagePath
+                };
+            }
+            if (type is "image" or "equation" && node.ImagePath != null)
+            {
+                block["imgPath"] = node.ImagePath;
+            }
+            blocks.Add(block);
+        }
+
+        var ir = new Dictionary<string, object?>
+        {
+            ["schemaVersion"] = "2.0", // 内部适配 IR 版本（1.0 为已废止的 ir.json 交付契约）
+            ["docId"] = docId,
+            ["meta"] = meta.DocMeta ?? new Dictionary<string, object?>(),
+            ["pages"] = (meta.Pages ?? new List<MetaPage>()).Select(p => new Dictionary<string, object?>
+            {
+                ["pageIdx"] = p.PageIdx,
+                ["width"] = p.Width,
+                ["height"] = p.Height
+            }).ToList(),
+            ["outline"] = MapOutline(meta.Outlines),
+            ["blocks"] = blocks
+        };
+        return JsonSerializer.Serialize(ir);
+    }
+
+    private static string? ReadText(GraphNode node, string type)
+    {
+        // v2 §2：公式块用 math_content / formula_body（LaTeX）
+        if (type == "equation")
+        {
+            return node.MathContent ?? node.FormulaBody ?? node.PlainText;
+        }
+        return node.PlainText;
+    }
+
+    /// <summary>v2 §5-6：嵌套 outlines 直收；扁平结构（parent_outline_id）转嵌套 children。</summary>
+    private static List<Dictionary<string, object?>> MapOutline(List<OutlineNode>? outlines)
+    {
+        if (outlines == null || outlines.Count == 0)
+        {
+            return new List<Dictionary<string, object?>>();
+        }
+        if (outlines.Any(o => o.Children is { Count: > 0 }))
+        {
+            return outlines.Select(ConvertOutlineNode).ToList();
+        }
+        if (outlines.All(o => o.ParentOutlineId == null))
+        {
+            return outlines.Select(ConvertOutlineNode).ToList();
+        }
+        var roots = outlines.Where(o => o.ParentOutlineId == null).ToList();
+        return roots.Select(r => BuildOutlineNode(r, outlines)).ToList();
+    }
+
+    private static Dictionary<string, object?> ConvertOutlineNode(OutlineNode node) => new()
+    {
+        ["title"] = node.Title,
+        ["level"] = node.Level,
+        ["blockId"] = node.BlockUid ?? node.BlockId,
+        ["children"] = (node.Children ?? new List<OutlineNode>()).Select(ConvertOutlineNode).ToList()
+    };
+
+    private static Dictionary<string, object?> BuildOutlineNode(OutlineNode node, List<OutlineNode> all) => new()
+    {
+        ["title"] = node.Title,
+        ["level"] = node.Level,
+        ["blockId"] = node.BlockUid ?? node.BlockId,
+        ["children"] = all.Where(o => o.ParentOutlineId == node.OutlineId).Select(o => BuildOutlineNode(o, all)).ToList()
+    };
+
+    private class GraphNode
+    {
+        [JsonPropertyName("block_uid")] public string? BlockUid { get; set; }
+        [JsonPropertyName("block_type")] public string? BlockType { get; set; }
+        [JsonPropertyName("page_idx")] public int PageIdx { get; set; }
+        [JsonPropertyName("plain_text")] public string? PlainText { get; set; }
+        [JsonPropertyName("derived_level")] public int? DerivedLevel { get; set; }
+        [JsonPropertyName("bbox")] public double[]? Bbox { get; set; }
+        [JsonPropertyName("table_html")] public string? TableHtml { get; set; }
+        [JsonPropertyName("math_content")] public string? MathContent { get; set; }
+        [JsonPropertyName("formula_body")] public string? FormulaBody { get; set; }
+        [JsonPropertyName("image_path")] public string? ImagePath { get; set; }
+        [JsonPropertyName("source")] public string? Source { get; set; }
+        // 保留原始数字 token（1.0 不折叠成 1），与内部适配 IR 样例一致
+        [JsonPropertyName("confidence")] public JsonElement? Confidence { get; set; }
+    }
+
+    private class OutlineNode
+    {
+        [JsonPropertyName("title")] public string Title { get; set; } = "";
+        [JsonPropertyName("level")] public int Level { get; set; }
+        [JsonPropertyName("block_uid")] public string? BlockUid { get; set; }
+        [JsonPropertyName("blockId")] public string? BlockId { get; set; }
+        [JsonPropertyName("outline_id")] public string? OutlineId { get; set; }
+        [JsonPropertyName("parent_outline_id")] public string? ParentOutlineId { get; set; }
+        [JsonPropertyName("children")] public List<OutlineNode>? Children { get; set; }
+    }
+
+    private class MetaDoc
+    {
+        [JsonPropertyName("outlines")] public List<OutlineNode>? Outlines { get; set; }
+        [JsonPropertyName("docMeta")] public Dictionary<string, object?>? DocMeta { get; set; }
+        [JsonPropertyName("pages")] public List<MetaPage>? Pages { get; set; }
+    }
+
+    private class MetaPage
+    {
+        [JsonPropertyName("page_idx")] public int PageIdx { get; set; }
+        [JsonPropertyName("width")] public double Width { get; set; }
+        [JsonPropertyName("height")] public double Height { get; set; }
+    }
+}

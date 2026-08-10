@@ -52,6 +52,11 @@ public class CompareTaskController : AbpControllerBase
         await using var stream = form.File.OpenReadStream();
         return await _appService.UploadDocumentAsync(id, form.Role, form.File.FileName, stream);
     }
+
+    /// <summary>GET /api/compare/tasks/{id}/ir/{docId} 某文档的 IR（前端对比视图画 bbox 用）</summary>
+    [HttpGet("{id}/ir/{docId}")]
+    public Task<Ir.DocumentIrDto> GetDocumentIrAsync(Guid id, Guid docId)
+        => _appService.GetDocumentIrAsync(id, docId);
 }
 
 public class UploadDocumentForm

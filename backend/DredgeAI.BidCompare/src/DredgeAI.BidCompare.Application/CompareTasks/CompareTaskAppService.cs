@@ -8,6 +8,7 @@ using DredgeAI.BidCompare.BackgroundJobs;
 using DredgeAI.BidCompare.Clauses;
 using DredgeAI.BidCompare.Documents;
 using DredgeAI.BidCompare.Evidences;
+using DredgeAI.BidCompare.Ir;
 using DredgeAI.BidCompare.Storage;
 using Volo.Abp;
 using Volo.Abp.Application.Dtos;
@@ -154,6 +155,24 @@ public class CompareTaskAppService : ApplicationService, ICompareTaskAppService
         await _backgroundJobManager.EnqueueAsync(new ParseDocumentArgs { TaskId = id, DocumentId = documentId });
 
         return MapToDto(document);
+    }
+
+    public async Task<DocumentIrDto> GetDocumentIrAsync(Guid id, Guid docId)
+    {
+        await _taskRepository.GetAsync(id); // 任务不存在 → 404
+        var document = await _documentRepository.FirstOrDefaultAsync(d => d.TaskId == id && d.Id == docId);
+        if (document == null)
+        {
+            throw new BusinessException(BidCompareErrorCodes.DocumentNotFound).WithData("docId", docId);
+        }
+        if (document.ParseStatus != DocumentParseStatus.Parsed || document.IrStorageKey == null)
+        {
+            throw new BusinessException(BidCompareErrorCodes.IrNotReady).WithData("docId", docId);
+        }
+
+        await using var stream = await _fileStorage.GetAsync(document.IrStorageKey);
+        var ir = await JsonSerializer.DeserializeAsync<DocumentIrDto>(stream, SnapshotJsonOptions);
+        return ir!;
     }
 
     internal static List<ClauseSnapshotItem> BuildSnapshot(IEnumerable<ClauseInputDto> clauses)
