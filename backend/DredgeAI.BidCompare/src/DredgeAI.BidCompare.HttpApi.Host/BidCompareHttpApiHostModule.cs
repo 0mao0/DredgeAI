@@ -10,6 +10,7 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using DredgeAI.BidCompare.EntityFrameworkCore;
 using DredgeAI.BidCompare.MultiTenancy;
+using DredgeAI.BidCompare.Storage;
 using Volo.Abp.AspNetCore.Mvc.UI.Theme.LeptonXLite;
 using Volo.Abp.AspNetCore.Mvc.UI.Theme.LeptonXLite.Bundling;
 using Microsoft.OpenApi.Models;
@@ -81,6 +82,8 @@ public class BidCompareHttpApiHostModule : AbpModule
                 }
             }
         });
+
+        Configure<S3StorageOptions>(configuration.GetSection("Storage:S3"));
     }
 
     private void ConfigureAuthentication(ServiceConfigurationContext context)
