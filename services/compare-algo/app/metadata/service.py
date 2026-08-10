@@ -79,6 +79,15 @@ TYPO_NGRAM = 6
 _TYPO_SAMPLES_MAX = 10
 
 
+def _native_full_text(doc: IrDocument) -> str:
+    """原生文本块（source == "text"）规范化后拼接的全文。"""
+    eligible = [
+        b for b in doc.blocks
+        if b.type in SHINGLABLE_TYPES and b.source == "text"
+    ]
+    return "".join(normalize_text(b.text) for b in eligible)
+
+
 def _block_typo_ngrams(doc: IrDocument, n: int = TYPO_NGRAM) -> dict[str, dict[str, int]]:
     """blockId -> {可疑异常 n-gram: 块内起始偏移}。
 
@@ -141,8 +150,14 @@ def detect_shared_typos(
         if len(m) >= 2:
             by_docs.setdefault(tuple(sorted(m)), []).append((g, m))
 
+    full_texts = {d.docId: _native_full_text(d) for d in documents}
     evidences: list[Evidence] = []
     for doc_ids, hits in sorted(by_docs.items()):
+        # 全文完全一致的副本组合不出 typo 证据：雷同已由 similarity 证据
+        # （Dice=1.0）覆盖，「错得一样」不再提供额外区分度（实测事实 #7：
+        # 评审办法副本对仅 author + creatorTool 两条元数据证据）
+        if len({full_texts[i] for i in doc_ids}) == 1:
+            continue
         ref = doc_ids[0]
         spans = sorted((m[ref][0], m[ref][1], g) for g, m in hits)
         runs: list[list[str]] = []  # 极大连续段（段内为按起点升序的 gram）

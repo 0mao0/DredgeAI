@@ -395,6 +395,15 @@ def test_pixel_bbox_rejected():
         validate_raw_document(data)
 
 
+def test_bbox_wrong_length_rejected_with_clear_message():
+    # 3 元素 bbox 不得塌陷为 pydantic "Field required"（tuple 强转先于范围校验）
+    data = _minimal_raw()
+    data["blocks"][0]["bbox"] = [0.1, 0.2, 0.3]
+    with pytest.raises(ValidationError) as exc_info:
+        validate_raw_document(data)
+    assert any("4 元素" in e["msg"] for e in exc_info.value.errors())
+
+
 def test_bbox_above_one_or_inverted_rejected():
     for bad in ([0, 0, 1.5, 0.5], [0.5, 0, 0.1, 0.1], [-0.1, 0, 0.5, 0.1]):
         data = _minimal_raw()
@@ -534,6 +543,16 @@ class RawBlock(BaseModel):
     formula_body: Optional[str] = None
     formula_number: Optional[str] = None
 
+    @field_validator("bbox", mode="before")
+    @classmethod
+    def _check_bbox_length(cls, v):
+        # 非 4 元素序列在 tuple 强转时会塌陷为 "Field required"，须在此之前给出明确文案
+        if v is None:
+            return v
+        if not isinstance(v, (list, tuple)) or len(v) != 4:
+            raise ValueError(f"bbox 必须为 4 元素数组，收到 {v!r}")
+        return v
+
     @field_validator("bbox")
     @classmethod
     def _check_bbox(cls, v):
@@ -621,7 +640,7 @@ class RawDocumentEnvelope(BaseModel):
         ids = [b.block_uid for b in self.blocks]
         dups = sorted({i for i in ids if ids.count(i) > 1})
         if dups:
-            raise ValueError(f"block_uid 重复：{dups}")
+            raise ValueError(f"文档 {self.docId} 的 block_uid 重复：{dups}")
         return self
 
 
@@ -3843,6 +3862,12 @@ def test_fixture_shared_typo(ir_docs):
     assert len(evidences[0].metrics["samples"]) == 1
 
 
+def test_shared_typo_skipped_for_identical_docs(raw_pingshen_pair):
+    # 全文完全一致的副本对：雷同已由 similarity 证据覆盖，错字碰撞不再单独出证据
+    # （实测事实 #7：评审办法副本对仅 author + creatorTool 两条元数据证据）
+    assert detect_shared_typos("task-real", _adapt_all(raw_pingshen_pair)) == []
+
+
 def test_analyze_metadata_combines_both(ir_docs):
     evidences = analyze_metadata("task-001", ir_docs)
     # author + createdAt + creatorTool + shared-typo = 4 条
@@ -3870,6 +3895,15 @@ cd services/compare-algo && uv run pytest tests/test_metadata.py -q
 
 TYPO_NGRAM = 6
 _TYPO_SAMPLES_MAX = 10
+
+
+def _native_full_text(doc: IrDocument) -> str:
+    """原生文本块（source == "text"）规范化后拼接的全文。"""
+    eligible = [
+        b for b in doc.blocks
+        if b.type in SHINGLABLE_TYPES and b.source == "text"
+    ]
+    return "".join(normalize_text(b.text) for b in eligible)
 
 
 def _block_typo_ngrams(doc: IrDocument, n: int = TYPO_NGRAM) -> dict[str, dict[str, int]]:
@@ -3934,8 +3968,14 @@ def detect_shared_typos(
         if len(m) >= 2:
             by_docs.setdefault(tuple(sorted(m)), []).append((g, m))
 
+    full_texts = {d.docId: _native_full_text(d) for d in documents}
     evidences: list[Evidence] = []
     for doc_ids, hits in sorted(by_docs.items()):
+        # 全文完全一致的副本组合不出 typo 证据：雷同已由 similarity 证据
+        # （Dice=1.0）覆盖，「错得一样」不再提供额外区分度（实测事实 #7：
+        # 评审办法副本对仅 author + creatorTool 两条元数据证据）
+        if len({full_texts[i] for i in doc_ids}) == 1:
+            continue
         ref = doc_ids[0]
         spans = sorted((m[ref][0], m[ref][1], g) for g, m in hits)
         runs: list[list[str]] = []  # 极大连续段（段内为按起点升序的 gram）
@@ -4015,7 +4055,7 @@ git add services/compare-algo && git commit -m "feat(compare-algo): 相同错别
 ```python
 from fastapi.testclient import TestClient
 
-from app.main import app
+from app.main import BodySizeLimitMiddleware, app
 
 client = TestClient(app)
 
@@ -4127,6 +4167,38 @@ def test_real_fixtures_end_to_end(raw_haigang_pair, raw_pingshen_pair):
     assert r.status_code == 200
     kinds = {e["metrics"].get("field") for e in r.json()["evidences"]}
     assert kinds == {"author", "creatorTool"}
+
+
+def test_wrong_length_bbox_returns_422_with_clear_message(ir_payload):
+    # 3 元素 bbox 不得塌陷为 pydantic "Field required"，须给出明确文案
+    ir_payload["documents"][0]["blocks"][0]["bbox"] = [0.1, 0.2, 0.3]
+    r = client.post("/analyze/similarity", json=ir_payload)
+    assert r.status_code == 422
+    body = r.json()
+    assert body["code"] == "IR_VALIDATION_FAILED"
+    assert any("bbox" in d["path"] for d in body["details"])
+    assert any("4 元素" in d["message"] for d in body["details"])
+
+
+def test_duplicate_block_uid_returns_422_with_document_path(ir_payload):
+    # 文档级 model_validator 的错误无字段级 loc，须渲染为 documents[i] 且消息含 docId
+    ir_payload["documents"][0]["blocks"].append(
+        dict(ir_payload["documents"][0]["blocks"][0])
+    )
+    r = client.post("/analyze/similarity", json=ir_payload)
+    assert r.status_code == 422
+    body = r.json()
+    assert body["code"] == "IR_VALIDATION_FAILED"
+    assert any(d["path"].startswith("documents") for d in body["details"])
+    assert any("doc-a" in d["message"] for d in body["details"])
+
+
+def test_oversized_body_rejected_413(ir_payload):
+    # parse-DoS 防御：超过限额的请求体直接 413，不进入解析
+    limited = TestClient(BodySizeLimitMiddleware(app, max_body_bytes=1024))
+    r = limited.post("/analyze/similarity", json=ir_payload)
+    assert r.status_code == 413
+    assert r.json()["code"] == "REQUEST_TOO_LARGE"
 ```
 
 运行确认失败：
@@ -4187,6 +4259,7 @@ class ErrorResponse(BaseModel):
 本服务不直接对接 AnGIneer/MinerU。产物经 app/angineer/ 适配层转为内部模型后分析。
 """
 import logging
+import os
 
 from fastapi import FastAPI, Request
 from fastapi.exceptions import RequestValidationError
@@ -4206,17 +4279,79 @@ from app.similarity.service import analyze_similarity
 
 logger = logging.getLogger("compare-algo")
 
+
+class BodySizeLimitMiddleware:
+    """请求体大小限制（parse-DoS 防御）：超过限额直接 413，不进入 JSON 解析。
+
+    纯 ASGI 实现：完整接收 body（含 chunked/无 Content-Length 的情况）并计数，
+    未超限时原样回放给下游。
+    """
+
+    def __init__(self, app, max_body_bytes: int):
+        self.app = app
+        self.max_body_bytes = max_body_bytes
+
+    async def __call__(self, scope, receive, send):
+        if scope["type"] != "http":
+            await self.app(scope, receive, send)
+            return
+        chunks: list[bytes] = []
+        size = 0
+        while True:
+            message = await receive()
+            if message["type"] != "http.request":
+                break
+            chunks.append(message.get("body", b""))
+            size += len(chunks[-1])
+            if size > self.max_body_bytes:
+                payload = ErrorResponse(
+                    code="REQUEST_TOO_LARGE",
+                    message=f"请求体超过大小限制（{self.max_body_bytes} 字节）",
+                ).model_dump_json().encode()
+                await send({
+                    "type": "http.response.start",
+                    "status": 413,
+                    "headers": [(b"content-type", b"application/json")],
+                })
+                await send({"type": "http.response.body", "body": payload})
+                return
+            if not message.get("more_body", False):
+                break
+        body = b"".join(chunks)
+        replayed = False
+
+        async def replay_receive():
+            nonlocal replayed
+            if replayed:
+                return {"type": "http.request", "body": b"", "more_body": False}
+            replayed = True
+            return {"type": "http.request", "body": body, "more_body": False}
+
+        await self.app(scope, replay_receive, send)
+
+
+def _max_body_bytes() -> int:
+    raw = os.environ.get("COMPARE_ALGO_MAX_BODY_BYTES", "")
+    if raw.isdigit():
+        return int(raw)
+    return 50 * 1024 * 1024  # 默认 50MB（实测 5 份真实文档产物 ≈ 15MB）
+
+
 app = FastAPI(title="compare-algo", version="0.1.0")
+app.add_middleware(BodySizeLimitMiddleware, max_body_bytes=_max_body_bytes())
+
+
+def _format_error_detail(e: dict) -> ErrorDetail:
+    # FastAPI 给请求体错误加 "body" 前缀，剥掉后对调用方更直观
+    loc = [str(p) for p in e.get("loc", ()) if p != "body"]
+    # 文档级/请求级 model_validator（block_uid 重复、docId 重复）loc 为空或为
+    # documents[i] 层级，无字段路径；空 loc 兜底渲染为 documents 根，避免空 path
+    path = ".".join(loc) if loc else "documents"
+    return ErrorDetail(path=path, message=e.get("msg", ""))
 
 
 def _validation_error_body(errors) -> ErrorResponse:
-    details = [
-        ErrorDetail(
-            path=".".join(str(p) for p in e.get("loc", ())),
-            message=e.get("msg", ""),
-        )
-        for e in errors
-    ]
+    details = [_format_error_detail(e) for e in errors]
     return ErrorResponse(
         code="IR_VALIDATION_FAILED",
         message="产物校验失败，详见 details",
@@ -4257,11 +4392,15 @@ def _adapt(req: AnalyzeRequest):
 
 @app.post("/analyze/similarity", response_model=AnalyzeResponse)
 def post_analyze_similarity(req: AnalyzeRequest) -> AnalyzeResponse:
+    """两两查重 + 雷同簇：同一文档集可同时产出 pairwise 与 cluster 证据，
+    消费方按 type + docIds / metrics.cluster 分组。"""
     return AnalyzeResponse(evidences=analyze_similarity(req.taskId, _adapt(req)))
 
 
 @app.post("/analyze/pricing", response_model=AnalyzeResponse)
 def post_analyze_pricing(req: AnalyzeRequest) -> AnalyzeResponse:
+    """报价规律分析：多个检测器（等差/贴近度/尾数）可在同一文档集上同时命中，
+    消费方按 type + docIds / metrics.pattern 分组。"""
     return AnalyzeResponse(evidences=analyze_pricing(req.taskId, _adapt(req)))
 
 

@@ -40,6 +40,16 @@ class RawBlock(BaseModel):
     formula_body: Optional[str] = None
     formula_number: Optional[str] = None
 
+    @field_validator("bbox", mode="before")
+    @classmethod
+    def _check_bbox_length(cls, v):
+        # 非 4 元素序列在 tuple 强转时会塌陷为 "Field required"，须在此之前给出明确文案
+        if v is None:
+            return v
+        if not isinstance(v, (list, tuple)) or len(v) != 4:
+            raise ValueError(f"bbox 必须为 4 元素数组，收到 {v!r}")
+        return v
+
     @field_validator("bbox")
     @classmethod
     def _check_bbox(cls, v):
@@ -127,7 +137,7 @@ class RawDocumentEnvelope(BaseModel):
         ids = [b.block_uid for b in self.blocks]
         dups = sorted({i for i in ids if ids.count(i) > 1})
         if dups:
-            raise ValueError(f"block_uid 重复：{dups}")
+            raise ValueError(f"文档 {self.docId} 的 block_uid 重复：{dups}")
         return self
 
 

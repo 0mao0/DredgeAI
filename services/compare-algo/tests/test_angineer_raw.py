@@ -104,6 +104,15 @@ def test_pixel_bbox_rejected():
         validate_raw_document(data)
 
 
+def test_bbox_wrong_length_rejected_with_clear_message():
+    # 3 元素 bbox 不得塌陷为 pydantic "Field required"（tuple 强转先于范围校验）
+    data = _minimal_raw()
+    data["blocks"][0]["bbox"] = [0.1, 0.2, 0.3]
+    with pytest.raises(ValidationError) as exc_info:
+        validate_raw_document(data)
+    assert any("4 元素" in e["msg"] for e in exc_info.value.errors())
+
+
 def test_bbox_above_one_or_inverted_rejected():
     for bad in ([0, 0, 1.5, 0.5], [0.5, 0, 0.1, 0.1], [-0.1, 0, 0.5, 0.1]):
         data = _minimal_raw()

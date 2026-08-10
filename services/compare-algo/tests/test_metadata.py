@@ -242,6 +242,12 @@ def test_fixture_shared_typo(ir_docs):
     assert len(evidences[0].metrics["samples"]) == 1
 
 
+def test_shared_typo_skipped_for_identical_docs(raw_pingshen_pair):
+    # 全文完全一致的副本对：雷同已由 similarity 证据覆盖，错字碰撞不再单独出证据
+    # （实测事实 #7：评审办法副本对仅 author + creatorTool 两条元数据证据）
+    assert detect_shared_typos("task-real", _adapt_all(raw_pingshen_pair)) == []
+
+
 def test_analyze_metadata_combines_both(ir_docs):
     evidences = analyze_metadata("task-001", ir_docs)
     # author + createdAt + creatorTool + shared-typo = 4 条
