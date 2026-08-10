@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.ComponentModel.DataAnnotations;
 using System.Threading.Tasks;
 using DredgeAI.BidCompare.CompareTasks;
@@ -67,6 +68,16 @@ public class CompareTaskController : AbpControllerBase
     [HttpGet("{id}/matrix")]
     public Task<Analysis.SimilarityMatrixDto> GetMatrixAsync(Guid id)
         => _appService.GetMatrixAsync(id);
+
+    /// <summary>POST /api/compare/tasks/{id}/clauses/extract 触发从招标文件提取条款草案</summary>
+    [HttpPost("{id}/clauses/extract")]
+    public Task<List<Clauses.ClauseDto>> ExtractClausesAsync(Guid id)
+        => _appService.ExtractClausesAsync(id);
+
+    /// <summary>PUT /api/compare/tasks/{id}/clauses 确认后的条款清单（锁定快照）</summary>
+    [HttpPut("{id}/clauses")]
+    public Task<CompareTaskDto> ConfirmClausesAsync(Guid id, [FromBody] Clauses.ConfirmClausesInput input)
+        => _appService.ConfirmClausesAsync(id, input);
 }
 
 public class UploadDocumentForm

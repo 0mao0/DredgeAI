@@ -1,7 +1,9 @@
 using System;
+using System.Collections.Generic;
 using System.IO;
 using System.Threading.Tasks;
 using DredgeAI.BidCompare.Analysis;
+using DredgeAI.BidCompare.Clauses;
 using DredgeAI.BidCompare.Documents;
 using DredgeAI.BidCompare.Evidences;
 using DredgeAI.BidCompare.Ir;
@@ -29,4 +31,8 @@ public interface ICompareTaskAppService : IApplicationService
     Task<PagedResultDto<EvidenceDto>> GetEvidencesAsync(Guid id, GetEvidenceListInput input);
 
     Task<SimilarityMatrixDto> GetMatrixAsync(Guid id);
+
+    Task<List<ClauseDto>> ExtractClausesAsync(Guid id);
+
+    Task<CompareTaskDto> ConfirmClausesAsync(Guid id, ConfirmClausesInput input);
 }

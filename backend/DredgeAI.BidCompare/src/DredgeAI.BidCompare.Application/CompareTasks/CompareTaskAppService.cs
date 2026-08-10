@@ -4,6 +4,7 @@ using System.IO;
 using System.Linq;
 using System.Text.Json;
 using System.Threading.Tasks;
+using DredgeAI.BidCompare.AI;
 using DredgeAI.BidCompare.Analysis;
 using DredgeAI.BidCompare.BackgroundJobs;
 using DredgeAI.BidCompare.Clauses;
@@ -25,6 +26,10 @@ public class CompareTaskAppService : ApplicationService, ICompareTaskAppService
 {
     private static readonly string[] AllowedExtensions = { ".pdf", ".doc", ".docx" };
     private const int MaxBidDocuments = 5;
+    private const string ClauseExtractionSystemPrompt =
+        "你是招投标文件分析助手。从用户提供的招标文件全文中提取所有强制性条款" +
+        "（包含「须/应当/必须/不得/否则视为无效投标/废标」等强制措辞的条款）。" +
+        "只返回 JSON 数组，不要输出任何其他文字。";
 
     internal static readonly JsonSerializerOptions SnapshotJsonOptions = new()
     {
@@ -37,19 +42,22 @@ public class CompareTaskAppService : ApplicationService, ICompareTaskAppService
     private readonly IRepository<EvidenceItem, Guid> _evidenceRepository;
     private readonly IFileStorage _fileStorage;
     private readonly IBackgroundJobManager _backgroundJobManager;
+    private readonly ILlmGateway _llmGateway;
 
     public CompareTaskAppService(
         IRepository<CompareTask, Guid> taskRepository,
         IRepository<CompareDocument, Guid> documentRepository,
         IRepository<EvidenceItem, Guid> evidenceRepository,
         IFileStorage fileStorage,
-        IBackgroundJobManager backgroundJobManager)
+        IBackgroundJobManager backgroundJobManager,
+        ILlmGateway llmGateway)
     {
         _taskRepository = taskRepository;
         _documentRepository = documentRepository;
         _evidenceRepository = evidenceRepository;
         _fileStorage = fileStorage;
         _backgroundJobManager = backgroundJobManager;
+        _llmGateway = llmGateway;
     }
 
     public async Task<CompareTaskDto> CreateAsync(CreateCompareTaskDto input)
@@ -243,6 +251,96 @@ public class CompareTaskAppService : ApplicationService, ICompareTaskAppService
             DocIds = docs.Select(d => d.Id).ToList(),
             Cells = cells
         };
+    }
+
+    public async Task<List<ClauseDto>> ExtractClausesAsync(Guid id)
+    {
+        var task = await _taskRepository.GetAsync(id);
+        if (!task.TenderDocumentId.HasValue)
+        {
+            throw new BusinessException(BidCompareErrorCodes.NoTenderDocument).WithData("taskId", id);
+        }
+
+        var tenderDoc = await _documentRepository.GetAsync(task.TenderDocumentId.Value);
+        if (tenderDoc.ParseStatus != DocumentParseStatus.Parsed || tenderDoc.DocMdStorageKey == null)
+        {
+            throw new BusinessException(BidCompareErrorCodes.IrNotReady).WithData("docId", tenderDoc.Id);
+        }
+
+        string docMd;
+        await using (var stream = await _fileStorage.GetAsync(tenderDoc.DocMdStorageKey))
+        using (var reader = new StreamReader(stream))
+        {
+            docMd = await reader.ReadToEndAsync();
+        }
+
+        var userPrompt =
+            "以下是招标文件全文（Markdown）：\n\n" + docMd +
+            "\n\n请以 JSON 数组返回全部强制性条款，每项字段：text（条款原文）、mandatory（是否强制，bool）、category（分类，如 资质/报价/技术/工期/格式）。只返回 JSON。";
+
+        var response = await _llmGateway.CompleteAsync(ClauseExtractionSystemPrompt, userPrompt);
+
+        return ParseClauseDrafts(response);
+    }
+
+    public async Task<CompareTaskDto> ConfirmClausesAsync(Guid id, ConfirmClausesInput input)
+    {
+        var task = await _taskRepository.GetAsync(id);
+        var snapshot = BuildSnapshot(input.Clauses);
+        task.LockClauseSnapshot(JsonSerializer.Serialize(snapshot, SnapshotJsonOptions));
+        task.MarkComparing();
+        task.UpdateProgress("comparing", 60, "两两比对中");
+        await _taskRepository.UpdateAsync(task, autoSave: true);
+
+        await _backgroundJobManager.EnqueueAsync(new CompareDocumentsArgs { TaskId = id });
+
+        var documents = await GetTaskDocumentsAsync(id);
+        return MapToDto(task, documents);
+    }
+
+    /// <summary>解析 LLM 条款提取响应：剥离 ```json 围栏后按数组解析，异常即抛 IrValidationFailed。</summary>
+    internal static List<ClauseDto> ParseClauseDrafts(string llmResponse)
+    {
+        var json = llmResponse.Trim();
+        if (json.StartsWith("```"))
+        {
+            var firstNewline = json.IndexOf('\n');
+            var lastFence = json.LastIndexOf("```", StringComparison.Ordinal);
+            if (firstNewline > 0 && lastFence > firstNewline)
+            {
+                json = json[(firstNewline + 1)..lastFence].Trim();
+            }
+        }
+
+        try
+        {
+            using var document = JsonDocument.Parse(json);
+            var drafts = new List<ClauseDto>();
+            foreach (var element in document.RootElement.EnumerateArray())
+            {
+                var text = element.TryGetProperty("text", out var t) ? t.GetString() : null;
+                if (text.IsNullOrWhiteSpace())
+                {
+                    continue;
+                }
+                drafts.Add(new ClauseDto
+                {
+                    ClauseId = Guid.NewGuid().ToString("N"),
+                    Source = ClauseSource.Extracted,
+                    Text = text!,
+                    Mandatory = element.TryGetProperty("mandatory", out var m) && m.ValueKind == JsonValueKind.True,
+                    Category = element.TryGetProperty("category", out var c) && c.ValueKind == JsonValueKind.String
+                        ? c.GetString()
+                        : null
+                });
+            }
+            return drafts;
+        }
+        catch (JsonException ex)
+        {
+            throw new BusinessException(BidCompareErrorCodes.IrValidationFailed)
+                .WithData("reason", $"LLM 条款提取响应不是合法 JSON：{ex.Message}");
+        }
     }
 
     internal static List<ClauseSnapshotItem> BuildSnapshot(IEnumerable<ClauseInputDto> clauses)

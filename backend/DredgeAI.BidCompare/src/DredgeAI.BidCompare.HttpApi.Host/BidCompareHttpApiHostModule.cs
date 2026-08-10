@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
+using DredgeAI.BidCompare.AI;
 using DredgeAI.BidCompare.Analysis;
 using DredgeAI.BidCompare.AnGineer;
 using DredgeAI.BidCompare.BackgroundJobs;
@@ -90,6 +91,7 @@ public class BidCompareHttpApiHostModule : AbpModule
         Configure<AnGineerPollOptions>(configuration.GetSection("AnGIneer"));
         Configure<AnGineerOptions>(configuration.GetSection("AnGIneer"));
         Configure<AlgoServiceOptions>(configuration.GetSection("AlgoService"));
+        Configure<LlmOptions>(configuration.GetSection("Llm"));
         context.Services.AddHttpClient();
     }
 

@@ -1,6 +1,7 @@
 using DredgeAI.BidCompare.EntityFrameworkCore;
 using DredgeAI.BidCompare.AnGineer;
 using DredgeAI.BidCompare.Analysis;
+using DredgeAI.BidCompare.AI;
 using DredgeAI.BidCompare.Storage;
 using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
@@ -32,6 +33,7 @@ public class BidCompareApplicationTestModule : AbpModule
         context.Services.Replace(ServiceDescriptor.Singleton<IFileStorage, InMemoryFileStorage>());
         context.Services.Replace(ServiceDescriptor.Singleton<IAnGineerClient, FakeAnGineerClient>());
         context.Services.Replace(ServiceDescriptor.Singleton<ICompareAlgoClient, FakeCompareAlgoClient>());
+        context.Services.Replace(ServiceDescriptor.Singleton<ILlmGateway, FakeLlmGateway>());
         // [Task8] IAnGineerClient / [Task9] ICompareAlgoClient / [Task11] ILlmGateway / [Task14] IPdfConverter 的 Fake 在此追加
 
         ConfigureInMemorySqlite(context.Services);
