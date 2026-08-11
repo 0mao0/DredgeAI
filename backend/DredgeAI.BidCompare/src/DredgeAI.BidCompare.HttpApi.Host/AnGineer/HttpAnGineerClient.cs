@@ -1,9 +1,10 @@
 using System.Collections.Generic;
 using System.IO;
-using System.IO.Compression;
+using System.Linq;
 using System.Net.Http;
 using System.Net.Http.Headers;
 using System.Net.Http.Json;
+using System.Text.Json.Serialization;
 using System.Threading;
 using System.Threading.Tasks;
 using Microsoft.Extensions.Options;
@@ -13,11 +14,12 @@ using Volo.Abp.DependencyInjection;
 namespace DredgeAI.BidCompare.AnGineer;
 
 /// <summary>
-/// AnGIneer HTTP API adapter。约定提供方接口形态：
-///   POST {BaseUrl}/api/parse          multipart 文件 → { "jobId": "..." }
-///   GET  {BaseUrl}/api/parse/{jobId}  → { "state": "processing|succeeded|failed" }
-///   GET  {BaseUrl}/api/parse/{jobId}/package → zip（doc_blocks_graph.jsonl + doc_blocks_graph_meta.json + content.md + images/）
-/// 形态变化（如改消息队列）只替换本类（spec §11 待决事项1）。
+/// AnGIneer HTTP API adapter（v1 documents API，实际端口 8789）：
+///   POST {BaseUrl}/api/v1/documents/parse  multipart 文件 → { doc_id, task_id, status }
+///   GET  {BaseUrl}/api/v1/documents/{docId}/status → { status: queued|processing|completed|failed|cancelled }
+///   GET  {BaseUrl}/api/v1/documents/{docId}/artifacts → items[{ name, url }]
+///   GET  {BaseUrl}/api/v1/documents/{docId}/artifacts/{name} → 产物文件字节
+/// jobId 复用为 doc_id（状态与产物均按 doc_id 查询）。
 /// </summary>
 public class HttpAnGineerClient : IAnGineerClient, ITransientDependency
 {
@@ -38,21 +40,21 @@ public class HttpAnGineerClient : IAnGineerClient, ITransientDependency
         fileContent.Headers.ContentType = new MediaTypeHeaderValue("application/octet-stream");
         form.Add(fileContent, "file", fileName);
 
-        using var response = await client.PostAsync("/api/parse", form, cancellationToken);
+        using var response = await client.PostAsync("/api/v1/documents/parse", form, cancellationToken);
         response.EnsureSuccessStatusCode();
         var payload = await response.Content.ReadFromJsonAsync<SubmitResponse>(cancellationToken: cancellationToken);
-        return payload?.JobId
-            ?? throw new BusinessException(BidCompareErrorCodes.AnGineerParseFailed).WithData("reason", "提交响应缺少 jobId");
+        return payload?.DocId
+            ?? throw new BusinessException(BidCompareErrorCodes.AnGineerParseFailed).WithData("reason", "提交响应缺少 doc_id");
     }
 
     public async Task<AnGineerJobState> GetStateAsync(string jobId, CancellationToken cancellationToken = default)
     {
         var client = CreateClient();
-        var payload = await client.GetFromJsonAsync<StateResponse>($"/api/parse/{jobId}", cancellationToken);
-        return payload?.State?.ToLowerInvariant() switch
+        var payload = await client.GetFromJsonAsync<StateResponse>($"/api/v1/documents/{jobId}/status", cancellationToken);
+        return payload?.Status?.ToLowerInvariant() switch
         {
-            "succeeded" => AnGineerJobState.Succeeded,
-            "failed" => AnGineerJobState.Failed,
+            "succeeded" or "completed" => AnGineerJobState.Succeeded,
+            "failed" or "cancelled" => AnGineerJobState.Failed,
             _ => AnGineerJobState.Processing
         };
     }
@@ -60,47 +62,25 @@ public class HttpAnGineerClient : IAnGineerClient, ITransientDependency
     public async Task<AnGineerPackage> DownloadPackageAsync(string jobId, CancellationToken cancellationToken = default)
     {
         var client = CreateClient();
-        await using var zipStream = await client.GetStreamAsync($"/api/parse/{jobId}/package", cancellationToken);
-        using var buffer = new MemoryStream();
-        await zipStream.CopyToAsync(buffer, cancellationToken);
-        buffer.Position = 0;
-
-        byte[]? graphJsonl = null;
-        byte[]? metaJson = null;
-        byte[]? contentMd = null;
-        var images = new Dictionary<string, byte[]>();
-
-        using var archive = new ZipArchive(buffer, ZipArchiveMode.Read);
-        foreach (var entry in archive.Entries)
+        var artifacts = await client.GetFromJsonAsync<ArtifactsResponse>(
+            $"/api/v1/documents/{jobId}/artifacts", cancellationToken);
+        if (artifacts?.Items == null)
         {
-            var name = entry.FullName.Replace('\\', '/');
-            using var entryStream = entry.Open();
-            using var entryBuffer = new MemoryStream();
-            await entryStream.CopyToAsync(entryBuffer, cancellationToken);
-            if (name.EndsWith("doc_blocks_graph.jsonl", System.StringComparison.OrdinalIgnoreCase))
-            {
-                graphJsonl = entryBuffer.ToArray();
-            }
-            else if (name.EndsWith("doc_blocks_graph_meta.json", System.StringComparison.OrdinalIgnoreCase))
-            {
-                metaJson = entryBuffer.ToArray();
-            }
-            else if (name.EndsWith("content.md", System.StringComparison.OrdinalIgnoreCase))
-            {
-                contentMd = entryBuffer.ToArray();
-            }
-            else if (name.StartsWith("images/", System.StringComparison.OrdinalIgnoreCase) && entry.Length > 0)
-            {
-                images[name] = entryBuffer.ToArray();
-            }
+            throw new BusinessException(BidCompareErrorCodes.AnGineerParseFailed)
+                .WithData("reason", "产物清单响应缺少 items");
         }
 
-        if (graphJsonl == null || metaJson == null)
+        var graphItem = artifacts.Items.FirstOrDefault(i => i.Name == "doc_blocks_graph.jsonl");
+        var metaItem = artifacts.Items.FirstOrDefault(i => i.Name == "doc_blocks_graph_meta.json");
+        if (graphItem?.Url == null || metaItem?.Url == null)
         {
             throw new BusinessException(BidCompareErrorCodes.AnGineerParseFailed)
                 .WithData("reason", "产物包缺少 doc_blocks_graph.jsonl / doc_blocks_graph_meta.json");
         }
-        return new AnGineerPackage(graphJsonl, metaJson, contentMd, images);
+
+        var graphJsonl = await DownloadBytesAsync(client, graphItem.Url, cancellationToken);
+        var metaJson = await DownloadBytesAsync(client, metaItem.Url, cancellationToken);
+        return new AnGineerPackage(graphJsonl, metaJson, contentMd: null, images: new Dictionary<string, byte[]>());
     }
 
     private HttpClient CreateClient()
@@ -115,13 +95,38 @@ public class HttpAnGineerClient : IAnGineerClient, ITransientDependency
         return client;
     }
 
+    private static async Task<byte[]> DownloadBytesAsync(HttpClient client, string url, CancellationToken cancellationToken)
+    {
+        await using var stream = await client.GetStreamAsync(url, cancellationToken);
+        using var buffer = new MemoryStream();
+        await stream.CopyToAsync(buffer, cancellationToken);
+        return buffer.ToArray();
+    }
+
     private class SubmitResponse
     {
-        public string? JobId { get; set; }
+        [JsonPropertyName("doc_id")]
+        public string? DocId { get; set; }
     }
 
     private class StateResponse
     {
-        public string? State { get; set; }
+        [JsonPropertyName("status")]
+        public string? Status { get; set; }
+    }
+
+    private class ArtifactsResponse
+    {
+        [JsonPropertyName("items")]
+        public List<ArtifactItem>? Items { get; set; }
+    }
+
+    private class ArtifactItem
+    {
+        [JsonPropertyName("name")]
+        public string? Name { get; set; }
+
+        [JsonPropertyName("url")]
+        public string? Url { get; set; }
     }
 }
