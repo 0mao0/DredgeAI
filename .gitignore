@@ -43,6 +43,9 @@ lerna-debug.log*
 **/.trae/
 .opencode/
 
+# 本地磁盘存储根目录（开发模式 Local 存储，文件不入库）
+**/App_Data/
+
 # 包管理器锁文件（项目使用 pnpm，忽略其他包管理器的锁文件）
 package-lock.json
 **/package-lock.json

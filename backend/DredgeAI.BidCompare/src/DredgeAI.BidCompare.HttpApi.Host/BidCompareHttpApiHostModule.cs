@@ -14,6 +14,8 @@ using Microsoft.AspNetCore.Extensions.DependencyInjection;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
+using Microsoft.Extensions.FileProviders;
+using Microsoft.Extensions.Options;
 using DredgeAI.BidCompare.EntityFrameworkCore;
 using DredgeAI.BidCompare.MultiTenancy;
 using DredgeAI.BidCompare.Storage;
@@ -90,6 +92,15 @@ public class BidCompareHttpApiHostModule : AbpModule
         });
 
         Configure<S3StorageOptions>(configuration.GetSection("Storage:S3"));
+        Configure<LocalStorageOptions>(configuration.GetSection("Storage:Local"));
+        if ((configuration["Storage:Provider"] ?? "S3").Equals("Local", StringComparison.OrdinalIgnoreCase))
+        {
+            context.Services.AddSingleton<IFileStorage, LocalFileStorage>();
+        }
+        else
+        {
+            context.Services.AddSingleton<IFileStorage, S3FileStorage>();
+        }
         Configure<AnGineerPollOptions>(configuration.GetSection("AnGIneer"));
         Configure<AnGineerOptions>(configuration.GetSection("AnGIneer"));
         Configure<AlgoServiceOptions>(configuration.GetSection("AlgoService"));
@@ -221,6 +232,18 @@ public class BidCompareHttpApiHostModule : AbpModule
 
         app.UseCorrelationId();
         app.UseStaticFiles();
+        if ((context.ServiceProvider.GetRequiredService<IConfiguration>()["Storage:Provider"] ?? "S3")
+            .Equals("Local", StringComparison.OrdinalIgnoreCase))
+        {
+            var localStorage = context.ServiceProvider.GetRequiredService<IOptions<LocalStorageOptions>>().Value;
+            var root = Path.GetFullPath(localStorage.RootPath);
+            Directory.CreateDirectory(root);
+            app.UseStaticFiles(new StaticFileOptions
+            {
+                FileProvider = new PhysicalFileProvider(root),
+                RequestPath = "/storage"
+            });
+        }
         app.UseRouting();
         app.UseCors();
         app.UseAuthentication();

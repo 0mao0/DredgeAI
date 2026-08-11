@@ -7,12 +7,11 @@ using Amazon.Runtime;
 using Amazon.S3;
 using Amazon.S3.Model;
 using Microsoft.Extensions.Options;
-using Volo.Abp.DependencyInjection;
 
 namespace DredgeAI.BidCompare.Storage;
 
 /// <summary>S3 兼容对象存储实现（MinIO），统一使用 AWSSDK.S3。</summary>
-public class S3FileStorage : IFileStorage, ISingletonDependency
+public class S3FileStorage : IFileStorage
 {
     private readonly S3StorageOptions _options;
     private readonly Lazy<IAmazonS3> _client;
