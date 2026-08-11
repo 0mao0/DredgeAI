@@ -15,22 +15,27 @@ public class FakeCompareAlgoClient : ICompareAlgoClient
 
     public string? FailWith { get; set; }
 
-    public IReadOnlyList<AlgoIrDocument>? LastRequest { get; private set; }
+    public string? LastTaskId { get; private set; }
 
-    public Task<IReadOnlyList<AlgoEvidence>> AnalyzeSimilarityAsync(IReadOnlyList<AlgoIrDocument> documents, CancellationToken cancellationToken = default)
+    public IReadOnlyList<AlgoRawDocument>? LastRequest { get; private set; }
+
+    public Task<IReadOnlyList<AlgoEvidence>> AnalyzeSimilarityAsync(string taskId, IReadOnlyList<AlgoRawDocument> documents, CancellationToken cancellationToken = default)
     {
+        LastTaskId = taskId;
         LastRequest = documents;
         return Respond(SimilarityEvidences);
     }
 
-    public Task<IReadOnlyList<AlgoEvidence>> AnalyzePricingAsync(IReadOnlyList<AlgoIrDocument> documents, CancellationToken cancellationToken = default)
+    public Task<IReadOnlyList<AlgoEvidence>> AnalyzePricingAsync(string taskId, IReadOnlyList<AlgoRawDocument> documents, CancellationToken cancellationToken = default)
     {
+        LastTaskId = taskId;
         LastRequest = documents;
         return Respond(PricingEvidences);
     }
 
-    public Task<IReadOnlyList<AlgoEvidence>> AnalyzeMetadataAsync(IReadOnlyList<AlgoIrDocument> documents, CancellationToken cancellationToken = default)
+    public Task<IReadOnlyList<AlgoEvidence>> AnalyzeMetadataAsync(string taskId, IReadOnlyList<AlgoRawDocument> documents, CancellationToken cancellationToken = default)
     {
+        LastTaskId = taskId;
         LastRequest = documents;
         return Respond(MetadataEvidences);
     }

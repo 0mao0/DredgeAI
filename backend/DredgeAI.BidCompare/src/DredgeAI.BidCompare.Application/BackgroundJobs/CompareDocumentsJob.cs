@@ -20,7 +20,7 @@ using Volo.Abp.Linq;
 namespace DredgeAI.BidCompare.BackgroundJobs;
 
 /// <summary>
-/// 比对后台任务（spec §5 步骤4）：汇总已解析标书 IR → 调算法服务三个端点 → 证据落库。
+/// 比对后台任务（spec §5 步骤4）：汇总已解析标书 AnGIneer 原始产物 → 调算法服务三个端点 → 证据落库。
 /// 算法服务不可用 → 任务 Failed（spec §9：不静默降级）。
 /// P1 版本比对完成即 Done；Task 12（P2）会把尾部改为 MarkAnalyzing + 入队 AiAnalysisJob。
 /// </summary>
@@ -73,26 +73,26 @@ public class CompareDocumentsJob : AsyncBackgroundJob<CompareDocumentsArgs>, ITr
             return;
         }
 
-        var algoDocuments = new List<AlgoIrDocument>();
+        var algoDocuments = new List<AlgoRawDocument>();
         foreach (var doc in bidDocs)
         {
-            await using var irStream = await _fileStorage.GetAsync(doc.IrStorageKey!, cancellationToken);
-            var irJson = await ReadAllAsync(irStream, cancellationToken);
-            string? docMd = null;
-            if (doc.DocMdStorageKey != null)
-            {
-                await using var mdStream = await _fileStorage.GetAsync(doc.DocMdStorageKey, cancellationToken);
-                docMd = await ReadAllAsync(mdStream, cancellationToken);
-            }
-            algoDocuments.Add(new AlgoIrDocument(doc.Id.ToString(), irJson, docMd));
+            var rawGraphKey = doc.IrStorageKey!.Replace("/ir.json", "/raw/doc_blocks_graph.jsonl", System.StringComparison.Ordinal);
+            var rawMetaKey = doc.IrStorageKey.Replace("/ir.json", "/raw/doc_blocks_graph_meta.json", System.StringComparison.Ordinal);
+
+            await using var graphStream = await _fileStorage.GetAsync(rawGraphKey, cancellationToken);
+            var graphJsonl = await ReadAllAsync(graphStream, cancellationToken);
+            await using var metaStream = await _fileStorage.GetAsync(rawMetaKey, cancellationToken);
+            var metaJson = await ReadAllAsync(metaStream, cancellationToken);
+
+            algoDocuments.Add(new AlgoRawDocument(doc.Id.ToString(), graphJsonl, metaJson));
         }
 
         List<AlgoEvidence> algoEvidences;
         try
         {
-            algoEvidences = (await _algoClient.AnalyzeSimilarityAsync(algoDocuments, cancellationToken))
-                .Concat(await _algoClient.AnalyzePricingAsync(algoDocuments, cancellationToken))
-                .Concat(await _algoClient.AnalyzeMetadataAsync(algoDocuments, cancellationToken))
+            algoEvidences = (await _algoClient.AnalyzeSimilarityAsync(task.Id.ToString(), algoDocuments, cancellationToken))
+                .Concat(await _algoClient.AnalyzePricingAsync(task.Id.ToString(), algoDocuments, cancellationToken))
+                .Concat(await _algoClient.AnalyzeMetadataAsync(task.Id.ToString(), algoDocuments, cancellationToken))
                 .ToList();
         }
         catch (Exception ex) when (ex is not OperationCanceledException)

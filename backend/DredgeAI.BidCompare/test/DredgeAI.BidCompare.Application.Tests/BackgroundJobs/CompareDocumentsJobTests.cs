@@ -94,6 +94,21 @@ public class CompareDocumentsJobTests : BidCompareApplicationTestBase<BidCompare
 
         await RunCompareJobAsync(taskId);
 
+        _algoClient.LastTaskId.ShouldBe(taskId.ToString());
+        _algoClient.LastRequest.ShouldNotBeNull();
+        _algoClient.LastRequest!.Count.ShouldBe(2);
+        _algoClient.LastRequest.ShouldContain(r => r.DocId == docA.ToString());
+        _algoClient.LastRequest.ShouldContain(r => r.DocId == docB.ToString());
+        foreach (var request in _algoClient.LastRequest)
+        {
+            // 契约：compare-algo 接收 AnGIneer 原始产物（jsonl 逐行块 + meta 原样），而非内部适配 IR。
+            request.GraphJsonl.ShouldContain("\"block_uid\"");
+            request.GraphJsonl.ShouldNotContain("\"blockId\"");
+            var meta = JsonDocument.Parse(request.MetaJson);
+            meta.RootElement.TryGetProperty("docMeta", out _).ShouldBeTrue();
+            meta.RootElement.TryGetProperty("pages", out _).ShouldBeTrue();
+        }
+
         var detail = await _appService.GetAsync(taskId);
         detail.Status.ShouldBe(CompareTaskStatus.Analyzing); // P1 尾部：比对完成进入 AI 分析（Done 由 AiAnalysisJob 收尾）
         detail.Progress.Percent.ShouldBe(80);
