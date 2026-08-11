@@ -80,7 +80,7 @@ public class HttpAnGineerClient : IAnGineerClient, ITransientDependency
 
         var graphJsonl = await DownloadBytesAsync(client, graphItem.Url, cancellationToken);
         var metaJson = await DownloadBytesAsync(client, metaItem.Url, cancellationToken);
-        return new AnGineerPackage(graphJsonl, metaJson, contentMd: null, images: new Dictionary<string, byte[]>());
+        return new AnGineerPackage(graphJsonl, metaJson, ContentMd: null, Images: new Dictionary<string, byte[]>());
     }
 
     private HttpClient CreateClient()
