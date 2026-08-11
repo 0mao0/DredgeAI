@@ -15,7 +15,6 @@ using Volo.Abp;
 using Volo.Abp.BackgroundJobs;
 using Volo.Abp.DependencyInjection;
 using Volo.Abp.Domain.Repositories;
-using Volo.Abp.Linq;
 
 namespace DredgeAI.BidCompare.BackgroundJobs;
 
@@ -33,7 +32,6 @@ public class ParseDocumentJob : AsyncBackgroundJob<ParseDocumentArgs>, ITransien
     private readonly IAnGineerClient _anGineerClient;
     private readonly IIrValidator _irValidator;
     private readonly IBackgroundJobManager _backgroundJobManager;
-    private readonly IAsyncQueryableExecuter _asyncExecuter;
     private readonly AnGineerPollOptions _pollOptions;
 
     public ParseDocumentJob(
@@ -43,7 +41,6 @@ public class ParseDocumentJob : AsyncBackgroundJob<ParseDocumentArgs>, ITransien
         IAnGineerClient anGineerClient,
         IIrValidator irValidator,
         IBackgroundJobManager backgroundJobManager,
-        IAsyncQueryableExecuter asyncExecuter,
         IOptions<AnGineerPollOptions> pollOptions)
     {
         _documentRepository = documentRepository;
@@ -52,7 +49,6 @@ public class ParseDocumentJob : AsyncBackgroundJob<ParseDocumentArgs>, ITransien
         _anGineerClient = anGineerClient;
         _irValidator = irValidator;
         _backgroundJobManager = backgroundJobManager;
-        _asyncExecuter = asyncExecuter;
         _pollOptions = pollOptions.Value;
     }
 
@@ -165,8 +161,7 @@ public class ParseDocumentJob : AsyncBackgroundJob<ParseDocumentArgs>, ITransien
     /// <summary>spec §5 步骤2→3→4：全部文档落定后推进任务状态。</summary>
     private async Task AdvanceTaskStateAsync(CompareTask task, CancellationToken cancellationToken)
     {
-        var queryable = await _documentRepository.GetQueryableAsync();
-        var documents = await _asyncExecuter.ToListAsync(queryable.Where(d => d.TaskId == task.Id));
+        var documents = await _documentRepository.GetListAsync(d => d.TaskId == task.Id);
 
         if (documents.Any(d => d.ParseStatus is DocumentParseStatus.Pending or DocumentParseStatus.Parsing))
         {

@@ -42,4 +42,25 @@ public class AnGineerIrMapperTests
         node["blocks"]![0]!["source"]?.GetValue<string?>().ShouldBeNull();
         node["blocks"]![0]!["confidence"]?.GetValue<double?>().ShouldBeNull();
     }
+
+    [Fact]
+    public void Map_Should_Normalize_Real_AnGineer_Source_Values()
+    {
+        // AnGIneer 实际产物 source 取值：text/ocr/formula/table/null → 内部 IR 归一化
+        var jsonl = """
+        {"block_uid":"b1","block_type":"paragraph","page_idx":0,"plain_text":"正文","bbox":[0.1,0.1,0.9,0.2],"source":"text","confidence":1.0}
+        {"block_uid":"b2","block_type":"title","page_idx":0,"plain_text":"标题","bbox":[0.1,0.2,0.9,0.3],"source":"ocr","confidence":0.6}
+        {"block_uid":"b3","block_type":"equation_interline","page_idx":0,"math_content":"x+y","bbox":[0.1,0.3,0.9,0.4],"source":"formula","confidence":1.0}
+        {"block_uid":"b4","block_type":"table","page_idx":0,"plain_text":"表","bbox":[0.1,0.4,0.9,0.5],"table_html":"<table></table>","image_path":"images/t.jpg","source":"table","confidence":1.0}
+        {"block_uid":"b5","block_type":"image","page_idx":0,"bbox":[0.1,0.5,0.9,0.6],"image_path":"images/i.jpg","source":null,"confidence":1.0}
+        """;
+        var irJson = AnGineerIrMapper.MapToIrJson(jsonl, SampleIr.ValidMetaJson, "doc-a");
+        var node = JsonNode.Parse(irJson)!;
+
+        node["blocks"]![0]!["source"]!.GetValue<string>().ShouldBe("native");
+        node["blocks"]![1]!["source"]!.GetValue<string>().ShouldBe("ocr");
+        node["blocks"]![2]!["source"]!.GetValue<string>().ShouldBe("ocr");
+        node["blocks"]![3]!["source"]!.GetValue<string>().ShouldBe("native");
+        node["blocks"]![4]!["source"]?.GetValue<string?>().ShouldBeNull();
+    }
 }

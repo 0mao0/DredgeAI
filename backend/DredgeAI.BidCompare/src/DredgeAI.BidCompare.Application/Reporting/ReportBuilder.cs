@@ -9,7 +9,6 @@ using DredgeAI.BidCompare.Evidences;
 using DredgeAI.BidCompare.Reports;
 using Volo.Abp.DependencyInjection;
 using Volo.Abp.Domain.Repositories;
-using Volo.Abp.Linq;
 using Volo.Abp.Timing;
 
 namespace DredgeAI.BidCompare.Reporting;
@@ -23,33 +22,28 @@ public class ReportBuilder : ITransientDependency
 {
     private readonly IRepository<EvidenceItem, Guid> _evidenceRepository;
     private readonly IRepository<CompareDocument, Guid> _documentRepository;
-    private readonly IAsyncQueryableExecuter _asyncExecuter;
     private readonly IClock _clock;
 
     public ReportBuilder(
         IRepository<EvidenceItem, Guid> evidenceRepository,
         IRepository<CompareDocument, Guid> documentRepository,
-        IAsyncQueryableExecuter asyncExecuter,
         IClock clock)
     {
         _evidenceRepository = evidenceRepository;
         _documentRepository = documentRepository;
-        _asyncExecuter = asyncExecuter;
         _clock = clock;
     }
 
     public async Task<CompareReportDto> BuildAsync(Guid taskId, CancellationToken cancellationToken = default)
     {
-        var evQueryable = await _evidenceRepository.GetQueryableAsync();
-        var evidences = (await _asyncExecuter.ToListAsync(evQueryable.Where(e => e.TaskId == taskId)))
+        var evidences = (await _evidenceRepository.GetListAsync(e => e.TaskId == taskId))
             .Select(EvidenceMapper.ToDto)
             .OrderBy(e => e.Severity)
             .ThenBy(e => e.Title)
             .ToList();
 
-        var docQueryable = await _documentRepository.GetQueryableAsync();
-        var docCount = await _asyncExecuter.CountAsync(docQueryable.Where(d =>
-            d.TaskId == taskId && d.Role == DocumentRole.Bid && d.ParseStatus == DocumentParseStatus.Parsed));
+        var docCount = await _documentRepository.CountAsync(d =>
+            d.TaskId == taskId && d.Role == DocumentRole.Bid && d.ParseStatus == DocumentParseStatus.Parsed);
 
         return new CompareReportDto
         {
@@ -91,10 +85,10 @@ public class ReportBuilder : ITransientDependency
 
     private async Task<SimilarityMatrixDto> BuildMatrixAsync(Guid taskId, List<EvidenceDto> evidences)
     {
-        var docQueryable = await _documentRepository.GetQueryableAsync();
-        var docs = await _asyncExecuter.ToListAsync(docQueryable
-            .Where(d => d.TaskId == taskId && d.Role == DocumentRole.Bid && d.ParseStatus == DocumentParseStatus.Parsed)
-            .OrderBy(d => d.CreationTime));
+        var docs = (await _documentRepository.GetListAsync(d =>
+                d.TaskId == taskId && d.Role == DocumentRole.Bid && d.ParseStatus == DocumentParseStatus.Parsed))
+            .OrderBy(d => d.CreationTime)
+            .ToList();
 
         var similarityEvidences = evidences.Where(e => e.Type == EvidenceType.Similarity).ToList();
         var cells = new List<SimilarityMatrixCellDto>();

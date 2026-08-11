@@ -15,6 +15,12 @@ $compareAlgoPidPath = Join-Path $logsDir "compare-algo.pid"
 $backendPidPath = Join-Path $logsDir "backend.pid"
 $frontendPidPath = Join-Path $logsDir "frontend.pid"
 
+# 优先使用用户目录下的真实 dotnet SDK（部分机器 C:\Program Files\dotnet 只是无 SDK 的空壳）
+$localDotnetDir = Join-Path $env:LOCALAPPDATA "Microsoft\dotnet"
+if (Test-Path (Join-Path $localDotnetDir "dotnet.exe")) {
+    $env:PATH = "$localDotnetDir;$env:PATH"
+}
+
 # 端口约定
 $postgresPort = 5432
 $compareAlgoPort = 8100
@@ -120,16 +126,18 @@ function Start-ServiceProcess {
     $escapedRootDir = $rootDir.Replace("'", "''")
     $escapedLogPath = $LogPath.Replace("'", "''")
     $escapedCommand = $ServiceCommand.Replace("'", "''")
-    $startupBanner = "[$(Get-Date -Format 'yyyy-MM-dd HH:mm:ss')] starting: $ServiceCommand"
+    $startupBanner = "[$(Get-Date -Format 'yyyy-MM-dd HH:mm:ss')] starting: $ServiceName"
     $startupScript = @"
 Set-Location '$escapedRootDir'
 '$startupBanner' | Out-File -FilePath '$escapedLogPath' -Encoding utf8 -Append
 Invoke-Expression '$escapedCommand' *>> '$escapedLogPath'
 "@
 
+    $encodedCommand = [Convert]::ToBase64String([System.Text.Encoding]::Unicode.GetBytes($startupScript))
+
     $process = Start-Process `
         -FilePath "powershell.exe" `
-        -ArgumentList @("-NoProfile", "-ExecutionPolicy", "Bypass", "-Command", $startupScript) `
+        -ArgumentList @("-NoProfile", "-ExecutionPolicy", "Bypass", "-EncodedCommand", $encodedCommand) `
         -WindowStyle Hidden `
         -PassThru
 
@@ -137,7 +145,7 @@ Invoke-Expression '$escapedCommand' *>> '$escapedLogPath'
     return $process
 }
 
-# 兼容 PS5.1/7 的 HTTPS 请求（自签名证书跳过校验）
+# 兼容 PS5.1/7 的 HTTP 健康检查（PS5.1 的 HttpWebRequest 无法与 Kestrel 完成 ALPN/HTTP2 握手，改用 Node fetch）
 function Invoke-WebRequestSafe {
     param(
         [Parameter(Mandatory = $true)]
@@ -145,11 +153,13 @@ function Invoke-WebRequestSafe {
         [int]$TimeoutSec = 3
     )
 
-    if ($PSVersionTable.PSVersion.Major -ge 7) {
-        return Invoke-WebRequest -Uri $Uri -TimeoutSec $TimeoutSec -SkipCertificateCheck -UseBasicParsing -ErrorAction Stop
+    $env:NODE_TLS_REJECT_UNAUTHORIZED = '0'
+    $nodeScript = 'const u=process.argv[1],ms=parseInt(process.argv[2],10)*1000,t=setTimeout(()=>process.exit(2),ms);fetch(u).then(r=>{clearTimeout(t);console.log(r.status);process.exit(r.status===200?0:1)}).catch(()=>process.exit(2));'
+    $output = & node -e $nodeScript $Uri $TimeoutSec 2>$null
+    if ($LASTEXITCODE -ne 0 -or -not $output) {
+        throw "HTTP health check failed for $Uri"
     }
-    [System.Net.ServicePointManager]::ServerCertificateValidationCallback = { $true }
-    return Invoke-WebRequest -Uri $Uri -TimeoutSec $TimeoutSec -UseBasicParsing -ErrorAction Stop
+    return [pscustomobject]@{ StatusCode = [int]($output.Trim()) }
 }
 
 # 等待 HTTP 服务就绪
@@ -242,17 +252,15 @@ $pnpmVer = pnpm --version 2>$null
 if (-not $pnpmVer) { Write-Error "pnpm not found!"; exit 1 }
 Write-Host "  pnpm $pnpmVer" -ForegroundColor DarkGray
 
-$dotnetCmd = Get-Command dotnet -ErrorAction SilentlyContinue
-if (-not $dotnetCmd) {
-    $dotnetExe = Join-Path $env:LOCALAPPDATA "Microsoft\dotnet\dotnet.exe"
-    if (Test-Path $dotnetExe) {
-        $env:PATH = "$env:LOCALAPPDATA\Microsoft\dotnet;$env:PATH"
-        Write-Host "  dotnet added from LOCALAPPDATA" -ForegroundColor DarkGray
-    } else {
-        Write-Error "dotnet not found!"; exit 1
-    }
+$dotnetVer = dotnet --version 2>$null
+if (-not $dotnetVer -and (Test-Path (Join-Path $localDotnetDir "dotnet.exe"))) {
+    $dotnetVer = & (Join-Path $localDotnetDir "dotnet.exe") --version 2>$null
 }
-Write-Host "  dotnet $((dotnet --version))" -ForegroundColor DarkGray
+if (-not $dotnetVer) {
+    Write-Error "dotnet not found! Install .NET 8 SDK or set a working dotnet on PATH."
+    exit 1
+}
+Write-Host "  dotnet $dotnetVer" -ForegroundColor DarkGray
 
 if (-not (Test-Path $compareAlgoPython)) {
     Write-Error "compare-algo venv not found: $compareAlgoPython"; exit 1

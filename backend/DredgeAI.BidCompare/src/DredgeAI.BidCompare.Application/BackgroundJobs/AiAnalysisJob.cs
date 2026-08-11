@@ -17,7 +17,6 @@ using Volo.Abp.BackgroundJobs;
 using Volo.Abp.DependencyInjection;
 using Volo.Abp.Domain.Repositories;
 using Volo.Abp.Guids;
-using Volo.Abp.Linq;
 
 namespace DredgeAI.BidCompare.BackgroundJobs;
 
@@ -43,7 +42,6 @@ public class AiAnalysisJob : AsyncBackgroundJob<AiAnalysisArgs>, ITransientDepen
     private readonly IRepository<EvidenceItem, Guid> _evidenceRepository;
     private readonly IFileStorage _fileStorage;
     private readonly ILlmGateway _llmGateway;
-    private readonly IAsyncQueryableExecuter _asyncExecuter;
     private readonly IGuidGenerator _guidGenerator;
 
     public AiAnalysisJob(
@@ -52,7 +50,6 @@ public class AiAnalysisJob : AsyncBackgroundJob<AiAnalysisArgs>, ITransientDepen
         IRepository<EvidenceItem, Guid> evidenceRepository,
         IFileStorage fileStorage,
         ILlmGateway llmGateway,
-        IAsyncQueryableExecuter asyncExecuter,
         IGuidGenerator guidGenerator)
     {
         _taskRepository = taskRepository;
@@ -60,7 +57,6 @@ public class AiAnalysisJob : AsyncBackgroundJob<AiAnalysisArgs>, ITransientDepen
         _evidenceRepository = evidenceRepository;
         _fileStorage = fileStorage;
         _llmGateway = llmGateway;
-        _asyncExecuter = asyncExecuter;
         _guidGenerator = guidGenerator;
     }
 
@@ -71,11 +67,10 @@ public class AiAnalysisJob : AsyncBackgroundJob<AiAnalysisArgs>, ITransientDepen
 
         try
         {
-            var queryable = await _documentRepository.GetQueryableAsync();
-            var bidDocs = await _asyncExecuter.ToListAsync(queryable.Where(d =>
+            var bidDocs = await _documentRepository.GetListAsync(d =>
                 d.TaskId == args.TaskId &&
                 d.Role == DocumentRole.Bid &&
-                d.ParseStatus == DocumentParseStatus.Parsed));
+                d.ParseStatus == DocumentParseStatus.Parsed);
 
             var docMds = new Dictionary<CompareDocument, string>();
             foreach (var doc in bidDocs.Where(d => d.DocMdStorageKey != null))

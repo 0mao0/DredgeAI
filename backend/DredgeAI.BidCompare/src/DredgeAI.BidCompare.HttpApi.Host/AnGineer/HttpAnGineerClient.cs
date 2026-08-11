@@ -82,7 +82,24 @@ public class HttpAnGineerClient : IAnGineerClient, ITransientDependency
 
         var graphJsonl = await DownloadBytesAsync(client, graphItem.Url, cancellationToken);
         var metaJson = await DownloadBytesAsync(client, metaItem.Url, cancellationToken);
-        return new AnGineerPackage(graphJsonl, metaJson, ContentMd: null, Images: new Dictionary<string, byte[]>());
+
+        // content.md / images 目前 AnGIneer v1 产物清单尚未开放（仅 graph/meta）；
+        // 清单里一旦出现即随包下载，避免后续再改适配层。
+        byte[]? contentMd = null;
+        var contentMdItem = artifacts.Items.FirstOrDefault(i => i.Name == "content.md");
+        if (contentMdItem?.Url != null)
+        {
+            contentMd = await DownloadBytesAsync(client, contentMdItem.Url, cancellationToken);
+        }
+
+        var images = new Dictionary<string, byte[]>();
+        foreach (var imageItem in artifacts.Items.Where(i =>
+                     i.Name != null && i.Name.StartsWith("images/", System.StringComparison.Ordinal) && i.Url != null))
+        {
+            images[imageItem.Name!] = await DownloadBytesAsync(client, imageItem.Url!, cancellationToken);
+        }
+
+        return new AnGineerPackage(graphJsonl, metaJson, ContentMd: contentMd, Images: images);
     }
 
     private HttpClient CreateClient()

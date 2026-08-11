@@ -52,7 +52,7 @@ public static class AnGineerIrMapper
                 ["text"] = ReadText(node, type),
                 // v2 §2：标题块 textLevel=derived_level，非标题固定 0
                 ["textLevel"] = type == "title" ? node.DerivedLevel ?? 1 : 0,
-                ["source"] = node.Source,       // v2 §4：补齐前为 null，透传
+                ["source"] = NormalizeSource(node.Source), // v2 §4：AnGIneer 原始取值归一化为 native|ocr（text→native、formula/table→对应识别途径）
                 ["confidence"] = node.Confidence
             };
             if (type == "table")
@@ -96,6 +96,20 @@ public static class AnGineerIrMapper
         }
         return node.PlainText;
     }
+
+    /// <summary>
+    /// AnGIneer 原始 source 归一化为内部 IR 契约取值（v2 §4：native|ocr 或 null）：
+    /// text → native（PDF 原生文本）；ocr → ocr；formula → ocr（公式经 OCR 识别）；
+    /// table → native（表格结构化提取）；其余取值/缺省原样透传（由 IrValidator 拒收未知值）。
+    /// </summary>
+    private static string? NormalizeSource(string? source) => source switch
+    {
+        "text" => "native",
+        "ocr" => "ocr",
+        "formula" => "ocr",
+        "table" => "native",
+        _ => source
+    };
 
     /// <summary>v2 §5-6：嵌套 outlines 直收；扁平结构（parent_outline_id）转嵌套 children。</summary>
     private static List<Dictionary<string, object?>> MapOutline(List<OutlineNode>? outlines)

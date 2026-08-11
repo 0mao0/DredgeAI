@@ -15,7 +15,6 @@ using Volo.Abp.BackgroundJobs;
 using Volo.Abp.DependencyInjection;
 using Volo.Abp.Domain.Repositories;
 using Volo.Abp.Guids;
-using Volo.Abp.Linq;
 
 namespace DredgeAI.BidCompare.BackgroundJobs;
 
@@ -31,7 +30,6 @@ public class CompareDocumentsJob : AsyncBackgroundJob<CompareDocumentsArgs>, ITr
     private readonly IRepository<EvidenceItem, Guid> _evidenceRepository;
     private readonly IFileStorage _fileStorage;
     private readonly ICompareAlgoClient _algoClient;
-    private readonly IAsyncQueryableExecuter _asyncExecuter;
     private readonly IGuidGenerator _guidGenerator;
     private readonly IBackgroundJobManager _backgroundJobManager;
 
@@ -41,7 +39,6 @@ public class CompareDocumentsJob : AsyncBackgroundJob<CompareDocumentsArgs>, ITr
         IRepository<EvidenceItem, Guid> evidenceRepository,
         IFileStorage fileStorage,
         ICompareAlgoClient algoClient,
-        IAsyncQueryableExecuter asyncExecuter,
         IGuidGenerator guidGenerator,
         IBackgroundJobManager backgroundJobManager)
     {
@@ -50,7 +47,6 @@ public class CompareDocumentsJob : AsyncBackgroundJob<CompareDocumentsArgs>, ITr
         _evidenceRepository = evidenceRepository;
         _fileStorage = fileStorage;
         _algoClient = algoClient;
-        _asyncExecuter = asyncExecuter;
         _guidGenerator = guidGenerator;
         _backgroundJobManager = backgroundJobManager;
     }
@@ -60,11 +56,10 @@ public class CompareDocumentsJob : AsyncBackgroundJob<CompareDocumentsArgs>, ITr
         var cancellationToken = CancellationToken.None;
         var task = await _taskRepository.GetAsync(args.TaskId, cancellationToken: cancellationToken);
 
-        var queryable = await _documentRepository.GetQueryableAsync();
-        var bidDocs = await _asyncExecuter.ToListAsync(queryable.Where(d =>
+        var bidDocs = await _documentRepository.GetListAsync(d =>
             d.TaskId == args.TaskId &&
             d.Role == DocumentRole.Bid &&
-            d.ParseStatus == DocumentParseStatus.Parsed));
+            d.ParseStatus == DocumentParseStatus.Parsed);
 
         if (bidDocs.Count < 2)
         {

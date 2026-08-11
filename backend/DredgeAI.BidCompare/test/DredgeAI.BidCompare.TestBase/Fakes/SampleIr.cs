@@ -9,8 +9,8 @@ public static class SampleIr
 {
     /// <summary>AnGIneer doc_blocks_graph.jsonl 样例（3 行，块级字段见 v2 §1）。</summary>
     public const string ValidGraphJsonl = """
-    {"block_uid":"b0001","block_type":"title","page_idx":0,"plain_text":"第三章 技术方案","derived_level":1,"bbox":[0.0672,0.0594,0.9244,0.095],"source":"native","confidence":1.0}
-    {"block_uid":"b0002","block_type":"table","page_idx":1,"plain_text":"报价表","derived_level":0,"bbox":[0.0672,0.1188,0.9244,0.2969],"table_html":"<table><tr><td>总价</td></tr></table>","image_path":"images/t1.jpg","source":"native","confidence":1.0}
+    {"block_uid":"b0001","block_type":"title","page_idx":0,"plain_text":"第三章 技术方案","derived_level":1,"bbox":[0.0672,0.0594,0.9244,0.095],"source":"text","confidence":1.0}
+    {"block_uid":"b0002","block_type":"table","page_idx":1,"plain_text":"报价表","derived_level":0,"bbox":[0.0672,0.1188,0.9244,0.2969],"table_html":"<table><tr><td>总价</td></tr></table>","image_path":"images/t1.jpg","source":"table","confidence":1.0}
     {"block_uid":"b0003","block_type":"paragraph","page_idx":1,"plain_text":"盖章扫描文字","derived_level":0,"bbox":[0.0672,0.3563,0.9244,0.4157],"source":"ocr","confidence":0.3}
     """;
 
