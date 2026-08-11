@@ -15,7 +15,8 @@ namespace DredgeAI.BidCompare.AnGineer;
 
 /// <summary>
 /// AnGIneer HTTP API adapter（v1 documents API，实际端口 8789）：
-///   POST {BaseUrl}/api/v1/documents/parse  multipart 文件 → { doc_id, task_id, status }
+///   POST {BaseUrl}/api/v1/documents/parse  multipart 文件（stages=source_prep,convert,raw_parse,structure，
+///        绕开 v1 默认 structure 单阶段缺少 mineru_raw 的缺陷）→ { doc_id, task_id, status }
 ///   GET  {BaseUrl}/api/v1/documents/{docId}/status → { status: queued|processing|completed|failed|cancelled }
 ///   GET  {BaseUrl}/api/v1/documents/{docId}/artifacts → items[{ name, url }]
 ///   GET  {BaseUrl}/api/v1/documents/{docId}/artifacts/{name} → 产物文件字节
@@ -40,7 +41,8 @@ public class HttpAnGineerClient : IAnGineerClient, ITransientDependency
         fileContent.Headers.ContentType = new MediaTypeHeaderValue("application/octet-stream");
         form.Add(fileContent, "file", fileName);
 
-        using var response = await client.PostAsync("/api/v1/documents/parse", form, cancellationToken);
+        using var response = await client.PostAsync(
+            "/api/v1/documents/parse?stages=source_prep,convert,raw_parse,structure", form, cancellationToken);
         response.EnsureSuccessStatusCode();
         var payload = await response.Content.ReadFromJsonAsync<SubmitResponse>(cancellationToken: cancellationToken);
         return payload?.DocId
@@ -89,8 +91,8 @@ public class HttpAnGineerClient : IAnGineerClient, ITransientDependency
         client.BaseAddress = new System.Uri(_options.BaseUrl.TrimEnd('/') + "/");
         if (!string.IsNullOrWhiteSpace(_options.ApiKey))
         {
-            client.DefaultRequestHeaders.Authorization =
-                new AuthenticationHeaderValue("Bearer", _options.ApiKey);
+            // AnGIneer v1 中间件要求 X-API-Key 头（Authorization: Bearer 不被识别）
+            client.DefaultRequestHeaders.Add("X-API-Key", _options.ApiKey);
         }
         return client;
     }
