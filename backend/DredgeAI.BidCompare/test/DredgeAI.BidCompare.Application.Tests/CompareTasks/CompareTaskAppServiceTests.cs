@@ -103,6 +103,23 @@ public class CompareTaskAppServiceTests : BidCompareApplicationTestBase<BidCompa
     }
 
     [Fact]
+    public async Task GetDocuments_Should_Return_Task_Documents_In_Upload_Order()
+    {
+        var task = await _appService.CreateAsync(new CreateCompareTaskDto { Name = "t" });
+        var docA = await _appService.UploadDocumentAsync(task.Id, DocumentRole.Bid, "标书A.pdf", new MemoryStream(Encoding.UTF8.GetBytes("a")));
+        var docB = await _appService.UploadDocumentAsync(task.Id, DocumentRole.Bid, "标书B.pdf", new MemoryStream(Encoding.UTF8.GetBytes("b")));
+
+        var documents = await _appService.GetDocumentsAsync(task.Id);
+
+        documents.Count.ShouldBe(2);
+        documents.Select(d => d.Id).ShouldBe(new[] { docA.Id, docB.Id });
+        documents[0].FileName.ShouldBe("标书A.pdf");
+        documents[0].Role.ShouldBe(DocumentRole.Bid);
+        documents[0].ParseStatus.ShouldBe(DocumentParseStatus.Pending);
+        documents[0].FileSize.ShouldBe(1);
+    }
+
+    [Fact]
     public async Task UploadDocument_Should_Reject_Unsupported_Extension()
     {
         var task = await _appService.CreateAsync(new CreateCompareTaskDto { Name = "t" });

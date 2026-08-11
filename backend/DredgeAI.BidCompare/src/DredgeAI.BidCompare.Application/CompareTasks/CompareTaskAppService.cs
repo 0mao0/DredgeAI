@@ -89,6 +89,13 @@ public class CompareTaskAppService : ApplicationService, ICompareTaskAppService
         return MapToDto(task, documents);
     }
 
+    public async Task<List<CompareDocumentDto>> GetDocumentsAsync(Guid id)
+    {
+        await _taskRepository.GetAsync(id);
+        var documents = await GetTaskDocumentsAsync(id);
+        return documents.OrderBy(d => d.CreationTime).Select(MapToDto).ToList();
+    }
+
     public async Task<PagedResultDto<CompareTaskDto>> GetListAsync(GetCompareTasksInput input)
     {
         var queryable = await _taskRepository.GetQueryableAsync();

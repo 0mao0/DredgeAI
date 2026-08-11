@@ -32,6 +32,11 @@ public class CompareTaskController : AbpControllerBase
     public Task<CompareTaskDto> GetAsync(Guid id)
         => _appService.GetAsync(id);
 
+    /// <summary>GET /api/compare/tasks/{id}/documents 任务文档列表（前端详情/历史用）</summary>
+    [HttpGet("{id}/documents")]
+    public Task<List<CompareDocumentDto>> GetDocumentsAsync(Guid id)
+        => _appService.GetDocumentsAsync(id);
+
     /// <summary>GET /api/compare/tasks 任务列表（分页，PagedResultDto）</summary>
     [HttpGet]
     public Task<PagedResultDto<CompareTaskDto>> GetListAsync([FromQuery] GetCompareTasksInput input)

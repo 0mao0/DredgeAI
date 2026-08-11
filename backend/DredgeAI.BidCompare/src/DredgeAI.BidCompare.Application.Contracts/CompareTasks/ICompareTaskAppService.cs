@@ -21,6 +21,8 @@ public interface ICompareTaskAppService : IApplicationService
 
     Task<CompareTaskDto> GetAsync(Guid id);
 
+    Task<List<CompareDocumentDto>> GetDocumentsAsync(Guid id);
+
     Task<PagedResultDto<CompareTaskDto>> GetListAsync(GetCompareTasksInput input);
 
     Task DeleteAsync(Guid id);
