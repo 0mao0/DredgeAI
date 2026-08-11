@@ -26,6 +26,7 @@ lerna-debug.log*
 **/.env
 **/.env.local
 **/.env.*.local
+**/appsettings.secrets.json
 
 # 编辑器 / IDE 配置
 .vscode/
