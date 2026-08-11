@@ -38,28 +38,28 @@ export const userAppManifests: AppManifest[] = [
     children: [
       {
         id: 'ai-bid-read',
-        route: '/read',
+        route: '/ai-bid/read',
         name: 'AiBidRead',
         title: '读标',
         component: () => import('@/views/ai-bid/read/index.vue'),
       },
       {
         id: 'ai-bid-write',
-        route: '/write',
+        route: '/ai-bid/write',
         name: 'AiBidWrite',
         title: '写标',
         component: () => import('@/views/ai-bid/write/index.vue'),
       },
       {
         id: 'ai-bid-compare',
-        route: '/compare',
+        route: '/ai-bid/compare',
         name: 'AiBidCompare',
         title: '比标',
         component: () => import('@/views/ai-bid/compare/index.vue'),
       },
       {
         id: 'ai-bid-clear',
-        route: '/clear',
+        route: '/ai-bid/clear',
         name: 'AiBidClear',
         title: '清标',
         component: () => import('@/views/ai-bid/clear/index.vue'),

@@ -2,9 +2,9 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** 为「AI 投标-比标」模块交付 ABP Framework (.NET 8) 后端主服务：比标任务状态机（`parsing→parsed→(awaitingClauses)→comparing→analyzing→done`，异常态 `failed/partial`）、文档上传与 S3 存储、MinerU IR 包接收/校验/落库、调用 Python 算法服务产出确定性证据、调用 LLM 做条款提取/响应判定/指标抽取、报告 JSON 组装与 Word/PDF 异步导出。API 逐字符合设计 spec §6 与《ABP接口响应格式标准》。
+**Goal:** 为「AI 投标-比标」模块交付 ABP Framework (.NET 8) 后端主服务：比标任务状态机（`parsing→parsed→(awaitingClauses)→comparing→analyzing→done`，异常态 `failed/partial`）、文档上传与 S3 存储、AnGIneer 解析产物（`doc_blocks_graph.jsonl` + `doc_blocks_graph_meta.json` + `content.md` + `images/`）接收、**按 v2 消费要求映射为内部适配 IR**、校验与落库、调用 Python 算法服务产出确定性证据、调用 LLM 做条款提取/响应判定/指标抽取、报告 JSON 组装与 Word/PDF 异步导出。API 逐字符合设计 spec §6 与《ABP接口响应格式标准》；IR 字段语义遵循 `docs/superpowers/plans/dredgeai-consume-angineer-requirements.md`（2026-08-07 v2，下称 v2 文档）。
 
-**Architecture:** 单一 ABP 分层解决方案 `DredgeAI.BidCompare`（Domain.Shared / Domain / Application.Contracts / Application / EntityFrameworkCore / HttpApi / HttpApi.Host）。API 用**显式 Controller** 暴露 `/api/compare/*` 精确路由（AppService 标 `[RemoteService(false)]` 不走约定式路由）。异步阶段（解析/比对/AI 分析/导出）全部走 ABP Background Jobs，前端轮询任务状态。外部依赖（MinerU、算法服务、LLM、S3、PDF 转换）全部接口化，实现在 HttpApi.Host，测试全部用 Fake。
+**Architecture:** 单一 ABP 分层解决方案 `DredgeAI.BidCompare`（Domain.Shared / Domain / Application.Contracts / Application / EntityFrameworkCore / HttpApi / HttpApi.Host）。API 用**显式 Controller** 暴露 `/api/compare/*` 精确路由（AppService 标 `[RemoteService(false)]` 不走约定式路由）。异步阶段（解析/比对/AI 分析/导出）全部走 ABP Background Jobs，前端轮询任务状态。外部依赖（AnGIneer、算法服务、LLM、S3、PDF 转换）全部接口化，实现在 HttpApi.Host，测试全部用 Fake。
 
 **Tech Stack:** .NET 8 · ABP Framework 8.x（`abp new -t app -u none`）· EF Core 8 + PostgreSQL（Npgsql）· ABP Background Jobs · AWSSDK.S3（MinIO）· HttpClient + OpenAI 兼容协议 · DocumentFormat.OpenXml · LibreOffice headless（soffice）· xUnit + Shouldly（ABP 测试基座，SQLite in-memory）。
 
@@ -12,16 +12,17 @@
 
 1. ABP Framework 8.x + .NET 8，新解决方案 `DredgeAI.BidCompare`，从 `abp new` 脚手架开始（不含 UI 的模板），EF Core + PostgreSQL，后台任务用 ABP Background Jobs（解析/分析/导出异步化）。
 2. 对象存储：S3 兼容（MinIO），统一用 **AWSSDK.S3**（不混用 MinIO SDK），存原始文件 / IR 包 / 导出文件。
-3. MinerU 对接：假设提供方是 HTTP API（提交文档 → 轮询 → 下载产物 zip 包），用 C# 接口 `IMinerUClient` 做 adapter 隔离，形态变化只改实现。
+3. 解析对接：提供方为 **AnGIneer**（v2 决策：直接消费其 `parsed/` 产物，不再要求 ir.json，也不做薄转化层）。假设 AnGIneer 提供 HTTP API（提交文档 → 轮询 → 下载产物 zip 包：`doc_blocks_graph.jsonl` + `doc_blocks_graph_meta.json` + `content.md` + `images/`），用 C# 接口 `IAnGineerClient` 做 adapter 隔离，形态变化只改实现；产物由 `AnGineerIrMapper` 按 v2 §2/§3 映射为内部适配 IR 后校验、落库。
 4. LLM：OpenAI 兼容协议（HttpClient + 可配置 endpoint/model/key），抽象 `ILlmGateway`。
-5. 算法服务：独立 Python 服务（不在本计划范围），本服务通过 HttpClient 调 `POST /analyze/similarity|pricing|metadata`，请求为多份 IR，响应为 Evidence 数组；Evidence 字段名见 spec §6.1，逐字遵守。
+5. 算法服务：独立 Python 服务（不在本计划范围），本服务通过 HttpClient 调 `POST /analyze/similarity|pricing|metadata`，请求为多份**内部适配 IR**（bbox 0~1 归一化、blockId=block_uid、source/confidence nullable），响应为 Evidence 数组；Evidence 字段名见 spec §6.1，逐字遵守。
 6. 报告导出：Word 用 OpenXML SDK 基于 docx 模板填充；PDF 用 LibreOffice headless（`soffice --convert-to pdf`）转换；导出异步（Background Job + 轮询下载链接）。
-7. 测试：xUnit + Shouldly（ABP 测试基座），TDD；外部依赖（MinerU/LLM/算法服务/S3/PDF 转换）全部用接口 + fake。
-8. 分期：P1 = 脚手架、任务与文档管理、IR 接收与存储、MinerU adapter、调算法服务、证据持久化与查询 API、相似度矩阵 API；P2 = 条款库 CRUD、条款提取/确认快照、LLM 响应判定与指标抽取、报告 JSON 组装、Word/PDF 导出。
+7. 测试：xUnit + Shouldly（ABP 测试基座），TDD；外部依赖（AnGIneer/LLM/算法服务/S3/PDF 转换）全部用接口 + fake。
+8. 分期：P1 = 脚手架、任务与文档管理、IR 接收与存储、AnGIneer adapter、调算法服务、证据持久化与查询 API、相似度矩阵 API；P2 = 条款库 CRUD、条款提取/确认快照、LLM 响应判定与指标抽取、报告 JSON 组装、Word/PDF 导出。
 
 **契约裁决（spec 与 ABP 标准冲突处的统一口径，全计划一致执行）:**
 
 - **字段名逐字遵守 spec §6.1**（`createdAt`、`tenderDocId`、`clauseSnapshot`、`docIds`、`aiGenerated`、`blockIds` 等）。因此 `CompareTaskDto`/`EvidenceDto` 等继承 `EntityDto<Guid>` 并显式声明 `CreatedAt`，**不**继承 `AuditedEntityDto`（避免 `creationTime` 与 `createdAt` 并存）。
+- **IR 形态按 2026-08-07 v2 文档执行**（`docs/superpowers/plans/dredgeai-consume-angineer-requirements.md`，取代 spec §4 的 ir.json 交付契约）：DredgeAI 直接消费 AnGIneer `doc_blocks_graph` 产物；后端在解析阶段经 `AnGineerIrMapper` 映射出一份**内部适配 IR**（字段名 `blockId/pageIdx/bbox/type/text/textLevel/source/confidence/table.html/imgPath/outline/meta/pages`，bbox 0~1 归一化、`blockId`=block_uid、`source/confidence` nullable），存为 `compare/{taskId}/{docId}/ir.json`（内部产物，非跨系统交付物），供算法服务请求与前端 `GET /ir/{docId}` 使用；`IrValidator` 校验该内部形态。
 - **枚举按《ABP接口响应格式标准》以整型序列化**（spec §6.1 中的 `'similarity'|...` 字符串联合类型仅表语义）。Task 1 会在 Host 中移除 `JsonStringEnumConverter` 以保证 int 输出。
 - **JSON 快照字段（ClauseSnapshotJson / ReportJson / DocIdsJson / LocationsJson / MetricsJson）以 text 列存储**，不使用 jsonb——测试库为 SQLite in-memory，且原型期无 JSON 内查询需求；后续如需 JSONB 查询再单独迁移。
 - **spec §6 未列出但流程必需的补充路由**（在对应 Task 中实现，自查表标注「补充」）：
@@ -42,7 +43,7 @@ backend/DredgeAI.BidCompare/
 │   ├── DredgeAI.BidCompare.Application/          # AppService、Background Jobs、ReportBuilder
 │   ├── DredgeAI.BidCompare.EntityFrameworkCore/  # DbContext、映射、迁移
 │   ├── DredgeAI.BidCompare.HttpApi/              # 显式 Controller（精确路由）
-│   ├── DredgeAI.BidCompare.HttpApi.Host/         # 宿主 + S3/MinerU/Algo/LLM/OpenXML/LibreOffice 实现
+│   ├── DredgeAI.BidCompare.HttpApi.Host/         # 宿主 + S3/AnGineer/Algo/LLM/OpenXML/LibreOffice 实现
 │   └── DredgeAI.BidCompare.DbMigrator/           # 模板自带
 └── test/
     ├── DredgeAI.BidCompare.TestBase/             # 测试基座 + 全部 Fake
@@ -211,7 +212,7 @@ Comparing/Analyzing 阶段算法服务不可用 ──▶ Failed（原因入 Fai
       public const string DocumentNotFound = Namespace + "DocumentNotFound";
       public const string IrNotReady = Namespace + "IrNotReady";
       public const string IrValidationFailed = Namespace + "IrValidationFailed";
-      public const string MinerUParseFailed = Namespace + "MinerUParseFailed";
+      public const string AnGineerParseFailed = Namespace + "AnGineerParseFailed";
       public const string NoTenderDocument = Namespace + "NoTenderDocument";
       public const string ClausesNotLocked = Namespace + "ClausesNotLocked";
       public const string ReportNotReady = Namespace + "ReportNotReady";
@@ -653,7 +654,7 @@ Comparing/Analyzing 阶段算法服务不可用 ──▶ Failed（原因入 Fai
 
       public long FileSize { get; private set; }
 
-      /// <summary>原始文件对象存储 key：compare/{taskId}/{docId}/origin.{ext}（spec §4.1）。</summary>
+      /// <summary>原始文件对象存储 key：compare/{taskId}/{docId}/origin.{ext}。</summary>
       public string OriginStorageKey { get; private set; } = default!;
 
       public DocumentParseStatus ParseStatus { get; private set; }
@@ -661,15 +662,15 @@ Comparing/Analyzing 阶段算法服务不可用 ──▶ Failed（原因入 Fai
       /// <summary>解析失败原因（spec §9 失败文档标注原因）。</summary>
       public string? ParseError { get; private set; }
 
-      /// <summary>ir.json 对象存储 key：compare/{taskId}/{docId}/ir.json。</summary>
+      /// <summary>内部适配 IR 对象存储 key：compare/{taskId}/{docId}/ir.json（由 AnGIneer doc_blocks_graph 按 v2 映射生成，非跨系统交付物）。</summary>
       public string? IrStorageKey { get; private set; }
 
-      /// <summary>doc.md 对象存储 key：compare/{taskId}/{docId}/doc.md。</summary>
+      /// <summary>content.md 对象存储 key：compare/{taskId}/{docId}/content.md（AnGIneer 阅读流 Markdown，LLM 语义层用）。</summary>
       public string? DocMdStorageKey { get; private set; }
 
       public int? PageCount { get; private set; }
 
-      /// <summary>OCR 低置信（source=ocr 且 confidence&lt;0.5）块占比，spec §4.5 概览提示用。</summary>
+      /// <summary>OCR 低置信（source=ocr 且 confidence&lt;0.5）块占比，spec §4.5 概览提示用；source/confidence 缺失（v2 降级期）时记 0。</summary>
       public double? OcrLowConfidenceRatio { get; private set; }
 
       protected CompareDocument()
@@ -1305,8 +1306,9 @@ Comparing/Analyzing 阶段算法服务不可用 ──▶ Failed（原因入 Fai
   /// <summary>
   /// 对象存储抽象（原始文件 / IR 包 / 导出文件）。
   /// 生产实现：S3 兼容（MinIO）AWSSDK.S3；测试实现：InMemoryFileStorage。
-  /// key 约定：compare/{taskId}/{docId}/origin.{ext}、compare/{taskId}/{docId}/ir.json、
-  /// compare/{taskId}/{docId}/doc.md、compare/{taskId}/{docId}/images/...、compare/{taskId}/exports/{jobId}.{ext}
+  /// key 约定：compare/{taskId}/{docId}/origin.{ext}、compare/{taskId}/{docId}/ir.json（内部适配 IR）、
+  /// compare/{taskId}/{docId}/content.md、compare/{taskId}/{docId}/images/...、
+  /// compare/{taskId}/{docId}/raw/（AnGIneer 原始产物留档）、compare/{taskId}/exports/{jobId}.{ext}
   /// </summary>
   public interface IFileStorage
   {
@@ -1801,7 +1803,7 @@ Comparing/Analyzing 阶段算法服务不可用 ──▶ Failed（原因入 Fai
       {
           context.Services.Replace(ServiceDescriptor.Singleton<IBackgroundJobManager, RecordingBackgroundJobManager>());
           context.Services.Replace(ServiceDescriptor.Singleton<IFileStorage, InMemoryFileStorage>());
-          // [Task8] IMinerUClient / [Task9] ICompareAlgoClient / [Task11] ILlmGateway / [Task14] IPdfConverter 的 Fake 在此追加
+          // [Task8] IAnGineerClient / [Task9] ICompareAlgoClient / [Task11] ILlmGateway / [Task14] IPdfConverter 的 Fake 在此追加
       }
   }
   ```
@@ -2347,12 +2349,13 @@ Comparing/Analyzing 阶段算法服务不可用 ──▶ Failed（原因入 Fai
 
 ---
 
-## Task 8 【P1】MinerU 对接：IR 校验、解析后台任务、IR 查询 API
+## Task 8 【P1】AnGIneer 对接：产物映射与内部适配 IR 校验、解析后台任务、IR 查询 API
 
-覆盖 spec §6 路由：`GET /api/compare/tasks/{id}/ir/{docId}`；实现 spec §4 交付契约（ir.json/doc.md/images/）与 §4.3 硬性要求校验、§4.5 OCR 置信度统计。
+覆盖 spec §6 路由：`GET /api/compare/tasks/{id}/ir/{docId}`；实现 v2 消费契约（`doc_blocks_graph.jsonl` + `doc_blocks_graph_meta.json` + `content.md` + `images/` → 内部适配 IR）与 v2 §2/§4/§5 硬性要求校验、spec §4.5 OCR 置信度统计（source/confidence 缺失时跳过）。
 
 **Files:**
-- Create: `src/DredgeAI.BidCompare.Domain/MinerU/IMinerUClient.cs`
+- Create: `src/DredgeAI.BidCompare.Domain/AnGineer/IAnGineerClient.cs`
+- Create: `src/DredgeAI.BidCompare.Domain/Documents/AnGineerIrMapper.cs`
 - Create: `src/DredgeAI.BidCompare.Domain/Documents/IIrValidator.cs`
 - Create: `src/DredgeAI.BidCompare.Domain/Documents/IrValidationResult.cs`
 - Create: `src/DredgeAI.BidCompare.Domain/Documents/IrValidator.cs`
@@ -2361,31 +2364,63 @@ Comparing/Analyzing 阶段算法服务不可用 ──▶ Failed（原因入 Fai
 - Modify: `src/DredgeAI.BidCompare.Application.Contracts/CompareTasks/ICompareTaskAppService.cs`（追加 `GetDocumentIrAsync`）
 - Modify: `src/DredgeAI.BidCompare.Application/CompareTasks/CompareTaskAppService.cs`（追加 `GetDocumentIrAsync`）
 - Modify: `src/DredgeAI.BidCompare.HttpApi/Controllers/CompareTaskController.cs`（追加 ir action）
-- Create: `src/DredgeAI.BidCompare.HttpApi.Host/MinerU/MinerUOptions.cs`
-- Create: `src/DredgeAI.BidCompare.HttpApi.Host/MinerU/HttpMinerUClient.cs`
+- Create: `src/DredgeAI.BidCompare.HttpApi.Host/AnGineer/AnGineerOptions.cs`
+- Create: `src/DredgeAI.BidCompare.HttpApi.Host/AnGineer/HttpAnGineerClient.cs`
 - Modify: `src/DredgeAI.BidCompare.HttpApi.Host/BidCompareHttpApiHostModule.cs`
 - Modify: `src/DredgeAI.BidCompare.HttpApi.Host/appsettings.json`
-- Test: `test/DredgeAI.BidCompare.TestBase/Fakes/FakeMinerUClient.cs`
+- Test: `test/DredgeAI.BidCompare.TestBase/Fakes/FakeAnGineerClient.cs`
 - Test: `test/DredgeAI.BidCompare.TestBase/Fakes/SampleIr.cs`
 - Modify: `test/DredgeAI.BidCompare.Application.Tests/BidCompareApplicationTestModule.cs`
 - Test: `test/DredgeAI.BidCompare.Domain.Tests/Documents/IrValidatorTests.cs`
+- Test: `test/DredgeAI.BidCompare.Domain.Tests/Documents/AnGineerIrMapperTests.cs`
 - Test: `test/DredgeAI.BidCompare.Application.Tests/BackgroundJobs/ParseDocumentJobTests.cs`
 
 **Steps:**
 
-- [ ] **Step 1: 写失败测试（IrValidator 覆盖 spec §4.3 硬性要求）**
+- [ ] **Step 1: 写失败测试（AnGineerIrMapper 字段/类型映射 + IrValidator 覆盖 v2 硬性要求）**
 
-  创建 `test/DredgeAI.BidCompare.TestBase/Fakes/SampleIr.cs`（合法样例，测试工程共用）：
+  创建 `test/DredgeAI.BidCompare.TestBase/Fakes/SampleIr.cs`（AnGIneer 原始产物样例 + 映射后的内部适配 IR 样例，测试工程共用）：
 
   ```csharp
   namespace DredgeAI.BidCompare;
 
-  /// <summary>符合 spec §4.2/§4.3 的最小合法 ir.json 样例。</summary>
+  /// <summary>
+  /// v2 消费要求的样例数据：ValidGraphJsonl / ValidMetaJson 为 AnGIneer 原始产物
+  /// （doc_blocks_graph.jsonl / doc_blocks_graph_meta.json），Valid 为 AnGineerIrMapper
+  /// 映射后的内部适配 IR（bbox 0~1 归一化、blockId=block_uid）。
+  /// </summary>
   public static class SampleIr
   {
+      /// <summary>AnGIneer doc_blocks_graph.jsonl 样例（3 行，块级字段见 v2 §1）。</summary>
+      public const string ValidGraphJsonl = """
+      {"block_uid":"b0001","block_type":"title","page_idx":0,"plain_text":"第三章 技术方案","derived_level":1,"bbox":[0.0672,0.0594,0.9244,0.095],"source":"native","confidence":1.0}
+      {"block_uid":"b0002","block_type":"table","page_idx":1,"plain_text":"报价表","derived_level":0,"bbox":[0.0672,0.1188,0.9244,0.2969],"table_html":"<table><tr><td>总价</td></tr></table>","image_path":"images/t1.jpg","source":"native","confidence":1.0}
+      {"block_uid":"b0003","block_type":"paragraph","page_idx":1,"plain_text":"盖章扫描文字","derived_level":0,"bbox":[0.0672,0.3563,0.9244,0.4157],"source":"ocr","confidence":0.3}
+      """;
+
+      /// <summary>AnGIneer doc_blocks_graph_meta.json 样例（outlines / docMeta / pages，v2 §1）。</summary>
+      public const string ValidMetaJson = """
+      {
+        "build_id": "demo-build",
+        "outlines": [
+          { "title": "第三章 技术方案", "level": 1, "block_uid": "b0001", "children": [] }
+        ],
+        "docMeta": {
+          "fileName": "标书A.pdf", "pageCount": 2,
+          "author": null, "creatorTool": "Microsoft Word",
+          "createdAt": null, "modifiedAt": null
+        },
+        "pages": [
+          { "page_idx": 0, "width": 1190, "height": 1684 },
+          { "page_idx": 1, "width": 1190, "height": 1684 }
+        ]
+      }
+      """;
+
+      /// <summary>映射后的内部适配 IR（docId 由调用方传入；页面 1190×1684 为真实尺寸，bbox 为 0~1 归一化值）。</summary>
       public const string Valid = """
       {
-        "schemaVersion": "1.0",
+        "schemaVersion": "2.0",
         "docId": "doc-a",
         "meta": {
           "fileName": "标书A.pdf",
@@ -2404,18 +2439,18 @@ Comparing/Analyzing 阶段算法服务不可用 ──▶ Failed（原因入 Fai
         ],
         "blocks": [
           {
-            "blockId": "b0001", "pageIdx": 0, "bbox": [80, 100, 1100, 160],
+            "blockId": "b0001", "pageIdx": 0, "bbox": [0.0672, 0.0594, 0.9244, 0.095],
             "type": "title", "text": "第三章 技术方案", "textLevel": 1,
             "source": "native", "confidence": 1.0
           },
           {
-            "blockId": "b0002", "pageIdx": 1, "bbox": [80, 200, 1100, 500],
+            "blockId": "b0002", "pageIdx": 1, "bbox": [0.0672, 0.1188, 0.9244, 0.2969],
             "type": "table", "text": "报价表", "textLevel": 0,
             "source": "native", "confidence": 1.0,
             "table": { "html": "<table><tr><td>总价</td></tr></table>", "imgPath": "images/t1.jpg" }
           },
           {
-            "blockId": "b0003", "pageIdx": 1, "bbox": [80, 600, 1100, 700],
+            "blockId": "b0003", "pageIdx": 1, "bbox": [0.0672, 0.3563, 0.9244, 0.4157],
             "type": "para", "text": "盖章扫描文字", "textLevel": 0,
             "source": "ocr", "confidence": 0.3
           }
@@ -2423,7 +2458,56 @@ Comparing/Analyzing 阶段算法服务不可用 ──▶ Failed（原因入 Fai
       }
       """;
 
-      public const string ValidDocMd = "# 第三章 技术方案\n\n本方案……\n";
+      public const string ValidContentMd = "# 第三章 技术方案\n\n本方案……\n";
+  }
+  ```
+
+  创建 `test/DredgeAI.BidCompare.Domain.Tests/Documents/AnGineerIrMapperTests.cs`：
+
+  ```csharp
+  using System.Text.Json.Nodes;
+  using DredgeAI.BidCompare.Documents;
+  using Shouldly;
+  using Xunit;
+
+  namespace DredgeAI.BidCompare.Documents;
+
+  public class AnGineerIrMapperTests
+  {
+      [Fact]
+      public void Map_Should_Produce_Internal_Ir_Per_V2_Field_Mapping()
+      {
+          var irJson = AnGineerIrMapper.MapToIrJson(SampleIr.ValidGraphJsonl, SampleIr.ValidMetaJson, "doc-a");
+
+          // 与期望的内部适配 IR 深度一致（v2 §2 字段映射 + §3 类型映射）
+          JsonNode.DeepEquals(JsonNode.Parse(irJson), JsonNode.Parse(SampleIr.Valid)).ShouldBeTrue();
+      }
+
+      [Fact]
+      public void Map_Should_Apply_Type_Mapping_And_Block_Uid()
+      {
+          var irJson = AnGineerIrMapper.MapToIrJson(SampleIr.ValidGraphJsonl, SampleIr.ValidMetaJson, "doc-a");
+          var node = JsonNode.Parse(irJson)!;
+
+          // paragraph → para（v2 §3）；blockId 直接采用 block_uid（v2 §2）
+          node["blocks"]![2]!["type"]!.GetValue<string>().ShouldBe("para");
+          node["blocks"]![0]!["blockId"]!.GetValue<string>().ShouldBe("b0001");
+          // 表格：table_html/image_path → table.html/table.imgPath
+          node["blocks"]![1]!["table"]!["html"]!.GetValue<string>().ShouldContain("<table>");
+          node["blocks"]![1]!["table"]!["imgPath"]!.GetValue<string>().ShouldBe("images/t1.jpg");
+      }
+
+      [Fact]
+      public void Map_Should_Tolerate_Missing_Source_And_Confidence()
+      {
+          // v2 §4：AnGIneer 补齐字段之前 source/confidence 缺省 → 映射为 null
+          var jsonl = "{\"block_uid\":\"b1\",\"block_type\":\"paragraph\",\"page_idx\":0,\"plain_text\":\"正文\",\"bbox\":[0.1,0.1,0.9,0.2]}";
+          var irJson = AnGineerIrMapper.MapToIrJson(jsonl, SampleIr.ValidMetaJson, "doc-a");
+          var node = JsonNode.Parse(irJson)!;
+
+          node["blocks"]![0]!["source"]!.GetValue<string?>().ShouldBeNull();
+          node["blocks"]![0]!["confidence"]!.GetValue<double?>().ShouldBeNull();
+      }
   }
   ```
 
@@ -2465,25 +2549,35 @@ Comparing/Analyzing 阶段算法服务不可用 ──▶ Failed（原因入 Fai
       }
 
       [Fact]
-      public void Normalized_Bbox_Should_Be_Rejected() // spec §4.3-1：不接受 0-1 归一化坐标
+      public void Pixel_Bbox_Should_Be_Rejected() // v2 §2：bbox 为 0~1 归一化坐标，像素坐标拒收
       {
-          var ir = SampleIr.Valid.Replace("[80, 100, 1100, 160]", "[0.06, 0.05, 0.92, 0.09]");
+          var ir = SampleIr.Valid.Replace("[0.0672, 0.0594, 0.9244, 0.095]", "[80, 100, 1100, 160]");
           var result = _validator.Validate(ir);
           result.IsValid.ShouldBeFalse();
           result.Errors.ShouldContain(e => e.Contains("归一化"));
       }
 
       [Fact]
-      public void Bbox_Out_Of_Page_Should_Fail()
+      public void Bbox_Above_One_Should_Fail()
       {
-          var ir = SampleIr.Valid.Replace("[80, 100, 1100, 160]", "[0, 0, 5000, 160]");
+          var ir = SampleIr.Valid.Replace("[0.0672, 0.0594, 0.9244, 0.095]", "[0, 0, 1.5, 0.095]");
           var result = _validator.Validate(ir);
           result.IsValid.ShouldBeFalse();
           result.Errors.ShouldContain(e => e.Contains("bbox"));
       }
 
       [Fact]
-      public void Duplicate_BlockId_Should_Fail() // spec §4.2：文档内唯一
+      public void Null_Source_And_Confidence_Should_Pass() // v2 §4：AnGIneer 补齐前允许缺省/null
+      {
+          var ir = SampleIr.Valid
+              .Replace(", \"source\": \"native\", \"confidence\": 1.0", "")
+              .Replace(", \"source\": \"ocr\", \"confidence\": 0.3", "");
+          var result = _validator.Validate(ir);
+          result.IsValid.ShouldBeTrue(string.Join("; ", result.Errors));
+      }
+
+      [Fact]
+      public void Duplicate_BlockId_Should_Fail() // v2 §2：文档内唯一（= block_uid）
       {
           var ir = SampleIr.Valid.Replace("\"blockId\": \"b0003\"", "\"blockId\": \"b0002\"");
           _validator.Validate(ir).IsValid.ShouldBeFalse();
@@ -2501,7 +2595,7 @@ Comparing/Analyzing 阶段算法服务不可用 ──▶ Failed（原因入 Fai
       }
 
       [Fact]
-      public void Confidence_Out_Of_Range_Should_Fail() // spec §4.2：0~1
+      public void Confidence_Out_Of_Range_Should_Fail() // v2 §4：存在时须在 0~1
       {
           var ir = SampleIr.Valid.Replace("\"confidence\": 1.0", "\"confidence\": 1.7");
           _validator.Validate(ir).IsValid.ShouldBeFalse();
@@ -2523,14 +2617,194 @@ Comparing/Analyzing 阶段算法服务不可用 ──▶ Failed（原因入 Fai
 
   预期：**编译失败**。
 
-- [ ] **Step 2: 实现 IIrValidator / IrValidationResult / IrValidator**
+- [ ] **Step 2: 实现 AnGineerIrMapper + IIrValidator / IrValidationResult / IrValidator**
+
+  `src/DredgeAI.BidCompare.Domain/Documents/AnGineerIrMapper.cs`：
+
+  ```csharp
+  using System.Collections.Generic;
+  using System.Linq;
+  using System.Text.Json;
+  using System.Text.Json.Serialization;
+
+  namespace DredgeAI.BidCompare.Documents;
+
+  /// <summary>
+  /// AnGIneer 产物 → 内部适配 IR 映射（v2 文档 §2 字段映射 + §3 类型映射）。
+  /// 输入 doc_blocks_graph.jsonl 与 doc_blocks_graph_meta.json 的文本内容；
+  /// 输出内部适配 IR JSON（blockId=block_uid、bbox 0~1 归一化直收、source/confidence 可空透传）。
+  /// 纯静态无依赖，Domain 层单测覆盖。
+  /// </summary>
+  public static class AnGineerIrMapper
+  {
+      // v2 §3 类型映射表；page_number 忽略（或归入 header/footer，此处按「忽略」处理）
+      private static readonly Dictionary<string, string> TypeMap = new()
+      {
+          ["title"] = "title",
+          ["paragraph"] = "para",
+          ["list"] = "list",
+          ["table"] = "table",
+          ["equation_interline"] = "equation",
+          ["image"] = "image",
+          ["figure"] = "image",
+          ["page_header"] = "header",
+          ["page_footer"] = "footer"
+      };
+
+      public static string MapToIrJson(string graphJsonl, string metaJson, string docId)
+      {
+          var meta = JsonSerializer.Deserialize<MetaDoc>(metaJson) ?? new MetaDoc();
+
+          var blocks = new List<Dictionary<string, object?>>();
+          foreach (var line in graphJsonl.Split('\n', System.StringSplitOptions.RemoveEmptyEntries | System.StringSplitOptions.TrimEntries))
+          {
+              var node = JsonSerializer.Deserialize<GraphNode>(line)
+                  ?? throw new JsonException("doc_blocks_graph.jsonl 存在空行");
+              var rawType = node.BlockType ?? "";
+              if (rawType == "page_number")
+              {
+                  continue; // v2 §3：忽略
+              }
+              var type = TypeMap.TryGetValue(rawType, out var mapped) ? mapped : "para";
+
+              var block = new Dictionary<string, object?>
+              {
+                  ["blockId"] = node.BlockUid,
+                  ["pageIdx"] = node.PageIdx,
+                  ["bbox"] = node.Bbox,
+                  ["type"] = type,
+                  ["text"] = ReadText(node, type),
+                  // v2 §2：标题块 textLevel=derived_level，非标题固定 0
+                  ["textLevel"] = type == "title" ? node.DerivedLevel ?? 1 : 0,
+                  ["source"] = node.Source,       // v2 §4：补齐前为 null，透传
+                  ["confidence"] = node.Confidence
+              };
+              if (type == "table")
+              {
+                  block["table"] = new Dictionary<string, object?>
+                  {
+                      ["html"] = node.TableHtml,
+                      ["imgPath"] = node.ImagePath
+                  };
+              }
+              if (type is "image" or "equation" && node.ImagePath != null)
+              {
+                  block["imgPath"] = node.ImagePath;
+              }
+              blocks.Add(block);
+          }
+
+          var ir = new Dictionary<string, object?>
+          {
+              ["schemaVersion"] = "2.0", // 内部适配 IR 版本（1.0 为已废止的 ir.json 交付契约）
+              ["docId"] = docId,
+              ["meta"] = meta.DocMeta ?? new Dictionary<string, object?>(),
+              ["pages"] = (meta.Pages ?? new List<MetaPage>()).Select(p => new Dictionary<string, object?>
+              {
+                  ["pageIdx"] = p.PageIdx,
+                  ["width"] = p.Width,
+                  ["height"] = p.Height
+              }).ToList(),
+              ["outline"] = MapOutline(meta.Outlines),
+              ["blocks"] = blocks
+          };
+          return JsonSerializer.Serialize(ir);
+      }
+
+      private static string? ReadText(GraphNode node, string type)
+      {
+          // v2 §2：公式块用 math_content / formula_body（LaTeX）
+          if (type == "equation")
+          {
+              return node.MathContent ?? node.FormulaBody ?? node.PlainText;
+          }
+          return node.PlainText;
+      }
+
+      /// <summary>v2 §5-6：嵌套 outlines 直收；扁平结构（parent_outline_id）转嵌套 children。</summary>
+      private static List<Dictionary<string, object?>> MapOutline(List<OutlineNode>? outlines)
+      {
+          if (outlines == null || outlines.Count == 0)
+          {
+              return new List<Dictionary<string, object?>>();
+          }
+          if (outlines.Any(o => o.Children is { Count: > 0 }))
+          {
+              return outlines.Select(ConvertOutlineNode).ToList();
+          }
+          if (outlines.All(o => o.ParentOutlineId == null))
+          {
+              return outlines.Select(ConvertOutlineNode).ToList();
+          }
+          var roots = outlines.Where(o => o.ParentOutlineId == null).ToList();
+          return roots.Select(r => BuildOutlineNode(r, outlines)).ToList();
+      }
+
+      private static Dictionary<string, object?> ConvertOutlineNode(OutlineNode node) => new()
+      {
+          ["title"] = node.Title,
+          ["level"] = node.Level,
+          ["blockId"] = node.BlockUid ?? node.BlockId,
+          ["children"] = (node.Children ?? new List<OutlineNode>()).Select(ConvertOutlineNode).ToList()
+      };
+
+      private static Dictionary<string, object?> BuildOutlineNode(OutlineNode node, List<OutlineNode> all) => new()
+      {
+          ["title"] = node.Title,
+          ["level"] = node.Level,
+          ["blockId"] = node.BlockUid ?? node.BlockId,
+          ["children"] = all.Where(o => o.ParentOutlineId == node.OutlineId).Select(o => BuildOutlineNode(o, all)).ToList()
+      };
+
+      private class GraphNode
+      {
+          [JsonPropertyName("block_uid")] public string? BlockUid { get; set; }
+          [JsonPropertyName("block_type")] public string? BlockType { get; set; }
+          [JsonPropertyName("page_idx")] public int PageIdx { get; set; }
+          [JsonPropertyName("plain_text")] public string? PlainText { get; set; }
+          [JsonPropertyName("derived_level")] public int? DerivedLevel { get; set; }
+          [JsonPropertyName("bbox")] public double[]? Bbox { get; set; }
+          [JsonPropertyName("table_html")] public string? TableHtml { get; set; }
+          [JsonPropertyName("math_content")] public string? MathContent { get; set; }
+          [JsonPropertyName("formula_body")] public string? FormulaBody { get; set; }
+          [JsonPropertyName("image_path")] public string? ImagePath { get; set; }
+          [JsonPropertyName("source")] public string? Source { get; set; }
+          [JsonPropertyName("confidence")] public double? Confidence { get; set; }
+      }
+
+      private class OutlineNode
+      {
+          [JsonPropertyName("title")] public string Title { get; set; } = "";
+          [JsonPropertyName("level")] public int Level { get; set; }
+          [JsonPropertyName("block_uid")] public string? BlockUid { get; set; }
+          [JsonPropertyName("blockId")] public string? BlockId { get; set; }
+          [JsonPropertyName("outline_id")] public string? OutlineId { get; set; }
+          [JsonPropertyName("parent_outline_id")] public string? ParentOutlineId { get; set; }
+          [JsonPropertyName("children")] public List<OutlineNode>? Children { get; set; }
+      }
+
+      private class MetaDoc
+      {
+          [JsonPropertyName("outlines")] public List<OutlineNode>? Outlines { get; set; }
+          [JsonPropertyName("docMeta")] public Dictionary<string, object?>? DocMeta { get; set; }
+          [JsonPropertyName("pages")] public List<MetaPage>? Pages { get; set; }
+      }
+
+      private class MetaPage
+      {
+          [JsonPropertyName("page_idx")] public int PageIdx { get; set; }
+          [JsonPropertyName("width")] public double Width { get; set; }
+          [JsonPropertyName("height")] public double Height { get; set; }
+      }
+  }
+  ```
 
   `src/DredgeAI.BidCompare.Domain/Documents/IIrValidator.cs`：
 
   ```csharp
   namespace DredgeAI.BidCompare.Documents;
 
-  /// <summary>IR（ir.json）规范化校验（spec §10 测试策略：不合格即拒收并报具体原因）。</summary>
+  /// <summary>内部适配 IR 规范化校验（v2 文档 §2/§4/§5；spec §10 测试策略：不合格即拒收并报具体原因）。</summary>
   public interface IIrValidator
   {
       IrValidationResult Validate(string irJson);
@@ -2570,15 +2844,16 @@ Comparing/Analyzing 阶段算法服务不可用 ──▶ Failed（原因入 Fai
   namespace DredgeAI.BidCompare.Documents;
 
   /// <summary>
-  /// spec §4.3 硬性要求校验：
-  /// 1) bbox 必须为页面实际像素坐标（拒绝 0-1 / 0-1000 归一化）且不越界；
-  /// 2) 每块必须带 source 与 confidence（0~1）；
-  /// 3) blockId 文档内唯一；
+  /// 内部适配 IR 校验（v2 文档 §2/§4/§5 硬性要求，取代 spec §4.3）：
+  /// 1) bbox 必须为 0~1 归一化坐标（拒绝像素坐标/负值/倒置）；
+  /// 2) source/confidence 允许缺省（v2 §4 降级期）；存在时 source∈native|ocr、confidence∈[0,1]、native 恒 1.0；
+  /// 3) blockId 文档内唯一（= AnGIneer block_uid）；
   /// 4) table 块必须同时给 html 与整表截图 imgPath；
-  /// 另校验 schemaVersion/docId/meta/pages 必填与页面尺寸。
+  /// 另校验 schemaVersion/docId/meta/pages 必填与页面真实尺寸。
   /// </summary>
   public class IrValidator : IIrValidator, ITransientDependency
   {
+      // seal 为保留类型（spec §4.3.5）：AnGIneer 当前不产出（v2 §3 映射表无此项）
       private static readonly HashSet<string> BlockTypes = new()
       {
           "title", "para", "table", "list", "image", "equation", "seal", "header", "footer"
@@ -2594,7 +2869,7 @@ Comparing/Analyzing 阶段算法服务不可用 ──▶ Failed（原因入 Fai
           }
           catch (JsonException ex)
           {
-              return new IrValidationResult(new[] { $"ir.json 不是合法 JSON：{ex.Message}" });
+              return new IrValidationResult(new[] { $"内部适配 IR 不是合法 JSON：{ex.Message}" });
           }
 
           using (document)
@@ -2602,7 +2877,7 @@ Comparing/Analyzing 阶段算法服务不可用 ──▶ Failed（原因入 Fai
               var root = document.RootElement;
               if (root.ValueKind != JsonValueKind.Object)
               {
-                  return new IrValidationResult(new[] { "ir.json 根节点必须是对象" });
+                  return new IrValidationResult(new[] { "内部适配 IR 根节点必须是对象" });
               }
 
               if (!TryGetNonEmptyString(root, "schemaVersion", out _))
@@ -2614,7 +2889,6 @@ Comparing/Analyzing 阶段算法服务不可用 ──▶ Failed（原因入 Fai
                   errors.Add("缺少必填字段 docId");
               }
 
-              var pageSizes = new Dictionary<int, (double Width, double Height)>();
               if (!root.TryGetProperty("pages", out var pages) || pages.ValueKind != JsonValueKind.Array)
               {
                   errors.Add("缺少必填字段 pages（数组）");
@@ -2632,9 +2906,8 @@ Comparing/Analyzing 阶段算法服务不可用 ──▶ Failed（原因入 Fai
                       var height = GetDouble(page, "height");
                       if (width <= 0 || height <= 0)
                       {
-                          errors.Add($"pages[{idx.GetInt32()}] width/height 必须为正数（页面实际像素尺寸）");
+                          errors.Add($"pages[{idx.GetInt32()}] width/height 必须为正数（页面真实尺寸，v2 §1 meta pages）");
                       }
-                      pageSizes[idx.GetInt32()] = (width, height);
                   }
               }
 
@@ -2656,7 +2929,7 @@ Comparing/Analyzing 阶段算法服务不可用 ──▶ Failed（原因入 Fai
                   var seenBlockIds = new HashSet<string>();
                   foreach (var block in blocks.EnumerateArray())
                   {
-                      ValidateBlock(block, pageSizes, seenBlockIds, errors);
+                      ValidateBlock(block, seenBlockIds, errors);
                   }
               }
           }
@@ -2664,7 +2937,7 @@ Comparing/Analyzing 阶段算法服务不可用 ──▶ Failed（原因入 Fai
           return new IrValidationResult(errors);
       }
 
-      /// <summary>spec §4.5：source=ocr 且 confidence&lt;0.5 的块占比。</summary>
+      /// <summary>spec §4.5：source=ocr 且 confidence&lt;0.5 的块占比。v2 §4：source/confidence 缺失的块不参与统计；全部缺失时返回 0（提示降级关闭）。</summary>
       public static double CalculateOcrLowConfidenceRatio(JsonElement root)
       {
           if (!root.TryGetProperty("blocks", out var blocks) || blocks.ValueKind != JsonValueKind.Array)
@@ -2676,10 +2949,14 @@ Comparing/Analyzing 阶段算法服务不可用 ──▶ Failed（原因入 Fai
           var lowConfidence = 0;
           foreach (var block in blocks.EnumerateArray())
           {
-              total++;
               var source = block.TryGetProperty("source", out var s) && s.ValueKind == JsonValueKind.String
                   ? s.GetString() : null;
               var confidence = GetDouble(block, "confidence");
+              if (source == null || confidence < 0)
+              {
+                  continue; // v2 §4：缺省块不参与（GetDouble 缺省约定返回 -1）
+              }
+              total++;
               if (source == "ocr" && confidence < 0.5)
               {
                   lowConfidence++;
@@ -2690,7 +2967,6 @@ Comparing/Analyzing 阶段算法服务不可用 ──▶ Failed（原因入 Fai
 
       private static void ValidateBlock(
           JsonElement block,
-          Dictionary<int, (double Width, double Height)> pageSizes,
           HashSet<string> seenBlockIds,
           List<string> errors)
       {
@@ -2725,22 +3001,10 @@ Comparing/Analyzing 阶段算法服务不可用 ──▶ Failed（原因入 Fai
               {
                   errors.Add($"{label} bbox 坐标非法（须 x1>x0 且 y1>y0，非负）");
               }
-              else if (pageIdxEl.ValueKind == JsonValueKind.Number &&
-                       pageSizes.TryGetValue(pageIdxEl.GetInt32(), out var size))
+              else if (values.Any(v => v > 1.0))
               {
-                  // spec §4.3-1：页面尺寸远大于坐标上界 → 判定为归一化坐标，拒收
-                  if (size.Width > 100 && values[2] <= 1.0)
-                  {
-                      errors.Add($"{label} bbox 疑似 0-1 归一化坐标，必须为页面实际像素坐标");
-                  }
-                  else if (size.Width > 2000 && values[2] <= 1000 && values[0] >= 0 && size.Width / values[2] > 10)
-                  {
-                      errors.Add($"{label} bbox 疑似 0-1000 归一化坐标，必须为页面实际像素坐标");
-                  }
-                  else if (values[2] > size.Width * 1.05 || values[3] > size.Height * 1.05)
-                  {
-                      errors.Add($"{label} bbox 超出页面 {pageIdxEl.GetInt32()} 像素范围（{size.Width}x{size.Height}）");
-                  }
+                  // v2 §2：bbox 为 0~1 归一化坐标，超出区间即疑似像素坐标，拒收
+                  errors.Add($"{label} bbox 超出 0~1 归一化区间（疑似像素坐标，v2 不要求像素坐标）");
               }
           }
 
@@ -2749,15 +3013,25 @@ Comparing/Analyzing 阶段算法服务不可用 ──▶ Failed（原因入 Fai
               errors.Add($"{label} type 非法（须为 {string.Join("|", BlockTypes)}）");
           }
 
-          if (!TryGetNonEmptyString(block, "source", out var source) || (source != "native" && source != "ocr"))
+          // v2 §4：source/confidence 允许缺省（AnGIneer 补齐前）；存在时才校验取值
+          if (block.TryGetProperty("source", out var sourceEl) && sourceEl.ValueKind != JsonValueKind.Null)
           {
-              errors.Add($"{label} source 必须为 native|ocr（spec §4.3-2）");
+              if (!TryGetNonEmptyString(block, "source", out var source) || (source != "native" && source != "ocr"))
+              {
+                  errors.Add($"{label} source 必须为 native|ocr（v2 §4）");
+              }
+              else if (source == "native" &&
+                       block.TryGetProperty("confidence", out var confEl) && confEl.ValueKind == JsonValueKind.Number &&
+                       confEl.GetDouble() != 1.0)
+              {
+                  errors.Add($"{label} source=native 时 confidence 必须为 1.0（v2 §4）");
+              }
           }
 
           var confidence = GetDouble(block, "confidence");
-          if (confidence < 0 || confidence > 1)
+          if (confidence != -1 && (confidence < 0 || confidence > 1)) // GetDouble 缺省约定返回 -1
           {
-              errors.Add($"{label} confidence 必须在 0~1（spec §4.3-2）");
+              errors.Add($"{label} confidence 必须在 0~1（v2 §4）");
           }
 
           if (type == "table")
@@ -2807,9 +3081,9 @@ Comparing/Analyzing 阶段算法服务不可用 ──▶ Failed（原因入 Fai
 
   预期：9 passed。
 
-- [ ] **Step 4: 定义 IMinerUClient 与 FakeMinerUClient**
+- [ ] **Step 4: 定义 IAnGineerClient 与 FakeAnGineerClient**
 
-  创建 `src/DredgeAI.BidCompare.Domain/MinerU/IMinerUClient.cs`：
+  创建 `src/DredgeAI.BidCompare.Domain/AnGineer/IAnGineerClient.cs`：
 
   ```csharp
   using System.Collections.Generic;
@@ -2817,37 +3091,38 @@ Comparing/Analyzing 阶段算法服务不可用 ──▶ Failed（原因入 Fai
   using System.Threading;
   using System.Threading.Tasks;
 
-  namespace DredgeAI.BidCompare.MinerU;
+  namespace DredgeAI.BidCompare.AnGineer;
 
-  public enum MinerUJobState
+  public enum AnGineerJobState
   {
       Processing = 0,
       Succeeded = 1,
       Failed = 2
   }
 
-  /// <summary>MinerU 产物包（spec §4.1 交付物清单：ir.json + doc.md + images/）。</summary>
-  public record MinerUPackage(
-      byte[] IrJson,
-      byte[]? DocMd,
+  /// <summary>AnGIneer 解析产物包（v2 §1 数据源：doc_blocks_graph.jsonl + doc_blocks_graph_meta.json + content.md + images/）。</summary>
+  public record AnGineerPackage(
+      byte[] GraphJsonl,
+      byte[] MetaJson,
+      byte[]? ContentMd,
       IReadOnlyDictionary<string, byte[]> Images);
 
   /// <summary>
-  /// MinerU 解析流水线 adapter（提交文档 → 轮询 → 下载产物包）。
+  /// AnGIneer 解析流水线 adapter（提交文档 → 轮询 → 下载产物包）。
   /// 提供方部署形态变化只改实现，契约不变（spec §2 非目标：不约束提供方内部流水线）。
   /// </summary>
-  public interface IMinerUClient
+  public interface IAnGineerClient
   {
       /// <summary>提交解析任务，返回提供方任务 id。</summary>
       Task<string> SubmitAsync(string fileName, Stream content, CancellationToken cancellationToken = default);
 
-      Task<MinerUJobState> GetStateAsync(string jobId, CancellationToken cancellationToken = default);
+      Task<AnGineerJobState> GetStateAsync(string jobId, CancellationToken cancellationToken = default);
 
-      Task<MinerUPackage> DownloadPackageAsync(string jobId, CancellationToken cancellationToken = default);
+      Task<AnGineerPackage> DownloadPackageAsync(string jobId, CancellationToken cancellationToken = default);
   }
   ```
 
-  创建 `test/DredgeAI.BidCompare.TestBase/Fakes/FakeMinerUClient.cs`：
+  创建 `test/DredgeAI.BidCompare.TestBase/Fakes/FakeAnGineerClient.cs`：
 
   ```csharp
   using System.Collections.Generic;
@@ -2855,42 +3130,43 @@ Comparing/Analyzing 阶段算法服务不可用 ──▶ Failed（原因入 Fai
   using System.Threading;
   using System.Threading.Tasks;
 
-  namespace DredgeAI.BidCompare.MinerU;
+  namespace DredgeAI.BidCompare.AnGineer;
 
   /// <summary>
   /// 可编程 Fake：默认立即成功并返回 SampleIr 产物包；
   /// 设置 StateSequence 可模拟轮询过程，设置 FailWith 可模拟解析失败。
   /// </summary>
-  public class FakeMinerUClient : IMinerUClient
+  public class FakeAnGineerClient : IAnGineerClient
   {
-      public Queue<MinerUJobState>? StateSequence { get; set; }
+      public Queue<AnGineerJobState>? StateSequence { get; set; }
 
       public string? FailWith { get; set; }
 
-      public MinerUPackage Package { get; set; } = new(
-          IrJson: System.Text.Encoding.UTF8.GetBytes(SampleIr.Valid),
-          DocMd: System.Text.Encoding.UTF8.GetBytes(SampleIr.ValidDocMd),
+      public AnGineerPackage Package { get; set; } = new(
+          GraphJsonl: System.Text.Encoding.UTF8.GetBytes(SampleIr.ValidGraphJsonl),
+          MetaJson: System.Text.Encoding.UTF8.GetBytes(SampleIr.ValidMetaJson),
+          ContentMd: System.Text.Encoding.UTF8.GetBytes(SampleIr.ValidContentMd),
           Images: new Dictionary<string, byte[]> { ["images/t1.jpg"] = new byte[] { 0xFF, 0xD8 } });
 
       public Task<string> SubmitAsync(string fileName, Stream content, CancellationToken cancellationToken = default)
       {
-          return Task.FromResult("fake-mineru-job-1");
+          return Task.FromResult("fake-angineer-job-1");
       }
 
-      public Task<MinerUJobState> GetStateAsync(string jobId, CancellationToken cancellationToken = default)
+      public Task<AnGineerJobState> GetStateAsync(string jobId, CancellationToken cancellationToken = default)
       {
           if (FailWith != null)
           {
-              return Task.FromResult(MinerUJobState.Failed);
+              return Task.FromResult(AnGineerJobState.Failed);
           }
           if (StateSequence is { Count: > 0 })
           {
               return Task.FromResult(StateSequence.Dequeue());
           }
-          return Task.FromResult(MinerUJobState.Succeeded);
+          return Task.FromResult(AnGineerJobState.Succeeded);
       }
 
-      public Task<MinerUPackage> DownloadPackageAsync(string jobId, CancellationToken cancellationToken = default)
+      public Task<AnGineerPackage> DownloadPackageAsync(string jobId, CancellationToken cancellationToken = default)
       {
           return Task.FromResult(Package);
       }
@@ -2900,12 +3176,12 @@ Comparing/Analyzing 阶段算法服务不可用 ──▶ Failed（原因入 Fai
   在 `BidCompareApplicationTestModule.ConfigureServices` 标注处追加一行：
 
   ```csharp
-  context.Services.Replace(ServiceDescriptor.Singleton<IMinerUClient, FakeMinerUClient>());
+  context.Services.Replace(ServiceDescriptor.Singleton<IAnGineerClient, FakeAnGineerClient>());
   ```
 
-  （同时在文件顶部 `using` 区追加 `using DredgeAI.BidCompare.MinerU;`。）
+  （同时在文件顶部 `using` 区追加 `using DredgeAI.BidCompare.AnGineer;`。）
 
-- [ ] **Step 5: 创建 IR DTO（spec §4.2 字段名逐字遵守）**
+- [ ] **Step 5: 创建 IR DTO（内部适配 IR 形态，v2 §2 字段语义）**
 
   创建 `src/DredgeAI.BidCompare.Application.Contracts/Ir/DocumentIrDtos.cs`：
 
@@ -2915,7 +3191,7 @@ Comparing/Analyzing 阶段算法服务不可用 ──▶ Failed（原因入 Fai
 
   namespace DredgeAI.BidCompare.Ir;
 
-  /// <summary>spec §4.2 ir.json 结构（camelCase 字段名逐字对应，前端画 bbox 用）。</summary>
+  /// <summary>内部适配 IR 结构（camelCase 字段名；由 AnGineerIrMapper 按 v2 §2/§3 从 doc_blocks_graph 映射，前端画 bbox 用）。</summary>
   public class DocumentIrDto
   {
       public string SchemaVersion { get; set; } = default!;
@@ -2972,7 +3248,7 @@ Comparing/Analyzing 阶段算法服务不可用 ──▶ Failed（原因入 Fai
 
       public int PageIdx { get; set; }
 
-      /// <summary>页面实际像素坐标 [x0,y0,x1,y1]，左上角原点（spec §4.3-1）。</summary>
+      /// <summary>0~1 归一化坐标 [x0,y0,x1,y1]，左上角原点（v2 §2，前端 PDF_Viewer 直接还原）。</summary>
       public double[] Bbox { get; set; } = Array.Empty<double>();
 
       public string Type { get; set; } = default!;
@@ -2981,9 +3257,11 @@ Comparing/Analyzing 阶段算法服务不可用 ──▶ Failed（原因入 Fai
 
       public int TextLevel { get; set; }
 
-      public string Source { get; set; } = default!;
+      /// <summary>v2 §4：AnGIneer 补齐前允许 null（OCR 降权随之降级关闭）。</summary>
+      public string? Source { get; set; }
 
-      public double Confidence { get; set; }
+      /// <summary>v2 §4：允许 null；存在时 native 恒 1.0。</summary>
+      public double? Confidence { get; set; }
 
       public IrTableDto? Table { get; set; }
 
@@ -3010,7 +3288,7 @@ Comparing/Analyzing 阶段算法服务不可用 ──▶ Failed（原因入 Fai
   using System.Threading.Tasks;
   using DredgeAI.BidCompare.CompareTasks;
   using DredgeAI.BidCompare.Documents;
-  using DredgeAI.BidCompare.MinerU;
+  using DredgeAI.BidCompare.AnGineer;
   using DredgeAI.BidCompare.Storage;
   using Shouldly;
   using Volo.Abp.BackgroundJobs;
@@ -3023,14 +3301,14 @@ Comparing/Analyzing 阶段算法服务不可用 ──▶ Failed（原因入 Fai
       private readonly ICompareTaskAppService _appService;
       private readonly RecordingBackgroundJobManager _jobManager;
       private readonly InMemoryFileStorage _fileStorage;
-      private readonly FakeMinerUClient _minerUClient;
+      private readonly FakeAnGineerClient _anGineerClient;
 
       public ParseDocumentJobTests()
       {
           _appService = GetRequiredService<ICompareTaskAppService>();
           _jobManager = (RecordingBackgroundJobManager)GetRequiredService<IBackgroundJobManager>();
           _fileStorage = (InMemoryFileStorage)GetRequiredService<IFileStorage>();
-          _minerUClient = (FakeMinerUClient)GetRequiredService<IMinerUClient>();
+          _anGineerClient = (FakeAnGineerClient)GetRequiredService<IAnGineerClient>();
       }
 
       private async Task<(CompareTaskDto Task, CompareDocumentDto Doc)> CreateTaskWithBidDocAsync(
@@ -3058,18 +3336,19 @@ Comparing/Analyzing 阶段算法服务不可用 ──▶ Failed（原因入 Fai
 
           var detail = await _appService.GetAsync(task.Id);
           detail.Status.ShouldBe(CompareTaskStatus.Comparing); // 无招标文件 → 直接进入比对
-          _fileStorage.Objects.Keys.ShouldContain($"compare/{task.Id}/{doc.Id}/ir.json");
-          _fileStorage.Objects.Keys.ShouldContain($"compare/{task.Id}/{doc.Id}/doc.md");
+          _fileStorage.Objects.Keys.ShouldContain($"compare/{task.Id}/{doc.Id}/ir.json"); // 内部适配 IR（v2 映射后）
+          _fileStorage.Objects.Keys.ShouldContain($"compare/{task.Id}/{doc.Id}/content.md");
           _fileStorage.Objects.Keys.ShouldContain($"compare/{task.Id}/{doc.Id}/images/t1.jpg");
+          _fileStorage.Objects.Keys.ShouldContain($"compare/{task.Id}/{doc.Id}/raw/doc_blocks_graph.jsonl"); // AnGIneer 原始产物留档
           _jobManager.LastEnqueued<CompareDocumentsArgs>().ShouldNotBeNull();
 
-          // IR API 可读取（spec §6 GET ir）
+          // IR API 可读取（spec §6 GET ir；内容为内部适配形态）
           var ir = await _appService.GetDocumentIrAsync(task.Id, doc.Id);
-          ir.DocId.ShouldBe("doc-a");
+          ir.DocId.ShouldBe(doc.Id.ToString()); // 内部适配 IR 的 docId 为本系统文档 id
           ir.Meta.FileName.ShouldBe("标书A.pdf");
           ir.Blocks.Count.ShouldBe(3);
           ir.Blocks[1].Table.ShouldNotBeNull();
-          ir.Blocks[0].Bbox.ShouldBe(new double[] { 80, 100, 1100, 160 });
+          ir.Blocks[0].Bbox.ShouldBe(new double[] { 0.0672, 0.0594, 0.9244, 0.095 }); // 0~1 归一化（v2 §2）
       }
 
       [Fact]
@@ -3089,9 +3368,9 @@ Comparing/Analyzing 阶段算法服务不可用 ──▶ Failed（原因入 Fai
       }
 
       [Fact]
-      public async Task MinerU_Failure_Should_Mark_Document_Failed_And_Task_Failed_When_All_Fail()
+      public async Task AnGIneer_Failure_Should_Mark_Document_Failed_And_Task_Failed_When_All_Fail()
       {
-          _minerUClient.FailWith = "服务不可用";
+          _anGineerClient.FailWith = "服务不可用";
           var (task, doc) = await CreateTaskWithBidDocAsync();
 
           await RunParseJobAsync(task.Id, doc.Id);
@@ -3117,7 +3396,7 @@ Comparing/Analyzing 阶段算法服务不可用 ──▶ Failed（原因入 Fai
 
           await RunParseJobAsync(task.Id, good.Id);
 
-          _minerUClient.FailWith = "OCR 崩溃";
+          _anGineerClient.FailWith = "OCR 崩溃";
           await RunParseJobAsync(task.Id, bad.Id);
 
           var detail = await _appService.GetAsync(task.Id);
@@ -3128,9 +3407,10 @@ Comparing/Analyzing 阶段算法服务不可用 ──▶ Failed（原因入 Fai
       [Fact]
       public async Task Invalid_Ir_Should_Be_Rejected_With_Reason()
       {
-          _minerUClient.Package = _minerUClient.Package with
+          // 映射后块缺少 blockId（graph 行无 block_uid）→ 内部适配 IR 校验拒收
+          _anGineerClient.Package = _anGineerClient.Package with
           {
-              IrJson = Encoding.UTF8.GetBytes("""{"schemaVersion":"1.0"}""")
+              GraphJsonl = Encoding.UTF8.GetBytes("{\"block_type\":\"paragraph\",\"page_idx\":0,\"plain_text\":\"缺 id\",\"bbox\":[0.1,0.1,0.9,0.2]}")
           };
           var (task, doc) = await CreateTaskWithBidDocAsync();
 
@@ -3187,7 +3467,7 @@ Comparing/Analyzing 阶段算法服务不可用 ──▶ Failed（原因入 Fai
   using System.Threading.Tasks;
   using DredgeAI.BidCompare.CompareTasks;
   using DredgeAI.BidCompare.Documents;
-  using DredgeAI.BidCompare.MinerU;
+  using DredgeAI.BidCompare.AnGineer;
   using DredgeAI.BidCompare.Storage;
   using Microsoft.Extensions.Logging;
   using Microsoft.Extensions.Options;
@@ -3200,8 +3480,9 @@ Comparing/Analyzing 阶段算法服务不可用 ──▶ Failed（原因入 Fai
   namespace DredgeAI.BidCompare.BackgroundJobs;
 
   /// <summary>
-  /// 解析后台任务（spec §5 步骤2）：下载原始文件 → 提交 MinerU → 轮询 → 下载产物包 →
-  /// IR 校验（不合格拒收并报原因）→ 产物落对象存储 → 更新文档与任务状态。
+  /// 解析后台任务（spec §5 步骤2）：下载原始文件 → 提交 AnGIneer → 轮询 → 下载产物包 →
+  /// AnGineerIrMapper 映射为内部适配 IR（v2 §2/§3）→ IR 校验（不合格拒收并报原因）→
+  /// 产物落对象存储（原始产物留档 raw/ + ir.json + content.md + images/）→ 更新文档与任务状态。
   /// 失败策略（spec §9）：单份失败标记原因、任务降级 Partial，其余照常；全部失败 → Failed。
   /// </summary>
   public class ParseDocumentJob : AsyncBackgroundJob<ParseDocumentArgs>, ITransientDependency
@@ -3209,26 +3490,26 @@ Comparing/Analyzing 阶段算法服务不可用 ──▶ Failed（原因入 Fai
       private readonly IRepository<CompareDocument, Guid> _documentRepository;
       private readonly IRepository<CompareTask, Guid> _taskRepository;
       private readonly IFileStorage _fileStorage;
-      private readonly IMinerUClient _minerUClient;
+      private readonly IAnGineerClient _anGineerClient;
       private readonly IIrValidator _irValidator;
       private readonly IBackgroundJobManager _backgroundJobManager;
       private readonly IAsyncQueryableExecuter _asyncExecuter;
-      private readonly MinerUPollOptions _pollOptions;
+      private readonly AnGineerPollOptions _pollOptions;
 
       public ParseDocumentJob(
           IRepository<CompareDocument, Guid> documentRepository,
           IRepository<CompareTask, Guid> taskRepository,
           IFileStorage fileStorage,
-          IMinerUClient minerUClient,
+          IAnGineerClient anGineerClient,
           IIrValidator irValidator,
           IBackgroundJobManager backgroundJobManager,
           IAsyncQueryableExecuter asyncExecuter,
-          IOptions<MinerUPollOptions> pollOptions)
+          IOptions<AnGineerPollOptions> pollOptions)
       {
           _documentRepository = documentRepository;
           _taskRepository = taskRepository;
           _fileStorage = fileStorage;
-          _minerUClient = minerUClient;
+          _anGineerClient = anGineerClient;
           _irValidator = irValidator;
           _backgroundJobManager = backgroundJobManager;
           _asyncExecuter = asyncExecuter;
@@ -3251,18 +3532,32 @@ Comparing/Analyzing 阶段算法服务不可用 ──▶ Failed（原因入 Fai
               await _documentRepository.UpdateAsync(document, autoSave: true, cancellationToken: cancellationToken);
 
               await using var origin = await _fileStorage.GetAsync(document.OriginStorageKey, cancellationToken);
-              var minerUJobId = await _minerUClient.SubmitAsync(document.FileName, origin, cancellationToken);
+              var anGineerJobId = await _anGineerClient.SubmitAsync(document.FileName, origin, cancellationToken);
 
-              var state = await PollUntilFinishedAsync(minerUJobId, cancellationToken);
-              if (state == MinerUJobState.Failed)
+              var state = await PollUntilFinishedAsync(anGineerJobId, cancellationToken);
+              if (state == AnGineerJobState.Failed)
               {
-                  throw new BusinessException(BidCompareErrorCodes.MinerUParseFailed)
+                  throw new BusinessException(BidCompareErrorCodes.AnGineerParseFailed)
                       .WithData("fileName", document.FileName);
               }
 
-              var package = await _minerUClient.DownloadPackageAsync(minerUJobId, cancellationToken);
+              var package = await _anGineerClient.DownloadPackageAsync(anGineerJobId, cancellationToken);
 
-              var irJson = Encoding.UTF8.GetString(package.IrJson);
+              // v2：AnGIneer 产物（graph jsonl + meta）→ 内部适配 IR
+              string irJson;
+              try
+              {
+                  irJson = AnGineerIrMapper.MapToIrJson(
+                      Encoding.UTF8.GetString(package.GraphJsonl),
+                      Encoding.UTF8.GetString(package.MetaJson),
+                      document.Id.ToString());
+              }
+              catch (Exception ex) when (ex is JsonException or InvalidOperationException)
+              {
+                  throw new BusinessException(BidCompareErrorCodes.IrValidationFailed)
+                      .WithData("errors", $"AnGIneer 产物映射失败：{ex.Message}");
+              }
+
               var validation = _irValidator.Validate(irJson);
               if (!validation.IsValid)
               {
@@ -3271,14 +3566,19 @@ Comparing/Analyzing 阶段算法服务不可用 ──▶ Failed（原因入 Fai
               }
 
               var prefix = $"compare/{args.TaskId}/{args.DocumentId}";
-              var irKey = $"{prefix}/ir.json";
-              await _fileStorage.UploadAsync(irKey, new MemoryStream(package.IrJson), "application/json", cancellationToken);
+
+              // AnGIneer 原始产物留档（追溯/调试，v2 §1 数据源原样保存）
+              await _fileStorage.UploadAsync($"{prefix}/raw/doc_blocks_graph.jsonl", new MemoryStream(package.GraphJsonl), "application/x-ndjson", cancellationToken);
+              await _fileStorage.UploadAsync($"{prefix}/raw/doc_blocks_graph_meta.json", new MemoryStream(package.MetaJson), "application/json", cancellationToken);
+
+              var irKey = $"{prefix}/ir.json"; // 内部适配 IR（非跨系统交付物）
+              await _fileStorage.UploadAsync(irKey, new MemoryStream(Encoding.UTF8.GetBytes(irJson)), "application/json", cancellationToken);
 
               string? docMdKey = null;
-              if (package.DocMd != null)
+              if (package.ContentMd != null)
               {
-                  docMdKey = $"{prefix}/doc.md";
-                  await _fileStorage.UploadAsync(docMdKey, new MemoryStream(package.DocMd), "text/markdown", cancellationToken);
+                  docMdKey = $"{prefix}/content.md";
+                  await _fileStorage.UploadAsync(docMdKey, new MemoryStream(package.ContentMd), "text/markdown", cancellationToken);
               }
 
               foreach (var (path, bytes) in package.Images)
@@ -3305,19 +3605,19 @@ Comparing/Analyzing 阶段算法服务不可用 ──▶ Failed（原因入 Fai
           await AdvanceTaskStateAsync(task, cancellationToken);
       }
 
-      private async Task<MinerUJobState> PollUntilFinishedAsync(string minerUJobId, CancellationToken cancellationToken)
+      private async Task<AnGineerJobState> PollUntilFinishedAsync(string anGineerJobId, CancellationToken cancellationToken)
       {
           var deadline = DateTime.UtcNow + _pollOptions.Timeout;
           while (DateTime.UtcNow < deadline)
           {
-              var state = await _minerUClient.GetStateAsync(minerUJobId, cancellationToken);
-              if (state != MinerUJobState.Processing)
+              var state = await _anGineerClient.GetStateAsync(anGineerJobId, cancellationToken);
+              if (state != AnGineerJobState.Processing)
               {
                   return state;
               }
               await Task.Delay(_pollOptions.PollInterval, cancellationToken);
           }
-          throw new BusinessException(BidCompareErrorCodes.MinerUParseFailed)
+          throw new BusinessException(BidCompareErrorCodes.AnGineerParseFailed)
               .WithData("reason", "轮询超时");
       }
 
@@ -3339,7 +3639,7 @@ Comparing/Analyzing 阶段算法服务不可用 ──▶ Failed（原因入 Fai
 
           if (parsed.Count == 0)
           {
-              // spec §9：MinerU 不可用/全部失败 → 明确提示，不静默降级
+              // spec §9：AnGIneer 不可用/全部失败 → 明确提示，不静默降级
               task.MarkFailed("全部文档解析失败：" + string.Join("；", failed.Select(f => $"{f.FileName}: {f.ParseError}")));
               await _taskRepository.UpdateAsync(task, autoSave: true, cancellationToken: cancellationToken);
               return;
@@ -3371,14 +3671,14 @@ Comparing/Analyzing 阶段算法服务不可用 ──▶ Failed（原因入 Fai
   }
   ```
 
-  `src/DredgeAI.BidCompare.Application/BackgroundJobs/MinerUPollOptions.cs`（Application 层轮询参数，Host 配置节绑定；默认对测试友好）：
+  `src/DredgeAI.BidCompare.Application/BackgroundJobs/AnGineerPollOptions.cs`（Application 层轮询参数，Host 配置节绑定；默认对测试友好）：
 
   ```csharp
   using System;
 
   namespace DredgeAI.BidCompare.BackgroundJobs;
 
-  public class MinerUPollOptions
+  public class AnGineerPollOptions
   {
       public TimeSpan PollInterval { get; set; } = TimeSpan.FromSeconds(5);
 
@@ -3389,7 +3689,7 @@ Comparing/Analyzing 阶段算法服务不可用 ──▶ Failed（原因入 Fai
   在 `BidCompareHttpApiHostModule.ConfigureServices` 末尾追加：
 
   ```csharp
-  Configure<MinerUPollOptions>(context.Configuration.GetSection("MinerU"));
+  Configure<AnGineerPollOptions>(context.Configuration.GetSection("AnGIneer"));
   ```
 
   （`using DredgeAI.BidCompare.BackgroundJobs;` 一并追加。）
@@ -3435,23 +3735,23 @@ Comparing/Analyzing 阶段算法服务不可用 ──▶ Failed（原因入 Fai
       => _appService.GetDocumentIrAsync(id, docId);
   ```
 
-- [ ] **Step 9: 实现 HttpMinerUClient（生产 adapter）**
+- [ ] **Step 9: 实现 HttpAnGineerClient（生产 adapter）**
 
-  创建 `src/DredgeAI.BidCompare.HttpApi.Host/MinerU/MinerUOptions.cs`：
+  创建 `src/DredgeAI.BidCompare.HttpApi.Host/AnGineer/AnGineerOptions.cs`：
 
   ```csharp
-  namespace DredgeAI.BidCompare.MinerU;
+  namespace DredgeAI.BidCompare.AnGineer;
 
-  public class MinerUOptions
+  public class AnGineerOptions
   {
-      /// <summary>MinerU HTTP API 基地址，如 http://localhost:8800。</summary>
+      /// <summary>AnGIneer HTTP API 基地址，如 http://localhost:8800。</summary>
       public string BaseUrl { get; set; } = "http://localhost:8800";
 
       public string? ApiKey { get; set; }
   }
   ```
 
-  创建 `src/DredgeAI.BidCompare.HttpApi.Host/MinerU/HttpMinerUClient.cs`：
+  创建 `src/DredgeAI.BidCompare.HttpApi.Host/AnGineer/HttpAnGineerClient.cs`：
 
   ```csharp
   using System.Collections.Generic;
@@ -3466,21 +3766,21 @@ Comparing/Analyzing 阶段算法服务不可用 ──▶ Failed（原因入 Fai
   using Volo.Abp;
   using Volo.Abp.DependencyInjection;
 
-  namespace DredgeAI.BidCompare.MinerU;
+  namespace DredgeAI.BidCompare.AnGineer;
 
   /// <summary>
-  /// MinerU HTTP API adapter。约定提供方接口形态：
+  /// AnGIneer HTTP API adapter。约定提供方接口形态：
   ///   POST {BaseUrl}/api/parse          multipart 文件 → { "jobId": "..." }
   ///   GET  {BaseUrl}/api/parse/{jobId}  → { "state": "processing|succeeded|failed" }
-  ///   GET  {BaseUrl}/api/parse/{jobId}/package → zip（ir.json + doc.md + images/）
+  ///   GET  {BaseUrl}/api/parse/{jobId}/package → zip（doc_blocks_graph.jsonl + doc_blocks_graph_meta.json + content.md + images/）
   /// 形态变化（如改消息队列）只替换本类（spec §11 待决事项1）。
   /// </summary>
-  public class HttpMinerUClient : IMinerUClient, ITransientDependency
+  public class HttpAnGineerClient : IAnGineerClient, ITransientDependency
   {
       private readonly IHttpClientFactory _httpClientFactory;
-      private readonly MinerUOptions _options;
+      private readonly AnGineerOptions _options;
 
-      public HttpMinerUClient(IHttpClientFactory httpClientFactory, IOptions<MinerUOptions> options)
+      public HttpAnGineerClient(IHttpClientFactory httpClientFactory, IOptions<AnGineerOptions> options)
       {
           _httpClientFactory = httpClientFactory;
           _options = options.Value;
@@ -3498,22 +3798,22 @@ Comparing/Analyzing 阶段算法服务不可用 ──▶ Failed（原因入 Fai
           response.EnsureSuccessStatusCode();
           var payload = await response.Content.ReadFromJsonAsync<SubmitResponse>(cancellationToken: cancellationToken);
           return payload?.JobId
-              ?? throw new BusinessException(BidCompareErrorCodes.MinerUParseFailed).WithData("reason", "提交响应缺少 jobId");
+              ?? throw new BusinessException(BidCompareErrorCodes.AnGineerParseFailed).WithData("reason", "提交响应缺少 jobId");
       }
 
-      public async Task<MinerUJobState> GetStateAsync(string jobId, CancellationToken cancellationToken = default)
+      public async Task<AnGineerJobState> GetStateAsync(string jobId, CancellationToken cancellationToken = default)
       {
           var client = CreateClient();
           var payload = await client.GetFromJsonAsync<StateResponse>($"/api/parse/{jobId}", cancellationToken);
           return payload?.State?.ToLowerInvariant() switch
           {
-              "succeeded" => MinerUJobState.Succeeded,
-              "failed" => MinerUJobState.Failed,
-              _ => MinerUJobState.Processing
+              "succeeded" => AnGineerJobState.Succeeded,
+              "failed" => AnGineerJobState.Failed,
+              _ => AnGineerJobState.Processing
           };
       }
 
-      public async Task<MinerUPackage> DownloadPackageAsync(string jobId, CancellationToken cancellationToken = default)
+      public async Task<AnGineerPackage> DownloadPackageAsync(string jobId, CancellationToken cancellationToken = default)
       {
           var client = CreateClient();
           await using var zipStream = await client.GetStreamAsync($"/api/parse/{jobId}/package", cancellationToken);
@@ -3521,8 +3821,9 @@ Comparing/Analyzing 阶段算法服务不可用 ──▶ Failed（原因入 Fai
           await zipStream.CopyToAsync(buffer, cancellationToken);
           buffer.Position = 0;
 
-          byte[]? irJson = null;
-          byte[]? docMd = null;
+          byte[]? graphJsonl = null;
+          byte[]? metaJson = null;
+          byte[]? contentMd = null;
           var images = new Dictionary<string, byte[]>();
 
           using var archive = new ZipArchive(buffer, ZipArchiveMode.Read);
@@ -3532,13 +3833,17 @@ Comparing/Analyzing 阶段算法服务不可用 ──▶ Failed（原因入 Fai
               using var entryStream = entry.Open();
               using var entryBuffer = new MemoryStream();
               await entryStream.CopyToAsync(entryBuffer, cancellationToken);
-              if (name.EndsWith("ir.json", System.StringComparison.OrdinalIgnoreCase))
+              if (name.EndsWith("doc_blocks_graph.jsonl", System.StringComparison.OrdinalIgnoreCase))
               {
-                  irJson = entryBuffer.ToArray();
+                  graphJsonl = entryBuffer.ToArray();
               }
-              else if (name.EndsWith("doc.md", System.StringComparison.OrdinalIgnoreCase))
+              else if (name.EndsWith("doc_blocks_graph_meta.json", System.StringComparison.OrdinalIgnoreCase))
               {
-                  docMd = entryBuffer.ToArray();
+                  metaJson = entryBuffer.ToArray();
+              }
+              else if (name.EndsWith("content.md", System.StringComparison.OrdinalIgnoreCase))
+              {
+                  contentMd = entryBuffer.ToArray();
               }
               else if (name.StartsWith("images/", System.StringComparison.OrdinalIgnoreCase) && entry.Length > 0)
               {
@@ -3546,17 +3851,17 @@ Comparing/Analyzing 阶段算法服务不可用 ──▶ Failed（原因入 Fai
               }
           }
 
-          if (irJson == null)
+          if (graphJsonl == null || metaJson == null)
           {
-              throw new BusinessException(BidCompareErrorCodes.MinerUParseFailed)
-                  .WithData("reason", "产物包缺少 ir.json");
+              throw new BusinessException(BidCompareErrorCodes.AnGineerParseFailed)
+                  .WithData("reason", "产物包缺少 doc_blocks_graph.jsonl / doc_blocks_graph_meta.json");
           }
-          return new MinerUPackage(irJson, docMd, images);
+          return new AnGineerPackage(graphJsonl, metaJson, contentMd, images);
       }
 
       private HttpClient CreateClient()
       {
-          var client = _httpClientFactory.CreateClient(nameof(HttpMinerUClient));
+          var client = _httpClientFactory.CreateClient(nameof(HttpAnGineerClient));
           client.BaseAddress = new System.Uri(_options.BaseUrl.TrimEnd('/') + "/");
           if (!_options.ApiKey.IsNullOrWhiteSpace())
           {
@@ -3581,14 +3886,14 @@ Comparing/Analyzing 阶段算法服务不可用 ──▶ Failed（原因入 Fai
   在 `BidCompareHttpApiHostModule.ConfigureServices` 末尾追加：
 
   ```csharp
-  Configure<MinerUOptions>(context.Configuration.GetSection("MinerU"));
+  Configure<AnGineerOptions>(context.Configuration.GetSection("AnGIneer"));
   context.Services.AddHttpClient();
   ```
 
   `appsettings.json` 顶层追加：
 
   ```json
-  "MinerU": {
+  "AnGIneer": {
     "BaseUrl": "http://localhost:8800",
     "ApiKey": null,
     "PollInterval": "00:00:05",
@@ -3609,14 +3914,14 @@ Comparing/Analyzing 阶段算法服务不可用 ──▶ Failed（原因入 Fai
 
   ```bash
   git add backend/DredgeAI.BidCompare
-  git commit -m "feat(backend): add MinerU adapter, IR validation and parse background job with GET ir API"
+  git commit -m "feat(backend): add AnGIneer adapter, IR mapping/validation and parse background job with GET ir API"
   ```
 
 ---
 
 ## Task 9 【P1】算法服务对接：比对后台任务、证据持久化、证据查询与相似度矩阵 API
 
-覆盖 spec §6 路由：`GET /api/compare/tasks/{id}/evidences`、`GET /api/compare/tasks/{id}/matrix`。算法服务调用契约：`POST /analyze/similarity|pricing|metadata`，请求为多份 IR，响应为 Evidence 数组（字段名逐字遵守 spec §6.1）。
+覆盖 spec §6 路由：`GET /api/compare/tasks/{id}/evidences`、`GET /api/compare/tasks/{id}/matrix`。算法服务调用契约：`POST /analyze/similarity|pricing|metadata`，请求为多份内部适配 IR（v2 映射后形态，bbox 0~1 归一化），响应为 Evidence 数组（字段名逐字遵守 spec §6.1）。
 
 **Files:**
 - Create: `src/DredgeAI.BidCompare.Domain/Analysis/ICompareAlgoClient.cs`
@@ -3892,7 +4197,7 @@ Comparing/Analyzing 阶段算法服务不可用 ──▶ Failed（原因入 Fai
 
   namespace DredgeAI.BidCompare.Analysis;
 
-  /// <summary>发送给算法服务的单份 IR（docId 为本系统文档 Guid 字符串）。</summary>
+  /// <summary>发送给算法服务的单份内部适配 IR（docId 为本系统文档 Guid 字符串；IrJson 为 v2 映射后形态，bbox 0~1 归一化；DocMd 为 content.md 内容）。</summary>
   public record AlgoIrDocument(string DocId, string IrJson, string? DocMd);
 
   /// <summary>
@@ -4980,7 +5285,7 @@ Comparing/Analyzing 阶段算法服务不可用 ──▶ Failed（原因入 Fai
           detail.Status.ShouldBe(CompareTaskStatus.AwaitingClauses);
           detail.ClauseSnapshot.ShouldBeNull();
 
-          // prompt 中应带招标文件 doc.md 内容
+          // prompt 中应带招标文件 content.md 内容
           _llmGateway.Requests.Single().User.ShouldContain("第三章 技术方案");
       }
 

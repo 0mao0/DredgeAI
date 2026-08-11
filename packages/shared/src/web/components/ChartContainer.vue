@@ -8,7 +8,7 @@
         :style="{ height: h, animationDelay: `${i * 0.12}s` }"
       />
     </div>
-    <VChart v-else :option="option" autoresize class="chart" />
+    <VChart v-else :option="option" autoresize class="chart" @click="onChartClick" />
   </div>
 </template>
 
@@ -30,6 +30,12 @@ defineProps<{
   height?: string
   loading?: boolean
 }>()
+
+const emit = defineEmits<{ chartClick: [params: unknown] }>()
+
+function onChartClick(params: unknown): void {
+  emit('chartClick', params)
+}
 
 use([
   CanvasRenderer,

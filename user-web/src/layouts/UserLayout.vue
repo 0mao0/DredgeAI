@@ -11,18 +11,37 @@
       class="sider"
       @breakpoint="(broken: boolean) => { collapsed = broken }"
     >
-      <div class="sider-brand">
-        <div class="sider-brand__left" @click="collapsed = !collapsed">
-          <div v-if="!collapsed">
-            <Logo :collapsed="collapsed" subtitle="DredgeAI" />
+      <div class="sider-brand" :class="{ 'sider-brand--collapsed': collapsed }">
+        <template v-if="!collapsed">
+          <span
+            class="sider-brand__trigger"
+            role="button"
+            title="收起侧栏"
+            @click="collapsed = !collapsed"
+          >
+            <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round">
+              <rect x="4.5" y="4.5" width="15" height="15" rx="3" />
+              <line x1="10.5" y1="4.5" x2="10.5" y2="19.5" />
+            </svg>
+          </span>
+          <div class="sider-brand__name">
+            <div class="sider-brand__title">智浚 <span class="sider-brand__ai">AI</span></div>
+            <div class="sider-brand__sub">DredgeAI</div>
           </div>
-          <MenuUnfoldOutlined v-else class="sider-brand__expand-icon" />
-        </div>
-        <MenuFoldOutlined
-          v-if="!collapsed"
-          class="sider-brand__trigger"
+        </template>
+        <span
+          v-else
+          class="sider-brand__expand-icon"
+          role="button"
+          title="展开侧栏"
           @click="collapsed = !collapsed"
-        />
+        >
+          <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round">
+            <path d="M10.5 4.5H7.5a3 3 0 0 0-3 3v9a3 3 0 0 0 3 3h3V4.5Z" fill="currentColor" stroke="none" />
+            <rect x="4.5" y="4.5" width="15" height="15" rx="3" />
+            <line x1="10.5" y1="4.5" x2="10.5" y2="19.5" />
+          </svg>
+        </span>
       </div>
       <a-menu
         v-model:selected-keys="selectedKeys"
@@ -93,13 +112,10 @@ import {
   DashboardOutlined,
   UserOutlined,
   ApiOutlined,
-  MenuFoldOutlined,
-  MenuUnfoldOutlined,
   BulbFilled,
   BulbOutlined,
 } from '@ant-design/icons-vue'
 import * as Icons from '@ant-design/icons-vue'
-import Logo from '@shared/web/components/Logo.vue'
 import { useAppStore } from '@/stores/app'
 import { useUserStore } from '@/stores/user'
 import { useSidebarStore, useThemeStore } from '@shared/web/stores'
@@ -178,29 +194,61 @@ onMounted(() => {
 .sider-brand {
   display: flex;
   align-items: center;
-  justify-content: space-between;
+  gap: @spacing-md;
+  height: @header-height;
+  // 左内距与菜单项图标对齐（菜单图标视觉左缘 28px）
+  padding: 0 @spacing-md 0 calc(@spacing-xl + 4px);
 
-  &__left {
-    cursor: pointer;
-    flex: 1;
-    min-width: 0;
-  }
-
-  &__expand-icon {
-    display: block;
-    margin: 0 auto;
-    font-size: 18px;
-    color: @header-text-secondary;
-    padding: @spacing-md 0;
-    text-align: center;
+  &--collapsed {
+    padding: 0;
   }
 
   &__trigger {
-    font-size: 14px;
     color: @header-text-secondary;
     cursor: pointer;
     flex-shrink: 0;
-    padding-right: @spacing-sm;
+    display: flex;
+    align-items: center;
+    &:hover { color: @brand-primary; }
+  }
+
+  &__name {
+    display: flex;
+    flex-direction: column;
+    min-width: 0;
+  }
+
+  &__title {
+    font-size: @font-size-lg;
+    font-weight: @font-weight-semibold;
+    color: @header-text;
+    line-height: 1.2;
+    letter-spacing: 0.02em;
+  }
+
+  &__ai {
+    background: var(--color-brand-gradient);
+    -webkit-background-clip: text;
+    background-clip: text;
+    -webkit-text-fill-color: transparent;
+    font-weight: @font-weight-bold;
+  }
+
+  &__sub {
+    font-size: 11px;
+    color: @header-text-secondary;
+    letter-spacing: 0.6px;
+    line-height: 1.3;
+    margin-top: 2px;
+  }
+
+  &__expand-icon {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    margin: 0 auto;
+    color: @header-text-secondary;
+    cursor: pointer;
     &:hover { color: @brand-primary; }
   }
 }

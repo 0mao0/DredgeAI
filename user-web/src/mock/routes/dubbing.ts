@@ -60,23 +60,21 @@ export function registerDubbingMock(
   }))
 
   mock.onGet(/\/api\/dubbing\/tasks\/([^/]+)$/).reply((config) => {
-    const match = config.url?.match(/\/api\/dubbing\/tasks\/([^/]+)$/)
-    const id = match?.[1] || ''
+    // config.url 为相对路径（匹配走完整 URL），提取 id 不能依赖 /api 前缀
+    const id = config.url?.match(/dubbing\/tasks\/([^/]+)$/)?.[1] || ''
     const task = dubbingTasks.find((t) => t.id === id)
     return task ? [200, task] : [404, { message: 'Task not found' }]
   })
 
   mock.onDelete(/\/api\/dubbing\/tasks\/([^/]+)$/).reply((config) => {
-    const match = config.url?.match(/\/api\/dubbing\/tasks\/([^/]+)$/)
-    const id = match?.[1] || ''
+    const id = config.url?.match(/dubbing\/tasks\/([^/]+)$/)?.[1] || ''
     const task = dubbingTasks.find((t) => t.id === id)
     if (task) task.deletedByUser = true
     return [204, undefined]
   })
 
   mock.onGet(/\/api\/dubbing\/tasks\/([^/]+)\/download$/).reply((config) => {
-    const match = config.url?.match(/\/api\/dubbing\/tasks\/([^/]+)/)
-    const id = match?.[1] || ''
+    const id = config.url?.match(/dubbing\/tasks\/([^/]+)/)?.[1] || ''
     const task = dubbingTasks.find((t) => t.id === id)
     return [200, { url: task?.audioUrl || sampleUrl }]
   })

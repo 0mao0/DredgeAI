@@ -6,15 +6,16 @@
 
 **Architecture:** 严格按 AGENTS.md §2.0 九步清单：shared types → shared urls → shared mock data → user-web api module → user-web mock routes → mock 注册 → 路由（manifests 已占位，不变）→ 页面 → typecheck。页面全部挂在既有路由 `/ai-bid/compare` 下，`compare/index.vue` 用组件内 `view` 状态机（`'list'|'create'|'clauses'|'progress'|'result'|'diff'`）切换六个视图，不新增路由记录；`index.vue` 是唯一持有业务状态、唯一调用 API 的组件，子组件 props down / events up（AGENTS §2.13）。
 
-**Tech Stack:** Vue 3 `<script setup lang="ts">`、ant-design-vue、echarts + vue-echarts（heatmap）、pinia（本模块不新增 store）、pdfjs-dist（新增依赖，PDF 渲染 + bbox 覆盖层）、axios-mock-adapter（mock）、LESS（`@shared/web/styles/variables.less` 变量）。
+**Tech Stack:** Vue 3 `<script setup lang="ts">`、ant-design-vue、echarts + vue-echarts（heatmap）、pinia（本模块不新增 store）、pdfjs-dist（新增依赖，PDF 渲染 + bbox 覆盖层）、katex（新增依赖，公式块 LaTeX 渲染）、axios-mock-adapter（mock）、LESS（`@shared/web/styles/variables.less` 变量）。
 
 **假设（已拍板）:**
 
-- 前端 mock 先行：所有 API 走 axios-mock-adapter，mock 数据按 spec §6 契约构造；不依赖任何后端。契约唯一事实源 = `docs/superpowers/specs/2026-07-29-ai-bid-compare-design.md`，字段名逐字遵守 §6.1（`CompareTask/Clause/Evidence/CompareReport`）。
-- 新增依赖仅 `pdfjs-dist`（`pnpm --filter user-web add pdfjs-dist`），worker 用 `import workerSrc from 'pdfjs-dist/build/pdf.worker.min.mjs?url'` 方式接入（vite 原生支持 `?url`，`env.d.ts` 已含 `vite/client` 类型，无需改 vite.config.ts）。其余一律用现有依赖。
+- 前端 mock 先行：所有 API 走 axios-mock-adapter，mock 数据按 spec §6 契约构造；不依赖任何后端。契约唯一事实源 = `docs/superpowers/specs/2026-07-29-ai-bid-compare-design.md`，字段名逐字遵守 §6.1（`CompareTask/Clause/Evidence/CompareReport`）。**IR 部分例外（2026-08-07 v2 更新）**：spec §4 的 ir.json 跨系统交付契约已废止，`IrDocument` 等类型为 DredgeAI 内部适配形态，按 `docs/superpowers/plans/dredgeai-consume-angineer-requirements.md`（下称 v2 文档）构造——bbox 为 0~1 归一化坐标、`blockId` 直接采用 AnGIneer `block_uid`、`source/confidence` 允许 null。
+- 新增依赖仅 `pdfjs-dist` 与 `katex`（`pnpm --filter user-web add pdfjs-dist katex`），pdfjs worker 用 `import workerSrc from 'pdfjs-dist/build/pdf.worker.min.mjs?url'` 方式接入（vite 原生支持 `?url`，`env.d.ts` 已含 `vite/client` 类型，无需改 vite.config.ts）。其余一律用现有依赖。
+- **公式渲染用 KaTeX**（AnGIneer 建议）：公式块 LaTeX（v2 §2 `math_content`/`formula_body`）经 `renderLatex` 薄封装渲染，`throwOnError: false` + `strict: 'ignore'`——OCR 坏串渲染为红字原文，不炸组件。**待 AnGIneer 钉死的契约**：math_content 是否裸公式（不含 `$`/`$$` 定界符），需写入 v2 文档 §2；本计划按「裸公式」实现，DocViewer md 管线只渲染显式带 `$$...$$`/`$...$` 定界符的文本（通用 markdown 语义，不影响既有模块）。字体随 `katex/dist/katex.min.css` 引入，颜色继承主题文字色（dark/light 无碍）；katex 体积约 70KB gz，先在 katex.ts 静态引入，后续在意首屏再改动态 import。
 - `docs/chart-conventions.md` 在仓库中**不存在**（AGENTS §2.10 引用落空）。热力图遵循从现有代码提炼的图表惯例：`ChartContainer` 容器 + `useChartTheme()` 取 axis/tooltip/legend 色 + `useCssVar()` 取品牌/语义色 + `animationDuration: 600 / easeOutQuad`。若后续该文档补齐，以其为准回查热力图。
 - spec §6 只定义了 `POST /export` 异步句柄，未给轮询端点；前端补充 `GET /compare/tasks/:id/export/:exportId` 作为句柄状态轮询（与「导出异步化」决策一致，后端落地时对齐）。`CompareReport` 扩展 `clauseResponses`/`indicatorRows` 两个字段承载条款响应矩阵与指标比选数据（报告 JSON 内容本由后端模板自定，前端先行提案）。
-- 演示 PDF 由仓库内脚本生成（`user-web/scripts/gen-compare-sample-pdf.mjs`，无第三方依赖，手写最小 PDF 结构，中文走 STSong-Light + UniGB-UCS2-H 预定义 CMap，pdf.js 回退系统中文字体渲染），产物提交到 `user-web/public/mock/compare/`。页面尺寸 595×842 pt，与 mock IR 的 `pages[].width/height` 一致，bbox 坐标与 PDF 文本行手工对齐。**移植 PDF_Viewer 后该脚本仍保留**：bbox 对齐精度走查需要「坐标已知的 PDF + 对应的 mock IR」这一组对照数据。
+- 演示 PDF 由仓库内脚本生成（`user-web/scripts/gen-compare-sample-pdf.mjs`，无第三方依赖，手写最小 PDF 结构，中文走 STSong-Light + UniGB-UCS2-H 预定义 CMap，pdf.js 回退系统中文字体渲染），产物提交到 `user-web/public/mock/compare/`。页面尺寸 595×842 pt，与 mock IR 的 `pages[].width/height` 一致；mock IR 的 bbox 为 0~1 归一化值（文本行坐标 ÷ 页面尺寸，v2 契约，PDF_Viewer 直接还原，不做像素换算）。**移植 PDF_Viewer 后该脚本仍保留**：bbox 对齐精度走查需要「坐标已知的 PDF + 对应的 mock IR」这一组对照数据。
 - **对比视图基于 AnGIneer docs-ui 的 PDF_Viewer 移植（路线 A：复制改造，不做独立包）**。源：`D:/AI/AnGIneer/packages/docs-ui/src/components/common/viewers/PDF_Viewer.vue`（1824 行，含 ~1000 行 `PdfViewerController`：pdfjs Range 流式→ArrayBuffer→iframe 三级降级、虚拟滚动、缩放/fit、页码跳转、防渲染竞态）+ `D:/AI/AnGIneer/packages/docs-ui/src/composables/useWorkspaceLinkage.ts` 中的纯函数坐标归一化段。移植到 `packages/shared/src/web/components/pdf-viewer/`，保持原代码结构不大改（便于日后与 AnGIneer 同步 bugfix），仅做解耦与主题适配：① `KnowledgeTreeNode` 类型 → 本地精简接口；② workspace 形态 props（isPdf/isOffice/isImage/isText/textContent/parse 进度）→ 纯 PDF 精简 props，fileUrl 由外部完整传入（替代 `useWorkspacePreview.ts:59` 的 `/api/files?path=` 拼接）；③ 删除 Office/图片/文本预览分支与解析进度条；④ 主题变量 `--dp-*` → DredgeAI CSS 变量，高亮硬编码蓝 `rgba(24,144,255)` → 支持按配对/严重度着色（经 inline style 注入，严重度色值：高 `#EF4444` / 中 `#F59E0B` / 低 `#3B82F6`）。`useTheme/appClass`（@angineer/ui-kit）只存在于不移植的父组件 PDFParsedWorkspace.vue，PDF_Viewer 本身无此耦合。
 - 无招标文件时任务解析完直接进入查重；有招标文件时停在 `parsed` 等待条款锁定（spec §3.2「条款必须用户确认后锁定」）。P1 阶段无条款确认页，进度页在 `parsed` 时自动提取并锁定条款草案（代码注释标明 P2 替换），P2 改为人工确认页。
 
@@ -27,6 +28,7 @@
 - 页面常量（`user-web/src/views/ai-bid/compare/constants.ts`）：`EVIDENCE_TYPE_LABELS`、`SEVERITY_LABELS`、`SEVERITY_COLORS`、`TASK_STATUS_LABELS`、`TASK_STATUS_COLORS`、`CompareView`
 - 组件（`user-web/src/views/ai-bid/compare/components/`）：`TaskList.vue`、`TaskCreate.vue`、`AnalysisProgress.vue`、`ResultWorkbench.vue`、`EvidenceTable.vue`、`ClauseConfirm.vue`、`ClauseMatrix.vue`、`IndicatorTable.vue`、`DiffViewer.vue`
 - 移植的共享 PDF 查看器（`packages/shared/src/web/components/pdf-viewer/`）：`PdfViewer.vue`（移植自 AnGIneer `PDF_Viewer.vue`，精简 props 后导出）、`highlight.ts`（导出 `LinkedHighlight`、`RectBounds`、`normalizeRect`、`normalizeRectFromBaseRow`、`normalizeRectFromPayload`、`mapIrBlocksToHighlights`）
+- 公式渲染（`packages/shared/src/web/components/katex.ts`）：`renderLatex(tex, displayMode)`；`DocViewer.vue` md 管线追加 `$$...$$`/`$...$` 处理（既有共享组件，向后兼容）
 - mock 数据导出（`packages/shared/src/mock/data/compare.ts`）：`compareTaskDetails`、`compareEvidences`、`compareMatrix`、`compareReport`、`compareClauseTemplates`、`compareExtractedDraft`、`compareIrMap`、`compareDocPool`
 
 ## spec §7 页面/区块 → Task 映射
@@ -59,8 +61,12 @@
 ```ts
 /**
  * 比标模块类型定义。
- * 契约来源：docs/superpowers/specs/2026-07-29-ai-bid-compare-design.md §4/§6，
+ * 契约来源：docs/superpowers/specs/2026-07-29-ai-bid-compare-design.md §6，
  * CompareTask / Clause / Evidence / CompareReport 字段名逐字对齐 spec §6.1。
+ * IR 部分（IrDocument 等）为 DredgeAI 内部适配形态，字段映射遵循
+ * docs/superpowers/plans/dredgeai-consume-angineer-requirements.md（2026-08-07 v2）：
+ * bbox 0~1 归一化、blockId=AnGIneer block_uid、source/confidence 允许 null；
+ * spec §4 的 ir.json 跨系统交付契约已由 v2 取代。
  * 后端落地前，本文件 + mock 数据为联调基准。
  */
 
@@ -110,7 +116,7 @@ export interface CompareDocument {
   parseStatus: 'parsing' | 'done' | 'failed'
   /** 解析失败原因（spec §9 单份失败降级，支持单独重传） */
   failReason?: string
-  /** OCR 低置信页占比 0~1，>0.3 时概览区醒目提示（spec §4.5/§9） */
+  /** OCR 低置信页占比 0~1，>0.3 时概览区醒目提示（spec §4.5/§9）；AnGIneer 补齐 source/confidence 前恒 0（v2 §4 提示降级关闭） */
   ocrLowConfidenceRatio: number
   /** 原始文件访问地址（前端 pdf.js 渲染用；mock 指向 /mock/compare/*.pdf） */
   fileUrl: string
@@ -201,26 +207,33 @@ export interface ExportJob {
   downloadUrl?: string
 }
 
-// ─── IR（解析产物，spec §4.2 交付契约，后端原样存储） ───
+// ─── IR（DredgeAI 内部适配形态：按 v2 文档 §2/§3 从 AnGIneer doc_blocks_graph 映射，后端存储内部 IR） ───
 
 export interface IrPage {
   pageIdx: number
+  /** 页面真实尺寸（AnGIneer meta `pages`，v2 §1）；bbox 已归一化，本字段不参与坐标换算 */
   width: number
   height: number
 }
 
+/** seal 为保留类型（spec §4.3.5 印章单独成块）：AnGIneer 当前不产出（v2 §3 映射表无此项） */
 export type IrBlockType = 'title' | 'para' | 'table' | 'list' | 'image' | 'equation' | 'seal' | 'header' | 'footer'
 
 export interface IrBlock {
+  /** 直接采用 AnGIneer block_uid（如 `doc-406e43e8:3:1`，唯一稳定，v2 §2），不自造 id */
   blockId: string
   pageIdx: number
-  /** 页面实际像素坐标 [x0,y0,x1,y1]，左上角原点（spec §4.3 不接受归一化坐标） */
+  /** 0~1 归一化坐标 [x0,y0,x1,y1]，左上角原点（v2 §2；PDF_Viewer 直接还原，不做像素换算） */
   bbox: [number, number, number, number]
   type: IrBlockType
+  /** plain_text；公式块用 math_content / formula_body（LaTeX，v2 §2；UI 经 KaTeX 渲染，见 Task 8 Step 3） */
   text: string
+  /** 标题块 = derived_level；非标题块固定 0（v2 §2） */
   textLevel: number
-  source: 'native' | 'ocr'
-  confidence: number
+  /** AnGIneer 补齐前允许 null（v2 §4；为 null 时 OCR 降权与低置信提示降级关闭） */
+  source: 'native' | 'ocr' | null
+  /** 同 source 允许 null；存在时 native 恒 1.0 */
+  confidence: number | null
   table?: { html: string, imgPath: string }
   imgPath?: string
 }
@@ -296,7 +309,7 @@ export * from './compare'
 **Files:**
 - Create: `packages/shared/src/mock/data/compare.ts`
 
-演示数据集：1 份招标文件 + 3 份标书（A/B/C），3×3 相似度矩阵，6 条证据（similarity 高/中、pricing、metadata、clause、indicator，带 blockIds 定位），5 条强制性条款，3 个任务（done / analyzing / partial）。页面尺寸统一 595×842（与 Task 10 生成的演示 PDF 对齐，bbox 即 PDF 文本行坐标）。
+演示数据集：1 份招标文件 + 3 份标书（A/B/C），3×3 相似度矩阵，6 条证据（similarity 高/中、pricing、metadata、clause、indicator，带 blockIds 定位），5 条强制性条款，3 个任务（done / analyzing / partial）。页面尺寸统一 595×842（与 Task 10 生成的演示 PDF 对齐；bbox 为 0~1 归一化值 = 文本行坐标 ÷ 页面尺寸，v2 契约；blockId 采用 AnGIneer block_uid 风格 `{docId}:{pageIdx}:{序号}`）。
 
 - [ ] **Step 1: 创建 `packages/shared/src/mock/data/compare.ts`，内容如下（完整文件）**
 
@@ -330,7 +343,7 @@ const cmp2Documents: CompareDocument[] = [
 const cmp3Documents: CompareDocument[] = [
   { id: 'cmp3-doc-a', taskId: 'cmp-3', role: 'bid', fileName: '宏基工程投标文件.pdf', shortName: '标书A', pageCount: 3, parseStatus: 'done', ocrLowConfidenceRatio: 0.04, fileUrl: '/mock/compare/bid-a.pdf' },
   // spec §9：单份解析失败 → 任务降级为「部分完成」，标注原因
-  { id: 'cmp3-doc-b', taskId: 'cmp-3', role: 'bid', fileName: '润通港航投标文件.pdf', shortName: '标书B', pageCount: 0, parseStatus: 'failed', failReason: 'MinerU 解析服务超时，可重传重解析', ocrLowConfidenceRatio: 0, fileUrl: '' },
+  { id: 'cmp3-doc-b', taskId: 'cmp-3', role: 'bid', fileName: '润通港航投标文件.pdf', shortName: '标书B', pageCount: 0, parseStatus: 'failed', failReason: '解析服务超时，可重传重解析', ocrLowConfidenceRatio: 0, fileUrl: '' },
 ]
 
 // ─── 任务（done / analyzing / partial 三态演示） ───
@@ -403,8 +416,8 @@ export const compareEvidences: Evidence[] = [
     severity: 'high',
     docIds: ['doc-a', 'doc-b'],
     locations: [
-      { docId: 'doc-a', blockIds: ['a-b5', 'a-b6', 'a-b7'] },
-      { docId: 'doc-b', blockIds: ['b-b5', 'b-b6', 'b-b7'] },
+      { docId: 'doc-a', blockIds: ['doc-a:1:2', 'doc-a:1:3', 'doc-a:1:4'] },
+      { docId: 'doc-b', blockIds: ['doc-b:1:2', 'doc-b:1:3', 'doc-b:1:4'] },
     ],
     metrics: { similarity: 0.87 },
     title: '技术方案章节大面积雷同',
@@ -418,8 +431,8 @@ export const compareEvidences: Evidence[] = [
     severity: 'mid',
     docIds: ['doc-a', 'doc-c'],
     locations: [
-      { docId: 'doc-a', blockIds: ['a-b1'] },
-      { docId: 'doc-c', blockIds: ['c-b1'] },
+      { docId: 'doc-a', blockIds: ['doc-a:0:1'] },
+      { docId: 'doc-c', blockIds: ['doc-c:0:1'] },
     ],
     metrics: { similarity: 0.58 },
     title: '封面与格式结构相似',
@@ -433,8 +446,8 @@ export const compareEvidences: Evidence[] = [
     severity: 'high',
     docIds: ['doc-a', 'doc-b'],
     locations: [
-      { docId: 'doc-a', blockIds: ['a-b9'] },
-      { docId: 'doc-b', blockIds: ['b-b9'] },
+      { docId: 'doc-a', blockIds: ['doc-a:2:2'] },
+      { docId: 'doc-b', blockIds: ['doc-b:2:2'] },
     ],
     metrics: {},
     title: '报价尾数规律异常',
@@ -460,7 +473,7 @@ export const compareEvidences: Evidence[] = [
     severity: 'mid',
     docIds: ['doc-c'],
     locations: [
-      { docId: 'doc-c', blockIds: ['c-b9'] },
+      { docId: 'doc-c', blockIds: ['doc-c:2:3'] },
     ],
     metrics: {},
     title: '强制性条款未实质响应：质保期',
@@ -526,9 +539,9 @@ export const compareReport: CompareReport = {
     { clauseId: 'cl-2', docId: 'doc-a', status: 'compliant', reason: '项目经理王建国，港口与航道工程一级建造师。', blockIds: [] },
     { clauseId: 'cl-2', docId: 'doc-b', status: 'partial', reason: '项目经理李海涛 2023 年取得一级建造师资格，执业年限偏短，建议评审时核实业绩。', blockIds: [] },
     { clauseId: 'cl-2', docId: 'doc-c', status: 'compliant', reason: '项目经理赵明远，港口与航道工程一级建造师。', blockIds: [] },
-    { clauseId: 'cl-3', docId: 'doc-a', status: 'compliant', reason: '响应质保期 2 年。', blockIds: ['a-b10'] },
-    { clauseId: 'cl-3', docId: 'doc-b', status: 'compliant', reason: '响应质保期 2 年。', blockIds: ['b-b10'] },
-    { clauseId: 'cl-3', docId: 'doc-c', status: 'noncompliant', reason: '响应质保期 1 年，不满足「不少于 2 年」的强制性要求。', blockIds: ['c-b9'] },
+    { clauseId: 'cl-3', docId: 'doc-a', status: 'compliant', reason: '响应质保期 2 年。', blockIds: ['doc-a:2:3'] },
+    { clauseId: 'cl-3', docId: 'doc-b', status: 'compliant', reason: '响应质保期 2 年。', blockIds: ['doc-b:2:3'] },
+    { clauseId: 'cl-3', docId: 'doc-c', status: 'noncompliant', reason: '响应质保期 1 年，不满足「不少于 2 年」的强制性要求。', blockIds: ['doc-c:2:3'] },
     { clauseId: 'cl-4', docId: 'doc-a', status: 'compliant', reason: '安全生产许可证在有效期内。', blockIds: [] },
     { clauseId: 'cl-4', docId: 'doc-b', status: 'compliant', reason: '安全生产许可证在有效期内。', blockIds: [] },
     { clauseId: 'cl-4', docId: 'doc-c', status: 'compliant', reason: '安全生产许可证在有效期内。', blockIds: [] },
@@ -563,7 +576,7 @@ export const compareExtractedDraft: Clause[] = [
   { clauseId: 'ext-4', source: 'extracted', text: '须提供安全生产许可证且在有效期内', mandatory: true, category: '资质要求' },
 ]
 
-// ─── IR（页面 595×842，bbox 与演示 PDF 文本行手工对齐） ───
+// ─── IR（页面 595×842 为真实尺寸；bbox 为 0~1 归一化值 = 演示 PDF 文本行坐标 ÷ 页面尺寸，v2 契约；blockId 采用 block_uid 风格） ───
 
 function makeIr(overrides: {
   docId: string
@@ -575,7 +588,8 @@ function makeIr(overrides: {
   outline: IrDocument['outline']
 }): IrDocument {
   return {
-    schemaVersion: '1.0',
+    // 内部适配 IR 版本（v2 映射形态；1.0 为已废止的 ir.json 交付契约）
+    schemaVersion: '2.0',
     docId: overrides.docId,
     meta: {
       fileName: overrides.fileName,
@@ -606,20 +620,20 @@ const irA = makeIr({
   creatorTool: 'Microsoft Word',
   modifiedAt: '2026-07-20T21:40:00Z',
   outline: [
-    { title: '第三章 技术方案', level: 1, blockId: 'a-b4', children: [] },
-    { title: '第五章 商务报价', level: 1, blockId: 'a-b8', children: [] },
+    { title: '第三章 技术方案', level: 1, blockId: 'doc-a:1:1', children: [] },
+    { title: '第五章 商务报价', level: 1, blockId: 'doc-a:2:1', children: [] },
   ],
   blocks: [
-    { blockId: 'a-b1', pageIdx: 0, bbox: [60, 72, 330, 100], type: 'title', text: '智慧航道疏浚工程投标文件', textLevel: 1, source: 'native', confidence: 1 },
-    { blockId: 'a-b2', pageIdx: 0, bbox: [60, 140, 220, 164], type: 'para', text: '投标人：中港疏浚有限公司', textLevel: 0, source: 'native', confidence: 1 },
-    { blockId: 'a-b3', pageIdx: 0, bbox: [60, 172, 230, 196], type: 'para', text: '日期：2026 年 7 月 20 日', textLevel: 0, source: 'native', confidence: 1 },
-    { blockId: 'a-b4', pageIdx: 1, bbox: [60, 60, 290, 88], type: 'title', text: '第三章 技术方案', textLevel: 1, source: 'native', confidence: 1 },
-    { blockId: 'a-b5', pageIdx: 1, bbox: [60, 110, 535, 136], type: 'para', text: SHARED_TECH_1, textLevel: 0, source: 'native', confidence: 1 },
-    { blockId: 'a-b6', pageIdx: 1, bbox: [60, 146, 535, 172], type: 'para', text: SHARED_TECH_2, textLevel: 0, source: 'native', confidence: 1 },
-    { blockId: 'a-b7', pageIdx: 1, bbox: [60, 182, 535, 208], type: 'para', text: SHARED_TECH_3, textLevel: 0, source: 'native', confidence: 1 },
-    { blockId: 'a-b8', pageIdx: 2, bbox: [60, 60, 290, 88], type: 'title', text: '第五章 商务报价', textLevel: 1, source: 'native', confidence: 1 },
-    { blockId: 'a-b9', pageIdx: 2, bbox: [60, 110, 320, 136], type: 'para', text: '投标总价：人民币 12,688.88 万元', textLevel: 0, source: 'native', confidence: 1 },
-    { blockId: 'a-b10', pageIdx: 2, bbox: [60, 146, 300, 172], type: 'para', text: '工期：300 日历天，质保期 2 年', textLevel: 0, source: 'native', confidence: 1 },
+    { blockId: 'doc-a:0:1', pageIdx: 0, bbox: [0.1008, 0.0855, 0.5546, 0.1188], type: 'title', text: '智慧航道疏浚工程投标文件', textLevel: 1, source: 'native', confidence: 1 },
+    { blockId: 'doc-a:0:2', pageIdx: 0, bbox: [0.1008, 0.1663, 0.3697, 0.1948], type: 'para', text: '投标人：中港疏浚有限公司', textLevel: 0, source: 'native', confidence: 1 },
+    { blockId: 'doc-a:0:3', pageIdx: 0, bbox: [0.1008, 0.2043, 0.3866, 0.2328], type: 'para', text: '日期：2026 年 7 月 20 日', textLevel: 0, source: 'native', confidence: 1 },
+    { blockId: 'doc-a:1:1', pageIdx: 1, bbox: [0.1008, 0.0713, 0.4874, 0.1045], type: 'title', text: '第三章 技术方案', textLevel: 1, source: 'native', confidence: 1 },
+    { blockId: 'doc-a:1:2', pageIdx: 1, bbox: [0.1008, 0.1306, 0.8992, 0.1615], type: 'para', text: SHARED_TECH_1, textLevel: 0, source: 'native', confidence: 1 },
+    { blockId: 'doc-a:1:3', pageIdx: 1, bbox: [0.1008, 0.1734, 0.8992, 0.2043], type: 'para', text: SHARED_TECH_2, textLevel: 0, source: 'native', confidence: 1 },
+    { blockId: 'doc-a:1:4', pageIdx: 1, bbox: [0.1008, 0.2162, 0.8992, 0.247], type: 'para', text: SHARED_TECH_3, textLevel: 0, source: 'native', confidence: 1 },
+    { blockId: 'doc-a:2:1', pageIdx: 2, bbox: [0.1008, 0.0713, 0.4874, 0.1045], type: 'title', text: '第五章 商务报价', textLevel: 1, source: 'native', confidence: 1 },
+    { blockId: 'doc-a:2:2', pageIdx: 2, bbox: [0.1008, 0.1306, 0.5378, 0.1615], type: 'para', text: '投标总价：人民币 12,688.88 万元', textLevel: 0, source: 'native', confidence: 1 },
+    { blockId: 'doc-a:2:3', pageIdx: 2, bbox: [0.1008, 0.1734, 0.5042, 0.2043], type: 'para', text: '工期：300 日历天，质保期 2 年', textLevel: 0, source: 'native', confidence: 1 },
   ],
 })
 
@@ -630,20 +644,20 @@ const irB = makeIr({
   creatorTool: 'Microsoft Word',
   modifiedAt: '2026-07-20T21:52:00Z',
   outline: [
-    { title: '第三章 技术方案', level: 1, blockId: 'b-b4', children: [] },
-    { title: '第五章 商务报价', level: 1, blockId: 'b-b8', children: [] },
+    { title: '第三章 技术方案', level: 1, blockId: 'doc-b:1:1', children: [] },
+    { title: '第五章 商务报价', level: 1, blockId: 'doc-b:2:1', children: [] },
   ],
   blocks: [
-    { blockId: 'b-b1', pageIdx: 0, bbox: [60, 72, 330, 100], type: 'title', text: '智慧航道疏浚工程投标文件', textLevel: 1, source: 'ocr', confidence: 0.62 },
-    { blockId: 'b-b2', pageIdx: 0, bbox: [60, 140, 220, 164], type: 'para', text: '投标人：长江航道工程局', textLevel: 0, source: 'ocr', confidence: 0.58 },
-    { blockId: 'b-b3', pageIdx: 0, bbox: [60, 172, 230, 196], type: 'para', text: '日期：2026 年 7 月 21 日', textLevel: 0, source: 'ocr', confidence: 0.6 },
-    { blockId: 'b-b4', pageIdx: 1, bbox: [60, 60, 290, 88], type: 'title', text: '第三章 技术方案', textLevel: 1, source: 'ocr', confidence: 0.66 },
-    { blockId: 'b-b5', pageIdx: 1, bbox: [60, 110, 535, 136], type: 'para', text: SHARED_TECH_1, textLevel: 0, source: 'ocr', confidence: 0.55 },
-    { blockId: 'b-b6', pageIdx: 1, bbox: [60, 146, 535, 172], type: 'para', text: SHARED_TECH_2, textLevel: 0, source: 'ocr', confidence: 0.57 },
-    { blockId: 'b-b7', pageIdx: 1, bbox: [60, 182, 535, 208], type: 'para', text: SHARED_TECH_3, textLevel: 0, source: 'ocr', confidence: 0.6 },
-    { blockId: 'b-b8', pageIdx: 2, bbox: [60, 60, 290, 88], type: 'title', text: '第五章 商务报价', textLevel: 1, source: 'ocr', confidence: 0.64 },
-    { blockId: 'b-b9', pageIdx: 2, bbox: [60, 110, 320, 136], type: 'para', text: '投标总价：人民币 10,288.88 万元', textLevel: 0, source: 'ocr', confidence: 0.61 },
-    { blockId: 'b-b10', pageIdx: 2, bbox: [60, 146, 300, 172], type: 'para', text: '工期：320 日历天，质保期 2 年', textLevel: 0, source: 'ocr', confidence: 0.63 },
+    { blockId: 'doc-b:0:1', pageIdx: 0, bbox: [0.1008, 0.0855, 0.5546, 0.1188], type: 'title', text: '智慧航道疏浚工程投标文件', textLevel: 1, source: 'ocr', confidence: 0.62 },
+    { blockId: 'doc-b:0:2', pageIdx: 0, bbox: [0.1008, 0.1663, 0.3697, 0.1948], type: 'para', text: '投标人：长江航道工程局', textLevel: 0, source: 'ocr', confidence: 0.58 },
+    { blockId: 'doc-b:0:3', pageIdx: 0, bbox: [0.1008, 0.2043, 0.3866, 0.2328], type: 'para', text: '日期：2026 年 7 月 21 日', textLevel: 0, source: 'ocr', confidence: 0.6 },
+    { blockId: 'doc-b:1:1', pageIdx: 1, bbox: [0.1008, 0.0713, 0.4874, 0.1045], type: 'title', text: '第三章 技术方案', textLevel: 1, source: 'ocr', confidence: 0.66 },
+    { blockId: 'doc-b:1:2', pageIdx: 1, bbox: [0.1008, 0.1306, 0.8992, 0.1615], type: 'para', text: SHARED_TECH_1, textLevel: 0, source: 'ocr', confidence: 0.55 },
+    { blockId: 'doc-b:1:3', pageIdx: 1, bbox: [0.1008, 0.1734, 0.8992, 0.2043], type: 'para', text: SHARED_TECH_2, textLevel: 0, source: 'ocr', confidence: 0.57 },
+    { blockId: 'doc-b:1:4', pageIdx: 1, bbox: [0.1008, 0.2162, 0.8992, 0.247], type: 'para', text: SHARED_TECH_3, textLevel: 0, source: 'ocr', confidence: 0.6 },
+    { blockId: 'doc-b:2:1', pageIdx: 2, bbox: [0.1008, 0.0713, 0.4874, 0.1045], type: 'title', text: '第五章 商务报价', textLevel: 1, source: 'ocr', confidence: 0.64 },
+    { blockId: 'doc-b:2:2', pageIdx: 2, bbox: [0.1008, 0.1306, 0.5378, 0.1615], type: 'para', text: '投标总价：人民币 10,288.88 万元', textLevel: 0, source: 'ocr', confidence: 0.61 },
+    { blockId: 'doc-b:2:3', pageIdx: 2, bbox: [0.1008, 0.1734, 0.5042, 0.2043], type: 'para', text: '工期：320 日历天，质保期 2 年', textLevel: 0, source: 'ocr', confidence: 0.63 },
   ],
 })
 
@@ -654,19 +668,19 @@ const irC = makeIr({
   creatorTool: 'WPS Office',
   modifiedAt: '2026-07-21T14:05:00Z',
   outline: [
-    { title: '第三章 施工组织设计', level: 1, blockId: 'c-b4', children: [] },
-    { title: '第五章 商务报价', level: 1, blockId: 'c-b7', children: [] },
+    { title: '第三章 施工组织设计', level: 1, blockId: 'doc-c:1:1', children: [] },
+    { title: '第五章 商务报价', level: 1, blockId: 'doc-c:2:1', children: [] },
   ],
   blocks: [
-    { blockId: 'c-b1', pageIdx: 0, bbox: [60, 72, 430, 100], type: 'title', text: '智慧航道疏浚工程投标文件（技术标）', textLevel: 1, source: 'native', confidence: 1 },
-    { blockId: 'c-b2', pageIdx: 0, bbox: [60, 140, 200, 164], type: 'para', text: '投标人：海工建设集团', textLevel: 0, source: 'native', confidence: 1 },
-    { blockId: 'c-b3', pageIdx: 0, bbox: [60, 172, 230, 196], type: 'para', text: '日期：2026 年 7 月 21 日', textLevel: 0, source: 'native', confidence: 1 },
-    { blockId: 'c-b4', pageIdx: 1, bbox: [60, 60, 330, 88], type: 'title', text: '第三章 施工组织设计', textLevel: 1, source: 'native', confidence: 1 },
-    { blockId: 'c-b5', pageIdx: 1, bbox: [60, 110, 535, 136], type: 'para', text: '3.1 工艺方案：采用绞吸式挖泥船加接力泵站，管线吹填上岸', textLevel: 0, source: 'native', confidence: 1 },
-    { blockId: 'c-b6', pageIdx: 1, bbox: [60, 146, 535, 172], type: 'para', text: '3.2 进度安排：总工期 280 日历天，分三个施工段流水作业', textLevel: 0, source: 'native', confidence: 1 },
-    { blockId: 'c-b7', pageIdx: 2, bbox: [60, 60, 290, 88], type: 'title', text: '第五章 商务报价', textLevel: 1, source: 'native', confidence: 1 },
-    { blockId: 'c-b8', pageIdx: 2, bbox: [60, 110, 320, 136], type: 'para', text: '投标总价：人民币 13,500.00 万元', textLevel: 0, source: 'native', confidence: 1 },
-    { blockId: 'c-b9', pageIdx: 2, bbox: [60, 146, 300, 172], type: 'para', text: '工期：280 日历天，质保期 1 年', textLevel: 0, source: 'native', confidence: 1 },
+    { blockId: 'doc-c:0:1', pageIdx: 0, bbox: [0.1008, 0.0855, 0.7227, 0.1188], type: 'title', text: '智慧航道疏浚工程投标文件（技术标）', textLevel: 1, source: 'native', confidence: 1 },
+    { blockId: 'doc-c:0:2', pageIdx: 0, bbox: [0.1008, 0.1663, 0.3361, 0.1948], type: 'para', text: '投标人：海工建设集团', textLevel: 0, source: 'native', confidence: 1 },
+    { blockId: 'doc-c:0:3', pageIdx: 0, bbox: [0.1008, 0.2043, 0.3866, 0.2328], type: 'para', text: '日期：2026 年 7 月 21 日', textLevel: 0, source: 'native', confidence: 1 },
+    { blockId: 'doc-c:1:1', pageIdx: 1, bbox: [0.1008, 0.0713, 0.5546, 0.1045], type: 'title', text: '第三章 施工组织设计', textLevel: 1, source: 'native', confidence: 1 },
+    { blockId: 'doc-c:1:2', pageIdx: 1, bbox: [0.1008, 0.1306, 0.8992, 0.1615], type: 'para', text: '3.1 工艺方案：采用绞吸式挖泥船加接力泵站，管线吹填上岸', textLevel: 0, source: 'native', confidence: 1 },
+    { blockId: 'doc-c:1:3', pageIdx: 1, bbox: [0.1008, 0.1734, 0.8992, 0.2043], type: 'para', text: '3.2 进度安排：总工期 280 日历天，分三个施工段流水作业', textLevel: 0, source: 'native', confidence: 1 },
+    { blockId: 'doc-c:2:1', pageIdx: 2, bbox: [0.1008, 0.0713, 0.4874, 0.1045], type: 'title', text: '第五章 商务报价', textLevel: 1, source: 'native', confidence: 1 },
+    { blockId: 'doc-c:2:2', pageIdx: 2, bbox: [0.1008, 0.1306, 0.5378, 0.1615], type: 'para', text: '投标总价：人民币 13,500.00 万元', textLevel: 0, source: 'native', confidence: 1 },
+    { blockId: 'doc-c:2:3', pageIdx: 2, bbox: [0.1008, 0.1734, 0.5042, 0.2043], type: 'para', text: '工期：280 日历天，质保期 1 年', textLevel: 0, source: 'native', confidence: 1 },
   ],
 })
 
@@ -1865,11 +1879,65 @@ template 中 `TaskCreate` 分支之后追加：
     />
 ```
 
-- [ ] **Step 3: 验证** — `pnpm run typecheck` 通过。手动走查：
+- [ ] **Step 3: KaTeX 公式渲染（DocViewer md 管线扩展）**
+
+公式块 LaTeX（v2 §2 `math_content`/`formula_body`，按裸公式处理）经 KaTeX 渲染；OCR 坏串降级为红字原文。改动点为既有共享组件 `DocViewer.vue` 的 md 渲染管线——只新增 `$` 定界符处理，向后兼容（dubbing 等既有使用方内容无 `$` 不受影响）。
+
+**Files:**
+- Create: `packages/shared/src/web/components/katex.ts`
+- Modify: `packages/shared/src/web/components/DocViewer.vue`（`renderedMd` 追加公式处理）
+
+3a. 创建 `packages/shared/src/web/components/katex.ts`，内容如下（完整文件）：
+
+```ts
+/**
+ * KaTeX 渲染薄封装（公式块 LaTeX，v2 §2 math_content/formula_body，按裸公式处理）。
+ * throwOnError:false + strict:'ignore'：OCR 坏串渲染为红字原文，不炸组件。
+ * 颜色继承主题文字色（dark/light 无碍）；后续在意首屏体积可改动态 import + 占位重渲。
+ */
+import katex from 'katex'
+import 'katex/dist/katex.min.css'
+
+export function renderLatex(tex: string, displayMode = true): string {
+  return katex.renderToString(tex, {
+    displayMode,
+    throwOnError: false,
+    strict: 'ignore',
+    output: 'html',
+  })
+}
+```
+
+3b. 修改 `DocViewer.vue`：`renderedMd` computed 整体替换为（仅追加两行 `$` 处理，其余与现状一致；注意 `$$` 必须先于 `$` 匹配）：
+
+```ts
+const renderedMd = computed(() => {
+  const d = props.doc
+  if (!d) return ''
+  return d.content
+    .replace(/^### (.+)$/gm, '<h3>$1</h3>')
+    .replace(/^## (.+)$/gm, '<h2>$1</h2>')
+    .replace(/^# (.+)$/gm, '<h1>$1</h1>')
+    .replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
+    .replace(/\$\$([^$]+)\$\$/g, (_, tex: string) => renderLatex(tex, true))
+    .replace(/\$([^$\n]+)\$/g, (_, tex: string) => renderLatex(tex, false))
+    .replace(/\n/g, '<br>')
+})
+```
+
+script import 区追加：
+
+```ts
+import { renderLatex } from './katex'
+```
+
+3c. 走查补充（并入 Step 4 验证清单）：mock IR 中本无公式块——临时把 `compare.ts` 某 para 块 text 改为 `'$$E=mc^2$$'`，进度页预览应渲染为排版公式；再改为 `'$$\frac{'`（坏串）应显示红字原文而非白屏；验证后改回。
+
+- [ ] **Step 4: 验证** — `pnpm run typecheck` 通过。手动走查：
   1. 列表点「港区护岸修复工程比标」（analyzing）→ 进入进度页：左侧 DocViewer 顶部进度条「文档解析/两两查重/条款校验」绿色完成、「AI 分析」蓝色 45%；右侧实时证据出现卡片（高/中风险色左边条 + 严重度 tag）；「进入结果工作台」可点（结果页 Task 9 才渲染，点击空白属预期，返回列表继续）。
   2. 列表点「锚地疏浚维护比标」（partial）→ 跳结果视图（空白，Task 9 生效）。
   3. 创建任务（含 1 份招标文件 + 2 份标书）→ 进度页顶部先出现「条款确认」info alert，约 2~3s 后消失并进入查重，右侧证据陆续出现；状态最终停在「AI 分析中/已完成」。
-- [ ] **Step 4: （可选）** `git add -A && git commit -m "feat(user-web): compare analysis progress view"`
+- [ ] **Step 5: （可选）** `git add -A && git commit -m "feat(user-web): compare analysis progress view"`
 
 ---
 
@@ -2396,9 +2464,9 @@ template 中 `AnalysisProgress` 分支之后追加：
 - Create: `user-web/scripts/gen-compare-sample-pdf.mjs`
 - Create（脚本产物）: `user-web/public/mock/compare/bid-a.pdf`、`bid-b.pdf`、`bid-c.pdf`、`tender.pdf`、`report-demo.pdf`
 
-pdf.js worker 采用 `import workerSrc from 'pdfjs-dist/build/pdf.worker.min.mjs?url'`（Task 11 移植的 `PdfViewer.vue` 内接入，与 AnGIneer 源写法一致），vite 原生处理，**无需改 `vite.config.ts`**。演示 PDF 由脚本手写最小 PDF 结构生成（无第三方依赖），中文用 Type0 字体 `STSong-Light + UniGB-UCS2-H` 预定义 CMap（pdf.js 回退系统中文字体渲染）。页面 595×842 pt，文本行坐标与 Task 3 mock IR 的 bbox 手工对齐（y 为行顶坐标，PDF 绘制时换算 `Tm y = 842 - y - size`）。**移植 PDF_Viewer 后本脚本仍保留**：Task 13 的 bbox 对齐精度走查依赖这组「坐标已知的 PDF + mock IR」对照数据，且 PdfViewer 的虚拟滚动/缩放功能验证也需要多页 PDF。
+pdf.js worker 采用 `import workerSrc from 'pdfjs-dist/build/pdf.worker.min.mjs?url'`（Task 11 移植的 `PdfViewer.vue` 内接入，与 AnGIneer 源写法一致），vite 原生处理，**无需改 `vite.config.ts`**。演示 PDF 由脚本手写最小 PDF 结构生成（无第三方依赖），中文用 Type0 字体 `STSong-Light + UniGB-UCS2-H` 预定义 CMap（pdf.js 回退系统中文字体渲染）。页面 595×842 pt；Task 3 mock IR 的 bbox 为 0~1 归一化值 = 文本行坐标 ÷ 页面尺寸（v2 契约，PDF_Viewer 直接还原；y 为行顶坐标，PDF 绘制时换算 `Tm y = 842 - y - size`）。**移植 PDF_Viewer 后本脚本仍保留**：Task 13 的 bbox 对齐精度走查依赖这组「坐标已知的 PDF + mock IR」对照数据，且 PdfViewer 的虚拟滚动/缩放功能验证也需要多页 PDF。
 
-- [ ] **Step 1: 仓库根执行 `pnpm --filter user-web add pdfjs-dist`**
+- [ ] **Step 1: 仓库根执行 `pnpm --filter user-web add pdfjs-dist katex`**
 
 - [ ] **Step 2: 创建 `user-web/scripts/gen-compare-sample-pdf.mjs`，内容如下（完整文件）**
 
@@ -2409,7 +2477,8 @@ pdf.js worker 采用 `import workerSrc from 'pdfjs-dist/build/pdf.worker.min.mjs
  * pdf.js 会用系统中文字体回退渲染。
  * 页面尺寸 595×842 pt（A4 @72dpi），与 packages/shared/src/mock/data/compare.ts
  * 中 IR 的 pages[].width/height 一致；每行文本 (x, y, size) 与对应 block 的
- * bbox 手工对齐：y 为行顶坐标，PDF 绘制时 Tm y = 842 - y - size。
+ * bbox 对齐：mock IR 存储 0~1 归一化值（行坐标 ÷ 页面尺寸，v2 契约），
+ * y 为行顶坐标，PDF 绘制时 Tm y = 842 - y - size。
  * 用法：node user-web/scripts/gen-compare-sample-pdf.mjs
  */
 import { writeFileSync, mkdirSync } from 'node:fs'
@@ -2643,7 +2712,7 @@ export const normalizeRectFromBaseRow = (row: Record<string, any>): RectBounds |
 
 /**
  * 源 :244-262。三种输入自适应：已归一化（max≤1.2）/ 绝对像素+页面尺寸 / 散字段。
- * 比标 IR 走「绝对像素 + pageWidth/pageHeight」分支。
+ * 比标 IR bbox 已是 0~1 归一化（v2 契约），走「max≤1.2 直收」分支；像素分支仅为兼容保留。
  */
 export const normalizeRectFromPayload = (
   payload: Record<string, any>,
@@ -2888,7 +2957,7 @@ controller 其余部分（含 `loadPdfDocument` 三级降级、虚拟滚动、�
 
 - [ ] **Step 1: `highlight.ts` 末尾追加以下代码（完整代码）**
 
-输入适配：比标 IR 的 `bbox` 是页面实际像素坐标 `[x0,y0,x1,y1]`（左上角原点），`pages[].width/height` 给页面像素尺寸；`normalizeRectFromPayload` 走「绝对像素 + pageWidth/pageHeight」分支归一化，`pageIdx`（0-based）转 `page`（1-based）。
+输入适配：v2 契约下比标 IR 的 `bbox` 已是 0~1 归一化坐标（左上角原点），直接 `normalizeRect` 采用，无需像素换算；`pageIdx`（0-based）转 `page`（1-based）。
 
 ```ts
 import type { IrDocument } from '../../../core/types'
@@ -2896,6 +2965,7 @@ import type { IrDocument } from '../../../core/types'
 /**
  * 比标 IR → LinkedHighlight 映射（薄 mapper）。
  * blockColors 由调用方按配对/严重度着色（blockId → CSS 色值），未着色的块不产出高亮。
+ * bbox 为 0~1 归一化（v2 契约），直接归一化校验后即可用。
  */
 export function mapIrBlocksToHighlights(
   ir: IrDocument | null,
@@ -2906,10 +2976,7 @@ export function mapIrBlocksToHighlights(
   for (const block of ir.blocks) {
     const color = blockColors.get(block.blockId)
     if (!color) continue
-    const page = ir.pages.find((p) => p.pageIdx === block.pageIdx)
-    if (!page || page.width <= 0 || page.height <= 0) continue
-    const rect = normalizeRectFromPayload({ bbox: block.bbox }, page.width, page.height)
-    if (!rect) continue
+    const rect = normalizeRect(block.bbox)
     highlights.push({
       id: block.blockId,
       itemId: block.blockId,
@@ -3283,7 +3350,7 @@ template 中 `ResultWorkbench` 分支之后追加：
 
 - [ ] **Step 2: 验证** — `pnpm run typecheck` 通过。手动走查：
   1. 工作台证据清单点「技术方案章节大面积雷同」→ 左右对比视图：左标书A、右标书B 各渲染 3 页 PDF，两侧自动跳到第 2 页，3 对雷同块（3.1/3.2/3.3）以同色框配对高亮，首对块闪烁后常亮。
-  2. **bbox 对齐精度**：高亮框应正好套住对应文本行（演示 PDF 坐标与 mock IR 手工对齐，偏差应 <2px）；点 PdfViewer 工具栏放大到约 150% 再缩小回适应，高亮框始终精确套住文本（高亮层按渲染页 metrics 定位，缩放不漂移）。
+  2. **bbox 对齐精度**：高亮框应正好套住对应文本行（mock IR 归一化 bbox 由演示 PDF 行坐标 ÷ 595×842 得出，渲染偏差应 <2px）；点 PdfViewer 工具栏放大到约 150% 再缩小回适应，高亮框始终精确套住文本（高亮层按渲染页 metrics 定位，缩放不漂移）。
   3. 点左侧某个高亮框 → 右侧配对框跳页闪烁（同色）；hover 高亮框显示类型 tag。
   4. 「逐块对齐」开启时滚动左栏，右栏按比例同步；关闭后互不影响。
   5. **虚拟滚动（可选，验证大文件能力）**：临时把 mock 中某文档 `fileUrl` 改为本地 100+ 页 PDF 路径（或 public 下放一份大 PDF），打开对比视图快速滚动——DOM 中 `.pdf-page-wrapper` 保持个位数（只渲染可视区页），滚动流畅无白屏闪烁；验证后改回。
@@ -3859,7 +3926,7 @@ style 块末尾追加（AGENTS §2.14 tabs 覆盖）：
 
 - [ ] **Step 4: 验证** — `pnpm run typecheck` 通过。手动走查：
   1. 「智慧航道疏浚工程比标」工作台 → 下方 tabs：默认「证据清单」与 P1 一致。
-  2. 切「条款响应矩阵」：5 行条款 × 3 列标书；cl-3 × 标书C 为红色「未响应」，点该单元格弹出 AI 判定理由（含原文定位 c-b9）；cl-2 × 标书B 为橙色「部分响应」。
+  2. 切「条款响应矩阵」：5 行条款 × 3 列标书；cl-3 × 标书C 为红色「未响应」，点该单元格弹出 AI 判定理由（含原文定位 doc-c:2:3）；cl-2 × 标书B 为橙色「部分响应」。
   3. 切「指标比选表」：5 行指标 × 3 列，报价/工期/质保期数值与 mock 一致。
   4. 「锚地疏浚维护比标」（partial）→ 条款矩阵与指标表显示 EmptyState 空态（mock 报告对该任务返回的是兜底结构，条款快照为空）。
 - [ ] **Step 5: （可选）** `git add -A && git commit -m "feat(user-web): clause response matrix and indicator tables"`

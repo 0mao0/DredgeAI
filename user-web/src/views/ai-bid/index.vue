@@ -35,12 +35,41 @@
 
     <a-drawer
       v-model:open="sessionDrawer"
-      title="历史会话"
+      :title="isCompare ? '比标历史' : '历史会话'"
       placement="right"
       width="400"
       destroy-on-close
     >
-      <div class="session-list">
+      <!-- 比标任务历史 -->
+      <div v-if="isCompare" class="session-list">
+        <a-skeleton v-if="compareLoading" active :paragraph="{ rows: 4 }" />
+        <a-empty v-else-if="!compareTasks.length" description="暂无比标任务" />
+        <template v-else>
+          <div
+            v-for="task in compareTasks"
+            :key="task.id"
+            class="session-item"
+            @click="openCompareTask(task.id)"
+          >
+            <div class="session-name">
+              {{ task.name }}
+              <a-tag :color="compareStatusMap[task.status]?.color" class="session-status">
+                {{ compareStatusMap[task.status]?.text }}
+              </a-tag>
+            </div>
+            <div class="session-meta">
+              <span>{{ task.documents.length }} 份标书 · {{ formatDate(task.createdAt) }}</span>
+              <span v-if="task.riskSummary" class="session-badge session-badge--warn">
+                高 {{ task.riskSummary.high }} / 中 {{ task.riskSummary.mid }} / 低 {{ task.riskSummary.low }}
+              </span>
+              <span v-else class="session-badge session-badge--ok">—</span>
+            </div>
+          </div>
+        </template>
+      </div>
+
+      <!-- 读标会话历史 -->
+      <div v-else class="session-list">
         <div
           v-for="session in sessions"
           :key="session.id"
@@ -65,8 +94,8 @@
 </template>
 
 <script setup lang="ts">
-import { ref } from 'vue'
-import { useRouter } from 'vue-router'
+import { ref, computed, watch } from 'vue'
+import { useRoute, useRouter } from 'vue-router'
 import {
   FileSearchOutlined,
   EditOutlined,
@@ -75,12 +104,42 @@ import {
   HistoryOutlined,
 } from '@ant-design/icons-vue'
 import { getBidSessions } from '@/api/modules/bid'
-import type { BidReviewSession } from '@/types'
+import { getTasks } from '@/api/modules/compare'
+import { COMPARE_STATUS_MAP } from './compare/constants'
+import type { BidReviewSession, CompareTask } from '@/types'
 
+const route = useRoute()
 const router = useRouter()
 const sessionDrawer = ref(false)
 const sessions = ref<BidReviewSession[]>([])
 const activeSessionId = ref('')
+
+const isCompare = computed(() => route.path.startsWith('/ai-bid/compare'))
+const compareTasks = ref<CompareTask[]>([])
+const compareLoading = ref(false)
+
+const compareStatusMap = COMPARE_STATUS_MAP
+
+function formatDate(s: string): string {
+  return s ? s.slice(0, 10) : '—'
+}
+
+watch(sessionDrawer, async (open) => {
+  if (!open || !isCompare.value) return
+  compareLoading.value = true
+  try {
+    compareTasks.value = await getTasks()
+  } catch {
+    compareTasks.value = []
+  } finally {
+    compareLoading.value = false
+  }
+})
+
+function openCompareTask(id: string): void {
+  sessionDrawer.value = false
+  router.push({ path: '/ai-bid/compare', query: { task: id } })
+}
 
 const features = [
   { route: '/ai-bid/read', name: '读标', icon: FileSearchOutlined, bg: 'linear-gradient(135deg, #2563EB, #3B82F6)' },
@@ -181,6 +240,7 @@ getBidSessions().then((s) => { sessions.value = s; if (s.length > 0) activeSessi
   &.active { background: color-mix(in srgb, @brand-primary 6%, transparent); }
 }
 .session-name { font-size: @font-size-sm; font-weight: @font-weight-medium; color: @text-primary; margin-bottom: 4px; }
+.session-status { margin-left: @spacing-sm; }
 .session-meta {
   display: flex; align-items: center; justify-content: space-between;
   font-size: @font-size-xs; color: @text-tertiary;
@@ -193,8 +253,17 @@ getBidSessions().then((s) => { sessions.value = s; if (s.length > 0) activeSessi
   &--warn { background: color-mix(in srgb, @danger 12%, transparent); color: @danger; }
 }
 
+.ai-bid {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+
 .ai-bid-content {
-  min-height: 400px;
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
 }
 </style>
 
