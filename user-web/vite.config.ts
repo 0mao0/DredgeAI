@@ -19,6 +19,12 @@ export default defineConfig(({ mode }) => {
       host: true,
       open: false,
       proxy: {
+        // ABP 后端（比标等真实接口，开发联调用；mock 关闭后生效）
+        '/api': {
+          target: env.VITE_API_TARGET || 'https://localhost:44361',
+          changeOrigin: true,
+          secure: false,
+        },
       // 本地 CosyVoice TTS 服务（开发联调用，生产由 VITE_TTS_TARGET 指向正式服务）
         '/tts': {
           target: env.VITE_TTS_TARGET || 'http://localhost:8000',

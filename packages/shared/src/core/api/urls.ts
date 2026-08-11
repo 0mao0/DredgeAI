@@ -46,6 +46,21 @@ export const urls = {
   adminDubbingUsageSummary: '/dubbing/admin/usage/summary',
   adminDubbingUsageTimeseries: '/dubbing/admin/usage/timeseries',
 
+  // AI 比标
+  compareTasks: '/compare/tasks',
+  compareTask: '/compare/tasks/:id',
+  compareTaskDocuments: '/compare/tasks/:id/documents',
+  compareTaskIr: '/compare/tasks/:id/ir/:docId',
+  compareTaskEvidences: '/compare/tasks/:id/evidences',
+  compareTaskMatrix: '/compare/tasks/:id/matrix',
+  compareTaskClauses: '/compare/tasks/:id/clauses',
+  compareTaskClauseExtract: '/compare/tasks/:id/clauses/extract',
+  compareTaskReport: '/compare/tasks/:id/report',
+  compareTaskExport: '/compare/tasks/:id/export',
+  compareTaskExportStatus: '/compare/tasks/:id/exports/:exportId',
+  compareClauseTemplates: '/compare/clause-templates',
+  compareClauseTemplate: '/compare/clause-templates/:id',
+
   // admin-web
   adminStats: '/dashboard/stats',
   dashboardMetrics: '/dashboard/metrics',
