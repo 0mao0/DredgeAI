@@ -4,6 +4,7 @@ import { API_BASE_URL } from '@/utils/constants'
 import type {
   ClauseItem,
   CompareDocMeta,
+  CompareDraftDocument,
   ComparePair,
   CompareTask,
   CompareTaskStatus,
@@ -64,8 +65,22 @@ interface CompareDocumentDto {
   fileSize: number
   parseStatus: number
   parseError?: string | null
+  parseProgress?: number | null
+  parseStage?: string | null
+  parseStageMessage?: string | null
+  parseStartedAt?: string | null
+  parseFinishedAt?: string | null
   pageCount?: number | null
   ocrLowConfidenceRatio?: number | null
+  createdAt: string
+}
+
+interface CompareDraftDocumentDto {
+  id: string
+  draftId: string
+  role: number
+  fileName: string
+  fileSize: number
   createdAt: string
 }
 
@@ -226,9 +241,25 @@ function mapDocument(dto: CompareDocumentDto): CompareDocMeta {
     pages: dto.pageCount ?? 0,
     sizeBytes: dto.fileSize,
     parseStatus: PARSE_STATUS_MAP[dto.parseStatus] ?? 'pending',
+    parseProgress: dto.parseProgress ?? undefined,
+    parseStage: dto.parseStage ?? undefined,
+    parseStageMessage: dto.parseStageMessage ?? undefined,
+    parseStartedAt: dto.parseStartedAt ?? undefined,
+    parseFinishedAt: dto.parseFinishedAt ?? undefined,
     role: dto.role === 1 ? 'tender' : 'bid',
     failReason: dto.parseError ?? undefined,
     isLowConfidenceOcr: dto.ocrLowConfidenceRatio != null && dto.ocrLowConfidenceRatio > 0.3,
+  }
+}
+
+function mapDraftDocument(dto: CompareDraftDocumentDto): CompareDraftDocument {
+  return {
+    id: dto.id,
+    draftId: dto.draftId,
+    role: dto.role === 1 ? 'tender' : 'bid',
+    fileName: dto.fileName,
+    fileSize: dto.fileSize,
+    createdAt: dto.createdAt,
   }
 }
 
@@ -277,8 +308,11 @@ export async function getTasks(): Promise<CompareTask[]> {
   return Promise.all(res.items.map(async (t) => mapTask(t, await getDocuments(t.id))))
 }
 
-export async function createTask(name: string): Promise<CompareTask> {
-  const dto = await request.post<CompareTaskDto>(urls.compareTasks, { name })
+export async function createTask(name: string, draftId?: string): Promise<CompareTask> {
+  const dto = await request.post<CompareTaskDto>(
+    urls.compareTasks,
+    draftId ? { name, draftId } : { name },
+  )
   return mapTask(dto, [])
 }
 
@@ -354,20 +388,58 @@ export async function uploadDocument(
   return mapDocument(dto)
 }
 
+/* —— 上传会话（选中即上传，仅暂存文件，不建任务） —— */
+
+export async function uploadDraftDocument(
+  draftId: string,
+  file: File,
+  role: 'bid' | 'tender',
+  onProgress?: (percent: number) => void,
+): Promise<CompareDraftDocument> {
+  const formData = new FormData()
+  formData.append('file', file)
+  formData.append('role', role === 'tender' ? '1' : '0')
+  const dto = await request.post<CompareDraftDocumentDto>(
+    fillUrl(urls.compareDraftDocuments, { draftId }),
+    formData,
+    {
+      headers: { 'Content-Type': 'multipart/form-data' },
+      timeout: 120000,
+      onUploadProgress: (e) => {
+        if (onProgress && e.total) onProgress(Math.round((e.loaded / e.total) * 100))
+      },
+    },
+  )
+  return mapDraftDocument(dto)
+}
+
+export async function getDraftDocuments(draftId: string): Promise<CompareDraftDocument[]> {
+  const res = await request.get<CompareDraftDocumentDto[]>(fillUrl(urls.compareDraft, { draftId }))
+  return res.map(mapDraftDocument)
+}
+
+export async function deleteDraftDocument(draftId: string, docId: string): Promise<void> {
+  await request.delete<void>(fillUrl(urls.compareDraftDocument, { draftId, docId }))
+}
+
+export async function deleteDraft(draftId: string): Promise<void> {
+  await request.delete<void>(fillUrl(urls.compareDraft, { draftId }))
+}
+
 /* —— 证据 / 矩阵 —— */
 
-async function getIr(taskId: string, docId: string, silent = false): Promise<DocumentIrDto | null> {
+async function getIr(taskId: string, docId: string): Promise<DocumentIrDto | null> {
   try {
-    return await request.get<DocumentIrDto>(fillUrl(urls.compareTaskIr, { id: taskId, docId }), silentConfig(silent))
+    return await request.get<DocumentIrDto>(fillUrl(urls.compareTaskIr, { id: taskId, docId }), silentConfig(true))
   } catch {
     return null
   }
 }
 
-async function buildRefs(taskId: string, ev: EvidenceDto, silent = false): Promise<EvidenceItem['refs']> {
+async function buildRefs(taskId: string, ev: EvidenceDto): Promise<EvidenceItem['refs']> {
   const refs: EvidenceItem['refs'] = []
   for (const loc of ev.locations) {
-    const ir = await getIr(taskId, loc.docId, silent)
+    const ir = await getIr(taskId, loc.docId)
     if (!ir) continue
     for (const blockId of loc.blockIds) {
       const block = ir.blocks.find((b) => b.blockId === blockId)
@@ -402,7 +474,7 @@ export async function getEvidence(id: string, silent = false): Promise<EvidenceI
       summary: ev.description,
       detail: ev.description,
       metrics: ev.metrics ?? undefined,
-      refs: await buildRefs(id, ev, silent),
+      refs: await buildRefs(id, ev),
       source: ev.aiGenerated ? 'ai' : 'algo',
       status: 'final',
     })
