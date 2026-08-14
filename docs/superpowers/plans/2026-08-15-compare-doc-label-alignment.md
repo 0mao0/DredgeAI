@@ -76,7 +76,7 @@ test('无字母文件从 A 补位并跳过已占用字母', () => {
   const docs = [doc('d1', 'C.docx'), doc('d2', 'D.docx'), doc('d3', '无字母.docx'), doc('d4', '报价.pdf')]
   assert.deepEqual(buildDocLabels(docs), { d1: 'C', d2: 'D', d3: 'A', d4: 'B' })
 
-  const three = [doc('d1', 'C.docx'), doc('d2', 'D.docx'), doc('d3', 'a.pdf'), doc('d4', 'b.pdf'), doc('d5', 'c.pdf')]
+  const three = [doc('d1', 'C.docx'), doc('d2', 'D.docx'), doc('d3', '无字母1.pdf'), doc('d4', '无字母2.pdf'), doc('d5', '无字母3.pdf')]
   assert.deepEqual(buildDocLabels(three), { d1: 'C', d2: 'D', d3: 'A', d4: 'B', d5: 'E' })
 })
 
