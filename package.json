@@ -18,7 +18,7 @@
     "prepare": "husky"
   },
   "lint-staged": {
-    "*.{ts,vue,mts}": "eslint --fix"
+    "*.{ts,vue,mts}": "node node_modules/eslint/bin/eslint.js --fix"
   },
   "devDependencies": {
     "@antfu/eslint-config": "^9.2.0",
