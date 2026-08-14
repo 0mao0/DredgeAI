@@ -1,4 +1,5 @@
 import { urls } from '@shared/core/api'
+import { overviewDocLabels } from '@shared/core/utils/compare'
 import request from '@/api/request'
 import { API_BASE_URL } from '@/utils/constants'
 import type {
@@ -487,8 +488,8 @@ export async function getMatrix(id: string, silent = false): Promise<SimilarityM
 }
 
 export async function getOverview(id: string): Promise<TaskOverview> {
-  const [matrix, evidence] = await Promise.all([getMatrix(id), getEvidence(id)])
-  const docLabels = matrix.docIds.map((_, i) => String.fromCharCode(65 + i))
+  const [matrix, evidence, documents] = await Promise.all([getMatrix(id), getEvidence(id), getDocuments(id)])
+  const docLabels = overviewDocLabels(matrix.docIds, documents)
   const simMatrix = matrix.docIds.map((a) =>
     matrix.docIds.map((b) => matrix.cells.find((c) => c.docAId === a && c.docBId === b)?.similarity ?? 0))
   const pairs = matrix.cells
