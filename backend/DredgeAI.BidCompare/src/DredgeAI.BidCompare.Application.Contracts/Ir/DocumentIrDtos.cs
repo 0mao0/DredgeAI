@@ -29,9 +29,10 @@ public class IrMetaDto
 
     public string? CreatorTool { get; set; }
 
-    public DateTime? CreatedAt { get; set; }
+    /// <summary>PDF 元数据时间可能是 D:20251229164720+08'00' 格式，按字符串透传，避免反序列化 500。</summary>
+    public string? CreatedAt { get; set; }
 
-    public DateTime? ModifiedAt { get; set; }
+    public string? ModifiedAt { get; set; }
 }
 
 public class IrPageDto
