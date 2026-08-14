@@ -23,22 +23,22 @@
       </a-tabs>
 
       <a-select
-        v-if="!collapsed"
+        v-if="!singlePane"
         v-model:value="rightDocId"
         size="small"
         class="pdf-workspace__select"
         :options="docOptions"
       />
 
-      <a-tooltip :title="collapsed ? '展开双栏对比' : '收起为单栏'">
-        <a-button size="small" type="text" class="pdf-workspace__toggle" @click="emit('update:collapsed', !collapsed)">
-          <ExpandOutlined v-if="collapsed" />
+      <a-tooltip :title="singlePane ? '展开双栏对比' : '收起为单栏'">
+        <a-button size="small" type="text" class="pdf-workspace__toggle" @click="singlePane = !singlePane">
+          <ExpandOutlined v-if="singlePane" />
           <CompressOutlined v-else />
         </a-button>
       </a-tooltip>
     </div>
 
-    <div class="pdf-workspace__body" :class="{ 'pdf-workspace__body--single': collapsed }">
+    <div class="pdf-workspace__body" :class="{ 'pdf-workspace__body--single': singlePane }">
       <PdfViewer
         :file-url="docFileUrl(leftDocId)"
         :title="docName(leftDocId)"
@@ -49,7 +49,7 @@
         @update:page="leftPage = $event"
       />
       <PdfViewer
-        v-if="!collapsed"
+        v-if="!singlePane"
         :file-url="docFileUrl(rightDocId)"
         :title="docName(rightDocId)"
         :page="rightPage"
@@ -71,16 +71,15 @@ import type { BlockRange, CompareDocMeta, EvidenceItem } from '@/types'
 
 const props = defineProps<{
   documents: CompareDocMeta[]
-  collapsed: boolean
   pairActive?: { docAId: string, docBId: string } | null
   scanningDocId?: string | null
 }>()
 
 const emit = defineEmits<{
-  'update:collapsed': [value: boolean]
   'tabManual': []
 }>()
 
+const singlePane = ref(false)
 const leftDocId = ref('')
 const rightDocId = ref('')
 const leftPage = ref(1)
@@ -105,7 +104,7 @@ watch(() => props.documents, (docs) => {
 
 watch(() => props.pairActive, (pair) => {
   if (!pair) return
-  if (props.collapsed) emit('update:collapsed', false)
+  if (singlePane.value) singlePane.value = false
   leftDocId.value = pair.docAId
   rightDocId.value = pair.docBId
   leftPage.value = 1
@@ -139,23 +138,30 @@ function onManualTab(): void {
   emit('tabManual')
 }
 
-/** 证据溯源：单份文档单栏定位，两份及以上自动展开双栏并分别定位高亮。 */
+/** 证据溯源：单份文档单栏定位，两份及以上自动展开双栏并分别定位高亮；无 bbox 时整页兜底。 */
 function locate(ev: EvidenceItem): void {
-  const refs = ev.refs.length
-    ? ev.refs
-    : ev.docIds.map((docId) => ({ docId, page: 1, bbox: [0, 0, 1, 1] as [number, number, number, number] }))
   const [a, b] = ev.docIds
-  if (b && props.collapsed) emit('update:collapsed', false)
+  if (b && singlePane.value) singlePane.value = false
   if (a) {
     leftDocId.value = a
-    leftPage.value = refs.find((r) => r.docId === a)?.page ?? 1
-    leftHigh.value = refs.filter((r) => r.docId === a)
+    const refs = refsOf(ev, a)
+    leftPage.value = refs[0]?.page ?? 1
+    leftHigh.value = refs.length ? refs : fullPageRefs(ev, a)
   }
   if (b) {
     rightDocId.value = b
-    rightPage.value = refs.find((r) => r.docId === b)?.page ?? 1
-    rightHigh.value = refs.filter((r) => r.docId === b)
+    const refs = refsOf(ev, b)
+    rightPage.value = refs[0]?.page ?? 1
+    rightHigh.value = refs.length ? refs : fullPageRefs(ev, b)
   }
+}
+
+function refsOf(ev: EvidenceItem, docId: string): BlockRange[] {
+  return ev.refs.filter((r) => r.docId === docId)
+}
+
+function fullPageRefs(ev: EvidenceItem, docId: string): BlockRange[] {
+  return [{ docId, page: 1, bbox: [0, 0, 1, 1], pairId: ev.id }]
 }
 
 /** 单文档定位（文档列表/来源 chip 跳转用）。 */
