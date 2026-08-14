@@ -2,6 +2,11 @@ export const MAX_BID_DOCUMENTS = 8
 
 const BID_LETTERS = 'ABCDEFGH'
 
+/** 是否可走 PDF 预览链路：仅 .pdf；Word 等格式 PDF_Viewer 无法渲染，硬塞会触发浏览器下载 */
+export function isPdfFileName(fileName: string | undefined): boolean {
+  return /\.pdf$/i.test((fileName ?? '').trim())
+}
+
 export interface DocLabelSource {
   id: string
   role?: string

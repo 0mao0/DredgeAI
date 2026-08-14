@@ -177,7 +177,7 @@ export * from './compare'
 修改 `user-web/src/views/ai-bid/compare/constants.ts`：删除本地 `docLabel` 定义及其注释，替换为：
 
 ```ts
-export { MAX_BID_DOCUMENTS, buildDocLabels, docLabel, overviewDocLabels } from '@shared/core/utils/compare'
+export { buildDocLabels, docLabel, isPdfFileName, MAX_BID_DOCUMENTS, overviewDocLabels } from '@shared/core/utils/compare'
 ```
 
 - [ ] **Step 4: 运行测试，确认通过**

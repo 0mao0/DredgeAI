@@ -14,13 +14,7 @@ export const COMPARE_STATUS_MAP: Record<CompareTaskStatus, { color: string, text
 export function isTerminalStatus(status: CompareTaskStatus): boolean {
   return status === 'completed' || status === 'partial' || status === 'failed'
 }
-
-/** 是否可走 PDF 预览链路：仅 .pdf；Word 等格式 PDF_Viewer 无法渲染，硬塞会触发浏览器下载 */
-export function isPdfFileName(fileName: string | undefined): boolean {
-  return /\.pdf$/i.test((fileName ?? '').trim())
-}
-
-export { buildDocLabels, docLabel, MAX_BID_DOCUMENTS, overviewDocLabels } from '@shared/core/utils/compare'
+export { buildDocLabels, docLabel, isPdfFileName, MAX_BID_DOCUMENTS, overviewDocLabels } from '@shared/core/utils/compare'
 
 export function formatFileSize(size: number): string {
   if (size >= 1024 * 1024) return `${(size / 1024 / 1024).toFixed(1)} MB`

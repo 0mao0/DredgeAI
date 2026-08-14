@@ -18,6 +18,7 @@ export default antfu(
       'vue/multi-word-component-names': 'off',
       'vue/block-order': ['error', { order: ['template', 'script', 'style'] }],
       'vue/singleline-html-element-content-newline': 'off',
+      'test/no-import-node-test': 'off',
       'style/brace-style': ['error', '1tbs', { allowSingleLine: true }],
       'style/arrow-parens': ['error', 'always'],
       'style/max-statements-per-line': 'off',
