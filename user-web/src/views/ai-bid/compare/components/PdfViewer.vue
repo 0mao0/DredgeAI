@@ -9,6 +9,13 @@
     <div class="pdf-viewer__body">
       <EmptyState v-if="!fileUrl" type="no-data" title="请选择文档" />
 
+      <EmptyState
+        v-else-if="!canPreviewPdf"
+        type="no-data"
+        title="暂不支持在线预览"
+        description="Word 文档请下载后在本地查看"
+      />
+
       <PDF_Viewer
         v-else
         class="pdf-viewer__viewer"
@@ -41,6 +48,7 @@ import '@angineer/docs-ui/style'
 import EmptyState from '@shared/web/components/EmptyState.vue'
 import { normalizeRect } from '@shared/types'
 import { useThemeStore } from '@shared/web/stores'
+import { isPdfFileName } from '../constants'
 import type { BlockRange } from '@/types'
 
 const props = withDefaults(defineProps<{
@@ -83,6 +91,8 @@ interface ViewerHighlight {
 
 const themeStore = useThemeStore()
 const theme = computed(() => themeStore.effectiveTheme)
+
+const canPreviewPdf = computed(() => isPdfFileName(props.title))
 
 /** 定位证据时整组高亮同属一个 pairId，未显式指定则取第一组作为激活态。 */
 const activeHighlightId = computed(() =>

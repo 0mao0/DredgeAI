@@ -91,7 +91,6 @@ public class CompareTaskController : AbpControllerBase
         var result = await _appService.GetDocumentFileAsync(id, docId);
         return new FileStreamResult(result.Content, result.ContentType)
         {
-            FileDownloadName = result.FileName,
             EnableRangeProcessing = true, // pdf.js 流式加载依赖 Range 请求
         };
     }
