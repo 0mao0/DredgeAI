@@ -16,10 +16,39 @@
       @history-open="openTask"
     />
 
+    <!-- 续传面板：点了「开始分析」但文件还没传完，先进入工作区继续上传 -->
+    <div v-else-if="!task" class="compare-uploading">
+      <div class="compare-uploading__head">
+        <div class="compare-uploading__title">
+          <LoadingOutlined v-if="creating" class="compare-uploading__spin" />
+          <UploadOutlined v-else />
+          <span>{{ creating ? '上传完成，正在创建任务并开始解析…' : `正在上传文件 ${uploadedCount}/${uploadItems.length}` }}</span>
+        </div>
+        <a-button size="small" :disabled="creating" @click="backToUpload()">返回上传页</a-button>
+      </div>
+
+      <div v-if="finalizeError" class="compare-uploading__error">
+        <a-alert type="error" :message="finalizeError" show-icon />
+        <a-button size="small" type="primary" @click="finalizeTask()">重试</a-button>
+      </div>
+
+      <div class="compare-uploading__list">
+        <UploadFileRow
+          v-for="item in uploadItems"
+          :key="item.key"
+          :item="item"
+          :disabled="creating"
+          @retry="retryItem(item.key)"
+          @remove="removeItem(item.key)"
+        />
+      </div>
+    </div>
+
     <!-- 工作区：analyzing / result / failed 共用同一左右分栏 -->
     <div v-else-if="task" class="compare-workspace">
       <div class="compare-workspace__bar">
         <div class="compare-workspace__name">
+          <a-tag :color="statusInfo.color">{{ statusInfo.text }}</a-tag>
           <a-input
             v-model:value="nameDraft"
             size="small"
@@ -31,7 +60,6 @@
           />
           <span v-if="nameError" class="compare-workspace__name-error">{{ nameError }}</span>
         </div>
-        <a-tag :color="statusInfo.color">{{ statusInfo.text }}</a-tag>
 
         <a-dropdown trigger="click" placement="bottomRight">
           <a-button size="small">
@@ -72,7 +100,7 @@
         </a-dropdown>
         <span v-if="exportError" class="compare-workspace__export-error">{{ exportError }}</span>
 
-        <a-tooltip :title="workspaceCollapsed ? '展开右侧面板' : '收起右侧面板'">
+        <a-tooltip :title="workspaceCollapsed ? '展开左侧面板' : '收起左侧面板'">
           <a-button size="small" @click="workspaceCollapsed = !workspaceCollapsed">
             <ExpandOutlined v-if="workspaceCollapsed" />
             <CompressOutlined v-else />
@@ -90,16 +118,15 @@
 
       <div class="compare-workspace__split">
         <div
+          v-if="!workspaceCollapsed"
           class="compare-workspace__left"
-          :style="workspaceCollapsed ? { width: '100%' } : { width: `${splitRatio * 100}%` }"
+          :style="{ width: `${splitRatio * 100}%` }"
         >
           <PdfWorkspace
             ref="workspaceRef"
             :documents="workspaceDocs"
-            :collapsed="workspaceCollapsed"
             :pair-active="pairActive"
             :scanning-doc-id="scanningDocId"
-            @update:collapsed="workspaceCollapsed = $event"
             @tab-manual="lastManualTabAt = Date.now()"
           />
         </div>
@@ -111,10 +138,11 @@
           @pointerdown="onDividerDown"
         />
 
-        <div v-if="!workspaceCollapsed" class="compare-workspace__right">
+        <div class="compare-workspace__right">
           <ProcessPanel
             v-if="panel === 'process'"
             :task="task"
+            :overview="overview"
             :evidence="evidence"
             :clause-drafts="clauseDrafts"
             :extracting="extracting"
@@ -130,20 +158,6 @@
             @extract-clauses="onExtractClauses"
             @confirm-clauses="onConfirmClauses"
             @locate="onLocateEvidence"
-          />
-
-          <ResultPanel
-            v-else-if="panel === 'result'"
-            :task="task"
-            :overview="overview"
-            :evidence="evidence"
-            :loading="resultsLoading"
-            :exporting="exporting"
-            @locate="onLocateEvidence"
-            @locate-doc="onLocateDoc"
-            @export="exportMenuVisible = true"
-            @reparse-doc="onReparseDoc"
-            @reparse-all="onReparseAll"
           />
 
           <FailurePanel
@@ -171,19 +185,23 @@ import {
   DownloadOutlined,
   ExpandOutlined,
   HistoryOutlined,
+  LoadingOutlined,
   PlusOutlined,
+  UploadOutlined,
   WifiOutlined,
 } from '@ant-design/icons-vue'
 import UploadPage from './components/UploadPage.vue'
 import type { UploadFileItem } from './components/UploadPage.vue'
+import UploadFileRow from './components/UploadFileRow.vue'
 import PdfWorkspace from './components/PdfWorkspace.vue'
 import ProcessPanel from './components/ProcessPanel.vue'
-import ResultPanel from './components/ResultPanel.vue'
 import FailurePanel from './components/FailurePanel.vue'
 import { COMPARE_STATUS_MAP, deriveProjectName, isTerminalStatus } from './constants'
 import {
   confirmClauses,
   createTask,
+  deleteDraft,
+  deleteDraftDocument,
   exportReport,
   extractClauses,
   getEvidence,
@@ -195,8 +213,8 @@ import {
   reparseTask,
   retryCompare,
   startParse,
+  uploadDraftDocument,
   updateTaskName,
-  uploadDocument,
 } from '@/api/modules/compare'
 import type { ClauseItem, CompareDocMeta, CompareTask, EvidenceItem, TaskOverview } from '@/types'
 
@@ -218,6 +236,9 @@ const uploadName = ref('')
 const uploadItems = ref<UploadFileItem[]>([])
 const creating = ref(false)
 const uploadError = ref('')
+const draftId = ref(newDraftId())
+const startRequested = ref(false)
+const finalizeError = ref('')
 
 /* —— 动作 loading —— */
 const extracting = ref(false)
@@ -250,12 +271,17 @@ const statusInfo = computed(() =>
   task.value ? COMPARE_STATUS_MAP[task.value.status] : { color: 'default', text: '' },
 )
 
-const panel = computed<'process' | 'result' | 'failed'>(() => {
+const panel = computed<'process' | 'failed'>(() => {
   if (!task.value) return 'process'
   if (task.value.status === 'failed') return 'failed'
-  if (isTerminalStatus(task.value.status)) return 'result'
   return 'process'
 })
+
+const uploadedCount = computed(() => uploadItems.value.filter((i) => i.status === 'done').length)
+const allUploadsSettled = computed(() =>
+  uploadItems.value.length > 0
+    && uploadItems.value.every((i) => i.status !== 'uploading' && i.status !== 'pending'),
+)
 
 /** 文档原文预览 URL 由宿主统一生成（子组件不直接触碰 API 层）。 */
 const workspaceDocs = computed<CompareDocMeta[]>(() =>
@@ -271,6 +297,10 @@ const canExport = computed(() =>
 
 watch(() => task.value?.name, (name) => {
   if (name != null && !nameSaving.value) nameDraft.value = name
+})
+
+watch(allUploadsSettled, (settled) => {
+  if (settled && startRequested.value) void maybeFinalize()
 })
 
 onMounted(() => {
@@ -465,18 +495,34 @@ function onHistoryClick({ key }: { key: string }): void {
 
 function resetToUpload(reason = ''): void {
   stopPoll()
+  if (draftId.value) void deleteDraft(draftId.value).catch(() => {})
+  draftId.value = newDraftId()
   task.value = null
   pendingTaskId.value = null
   uploadItems.value = []
   uploadName.value = ''
   uploadError.value = reason
   creating.value = false
+  startRequested.value = false
+  finalizeError.value = ''
   resetWorkspace()
   view.value = 'upload'
   void loadHistory()
 }
 
-/* —— 上传页 —— */
+/** 上传续传面板：返回上传页但保留已上传文件和会话，可继续增删文件。 */
+function backToUpload(): void {
+  view.value = 'upload'
+}
+
+/* —— 上传页：选中即上传到会话（不建任务），点「开始分析」才建任务/解析 —— */
+
+function newDraftId(): string {
+  return typeof crypto !== 'undefined' && 'randomUUID' in crypto
+    ? crypto.randomUUID()
+    : `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}`
+}
+
 function onAddFiles(files: { file: File, role: 'bid' | 'tender' }[]): void {
   for (const { file, role } of files) {
     const key = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`
@@ -516,10 +562,11 @@ function pushUploadItem(
     name: file.name,
     size: file.size,
     role,
-    status: error ? 'error' : 'pending',
+    status: error ? 'error' : 'uploading',
     error,
     file,
   })
+  if (!error) void uploadItem(key)
 }
 
 function setUploadItem(key: string, patch: Partial<UploadFileItem>): void {
@@ -529,25 +576,31 @@ function setUploadItem(key: string, patch: Partial<UploadFileItem>): void {
   }
 }
 
-async function uploadItemWithProgress(item: UploadFileItem, taskId: string): Promise<void> {
+async function uploadItem(key: string): Promise<void> {
+  const item = uploadItems.value.find((i) => i.key === key)
+  if (!item) return
   const startedAt = Date.now()
-  setUploadItem(item.key, { status: 'uploading', error: undefined, percent: 0 })
+  setUploadItem(key, { status: 'uploading', error: undefined, percent: 0, startedAt })
   try {
-    const doc = await uploadDocument(taskId, item.file, item.role, (p) => {
-      setUploadItem(item.key, { percent: Math.max(2, Math.min(95, p)) })
+    const doc = await uploadDraftDocument(draftId.value, item.file, item.role, (p) => {
+      setUploadItem(key, { percent: Math.max(2, Math.min(95, p)) })
     })
-    // 本地回环传输可能“秒传”，保持上传态至少可见 700ms，避免看起来像瞬间完成
+    // 本地回环传输可能“秒传”，保持上传态至少可见 300ms，避免看起来像瞬间完成
     const elapsed = Date.now() - startedAt
-    if (elapsed < 700) {
-      await new Promise((r) => setTimeout(r, 700 - elapsed))
+    if (elapsed < 300) {
+      await new Promise((r) => setTimeout(r, 300 - elapsed))
     }
-    setUploadItem(item.key, { status: 'done', docId: doc.id, percent: 100 })
+    setUploadItem(key, { status: 'done', docId: doc.id, percent: 100 })
   } catch {
-    setUploadItem(item.key, { status: 'error', error: '上传失败，请重试', percent: undefined })
+    setUploadItem(key, { status: 'error', error: '上传失败，请重试', percent: undefined })
   }
 }
 
 function removeItem(key: string): void {
+  const item = uploadItems.value.find((i) => i.key === key)
+  if (item?.status === 'done' && item.docId) {
+    void deleteDraftDocument(draftId.value, item.docId).catch(() => {})
+  }
   uploadItems.value = uploadItems.value.filter((i) => i.key !== key)
   if (!uploadName.value) {
     uploadName.value = deriveProjectName(uploadItems.value.filter((i) => i.role === 'bid').map((i) => i.name))
@@ -555,12 +608,10 @@ function removeItem(key: string): void {
 }
 
 async function retryItem(key: string): Promise<void> {
-  const item = uploadItems.value.find((i) => i.key === key)
-  if (!item || !pendingTaskId.value) return
-  await uploadItemWithProgress(item, pendingTaskId.value)
+  await uploadItem(key)
 }
 
-async function handleStart(name: string): Promise<void> {
+function handleStart(): void {
   if (creating.value) return
   const readyBids = uploadItems.value.filter((i) => i.role === 'bid' && i.status !== 'error').length
   if (readyBids < 2) {
@@ -568,34 +619,39 @@ async function handleStart(name: string): Promise<void> {
     return
   }
 
-  creating.value = true
   uploadError.value = ''
+  startRequested.value = true
+  view.value = 'workspace'
+  maybeFinalize()
+}
+
+function maybeFinalize(): void {
+  if (!startRequested.value || creating.value || task.value || !allUploadsSettled.value) return
+  void finalizeTask()
+}
+
+async function finalizeTask(): Promise<void> {
+  if (creating.value || task.value) return
+  const okBids = uploadItems.value.filter((i) => i.role === 'bid' && i.status === 'done').length
+  if (okBids < 2) {
+    finalizeError.value = '可用投标文件不足 2 份，请返回上传页重试'
+    return
+  }
+
+  creating.value = true
+  finalizeError.value = ''
   try {
-    let taskId = pendingTaskId.value
-    if (!taskId) {
-      const t = await createTask(name.trim() || '比标任务')
-      taskId = t.id
-      pendingTaskId.value = taskId
-      task.value = t
-    }
-
-    const pending = uploadItems.value.filter((i) => i.status === 'pending' || i.status === 'error')
-    await Promise.allSettled(pending.map(async (item) => uploadItemWithProgress(item, taskId!)))
-    // v2 修订：上传完成后统一批量并发解析，不再逐份入队
-    await startParse(taskId!)
-
-    const successBids = uploadItems.value.filter((i) => i.role === 'bid' && i.status === 'done').length
-    if (successBids >= 2) {
-      const t = await getTask(taskId)
-      task.value = t
-      resetWorkspace()
-      view.value = 'workspace'
-      startPoll()
-    } else {
-      uploadError.value = '可用投标文件不足 2 份，请重试失败文件'
-    }
+    const t = await createTask(uploadName.value.trim() || '比标任务', draftId.value)
+    const started = await startParse(t.id, true)
+    task.value = started
+    pendingTaskId.value = null
+    uploadItems.value = []
+    startRequested.value = false
+    resetWorkspace()
+    view.value = 'workspace'
+    startPoll()
   } catch {
-    uploadError.value = '任务创建失败，请重试'
+    finalizeError.value = '任务创建失败，请重试'
   } finally {
     creating.value = false
   }
@@ -710,10 +766,6 @@ function onLocateEvidence(ev: EvidenceItem): void {
   workspaceRef.value?.locate(ev)
 }
 
-function onLocateDoc(payload: { docId: string, page: number }): void {
-  workspaceRef.value?.locateDoc(payload.docId, payload.page)
-}
-
 async function handleExport(format: 'docx' | 'pdf'): Promise<void> {
   if (!task.value || exporting.value) return
   exporting.value = true
@@ -786,6 +838,51 @@ function onDividerDown(e: PointerEvent): void {
   display: flex;
   flex-direction: column;
   overflow: hidden;
+}
+
+.compare-uploading {
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  gap: @spacing-md;
+  padding: @spacing-lg 0;
+  max-width: 720px;
+  margin: 0 auto;
+  width: 100%;
+
+  &__head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: @spacing-md;
+    flex-wrap: wrap;
+  }
+
+  &__title {
+    display: flex;
+    align-items: center;
+    gap: @spacing-sm;
+    font-size: @font-size-base;
+    font-weight: @font-weight-medium;
+    color: @text-primary;
+  }
+
+  &__spin {
+    color: @brand-primary;
+  }
+
+  &__error {
+    display: flex;
+    align-items: center;
+    gap: @spacing-md;
+    flex-wrap: wrap;
+  }
+
+  &__list {
+    display: flex;
+    flex-direction: column;
+    gap: @spacing-xs;
+  }
 }
 
 .compare-workspace {

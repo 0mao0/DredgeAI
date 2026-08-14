@@ -1,7 +1,6 @@
 <template>
   <div class="process-panel">
     <div class="process-panel__scroll">
-      <!-- partial：结果正常 + 失败文档内联重试 -->
       <div v-if="failedDocs.length" class="process-panel__partial">
         <ExclamationCircleOutlined class="process-panel__partial-icon" />
         <span class="process-panel__partial-text">
@@ -12,173 +11,246 @@
         </a-button>
       </div>
 
-      <SectionCard title="处理进度" flush>
-        <div class="process-stage">
-          <div class="process-stage__head">
-            <a-tag :color="stageColor" class="process-stage__tag">{{ stageText }}</a-tag>
-            <span v-if="pairLabel" class="process-stage__pair">{{ pairLabel }}</span>
-            <span class="process-stage__spacer" />
-            <a-progress type="circle" :percent="overallPercent" :size="52" />
-          </div>
-          <p v-if="task.progress.message" class="process-stage__message">{{ task.progress.message }}</p>
-        </div>
-      </SectionCard>
-
-      <SectionCard title="文档解析" flush>
-        <div class="process-list">
-          <div v-for="d in task.documents" :key="d.id" class="process-row">
-            <span class="process-row__label">{{ docLabel(task.documents, d.id) }}</span>
-            <a-tag v-if="d.role === 'tender'" class="process-row__tender">招标</a-tag>
-            <span class="process-row__name" :title="d.fileName">{{ d.fileName }}</span>
-            <template v-if="d.parseStatus === 'parsing'">
-              <a-spin size="small" />
-              <span class="process-row__parsing">解析中 · {{ elapsedText(d.id) }}</span>
-            </template>
-            <CheckCircleFilled v-else-if="d.parseStatus === 'done'" class="process-row__ok" />
-            <CloseCircleFilled v-else-if="d.parseStatus === 'failed'" class="process-row__bad" />
-            <span v-else class="process-row__wait">等待</span>
-            <span v-if="d.pages" class="process-row__pages">{{ d.pages }} 页</span>
-            <span v-if="d.failReason" class="process-row__error" :title="d.failReason">{{ d.failReason }}</span>
-            <a-button
-              v-if="d.parseStatus === 'failed'"
-              type="link"
-              size="small"
-              :loading="reparseDocIds.includes(d.id)"
-              @click="emit('reparseDoc', d.id)"
-            >
-              重新解析
-            </a-button>
-          </div>
-          <a-empty v-if="!task.documents.length" description="暂无文档" />
-        </div>
-      </SectionCard>
-
-      <!-- 条款确认：仅上传招标文件且尚未锁定快照时出现 -->
-      <SectionCard v-if="showClauseConfirm" title="强制性条款确认" flush>
-        <div v-if="extracting" class="process-panel__skeleton">
-          <a-skeleton active :paragraph="{ rows: 3 }" />
-        </div>
-        <a-empty v-else-if="!editableDrafts.length" description="尚未提取条款">
-          <a-button type="primary" size="small" @click="emit('extractClauses')">提取条款</a-button>
-        </a-empty>
-        <div v-else class="clause-edit">
-          <div v-for="(c, i) in editableDrafts" :key="c.id" class="clause-edit__row">
-            <a-tag :color="c.mandatory ? 'red' : 'default'" class="clause-edit__tag">
-              {{ c.mandatory ? '强制' : '建议' }}
-            </a-tag>
-            <a-tag class="clause-edit__source">{{ sourceText(c.source) }}</a-tag>
-            <a-input
-              v-model:value="editableDrafts[i].content"
-              size="small"
-              :placeholder="c.title"
-              class="clause-edit__input"
-            />
-            <a-button type="text" size="small" @click="removeClause(i)">
-              <DeleteOutlined />
-            </a-button>
-          </div>
-          <a-button size="small" type="dashed" block @click="addClause">
-            <PlusOutlined />添加条款
-          </a-button>
-          <div class="clause-edit__footer">
-            <span class="clause-edit__hint">确认后锁定任务快照，进入两两对比</span>
-            <a-button
-              type="primary"
-              :loading="confirmingClauses"
-              :disabled="!editableDrafts.length"
-              @click="emit('confirmClauses', editableDrafts.map(toPayload))"
-            >
-              确认并继续
-            </a-button>
-          </div>
-        </div>
-      </SectionCard>
-
-      <SectionCard title="两两对比" flush>
-        <div class="process-list">
-          <div v-for="p in pairs" :key="p.pairId" class="process-row">
-            <span class="process-row__label">
-              {{ docLabel(task.documents, p.docAId) }} ↔ {{ docLabel(task.documents, p.docBId) }}
-            </span>
-            <a-tag :color="PAIR_META[p.status].color" class="process-row__status">{{ PAIR_META[p.status].text }}</a-tag>
-            <span v-if="p.similarity != null" class="process-row__sim">
-              相似度 {{ Math.round(p.similarity * 100) }}%
-            </span>
-            <span v-if="p.failReason" class="process-row__error" :title="p.failReason">{{ p.failReason }}</span>
-            <a-button
-              v-if="p.status === 'failed'"
-              type="link"
-              size="small"
-              :loading="retryingPairIds.includes(p.pairId)"
-              @click="emit('retryPair', p.pairId)"
-            >
-              重试该对
-            </a-button>
-          </div>
-          <a-empty v-if="!pairs.length" description="比对对将在解析完成后生成" />
-        </div>
-      </SectionCard>
-
-      <SectionCard v-if="showAiSection" title="AI 分析" flush>
-        <a-alert
-          v-if="aiUnavailable"
-          type="warning"
-          show-icon
-          message="AI 分析暂不可用"
-          description="算法证据不受影响，可稍后重试"
-          class="process-panel__ai-alert"
-        />
-        <div v-else class="process-list">
-          <div class="process-row">
-            <a-spin size="small" />
-            <span class="process-row__name">条款响应判定（{{ task.documents.filter((d) => d.role !== 'tender').length }} 份标书）</span>
-          </div>
-          <div class="process-row">
-            <a-spin size="small" />
-            <span class="process-row__name">关键指标抽取</span>
-          </div>
-          <div class="process-row">
-            <a-spin size="small" />
-            <span class="process-row__name">AI 综合结论生成</span>
-          </div>
-        </div>
-        <div v-if="aiUnavailable" class="process-panel__ai-retry">
-          <a-button size="small" :loading="retryingCompare" @click="emit('retryCompare')">重试 AI</a-button>
-        </div>
-      </SectionCard>
-
-      <SectionCard title="发现流" flush>
-        <div class="process-feed">
-          <EvidenceCard
-            v-for="ev in evidence"
-            :key="ev.id"
-            :evidence="ev"
-            :documents="task.documents"
-            @trace="(e) => emit('locate', e)"
+      <section
+        v-for="(stage, index) in visibleStages"
+        :key="stage.key"
+        class="trace-stage"
+        :class="{ 'trace-stage--collapsed': isCollapsed(stage.key) }"
+      >
+        <button
+          type="button"
+          class="trace-stage__head"
+          :class="{ 'trace-stage__head--active': !isStageDone(stage.key) }"
+          @click="toggleStage(stage.key)"
+        >
+          <span class="trace-stage__index">{{ index + 1 }}</span>
+          <span class="trace-stage__title">{{ stage.title }}</span>
+          <span class="trace-stage__summary">{{ summaryOf(stage.key) }}</span>
+          <span class="trace-stage__spacer" />
+          <a-tag :color="metaOf(stage.key).color" class="trace-stage__tag">{{ metaOf(stage.key).text }}</a-tag>
+          <DownOutlined
+            v-if="isStageDone(stage.key)"
+            class="trace-stage__chevron"
+            :class="{ 'trace-stage__chevron--collapsed': isCollapsed(stage.key) }"
           />
-          <a-empty v-if="!evidence.length" description="暂无发现，比对开始后实时追加" />
+        </button>
+
+        <div v-show="!isCollapsed(stage.key)" class="trace-stage__body">
+          <template v-if="stage.key === 'parse'">
+            <div class="process-list">
+              <div v-for="d in task.documents" :key="d.id" class="process-row">
+                <span class="process-row__label">{{ docLabel(task.documents, d.id) }}</span>
+                <a-tag v-if="d.role === 'tender'" class="process-row__tender">招标</a-tag>
+                <template v-if="d.parseStatus === 'parsing'">
+                  <div class="process-row__parse">
+                    <div class="process-row__parse-head">
+                      <a-spin size="small" />
+                      <span class="process-row__name" :title="d.fileName">{{ d.fileName }}</span>
+                      <span class="process-row__elapsed">解析中 · {{ elapsedText(d) }}</span>
+                    </div>
+                    <div class="process-row__parse-meta">
+                      <a-progress
+                        class="process-row__parse-bar"
+                        :percent="d.parseProgress ?? 0"
+                        :show-info="false"
+                        size="small"
+                      />
+                      <span class="process-row__step" :title="stepText(d)">{{ stepText(d) }}</span>
+                      <span v-if="d.parseProgress != null" class="process-row__percent">{{ d.parseProgress }}%</span>
+                    </div>
+                  </div>
+                </template>
+                <template v-else>
+                  <CheckCircleFilled v-if="d.parseStatus === 'done'" class="process-row__ok" />
+                  <CloseCircleFilled v-else-if="d.parseStatus === 'failed'" class="process-row__bad" />
+                  <span v-else class="process-row__wait">等待</span>
+                  <span class="process-row__name" :title="d.fileName">{{ d.fileName }}</span>
+                  <span v-if="d.pages" class="process-row__pages">{{ d.pages }} 页</span>
+                  <span v-if="parseDurationText(d)" class="process-row__done-time">
+                    解析耗时 {{ parseDurationText(d) }}
+                  </span>
+                  <span v-if="d.failReason" class="process-row__error" :title="d.failReason">{{ d.failReason }}</span>
+                  <a-button
+                    v-if="d.parseStatus === 'failed'"
+                    type="link"
+                    size="small"
+                    :loading="reparseDocIds.includes(d.id)"
+                    @click="emit('reparseDoc', d.id)"
+                  >
+                    重新解析
+                  </a-button>
+                </template>
+              </div>
+              <a-empty v-if="!task.documents.length" description="暂无文档" />
+            </div>
+          </template>
+
+          <template v-else-if="stage.key === 'clause'">
+            <div v-if="extracting" class="process-panel__skeleton">
+              <a-skeleton active :paragraph="{ rows: 3 }" />
+            </div>
+            <a-empty v-else-if="!editableDrafts.length" description="尚未提取条款">
+              <a-button type="primary" size="small" @click="emit('extractClauses')">提取条款</a-button>
+            </a-empty>
+            <div v-else class="clause-edit">
+              <div v-for="(c, i) in editableDrafts" :key="c.id" class="clause-edit__row">
+                <a-tag :color="c.mandatory ? 'red' : 'default'" class="clause-edit__tag">
+                  {{ c.mandatory ? '强制' : '建议' }}
+                </a-tag>
+                <a-tag class="clause-edit__source">{{ sourceText(c.source) }}</a-tag>
+                <a-input
+                  v-model:value="editableDrafts[i].content"
+                  size="small"
+                  :placeholder="c.title"
+                  class="clause-edit__input"
+                />
+                <a-button type="text" size="small" @click="removeClause(i)">
+                  <DeleteOutlined />
+                </a-button>
+              </div>
+              <a-button size="small" type="dashed" block @click="addClause">
+                <PlusOutlined />添加条款
+              </a-button>
+              <div class="clause-edit__footer">
+                <span class="clause-edit__hint">确认后锁定任务快照，进入两两对比</span>
+                <a-button
+                  type="primary"
+                  :loading="confirmingClauses"
+                  :disabled="!editableDrafts.length"
+                  @click="emit('confirmClauses', editableDrafts.map(toPayload))"
+                >
+                  确认并继续
+                </a-button>
+              </div>
+            </div>
+          </template>
+
+          <template v-else-if="stage.key === 'compare'">
+            <div class="process-list">
+              <div v-for="p in pairs" :key="p.pairId" class="process-row">
+                <span class="process-row__label">
+                  {{ docLabel(task.documents, p.docAId) }} ↔ {{ docLabel(task.documents, p.docBId) }}
+                </span>
+                <a-tag :color="PAIR_META[p.status].color" class="process-row__status">{{ PAIR_META[p.status].text }}</a-tag>
+                <span v-if="p.similarity != null" class="process-row__sim">
+                  相似度 {{ Math.round(p.similarity * 100) }}%
+                </span>
+                <span v-if="p.failReason" class="process-row__error" :title="p.failReason">{{ p.failReason }}</span>
+                <a-button
+                  v-if="p.status === 'failed'"
+                  type="link"
+                  size="small"
+                  :loading="retryingPairIds.includes(p.pairId)"
+                  @click="emit('retryPair', p.pairId)"
+                >
+                  重试该对
+                </a-button>
+              </div>
+              <a-empty v-if="!pairs.length" description="比对对将在解析完成后生成" />
+            </div>
+
+            <template v-if="compareEvidence.length">
+              <div class="trace-stage__subtitle">串标查重发现</div>
+              <div class="process-feed">
+                <EvidenceCard
+                  v-for="ev in compareEvidence"
+                  :key="ev.id"
+                  :evidence="ev"
+                  :documents="task.documents"
+                  @trace="(e) => emit('locate', e)"
+                />
+              </div>
+            </template>
+
+            <SimilarityHeatmap
+              v-if="overview && overview.docLabels.length"
+              :labels="overview.docLabels"
+              :matrix="overview.simMatrix"
+              :self-matrix="overview.simMatrixSelf"
+              @cell-click="onHeatmapCell"
+            />
+          </template>
+
+          <template v-else>
+            <div v-if="aiUnavailable" class="process-panel__ai-alert">
+              <a-alert
+                type="warning"
+                show-icon
+                message="AI 分析暂不可用"
+                description="算法证据不受影响，可稍后重试"
+              />
+            </div>
+            <div v-else-if="!aiDone" class="process-list">
+              <div class="process-row">
+                <a-spin size="small" />
+                <span class="process-row__name">条款响应判定（{{ bidCount }} 份标书）</span>
+              </div>
+              <div class="process-row">
+                <a-spin size="small" />
+                <span class="process-row__name">关键指标抽取</span>
+              </div>
+              <div class="process-row">
+                <a-spin size="small" />
+                <span class="process-row__name">AI 综合结论生成</span>
+              </div>
+            </div>
+            <div v-if="aiUnavailable" class="process-panel__ai-retry">
+              <a-button size="small" :loading="retryingCompare" @click="emit('retryCompare')">重试 AI</a-button>
+            </div>
+
+            <template v-if="aiEvidence.length">
+              <div class="trace-stage__subtitle">条款与指标发现</div>
+              <div class="process-feed">
+                <EvidenceCard
+                  v-for="ev in aiEvidence"
+                  :key="ev.id"
+                  :evidence="ev"
+                  :documents="task.documents"
+                  @trace="(e) => emit('locate', e)"
+                />
+              </div>
+            </template>
+
+            <ResponseMatrix
+              :documents="task.documents"
+              :evidence="evidence"
+              @trace="(e) => emit('locate', e)"
+            />
+            <IndicatorTable
+              :evidence="evidence"
+              :documents="task.documents"
+              @trace="(e) => emit('locate', e)"
+            />
+          </template>
         </div>
-      </SectionCard>
+      </section>
     </div>
   </div>
 </template>
 
 <script setup lang="ts">
 import { computed, onBeforeUnmount, ref, watch } from 'vue'
+import { message } from 'ant-design-vue'
 import {
   CheckCircleFilled,
   CloseCircleFilled,
   DeleteOutlined,
+  DownOutlined,
   ExclamationCircleOutlined,
   PlusOutlined,
 } from '@ant-design/icons-vue'
-import SectionCard from '@shared/web/components/SectionCard.vue'
 import EvidenceCard from './EvidenceCard.vue'
+import SimilarityHeatmap from './SimilarityHeatmap.vue'
+import ResponseMatrix from './ResponseMatrix.vue'
+import IndicatorTable from './IndicatorTable.vue'
 import { docLabel } from '../constants'
-import type { ClauseItem, ComparePair, CompareTask, EvidenceItem } from '@/types'
+import type { ClauseItem, CompareDocMeta, ComparePair, CompareTask, EvidenceItem, TaskOverview } from '@/types'
+
+type StageKey = 'parse' | 'clause' | 'compare' | 'ai'
 
 const props = defineProps<{
   task: CompareTask
+  overview: TaskOverview | null
   evidence: EvidenceItem[]
   clauseDrafts: ClauseItem[]
   extracting: boolean
@@ -199,7 +271,6 @@ const emit = defineEmits<{
   locate: [item: EvidenceItem]
 }>()
 
-const parseStartedAt = ref<Record<string, number>>({})
 const nowTick = ref(Date.now())
 let timerHandle: number | undefined
 
@@ -219,29 +290,39 @@ function startParseTimer(): void {
 }
 
 watch(() => props.task.documents, (docs) => {
-  const parsingIds = docs.filter((d) => d.parseStatus === 'parsing').map((d) => d.id)
-  if (!parsingIds.length) {
-    parseStartedAt.value = {}
+  const parsing = docs.some((d) => d.parseStatus === 'parsing')
+  if (parsing) {
+    startParseTimer()
+  } else {
     stopParseTimer()
-    return
   }
-  const next: Record<string, number> = {}
-  for (const id of parsingIds) {
-    next[id] = parseStartedAt.value[id] ?? Date.now()
-  }
-  parseStartedAt.value = next
-  startParseTimer()
 }, { immediate: true })
 
 onBeforeUnmount(stopParseTimer)
 
-function elapsedText(docId: string): string {
-  const start = parseStartedAt.value[docId]
-  if (!start) return '0秒'
-  const seconds = Math.max(0, Math.floor((nowTick.value - start) / 1000))
+function formatSeconds(totalSeconds: number): string {
+  const seconds = Math.max(0, Math.floor(totalSeconds))
   const minutes = Math.floor(seconds / 60)
   const rest = seconds % 60
   return minutes > 0 ? `${minutes}分${rest}秒` : `${seconds}秒`
+}
+
+function elapsedText(d: CompareDocMeta): string {
+  const start = d.parseStartedAt ? Date.parse(d.parseStartedAt) : undefined
+  if (!start) return '0秒'
+  const end = d.parseFinishedAt ? Date.parse(d.parseFinishedAt) : nowTick.value
+  return formatSeconds((end - start) / 1000)
+}
+
+function parseDurationText(d: CompareDocMeta): string {
+  if (d.parseStatus !== 'done' && d.parseStatus !== 'failed') return ''
+  if (!d.parseStartedAt || !d.parseFinishedAt) return ''
+  return formatSeconds((Date.parse(d.parseFinishedAt) - Date.parse(d.parseStartedAt)) / 1000)
+}
+
+function stepText(d: CompareDocMeta): string {
+  const parts = [d.parseStage, d.parseStageMessage].filter((s): s is string => !!s)
+  return parts.length ? parts.join(' · ') : '解析中'
 }
 
 const PAIR_META: Record<ComparePair['status'], { color: string, text: string }> = {
@@ -251,40 +332,157 @@ const PAIR_META: Record<ComparePair['status'], { color: string, text: string }> 
   failed: { color: 'red', text: '失败' },
 }
 
-const STAGE_META: Record<string, { color: string, text: string }> = {
-  parsing: { color: 'blue', text: '解析文档' },
-  clauses: { color: 'gold', text: '条款确认' },
-  comparing: { color: 'blue', text: '两两对比' },
-  analyzing: { color: 'purple', text: 'AI 分析' },
-  done: { color: 'green', text: '已完成' },
-}
-
 const failedDocs = computed(() => props.task.documents.filter((d) => d.parseStatus === 'failed'))
 const pairs = computed(() => props.task.pairs ?? [])
-const stage = computed(() => STAGE_META[props.task.progress.stage ?? 'parsing'] ?? STAGE_META.parsing)
-const stageColor = computed(() => stage.value.color)
-const stageText = computed(() => stage.value.text)
-const pairLabel = computed(() =>
-  props.task.progress.pairIndex && props.task.progress.pairCount
-    ? `第 ${props.task.progress.pairIndex}/${props.task.progress.pairCount} 对`
-    : '',
-)
-const overallPercent = computed(() => {
-  const p = props.task.progress
-  if (p.stage === 'done') return 100
-  if (p.stage === 'analyzing') return Math.min(99, 80 + Math.round((p.ai / 100) * 19))
-  if (p.stage === 'comparing') return p.compare
-  if (p.stage === 'clauses') return 40
-  return p.parse
-})
-const showClauseConfirm = computed(() =>
-  !!props.task.tenderDocId && !props.task.clauseSnapshot && !isTerminalish(props.task),
-)
+const failedPairs = computed(() => pairs.value.filter((p) => p.status === 'failed'))
+const bidCount = computed(() => props.task.documents.filter((d) => d.role !== 'tender').length)
+const compareEvidence = computed(() =>
+  props.evidence.filter((e) => e.type === 'similarity' || e.type === 'price' || e.type === 'metadata'))
+const aiEvidence = computed(() =>
+  props.evidence.filter((e) => e.type === 'clause' || e.type === 'indicator'))
 const aiUnavailable = computed(() => (props.task.progress.message ?? '').includes('AI 分析暂不可用'))
-const showAiSection = computed(() => props.task.progress.stage === 'analyzing' || aiUnavailable.value)
 
 function isTerminalish(t: CompareTask): boolean {
   return t.status === 'completed' || t.status === 'failed' || t.status === 'partial'
+}
+
+const parseDone = computed(() =>
+  props.task.documents.length > 0
+  && props.task.documents.every((d) => d.parseStatus === 'done' || d.parseStatus === 'failed'),
+)
+const clauseVisible = computed(() =>
+  !!props.task.tenderDocId && !props.task.clauseSnapshot && !isTerminalish(props.task),
+)
+const clauseDone = computed(() => !!props.task.clauseSnapshot)
+const compareVisible = computed(() =>
+  parseDone.value
+  && (!clauseVisible.value || clauseDone.value)
+  && props.task.status !== 'failed'
+  && props.task.status !== 'uploading',
+)
+const compareDone = computed(() => {
+  if (isTerminalish(props.task) || props.task.progress.stage === 'analyzing' || props.task.progress.stage === 'done') {
+    return true
+  }
+  return pairs.value.length > 0
+    && pairs.value.every((p) => p.status === 'done' || p.status === 'failed')
+    && props.task.status !== 'comparing'
+    && props.task.status !== 'parsing'
+})
+const aiVisible = computed(() =>
+  compareDone.value
+  && (props.task.progress.stage === 'analyzing'
+    || props.task.progress.stage === 'done'
+    || isTerminalish(props.task)),
+)
+const aiDone = computed(() => isTerminalish(props.task) || props.task.progress.stage === 'done')
+
+const visibleStages = computed<{ key: StageKey, title: string }[]>(() => {
+  const list: { key: StageKey, title: string }[] = [{ key: 'parse', title: '文档解析' }]
+  if (clauseVisible.value) list.push({ key: 'clause', title: '条款确认' })
+  if (compareVisible.value) list.push({ key: 'compare', title: '两两对比' })
+  if (aiVisible.value) list.push({ key: 'ai', title: 'AI 分析' })
+  return list
+})
+
+const stageDoneMap = computed<Record<StageKey, boolean>>(() => ({
+  parse: parseDone.value,
+  clause: clauseDone.value,
+  compare: compareDone.value,
+  ai: aiDone.value,
+}))
+
+function isStageDone(key: StageKey): boolean {
+  return stageDoneMap.value[key]
+}
+
+const expandedStages = ref<Set<StageKey>>(new Set())
+
+function isCollapsed(key: StageKey): boolean {
+  if (!isStageDone(key)) return false
+  return !expandedStages.value.has(key)
+}
+
+function toggleStage(key: StageKey): void {
+  if (!isStageDone(key)) return
+  const next = new Set(expandedStages.value)
+  if (next.has(key)) {
+    next.delete(key)
+  } else {
+    next.add(key)
+  }
+  expandedStages.value = next
+}
+
+const parseSummary = computed(() => {
+  if (!parseDone.value) {
+    const parsing = props.task.documents.filter((d) => d.parseStatus === 'parsing').length
+    return parsing ? `解析中 ${parsing}/${props.task.documents.length}` : '等待解析'
+  }
+  const pages = props.task.documents.reduce((acc, d) => acc + (d.pages || 0), 0)
+  const failed = failedDocs.value.length
+  return `文档解析完成 · ${props.task.documents.length} 份 · ${pages} 页${failed ? ` · ${failed} 份失败` : ''}`
+})
+
+const clauseCount = computed(() => props.task.clauseSnapshot?.length ?? 0)
+const clauseSummary = computed(() =>
+  clauseDone.value ? `条款确认完成 · ${clauseCount.value} 条` : '等待确认')
+
+const compareSummary = computed(() => {
+  if (!compareDone.value) {
+    const processing = pairs.value.find((p) => p.status === 'processing')
+    if (processing) {
+      const fallbackIndex = pairs.value.findIndex((p) => p.pairId === processing.pairId) + 1
+      const idx = props.task.progress.pairIndex ?? (fallbackIndex > 0 ? fallbackIndex : 1)
+      return `第 ${idx}/${pairs.value.length || '—'} 对比对中`
+    }
+    const done = pairs.value.filter((p) => p.status === 'done' || p.status === 'failed').length
+    return done ? `已完成 ${done}/${pairs.value.length} 对` : '等待比对'
+  }
+  if (!pairs.value.length) return '两两对比完成'
+  const done = pairs.value.filter((p) => p.status === 'done').length
+  const sims = pairs.value.filter((p) => p.similarity != null).map((p) => p.similarity!)
+  const max = sims.length ? Math.round(Math.max(...sims) * 100) : 0
+  const failed = failedPairs.value.length
+  return `两两对比完成 · ${done}/${pairs.value.length} 对 · 最高相似度 ${max}%${failed ? ` · ${failed} 对失败` : ''}`
+})
+
+const aiSummary = computed(() =>
+  aiDone.value ? `AI 分析完成 · 共 ${aiEvidence.value.length} 条发现` : 'AI 分析中')
+
+function summaryOf(key: StageKey): string {
+  switch (key) {
+    case 'parse': return parseSummary.value
+    case 'clause': return clauseSummary.value
+    case 'compare': return compareSummary.value
+    case 'ai': return aiSummary.value
+  }
+}
+
+interface StageMeta {
+  color: string
+  text: string
+}
+
+const stageMeta = computed<Record<StageKey, StageMeta>>(() => ({
+  parse: parseDone.value
+    ? { color: failedDocs.value.length ? 'orange' : 'green', text: failedDocs.value.length ? '部分完成' : '完成' }
+    : {
+      color: props.task.documents.some((d) => d.parseStatus === 'parsing') ? 'blue' : 'default',
+      text: props.task.documents.some((d) => d.parseStatus === 'parsing') ? '解析中' : '等待',
+    },
+  clause: clauseDone.value ? { color: 'green', text: '完成' } : { color: 'gold', text: '待确认' },
+  compare: compareDone.value
+    ? { color: failedPairs.value.length ? 'orange' : 'green', text: failedPairs.value.length ? '部分完成' : '完成' }
+    : {
+      color: pairs.value.some((p) => p.status === 'processing') ? 'blue' : 'default',
+      text: pairs.value.some((p) => p.status === 'processing') ? '比对中' : '等待',
+    },
+  ai: aiDone.value ? { color: 'green', text: '完成' } : { color: 'purple', text: '分析中' },
+}))
+
+function metaOf(key: StageKey): StageMeta {
+  return stageMeta.value[key]
 }
 
 const editableDrafts = ref<ClauseItem[]>([])
@@ -322,6 +520,20 @@ function toPayload(c: ClauseItem): ClauseItem {
     title: c.content || c.title,
   }
 }
+
+function onHeatmapCell(pair: { docA: string, docB: string }): void {
+  const labels = props.overview?.docLabels ?? []
+  const bids = props.task.documents.filter((d) => d.role !== 'tender')
+  const docAId = bids[labels.indexOf(pair.docA)]?.id
+  const docBId = bids[labels.indexOf(pair.docB)]?.id
+  const ev = props.evidence.find((e) =>
+    docAId && docBId && e.docIds.includes(docAId) && e.docIds.includes(docBId))
+  if (ev) {
+    emit('locate', ev)
+  } else {
+    message.info('该文档对暂无发现')
+  }
+}
 </script>
 
 <style scoped lang="less">
@@ -355,27 +567,83 @@ function toPayload(c: ClauseItem): ClauseItem {
   &-text { flex: 1; min-width: 0; font-size: @font-size-xs; color: @text-secondary; }
 }
 
-.process-stage {
-  padding: @spacing-base @spacing-xl @spacing-xl;
+.trace-stage {
+  border: 1px solid @border-color;
+  border-radius: @radius-lg;
+  background: @card-bg;
+  overflow: hidden;
 
   &__head {
+    width: 100%;
     display: flex;
     align-items: center;
-    gap: @spacing-md;
+    gap: @spacing-sm;
+    padding: @spacing-md @spacing-xl;
+    background: @card-bg;
+    border: none;
+    cursor: pointer;
+    font: inherit;
+    text-align: left;
+
+    &:hover:not(.trace-stage__head--active) {
+      background: color-mix(in srgb, @brand-primary 4%, @card-bg);
+    }
   }
 
-  &__tag { margin-inline-end: 0; }
-  &__pair {
+  &__head--active {
+    cursor: default;
+  }
+
+  &__index {
+    flex-shrink: 0;
+    width: 22px;
+    height: 22px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 50%;
+    background: @brand-primary;
+    color: #fff;
+    font-size: @font-size-xs;
+    font-weight: @font-weight-semibold;
+  }
+
+  &__title {
+    flex-shrink: 0;
     font-size: @font-size-sm;
-    font-weight: @font-weight-medium;
+    font-weight: @font-weight-semibold;
     color: @text-primary;
   }
-  &__spacer { flex: 1; }
-  &__message {
-    margin: @spacing-sm 0 0;
+
+  &__summary {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
     font-size: @font-size-xs;
     color: @text-tertiary;
-    line-height: 1.6;
+  }
+
+  &__spacer { flex: 1; }
+  &__tag { flex-shrink: 0; margin-inline-end: 0; }
+
+  &__chevron {
+    flex-shrink: 0;
+    color: @text-tertiary;
+    transition: transform @transition-fast;
+
+    &--collapsed { transform: rotate(-90deg); }
+  }
+
+  &__body {
+    border-top: 1px solid @divider-color;
+  }
+
+  &__subtitle {
+    padding: @spacing-sm @spacing-xl 0;
+    font-size: @font-size-xs;
+    font-weight: @font-weight-medium;
+    color: @text-tertiary;
   }
 }
 
@@ -410,10 +678,56 @@ function toPayload(c: ClauseItem): ClauseItem {
     color: @text-primary;
   }
   &__wait { font-size: @font-size-xs; color: @text-tertiary; }
-  &__parsing {
+  &__parse {
+    flex: 1;
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 3px;
+  }
+  &__parse-head {
+    display: flex;
+    align-items: center;
+    gap: @spacing-sm;
+    min-width: 0;
+  }
+  &__parse-meta {
+    display: flex;
+    align-items: center;
+    gap: @spacing-sm;
+    padding-left: 22px;
+    min-width: 0;
+  }
+  &__parse-bar {
+    width: 72px;
+    flex-shrink: 0;
+    margin-inline-end: 0;
+  }
+  &__step {
+    flex: 1;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    font-size: @font-size-xs;
+    color: @text-tertiary;
+  }
+  &__elapsed {
     flex-shrink: 0;
     font-size: @font-size-xs;
     color: @brand-primary;
+    font-variant-numeric: tabular-nums;
+  }
+  &__percent {
+    flex-shrink: 0;
+    font-size: @font-size-xs;
+    color: @text-secondary;
+    font-variant-numeric: tabular-nums;
+  }
+  &__done-time {
+    flex-shrink: 0;
+    font-size: @font-size-xs;
+    color: @text-tertiary;
     font-variant-numeric: tabular-nums;
   }
   &__ok { color: @success; flex-shrink: 0; }
@@ -470,7 +784,7 @@ function toPayload(c: ClauseItem): ClauseItem {
   display: flex;
   flex-direction: column;
   gap: @spacing-sm;
-  padding: @spacing-base @spacing-xl @spacing-xl;
+  padding: @spacing-sm @spacing-xl @spacing-xl;
 }
 
 .process-panel__ai-alert {
@@ -479,5 +793,11 @@ function toPayload(c: ClauseItem): ClauseItem {
 
 .process-panel__ai-retry {
   padding: @spacing-sm @spacing-xl @spacing-xl;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .trace-stage__chevron {
+    transition: none;
+  }
 }
 </style>
