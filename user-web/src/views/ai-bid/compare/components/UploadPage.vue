@@ -39,7 +39,7 @@
         <div class="upload-card__head">
           <div class="upload-card__titles">
             <span class="upload-card__title">投标文件</span>
-            <span class="upload-card__count">{{ bidCount }}/5</span>
+            <span class="upload-card__count">{{ bidCount }}/{{ MAX_BID_DOCUMENTS }}</span>
           </div>
           <span class="upload-card__hint">支持 PDF / Word，单份不超过 100MB</span>
         </div>
@@ -52,7 +52,7 @@
           <div class="upload-drop">
             <InboxOutlined class="upload-drop__icon" />
             <p class="upload-drop__text">点击或拖拽上传投标文件</p>
-            <p class="upload-drop__hint">已选 {{ bidCount }} 份，可继续添加至 5 份</p>
+            <p class="upload-drop__hint">已选 {{ bidCount }} 份，可继续添加至 {{ MAX_BID_DOCUMENTS }} 份</p>
           </div>
         </a-upload-dragger>
       </div>
@@ -154,7 +154,7 @@ import {
   PaperClipOutlined,
 } from '@ant-design/icons-vue'
 import { computed } from 'vue'
-import { COMPARE_STATUS_MAP, formatFileSize } from '../constants'
+import { COMPARE_STATUS_MAP, MAX_BID_DOCUMENTS, formatFileSize } from '../constants'
 import type { CompareTask } from '@/types'
 
 export interface UploadFileItem {

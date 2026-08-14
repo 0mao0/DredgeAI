@@ -196,7 +196,7 @@ import UploadFileRow from './components/UploadFileRow.vue'
 import PdfWorkspace from './components/PdfWorkspace.vue'
 import ProcessPanel from './components/ProcessPanel.vue'
 import FailurePanel from './components/FailurePanel.vue'
-import { COMPARE_STATUS_MAP, deriveProjectName, isTerminalStatus } from './constants'
+import { COMPARE_STATUS_MAP, MAX_BID_DOCUMENTS, deriveProjectName, isTerminalStatus } from './constants'
 import {
   confirmClauses,
   createTask,
@@ -280,7 +280,7 @@ const panel = computed<'process' | 'failed'>(() => {
 const uploadedCount = computed(() => uploadItems.value.filter((i) => i.status === 'done').length)
 const allUploadsSettled = computed(() =>
   uploadItems.value.length > 0
-    && uploadItems.value.every((i) => i.status !== 'uploading' && i.status !== 'pending'),
+  && uploadItems.value.every((i) => i.status !== 'uploading' && i.status !== 'pending'),
 )
 
 /** 文档原文预览 URL 由宿主统一生成（子组件不直接触碰 API 层）。 */
@@ -540,8 +540,8 @@ function onAddFiles(files: { file: File, role: 'bid' | 'tender' }[]): void {
       continue
     }
     const activeBids = uploadItems.value.filter((i) => i.role === 'bid' && i.status !== 'error').length
-    if (activeBids >= 5) {
-      pushUploadItem(key, file, role, '投标文件最多 5 份')
+    if (activeBids >= MAX_BID_DOCUMENTS) {
+      pushUploadItem(key, file, role, `投标文件最多 ${MAX_BID_DOCUMENTS} 份`)
       continue
     }
     pushUploadItem(key, file, role)

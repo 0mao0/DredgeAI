@@ -28,7 +28,7 @@ namespace DredgeAI.BidCompare.CompareTasks;
 public class CompareTaskAppService : ApplicationService, ICompareTaskAppService
 {
     private static readonly string[] AllowedExtensions = { ".pdf", ".doc", ".docx" };
-    private const int MaxBidDocuments = 5;
+    private const int MaxBidDocuments = 8;
     private const string ClauseExtractionSystemPrompt =
         "你是招投标文件分析助手。从用户提供的招标文件全文中提取所有强制性条款" +
         "（包含「须/应当/必须/不得/否则视为无效投标/废标」等强制措辞的条款）。" +

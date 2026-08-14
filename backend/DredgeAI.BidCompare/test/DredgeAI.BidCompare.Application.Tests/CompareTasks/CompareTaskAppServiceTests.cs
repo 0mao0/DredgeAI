@@ -290,17 +290,17 @@ public class CompareTaskAppServiceTests : BidCompareApplicationTestBase<BidCompa
     }
 
     [Fact]
-    public async Task UploadDocument_Should_Enforce_Max_5_Bid_Documents()
+    public async Task UploadDocument_Should_Enforce_Max_8_Bid_Documents()
     {
         var task = await _appService.CreateAsync(new CreateCompareTaskDto { Name = "t" });
-        for (var i = 0; i < 5; i++)
+        for (var i = 0; i < 8; i++)
         {
             await _appService.UploadDocumentAsync(task.Id, DocumentRole.Bid, $"标书{i}.pdf",
                 new MemoryStream(new byte[] { 1 }));
         }
 
         var ex = await Should.ThrowAsync<BusinessException>(() =>
-            _appService.UploadDocumentAsync(task.Id, DocumentRole.Bid, "第6份.pdf",
+            _appService.UploadDocumentAsync(task.Id, DocumentRole.Bid, "第9份.pdf",
                 new MemoryStream(new byte[] { 1 })));
         ex.Code.ShouldBe(BidCompareErrorCodes.DocumentCountOutOfRange);
     }
