@@ -1,6 +1,6 @@
 # DredgeAI 接入 angineer-docs-ui 需求（修订版）
 
-> 状态：**主体已实施**，剩余收尾工作 · 版本：v3 · 2026-08-14
+> 状态：**主体已实施**，docs-ui 已改 git submodule 引入 · 版本：v4 · 2026-08-14
 > 组件库来源：[angineer-docs-ui](https://github.com/0mao0/angineer-docs-ui) / [angineer-aichat-ui](https://github.com/0mao0/angineer-aichat-ui)
 > 本地参照源码：`D:/AI/AnGIneer`（monorepo，含 aichat-ui / docs-ui / sop-ui 等包）
 > **范围调整（v3）**：aichat-ui 接入**移出本次范围**（见 §3），本次聚焦 docs-ui 接入收尾。
@@ -11,7 +11,13 @@
 2. **任务清单收敛为 docs-ui 收尾 3 项**（锁版本 / 可选索引树联动 / 全量回归），合计 0.5–3 人天；
 3. v2 已完成的事实核查（核对表、导出面清单、数据能力现状）全部保留。
 
-## 1. 背景与目标（v3 范围）
+## 修订说明（v3 → v4）
+
+1. **依赖机制切换为 git submodule**：`@angineer/docs-ui` 从 codeload tar.gz URL 依赖改为 **git submodule**（`vendor/angineer-docs-ui`，锁 commit `4b96e234`）+ `file:` 依赖。submodule 内容与原 main 快照逐文件核对一致（48 文件 0 差异），构建行为不变；
+2. **vite.config 去内联化**：pdf-wasm 资源复制插件改为直接引用 submodule 自带 `vendor/angineer-docs-ui/vite-pdf-wasm.mjs`，删除 user-web 内联拷贝，后续随 submodule 升级自动同步；
+3. **T1 锁版本完成**：commit 由 submodule 天然锁定，不再漂移。
+
+## 1. 背景与目标（v4 范围）
 
 **本次范围**：复用 docs-ui 的文档解析产物展示能力（PDF 渲染 + 归一化 bbox 高亮），服务比标 compare 模块——已落地大半，本次只做收尾。
 
@@ -27,19 +33,29 @@
 
 | 检查项 | 状态 | 证据 |
 |---|---|---|
-| docs-ui 依赖 | ✅ 已接入 user-web | `user-web/package.json`：`"@angineer/docs-ui": "https://codeload.github.com/0mao0/angineer-docs-ui/tar.gz/refs/heads/main"` |
+| docs-ui 依赖 | ✅ 已接入 user-web（submodule） | `user-web/package.json`：`"@angineer/docs-ui": "file:../vendor/angineer-docs-ui"`；`vendor/angineer-docs-ui` 为 git submodule（`.gitmodules`） |
 | pnpm 安装 + 锁文件 | ✅ | `pnpm-lock.yaml` 已含 `@angineer/docs-ui` 解析记录；pnpm store 有安装产物 |
 | Vite 编译 node_modules 内 .vue/.ts/.less 源码 | ✅ 已实证 | docs-ui `main` 直指 `src/index.ts`，`vue-tsc --noEmit` 与 Vite 均通过（下） |
 | `optimizeDeps.exclude` | ✅ 已配置 | `user-web/vite.config.ts`：`exclude: ['@angineer/docs-ui']` |
-| pdf.js 运行资源（cmaps/fonts/wasm） | ✅ 已实现 | `user-web/vite.config.ts` 的 `pdfWasmPlugin`（docs-ui 的 `vite-pdf-wasm` 子路径未在包 exports 中暴露，此处为等价内联实现，注释已说明） |
+| pdf.js 运行资源（cmaps/fonts/wasm） | ✅ 已实现 | `user-web/vite.config.ts` 直接复用 submodule 自带 `vendor/angineer-docs-ui/vite-pdf-wasm.mjs`（docs-ui 的 `vite-pdf-wasm` 子路径未在包 exports 中暴露，经相对路径引入） |
 | 双端类型检查 | ✅ | 2026-08-14 实测 `pnpm --filter user-web typecheck` 与 `pnpm --filter admin-web typecheck` 均通过 |
 | aichat-ui 依赖 | ⏸️ 本次不加 | 待 §3 前置条件满足后启用 |
-| 版本锁定 | ⚠️ 漂移风险 | 当前锁 `refs/heads/main`（tar.gz），AnGIneer 更新即漂移 → T1 |
+| CI 拉取方式 | ⚠️ 需配置 | 新克隆需 `git clone --recurse-submodules`；codeup 构建机访问 GitHub（公开库无需认证，内网受限需代理/镜像） |
+| 版本锁定 | ✅ submodule 锁定 | `vendor/angineer-docs-ui` 锁 commit `4b96e234`（等价原 main 快照，48 文件 0 差异已核对） |
 
-### 2.2 剩余动作
+### 2.2 submodule 机制与维护
 
-1. **锁版本（唯一必做项）**：本地 monorepo 已有 tag `v0.1-frontend-cleanup` / `v0.1-frontend-ux-fix`；独立仓库 tag 需与 AnGIneer 侧确认，确认前可先锁 commit SHA；改 `user-web/package.json` 后 `pnpm install` 复验；
-2. 网络：本机已成功从 `codeload.github.com` 安装（store 有产物）；DredgeAI 私有云 CI/构建机需确认可达 GitHub（公开库无需认证）。
+**当前机制（已落地）**：
+
+- `vendor/angineer-docs-ui` 为 git submodule（`.gitmodules` → `https://github.com/0mao0/angineer-docs-ui.git`，锁 commit `4b96e234`）；
+- `user-web/package.json` 用 `file:../vendor/angineer-docs-ui` 依赖，Vite 直接编译 submodule 内源码；`optimizeDeps.exclude` 不变；
+- pdf-wasm 插件直接引用 `vendor/angineer-docs-ui/vite-pdf-wasm.mjs`。
+
+**日常维护**：
+
+1. 升级：`git submodule update --remote vendor/angineer-docs-ui`（或手动切 tag/commit）→ `pnpm install` → 回归（compare 预览/高亮/主题）→ 提交 `.gitmodules` 与 gitlink；
+2. CI/新克隆：`git clone --recurse-submodules <dredge-ai>`；已有克隆用 `git submodule update --init`；
+3. 网络：本机已验证可达 GitHub（公开库无需认证）；codeup CI 若访问 GitHub 受限，需在构建机配代理/镜像或定期 vendor 后离线构建。
 
 **验收**：`pnpm install` 成功；双端 `vue-tsc --noEmit` + `vite build` 通过；compare 页 PDF 预览与高亮正常。
 
@@ -106,23 +122,21 @@
 
 1. ~~源码包 + Vite 编译~~ → **已实证可行**；
 2. **docs-ui 导出面限制**：索引树/图等深路径组件被 `exports` 拦截，需上游补导出（提 AnGIneer）；
-3. **版本漂移**：当前锁 `main` 需切 tag/commit（T1）；
+3. ~~版本漂移~~ → **已解决**：submodule 锁 commit `4b96e234`；
 4. **主题硬编码**：docs-ui 样式默认色与 DredgeAI 品牌/暗色不一致，已局部适配，T3 回归兜底；
-5. **网络可达性**：本机已验证；CI/私有云构建机需确认 GitHub 可达。
+5. **网络可达性**：本机已验证；codeup CI 拉取 GitHub submodule 需确认可达（公开库无需认证，内网受限需代理/镜像）。
 
 ## 7. 建议实施顺序（v3：本次任务清单）
 
 - [x] **D1 依赖接入（docs-ui）** — 已完成（§2.1）
 - [x] **D2 PDF_Viewer 集成 + pdf-wasm + 主题** — 已完成（§4.3）
-- [ ] **T1 锁版本 + 构建复验**（约 0.5 天）
-  - Files：`user-web/package.json`（docs-ui 依赖从 `refs/heads/main` 切到 tag/commit）
-  - 验证：`pnpm install`；`pnpm --filter user-web typecheck`；`pnpm build:user`
+- [x] **T1 submodule 化 + 锁版本 + 构建复验** — 已完成（v4：submodule 锁 `4b96e234`；`pnpm install` + 双端 typecheck + build 复验）
 - [ ] **T2 索引树/图联动（可选）**（约 1–2 天，依赖 AnGIneer 补导出）
   - Files：compare 页新增索引树/图面板，数据源 `GET /api/compare/tasks/{id}/ir/{docId}`
   - 验证：树/图与 PDF 高亮联动；`pnpm --filter user-web typecheck`
 - [ ] **T3 全量回归**（约 0.5 天）：双端构建、compare 文档预览、IR 高亮、明暗主题（含 reduced-motion 降级）
 
-合计剩余 **0.5–3 人天**（T2 可选、不计关键路径）。
+合计剩余 **0.5–2 人天**（仅 T2 可选 + T3 回归）。
 
 ## 8. 决策建议（v3，附依据）
 
@@ -130,13 +144,14 @@
 |---|---|---|
 | aichat 接入时点 | **本次不做**；待"追问/查询"产品立项 + 知识库/问答后端就绪后再按 v2 路线 A 启动 | PRD 反聊天工具定位；compare 计划无聊天需求；后端无问答端点、无知识库，能力会空转 |
 | 若产品提前要"追问区" | 现有 AIChat.vue + 后端流式端点即可，**不引 aichat-ui 全套** | §3.3 |
-| 版本策略 | 尽快从 `main` 切到 tag/commit | 漂移风险已实际存在 |
+| 版本策略 | ✅ 已落地：submodule 锁 commit `4b96e234` | 天然锁定，升级走 `git submodule update` |
 | docs-ui 索引树/图 | 可选；先推 AnGIneer 补导出 | 组件有源码但被 `exports` 拦截 |
 | 主题融合 | theme prop + 局部覆盖 + 回归，不 fork 组件 | 已按此落地 |
 
 ## 9. 参考（全部为已核实路径）
 
 - docs-ui 出口（已安装包）：`node_modules/@angineer/docs-ui/src/index.ts`、`src/components/index.ts`、`src/composables/index.ts`、`src/styles/variables.less`
+- submodule：`vendor/angineer-docs-ui`（锁 `4b96e234`）、`.gitmodules`、`user-web/vite.config.ts`（引用 `vite-pdf-wasm.mjs`）
 - DredgeAI 已接入点：`user-web/vite.config.ts`、`user-web/src/views/ai-bid/compare/components/PdfViewer.vue`、`PdfWorkspace.vue`
 - DredgeAI 产品定位：`docs/prd-ai-platform-prototype.md`（首页去聊天工具化、审标页追问区）、`docs/superpowers/plans/2026-07-29-ai-bid-compare-frontend.md`
 - 后端数据端点：`...HttpApi/Controllers/CompareTaskController.cs`（上传/解析/文件/IR）

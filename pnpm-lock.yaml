@@ -139,8 +139,8 @@ importers:
   user-web:
     dependencies:
       '@angineer/docs-ui':
-        specifier: https://codeload.github.com/0mao0/angineer-docs-ui/tar.gz/refs/heads/main
-        version: https://codeload.github.com/0mao0/angineer-docs-ui/tar.gz/refs/heads/main(@ant-design/icons-vue@7.0.1(vue@3.5.41(typescript@5.7.3)))(ant-design-vue@4.2.6(vue@3.5.41(typescript@5.7.3)))(vue@3.5.41(typescript@5.7.3))
+        specifier: file:../vendor/angineer-docs-ui
+        version: file:vendor/angineer-docs-ui(@ant-design/icons-vue@7.0.1(vue@3.5.41(typescript@5.7.3)))(ant-design-vue@4.2.6(vue@3.5.41(typescript@5.7.3)))(vue@3.5.41(typescript@5.7.3))
       '@ant-design/icons-vue':
         specifier: 7.0.1
         version: 7.0.1(vue@3.5.41(typescript@5.7.3))
@@ -217,9 +217,8 @@ importers:
 
 packages:
 
-  '@angineer/docs-ui@https://codeload.github.com/0mao0/angineer-docs-ui/tar.gz/refs/heads/main':
-    resolution: {tarball: https://codeload.github.com/0mao0/angineer-docs-ui/tar.gz/refs/heads/main}
-    version: 0.1.0
+  '@angineer/docs-ui@file:vendor/angineer-docs-ui':
+    resolution: {directory: vendor/angineer-docs-ui, type: directory}
     peerDependencies:
       '@ant-design/icons-vue': 7.0.1
       ant-design-vue: 4.2.6
@@ -2989,7 +2988,7 @@ packages:
 
 snapshots:
 
-  '@angineer/docs-ui@https://codeload.github.com/0mao0/angineer-docs-ui/tar.gz/refs/heads/main(@ant-design/icons-vue@7.0.1(vue@3.5.41(typescript@5.7.3)))(ant-design-vue@4.2.6(vue@3.5.41(typescript@5.7.3)))(vue@3.5.41(typescript@5.7.3))':
+  '@angineer/docs-ui@file:vendor/angineer-docs-ui(@ant-design/icons-vue@7.0.1(vue@3.5.41(typescript@5.7.3)))(ant-design-vue@4.2.6(vue@3.5.41(typescript@5.7.3)))(vue@3.5.41(typescript@5.7.3))':
     dependencies:
       '@ant-design/icons-vue': 7.0.1(vue@3.5.41(typescript@5.7.3))
       ant-design-vue: 4.2.6(vue@3.5.41(typescript@5.7.3))

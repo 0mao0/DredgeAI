@@ -1,0 +1,3 @@
+[submodule "vendor/angineer-docs-ui"]
+	path = vendor/angineer-docs-ui
+	url = https://github.com/0mao0/angineer-docs-ui.git

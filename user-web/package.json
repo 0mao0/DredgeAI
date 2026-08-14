@@ -10,7 +10,7 @@
     "typecheck": "vue-tsc --noEmit"
   },
   "dependencies": {
-    "@angineer/docs-ui": "https://codeload.github.com/0mao0/angineer-docs-ui/tar.gz/refs/heads/main",
+    "@angineer/docs-ui": "file:../vendor/angineer-docs-ui",
     "@ant-design/icons-vue": "7.0.1",
     "@vueuse/core": "^11.3.0",
     "ant-design-vue": "4.2.6",
