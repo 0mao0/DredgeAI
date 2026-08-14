@@ -30,6 +30,7 @@
         <template v-else-if="column.dataIndex === 'title'">
           <div class="evidence-table__title">{{ record.title }}</div>
           <div class="evidence-table__summary">{{ record.summary }}</div>
+          <div v-if="metricHint(record)" class="evidence-table__metrics">{{ metricHint(record) }}</div>
         </template>
         <template v-else-if="column.dataIndex === 'confidence'">
           {{ record.confidence != null ? `${Math.round(record.confidence * 100)}%` : '—' }}
@@ -41,6 +42,7 @@
         </template>
         <template v-else-if="column.dataIndex === 'action'">
           <a-button type="link" size="small" @click.stop="emit('jump', record)">查看</a-button>
+          <a-button type="link" size="small" @click.stop="emit('trace', record)">溯源</a-button>
         </template>
       </template>
     </a-table>
@@ -50,6 +52,7 @@
 <script setup lang="ts">
 import { ref, computed } from 'vue'
 import SectionCard from '@shared/web/components/SectionCard.vue'
+import { evidenceMetricLines } from '../evidenceMetrics'
 import type { CompareDocMeta, EvidenceItem, EvidenceType, RiskLevel } from '@/types'
 
 const props = withDefaults(defineProps<{
@@ -63,7 +66,7 @@ const props = withDefaults(defineProps<{
   title: '证据清单',
 })
 
-const emit = defineEmits<{ jump: [item: EvidenceItem] }>()
+const emit = defineEmits<{ jump: [item: EvidenceItem], trace: [item: EvidenceItem] }>()
 
 const severityFilter = ref<'all' | RiskLevel>('all')
 const typeFilter = ref<'all' | EvidenceType>('all')
@@ -81,6 +84,7 @@ const typeOptions = [
   { label: '报价', value: 'price' },
   { label: '元数据', value: 'metadata' },
   { label: '条款', value: 'clause' },
+  { label: '指标', value: 'indicator' },
 ]
 
 const columns = computed(() => [
@@ -90,7 +94,7 @@ const columns = computed(() => [
   { title: '证据', dataIndex: 'title' },
   { title: '置信度', dataIndex: 'confidence', width: 90 },
   { title: '来源', dataIndex: 'source', width: 90 },
-  { title: '操作', dataIndex: 'action', width: 70 },
+  { title: '操作', dataIndex: 'action', width: 120 },
 ])
 
 const filtered = computed(() =>
@@ -128,6 +132,7 @@ function typeColor(t: EvidenceType): string {
     price: 'orange',
     metadata: 'blue',
     clause: 'green',
+    indicator: 'purple',
   }
   return map[t]
 }
@@ -138,8 +143,13 @@ function typeText(t: EvidenceType): string {
     price: '报价',
     metadata: '元数据',
     clause: '条款',
+    indicator: '指标',
   }
   return map[t]
+}
+
+function metricHint(record: EvidenceItem): string {
+  return evidenceMetricLines(record).join(' · ')
 }
 </script>
 
@@ -167,6 +177,13 @@ function typeText(t: EvidenceType): string {
   text-align: left;
   margin-top: 2px;
   line-height: 1.5;
+}
+
+.evidence-table__metrics {
+  margin-top: 2px;
+  font-size: @font-size-xs;
+  color: @brand-primary;
+  text-align: left;
 }
 
 :deep(.evidence-table__row--clickable) {

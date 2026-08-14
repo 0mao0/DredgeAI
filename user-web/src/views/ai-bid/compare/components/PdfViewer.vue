@@ -1,33 +1,34 @@
 <template>
-  <div class="pdf-viewer">
-    <div class="pdf-viewer__toolbar">
+  <div class="pdf-viewer" :class="{ 'pdf-viewer--scanning': scanning }">
+    <div v-if="title" class="pdf-viewer__bar">
       <FilePdfOutlined class="pdf-viewer__icon" />
-      <span class="pdf-viewer__title" :title="title">{{ title || '未选择文档' }}</span>
-      <a-tag class="pdf-viewer__tag">占位渲染</a-tag>
-      <span v-if="totalPages" class="pdf-viewer__page">第 {{ page }} / {{ totalPages }} 页</span>
+      <span class="pdf-viewer__title" :title="title">{{ title }}</span>
+      <a-tag v-if="scanning" color="processing" class="pdf-viewer__tag">解析中</a-tag>
     </div>
 
     <div class="pdf-viewer__body">
-      <EmptyState v-if="!src" type="no-data" title="请选择文档" />
+      <EmptyState v-if="!fileUrl" type="no-data" title="请选择文档" />
 
-      <div v-else class="pdf-viewer__page-wrap" :style="{ width: `${(zoom ?? 1) * 100}%` }">
-        <div class="pdf-viewer__paper">
-          <div class="pdf-viewer__lines">
-            <div v-for="i in 24" :key="i" class="pdf-viewer__line" :class="{ 'pdf-viewer__line--short': i % 5 === 0 }" />
-          </div>
-          <div
-            v-for="(h, i) in rects"
-            :key="i"
-            class="pdf-viewer__rect"
-            :class="{ 'pdf-viewer__rect--active': h.pairId }"
-            :style="h.style"
-            :title="h.excerpt"
-          >
-            <span v-if="h.excerpt" class="pdf-viewer__excerpt" :style="{ color: h.color }">{{ h.excerpt }}</span>
-          </div>
-        </div>
-        <div class="pdf-viewer__placeholder-note">PDF 真渲染（pdf.js）接入中，当前为 bbox 示意</div>
-      </div>
+      <PDF_Viewer
+        v-else
+        class="pdf-viewer__viewer"
+        :node="node"
+        :theme="theme"
+        :is-pdf="true"
+        :is-office="false"
+        :is-image="false"
+        :is-text="false"
+        :file-url="fileUrl"
+        :pdf-viewer-url="fileUrl"
+        office-preview-url=""
+        text-content=""
+        :current-pdf-page="page"
+        :pdf-page-count="totalPages && totalPages > 0 ? totalPages : undefined"
+        :highlights="highlights"
+        :active-highlight-id="activeHighlightId"
+        :text-scroll-percent="0"
+        @pdf-active-page="emit('update:page', $event)"
+      />
     </div>
   </div>
 </template>
@@ -35,47 +36,80 @@
 <script setup lang="ts">
 import { computed } from 'vue'
 import { FilePdfOutlined } from '@ant-design/icons-vue'
+import { PDF_Viewer } from '@angineer/docs-ui'
+import '@angineer/docs-ui/style'
 import EmptyState from '@shared/web/components/EmptyState.vue'
 import { normalizeRect } from '@shared/types'
+import { useThemeStore } from '@shared/web/stores'
 import type { BlockRange } from '@/types'
 
 const props = withDefaults(defineProps<{
-  src?: string
+  fileUrl: string
   title?: string
   page?: number
   totalPages?: number
   high?: BlockRange[]
-  zoom?: number
+  scanning?: boolean
+  activeHighlightId?: string | null
 }>(), {
   page: 1,
   high: () => [],
+  scanning: false,
+  activeHighlightId: null,
 })
 
-const PAIR_COLORS = ['#EF4444', '#F59E0B', '#3B82F6', '#10B981']
+const emit = defineEmits<{
+  'update:page': [value: number]
+}>()
 
-function pairColor(pairId?: string): string {
-  if (!pairId) return '#8C8C8C'
-  let hash = 0
-  for (let i = 0; i < pairId.length; i++) hash += pairId.charCodeAt(i)
-  return PAIR_COLORS[hash % PAIR_COLORS.length]
+interface ViewerNode {
+  status: string
+  filePath: string
 }
 
-const rects = computed(() =>
-  props.high.map((h) => {
+interface ViewerHighlight {
+  id: string
+  itemId: string
+  page: number
+  hasRect: boolean
+  left: number
+  top: number
+  width: number
+  height: number
+  lineStart: number | null
+  lineEnd: number | null
+  type?: string
+}
+
+const themeStore = useThemeStore()
+const theme = computed(() => themeStore.effectiveTheme)
+
+/** 定位证据时整组高亮同属一个 pairId，未显式指定则取第一组作为激活态。 */
+const activeHighlightId = computed(() =>
+  props.activeHighlightId ?? props.high.find((h) => h.pairId)?.pairId ?? null,
+)
+
+const node = computed<ViewerNode>(() => ({
+  status: 'completed',
+  filePath: props.fileUrl,
+}))
+
+/** bbox 为 0~1 归一化坐标，PDF_Viewer 高亮层按 0~1 比例直接渲染。 */
+const highlights = computed<ViewerHighlight[]>(() =>
+  props.high.map((h, i) => {
     const [x0, y0, x1, y1] = normalizeRect(h.bbox)
-    const color = pairColor(h.pairId)
     return {
-      pairId: h.pairId,
-      excerpt: h.excerpt,
-      color,
-      style: {
-        left: `${x0 * 100}%`,
-        top: `${y0 * 100}%`,
-        width: `${(x1 - x0) * 100}%`,
-        height: `${(y1 - y0) * 100}%`,
-        borderColor: color,
-        background: `color-mix(in srgb, ${color} 12%, transparent)`,
-      },
+      id: `${h.pairId ?? h.docId}-${i}`,
+      itemId: h.pairId ?? h.docId,
+      page: h.page,
+      hasRect: true,
+      left: x0,
+      top: y0,
+      width: x1 - x0,
+      height: y1 - y0,
+      lineStart: null,
+      lineEnd: null,
+      type: 'text',
     }
   }),
 )
@@ -86,6 +120,7 @@ const rects = computed(() =>
 
 .pdf-viewer {
   height: 100%;
+  min-height: 0;
   display: flex;
   flex-direction: column;
   background: @card-bg;
@@ -94,7 +129,7 @@ const rects = computed(() =>
   overflow: hidden;
 }
 
-.pdf-viewer__toolbar {
+.pdf-viewer__bar {
   display: flex;
   align-items: center;
   gap: @spacing-sm;
@@ -115,80 +150,21 @@ const rects = computed(() =>
   color: @text-primary;
 }
 
-.pdf-viewer__tag { flex-shrink: 0; margin-inline-end: 0; }
-
-.pdf-viewer__page {
-  font-size: @font-size-xs;
-  color: @text-tertiary;
+.pdf-viewer__tag {
   flex-shrink: 0;
-  font-variant-numeric: tabular-nums;
+  margin-inline-end: 0;
 }
 
 .pdf-viewer__body {
   flex: 1;
   min-height: 0;
-  overflow: auto;
-  padding: @spacing-base;
-  background: @content-bg;
-}
-
-.pdf-viewer__page-wrap {
-  max-width: 720px;
-  margin: 0 auto;
-}
-
-.pdf-viewer__paper {
-  position: relative;
-  width: 100%;
-  aspect-ratio: 210 / 297;
-  background: @card-bg;
-  border: 1px solid @border-color;
-  box-shadow: @shadow-sm;
-  overflow: hidden;
-}
-
-.pdf-viewer__lines {
-  position: absolute;
-  inset: 6% 7%;
   display: flex;
   flex-direction: column;
-  justify-content: space-between;
-}
-
-.pdf-viewer__line {
-  height: 6px;
-  border-radius: 3px;
-  background: @surface-hover;
-
-  &--short { width: 62%; }
-}
-
-.pdf-viewer__rect {
-  position: absolute;
-  border: 1.5px solid;
-  border-radius: 2px;
-  pointer-events: auto;
-}
-
-.pdf-viewer__excerpt {
-  position: absolute;
-  left: 0;
-  top: 100%;
-  font-size: 11px;
-  line-height: 1.4;
-  white-space: nowrap;
-  max-width: 100%;
   overflow: hidden;
-  text-overflow: ellipsis;
-  background: @card-bg;
-  padding: 0 3px;
-  border-radius: 2px;
 }
 
-.pdf-viewer__placeholder-note {
-  text-align: center;
-  font-size: @font-size-xs;
-  color: @text-tertiary;
-  padding: @spacing-sm 0 0;
+.pdf-viewer__viewer {
+  flex: 1;
+  min-height: 0;
 }
 </style>

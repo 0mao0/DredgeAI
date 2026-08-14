@@ -9,7 +9,15 @@ public class CompareTaskDto : EntityDto<Guid>
 {
     public string Name { get; set; } = default!;
 
+    /// <summary>用户是否手动编辑过项目名（spec §3.3）。</summary>
+    public bool NameEditedByUser { get; set; }
+
+    /// <summary>解析完成后后端推断的项目名建议，未取到为 null。</summary>
+    public string? SuggestedName { get; set; }
+
     public CompareTaskStatus Status { get; set; }
+
+    public string? FailureReason { get; set; }
 
     public List<Guid> DocIds { get; set; } = new();
 
@@ -18,6 +26,8 @@ public class CompareTaskDto : EntityDto<Guid>
     public List<ClauseDto>? ClauseSnapshot { get; set; }
 
     public CompareProgressDto Progress { get; set; } = new();
+
+    public List<ComparePairDto>? Pairs { get; set; }
 
     public DateTime CreatedAt { get; set; }
 }

@@ -138,6 +138,114 @@ public class CompareTaskAppService : ApplicationService, ICompareTaskAppService
         await _taskRepository.DeleteAsync(task, autoSave: true);
     }
 
+    public async Task<CompareTaskDto> ReparseAsync(Guid id, ReparseDocumentsInput? input)
+    {
+        var task = await _taskRepository.GetAsync(id);
+        var documents = await GetTaskDocumentsAsync(id);
+        var failed = documents.Where(d => d.ParseStatus == DocumentParseStatus.Failed).ToList();
+        if (failed.Count == 0)
+        {
+            throw new BusinessException(BidCompareErrorCodes.InvalidTaskState)
+                .WithData("action", "Reparse")
+                .WithData("status", "无失败文档");
+        }
+
+        List<CompareDocument> targets;
+        if (input?.DocIds is { Count: > 0 })
+        {
+            var requested = input.DocIds.Distinct().ToList();
+            var notFound = requested.Where(rid => documents.All(d => d.Id != rid)).ToList();
+            if (notFound.Count > 0)
+            {
+                throw new BusinessException(BidCompareErrorCodes.DocumentNotFound)
+                    .WithData("docIds", string.Join(",", notFound));
+            }
+            var notFailed = requested.Where(rid => failed.All(d => d.Id != rid)).ToList();
+            if (notFailed.Count > 0)
+            {
+                throw new BusinessException(BidCompareErrorCodes.InvalidTaskState)
+                    .WithData("action", "Reparse")
+                    .WithData("docIds", string.Join(",", notFailed))
+                    .WithData("reason", "仅支持重新解析失败文档");
+            }
+            targets = failed.Where(d => requested.Contains(d.Id)).ToList();
+        }
+        else
+        {
+            targets = failed;
+        }
+
+        task.RestartParsing();
+        await _taskRepository.UpdateAsync(task, autoSave: true);
+
+        foreach (var document in targets)
+        {
+            document.MarkPendingForReparse();
+            await _documentRepository.UpdateAsync(document, autoSave: true);
+            await _backgroundJobManager.EnqueueAsync(new ParseDocumentArgs { TaskId = id, DocumentId = document.Id });
+        }
+
+        return MapToDto(task, documents);
+    }
+
+    /// <summary>重新对比：重跑全部或指定比对对；任务正在 analyzing/comparing 时返回冲突。</summary>
+    public async Task<CompareTaskDto> RetryCompareAsync(Guid id, RetryCompareInput? input)
+    {
+        var task = await _taskRepository.GetAsync(id);
+        if (task.Status is CompareTaskStatus.Comparing or CompareTaskStatus.Analyzing)
+        {
+            throw new BusinessException(BidCompareErrorCodes.InvalidTaskState)
+                .WithData("action", "RetryCompare")
+                .WithData("status", task.Status.ToString())
+                .WithData("reason", "任务正在分析中，请等待完成后重试");
+        }
+
+        var documents = await GetTaskDocumentsAsync(id);
+        var parsedBidCount = documents.Count(d =>
+            d.Role == DocumentRole.Bid && d.ParseStatus == DocumentParseStatus.Parsed);
+        if (parsedBidCount < 2)
+        {
+            throw new BusinessException(BidCompareErrorCodes.InvalidTaskState)
+                .WithData("action", "RetryCompare")
+                .WithData("parsedBidCount", parsedBidCount)
+                .WithData("reason", "可比对标书不足 2 份，请先重新解析失败文档");
+        }
+
+        if (input?.PairIds is { Count: > 0 })
+        {
+            var pairs = task.GetPairs();
+            var unknown = input.PairIds.Where(pid => pairs.All(p => p.PairId != pid)).ToList();
+            if (unknown.Count > 0)
+            {
+                throw new BusinessException(BidCompareErrorCodes.InvalidTaskState)
+                    .WithData("action", "RetryCompare")
+                    .WithData("pairIds", string.Join(",", unknown));
+            }
+        }
+
+        task.MarkComparing();
+        task.UpdateProgress("comparing", 60, "两两比对中");
+        await _taskRepository.UpdateAsync(task, autoSave: true);
+        await _backgroundJobManager.EnqueueAsync(new CompareDocumentsArgs
+        {
+            TaskId = id,
+            PairIds = input?.PairIds
+        });
+
+        return MapToDto(task, documents);
+    }
+
+    /// <summary>编辑项目名：后端持久化 nameEditedByUser，前端据此决定是否自动应用建议名。</summary>
+    public async Task<CompareTaskDto> UpdateNameAsync(Guid id, UpdateCompareTaskNameInput input)
+    {
+        var task = await _taskRepository.GetAsync(id);
+        task.SetName(input.Name.Trim());
+        await _taskRepository.UpdateAsync(task, autoSave: true);
+
+        var documents = await GetTaskDocumentsAsync(id);
+        return MapToDto(task, documents);
+    }
+
     [DisableValidation] // Stream 参数无法被验证拦截器递归校验（ReadTimeout 等属性不可读）
     public async Task<CompareDocumentDto> UploadDocumentAsync(Guid id, DocumentRole role, string fileName, Stream content)
     {
@@ -177,9 +285,47 @@ public class CompareTaskAppService : ApplicationService, ICompareTaskAppService
             await _taskRepository.UpdateAsync(task, autoSave: true);
         }
 
-        await _backgroundJobManager.EnqueueAsync(new ParseDocumentArgs { TaskId = id, DocumentId = documentId });
-
         return MapToDto(document);
+    }
+
+    public async Task<CompareTaskDto> StartParsingAsync(Guid id)
+    {
+        var task = await _taskRepository.GetAsync(id);
+        var documents = await GetTaskDocumentsAsync(id);
+        var pendingIds = documents
+            .Where(d => d.ParseStatus == DocumentParseStatus.Pending)
+            .Select(d => d.Id)
+            .ToList();
+
+        if (pendingIds.Count > 0)
+        {
+            await _backgroundJobManager.EnqueueAsync(new ParseDocumentsArgs
+            {
+                TaskId = id,
+                DocumentIds = pendingIds
+            });
+        }
+
+        return MapToDto(task, documents);
+    }
+
+    public async Task<CompareDocumentFileResult> GetDocumentFileAsync(Guid id, Guid docId)
+    {
+        await _taskRepository.GetAsync(id); // 任务不存在 → 404
+        var document = await _documentRepository.FirstOrDefaultAsync(d => d.TaskId == id && d.Id == docId);
+        if (document == null)
+        {
+            throw new BusinessException(BidCompareErrorCodes.DocumentNotFound).WithData("docId", docId);
+        }
+
+        var content = await _fileStorage.GetAsync(document.OriginStorageKey);
+        var extension = Path.GetExtension(document.FileName).ToLowerInvariant();
+        return new CompareDocumentFileResult
+        {
+            Content = content,
+            ContentType = ContentTypeOf(extension),
+            FileName = document.FileName,
+        };
     }
 
     public async Task<DocumentIrDto> GetDocumentIrAsync(Guid id, Guid docId)
@@ -431,11 +577,37 @@ public class CompareTaskAppService : ApplicationService, ICompareTaskAppService
 
     internal static CompareTaskDto MapToDto(CompareTask task, List<CompareDocument> documents)
     {
+        var pairs = task.PairsJson == null ? null : task.GetPairs();
+        int? pairIndex = null;
+        if (pairs is { Count: > 0 })
+        {
+            var doneCount = pairs.Count(p => p.Status is ComparePairStatus.Done or ComparePairStatus.Failed);
+            var processing = pairs.FindIndex(p => p.Status == ComparePairStatus.Processing);
+            var waiting = pairs.FindIndex(p => p.Status == ComparePairStatus.Waiting);
+            if (processing >= 0)
+            {
+                pairIndex = processing + 1;
+            }
+            else if (doneCount == pairs.Count)
+            {
+                pairIndex = pairs.Count;
+            }
+            else if (waiting >= 0 && doneCount > 0)
+            {
+                // 已有完成对、还有等待对 → 展示下一个即将落定的对
+                pairIndex = waiting + 1;
+            }
+            // 全部 waiting（批处理计算中）：pairIndex 保持 null，前端不展示「第 i/N 对」
+        }
+
         return new CompareTaskDto
         {
             Id = task.Id,
             Name = task.Name,
+            NameEditedByUser = task.NameEditedByUser,
+            SuggestedName = task.SuggestedName,
             Status = task.Status,
+            FailureReason = task.FailureReason,
             DocIds = documents.OrderBy(d => d.CreationTime).Select(d => d.Id).ToList(),
             TenderDocId = task.TenderDocumentId,
             ClauseSnapshot = task.ClauseSnapshotJson == null
@@ -445,9 +617,27 @@ public class CompareTaskAppService : ApplicationService, ICompareTaskAppService
             {
                 Stage = task.ProgressStage,
                 Percent = task.ProgressPercent,
-                Message = task.ProgressMessage
+                Message = task.ProgressMessage,
+                PairIndex = pairIndex,
+                PairCount = pairs?.Count
             },
+            Pairs = pairs?.Select(MapToPairDto).ToList(),
             CreatedAt = task.CreationTime
+        };
+    }
+
+    internal static ComparePairDto MapToPairDto(ComparePairItem pair)
+    {
+        return new ComparePairDto
+        {
+            PairId = pair.PairId,
+            DocAId = pair.DocAId,
+            DocBId = pair.DocBId,
+            Status = pair.Status,
+            Similarity = pair.Similarity,
+            FailReason = pair.FailReason,
+            StartedAt = pair.StartedAt,
+            FinishedAt = pair.FinishedAt
         };
     }
 

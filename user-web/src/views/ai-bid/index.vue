@@ -9,7 +9,7 @@
             :key="feature.route"
             class="nav-card"
             :class="{ 'nav-card--active': $route.path.startsWith(feature.route) }"
-            @click="$router.push(feature.route)"
+            @click="goFeature(feature.route)"
           >
             <div class="nav-icon" :style="{ background: feature.bg }">
               <component :is="feature.icon" />
@@ -105,11 +105,13 @@ import {
 } from '@ant-design/icons-vue'
 import { getBidSessions } from '@/api/modules/bid'
 import { getTasks } from '@/api/modules/compare'
+import { useSidebarStore } from '@shared/web/stores'
 import { COMPARE_STATUS_MAP } from './compare/constants'
 import type { BidReviewSession, CompareTask } from '@/types'
 
 const route = useRoute()
 const router = useRouter()
+const sidebarStore = useSidebarStore()
 const sessionDrawer = ref(false)
 const sessions = ref<BidReviewSession[]>([])
 const activeSessionId = ref('')
@@ -147,6 +149,11 @@ const features = [
   { route: '/ai-bid/compare', name: '比标', icon: SwapOutlined, bg: 'linear-gradient(135deg, #D97706, #F59E0B)' },
   { route: '/ai-bid/clear', name: '清标', icon: ClearOutlined, bg: 'linear-gradient(135deg, #7C3AED, #8B5CF6)' },
 ]
+
+function goFeature(routePath: string): void {
+  sidebarStore.setCollapsed(true)
+  router.push(routePath)
+}
 
 function selectSession(id: string): void {
   activeSessionId.value = id

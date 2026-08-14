@@ -62,6 +62,17 @@ public class CompareDocument : FullAuditedEntity<Guid>
         ParseError = null;
     }
 
+    /// <summary>重新解析前复位：清空失败原因与旧产物引用。</summary>
+    public void MarkPendingForReparse()
+    {
+        ParseStatus = DocumentParseStatus.Pending;
+        ParseError = null;
+        IrStorageKey = null;
+        DocMdStorageKey = null;
+        PageCount = null;
+        OcrLowConfidenceRatio = null;
+    }
+
     public void MarkParsed(string irStorageKey, string? docMdStorageKey, int pageCount, double ocrLowConfidenceRatio)
     {
         ParseStatus = DocumentParseStatus.Parsed;
@@ -75,6 +86,7 @@ public class CompareDocument : FullAuditedEntity<Guid>
     public void MarkParseFailed(string error)
     {
         ParseStatus = DocumentParseStatus.Failed;
-        ParseError = Check.NotNullOrWhiteSpace(error, nameof(error), maxLength: 2048);
+        var value = Check.NotNullOrWhiteSpace(error, nameof(error));
+        ParseError = value.Length <= 2048 ? value : value[..2048];
     }
 }

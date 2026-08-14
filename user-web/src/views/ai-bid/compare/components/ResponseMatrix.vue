@@ -5,19 +5,29 @@
         <thead>
           <tr>
             <th class="matrix-table__head">条款</th>
-            <th v-for="d in documents" :key="d.id" class="matrix-table__head">{{ docLabel(d.id) }}</th>
+            <th v-for="d in bidDocs" :key="d.id" class="matrix-table__head">{{ docLabel(d.id) }}</th>
           </tr>
         </thead>
         <tbody>
-          <tr v-for="(row, i) in matrix" :key="i">
-            <td class="matrix-table__clause">{{ clauseTitle(i) }}</td>
-            <td v-for="(cell, j) in row" :key="j" class="matrix-table__cell">
-              <span class="matrix-cell" :class="cellClass(cell)">{{ cell }}</span>
+          <tr v-for="row in rows" :key="row.clauseId">
+            <td class="matrix-table__clause">{{ row.text }}</td>
+            <td v-for="d in bidDocs" :key="d.id" class="matrix-table__cell">
+              <a-button
+                v-if="cellOf(row, d.id)"
+                type="link"
+                size="small"
+                class="matrix-cell"
+                :class="cellClass(cellOf(row, d.id)!)"
+                @click="emit('trace', cellOf(row, d.id)!)"
+              >
+                {{ cellText(cellOf(row, d.id)!) }}
+              </a-button>
+              <span v-else class="matrix-cell matrix-cell--ok">响应</span>
             </td>
           </tr>
         </tbody>
       </table>
-      <a-empty v-if="!matrix.length" description="暂无条款响应数据" />
+      <a-empty v-if="!rows.length" description="暂无条款响应数据（需要招标文件并完成条款确认后由 AI 判定）" />
     </div>
   </SectionCard>
 </template>
@@ -25,26 +35,54 @@
 <script setup lang="ts">
 import { computed } from 'vue'
 import SectionCard from '@shared/web/components/SectionCard.vue'
-import type { CompareTask } from '@/types'
+import type { CompareDocMeta, EvidenceItem } from '@/types'
 
-const props = defineProps<{ task: CompareTask }>()
+const props = defineProps<{
+  documents: CompareDocMeta[]
+  evidence: EvidenceItem[]
+}>()
 
-const documents = computed(() => props.task.documents)
-const matrix = computed(() => props.task.responseMatrix ?? [])
+const emit = defineEmits<{ trace: [item: EvidenceItem] }>()
+
+const bidDocs = computed(() => props.documents.filter((d) => d.role !== 'tender'))
+const clauseEvidence = computed(() => props.evidence.filter((e) => e.type === 'clause'))
+
+interface ClauseRow {
+  clauseId: string
+  text: string
+  items: EvidenceItem[]
+}
+
+const rows = computed<ClauseRow[]>(() => {
+  const map = new Map<string, ClauseRow>()
+  for (const ev of clauseEvidence.value) {
+    const clauseId = String(ev.metrics?.clauseId ?? ev.title)
+    const row = map.get(clauseId) ?? {
+      clauseId,
+      text: String(ev.metrics?.clauseText ?? ev.title.replace(/^条款未实质响应（[^）]*）：/, '')),
+      items: [],
+    }
+    row.items.push(ev)
+    map.set(clauseId, row)
+  }
+  return [...map.values()]
+})
+
+function cellOf(row: ClauseRow, docId: string): EvidenceItem | undefined {
+  return row.items.find((ev) => ev.docIds.includes(docId))
+}
+
+function cellText(ev: EvidenceItem): string {
+  return ev.metrics?.status === 'partial' ? '部分响应' : '未响应'
+}
+
+function cellClass(ev: EvidenceItem): string {
+  return ev.metrics?.status === 'partial' ? 'matrix-cell--partial' : 'matrix-cell--missing'
+}
 
 function docLabel(docId: string): string {
-  const idx = documents.value.findIndex((d) => d.id === docId)
+  const idx = bidDocs.value.findIndex((d) => d.id === docId)
   return idx >= 0 ? String.fromCharCode(65 + idx) : docId
-}
-
-function clauseTitle(index: number): string {
-  return props.task.matrixClauses?.[index] ?? `条款 ${index + 1}`
-}
-
-function cellClass(cell: string): string {
-  if (cell === '√') return 'matrix-cell--ok'
-  if (cell === '△') return 'matrix-cell--partial'
-  return 'matrix-cell--missing'
 }
 </script>
 
@@ -81,6 +119,8 @@ function cellClass(cell: string): string {
 
 .matrix-cell {
   font-weight: @font-weight-semibold;
+  padding: 0;
+  height: auto;
 
   &--ok { color: @success; }
   &--partial { color: @warning; }

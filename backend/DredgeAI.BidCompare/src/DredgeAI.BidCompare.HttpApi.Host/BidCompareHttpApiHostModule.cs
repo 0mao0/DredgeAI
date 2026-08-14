@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
+using System.Net.Http;
 using DredgeAI.BidCompare.AI;
 using DredgeAI.BidCompare.Analysis;
 using DredgeAI.BidCompare.AnGineer;
@@ -107,6 +108,14 @@ public class BidCompareHttpApiHostModule : AbpModule
         Configure<LlmOptions>(configuration.GetSection("Llm"));
         Configure<ReportExportOptions>(configuration.GetSection("Export"));
         Configure<LibreOfficeOptions>(configuration.GetSection("LibreOffice"));
+        // AnGIneer 轮询间隔为 5s，服务端 keep-alive 超时也是 5s 级别；
+        // 缩短连接池空闲寿命，避免复用已被服务端关闭的旧连接（SocketException 10053）。
+        context.Services.AddHttpClient(nameof(HttpAnGineerClient))
+            .ConfigurePrimaryHttpMessageHandler(() => new SocketsHttpHandler
+            {
+                PooledConnectionIdleTimeout = TimeSpan.FromSeconds(2),
+                PooledConnectionLifetime = TimeSpan.FromSeconds(30),
+            });
         context.Services.AddHttpClient();
     }
 

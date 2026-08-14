@@ -152,8 +152,11 @@ public class IrValidator : IIrValidator, ITransientDependency
             errors.Add($"{label} 缺少 pageIdx");
         }
 
-        if (!block.TryGetProperty("bbox", out var bbox) || bbox.ValueKind != JsonValueKind.Array ||
-            bbox.GetArrayLength() != 4)
+        if (!block.TryGetProperty("bbox", out var bbox) || bbox.ValueKind == JsonValueKind.Null)
+        {
+            // v2 降级：AnGIneer 部分块暂无 bbox，前端跳过该块的溯源定位
+        }
+        else if (bbox.ValueKind != JsonValueKind.Array || bbox.GetArrayLength() != 4)
         {
             errors.Add($"{label} bbox 必须为 [x0,y0,x1,y1] 四元数组");
         }
@@ -199,12 +202,9 @@ public class IrValidator : IIrValidator, ITransientDependency
 
         if (type == "table")
         {
+            // v2 降级：AnGIneer 部分表格暂无 table.html，仅整表截图；html 可缺省
             if (!block.TryGetProperty("table", out var table) || table.ValueKind != JsonValueKind.Object ||
-                !TryGetNonEmptyString(table, "html", out _))
-            {
-                errors.Add($"{label} table 块缺少 table.html（spec §4.3-4）");
-            }
-            if (table.ValueKind != JsonValueKind.Object || !TryGetNonEmptyString(table, "imgPath", out _))
+                !TryGetNonEmptyString(table, "imgPath", out _))
             {
                 errors.Add($"{label} table 块缺少 table.imgPath 整表截图（spec §4.3-4）");
             }

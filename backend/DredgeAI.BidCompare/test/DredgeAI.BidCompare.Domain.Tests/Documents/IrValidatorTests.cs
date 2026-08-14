@@ -1,5 +1,5 @@
 using System.Text.Json;
-using DredgeAI.BidCompare.Documents;
+using System.Text.Json.Nodes;
 using Shouldly;
 using Xunit;
 
@@ -33,12 +33,12 @@ public class IrValidatorTests
     }
 
     [Fact]
-    public void Pixel_Bbox_Should_Be_Rejected() // v2 §2：bbox 为 0~1 归一化坐标，像素坐标拒收
+    public void Pixel_Bbox_Should_Be_Rejected()
     {
         var ir = SampleIr.Valid.Replace("[0.0672, 0.0594, 0.9244, 0.095]", "[80, 100, 1100, 160]");
         var result = _validator.Validate(ir);
         result.IsValid.ShouldBeFalse();
-        result.Errors.ShouldContain(e => e.Contains("归一化"));
+        result.Errors.ShouldContain(e => e.Contains("bbox"));
     }
 
     [Fact]
@@ -51,7 +51,7 @@ public class IrValidatorTests
     }
 
     [Fact]
-    public void Null_Source_And_Confidence_Should_Pass() // v2 §4：AnGIneer 补齐前允许缺省/null
+    public void Null_Source_And_Confidence_Should_Pass()
     {
         var ir = SampleIr.Valid
             .Replace(", \"source\": \"native\", \"confidence\": 1.0", "")
@@ -61,32 +61,61 @@ public class IrValidatorTests
     }
 
     [Fact]
-    public void Duplicate_BlockId_Should_Fail() // v2 §2：文档内唯一（= block_uid）
+    public void Duplicate_BlockId_Should_Fail()
     {
         var ir = SampleIr.Valid.Replace("\"blockId\": \"b0003\"", "\"blockId\": \"b0002\"");
         _validator.Validate(ir).IsValid.ShouldBeFalse();
     }
 
     [Fact]
-    public void Table_Without_Html_Or_Screenshot_Should_Fail() // spec §4.3-4
+    public void Table_Without_Html_And_Screenshot_Should_Fail()
     {
-        var ir = SampleIr.Valid.Replace(
-            "\"table\": { \"html\": \"<table><tr><td>总价</td></tr></table>\", \"imgPath\": \"images/t1.jpg\" }",
-            "\"table\": { \"html\": \"\", \"imgPath\": \"\" }");
+        var doc = JsonNode.Parse(SampleIr.Valid)!.AsObject();
+        var table = (JsonObject?)doc["blocks"]![1]!["table"];
+        table!.Remove("html");
+        table.Remove("imgPath");
+        var ir = doc.ToJsonString();
+
         var result = _validator.Validate(ir);
         result.IsValid.ShouldBeFalse();
-        result.Errors.ShouldContain(e => e.Contains("table.html"));
+        result.Errors.ShouldContain(e => e.Contains("table.imgPath"));
     }
 
     [Fact]
-    public void Confidence_Out_Of_Range_Should_Fail() // v2 §4：存在时须在 0~1
+    public void Table_Without_Html_But_With_Screenshot_Should_Pass()
+    {
+        var doc = JsonNode.Parse(SampleIr.Valid)!.AsObject();
+        var table = (JsonObject?)doc["blocks"]![1]!["table"];
+        table!.Remove("html");
+        var ir = doc.ToJsonString();
+
+        var result = _validator.Validate(ir);
+        result.IsValid.ShouldBeTrue(string.Join("; ", result.Errors));
+    }
+
+    [Fact]
+    public void Missing_Bbox_Should_Be_Allowed()
+    {
+        var doc = JsonNode.Parse(SampleIr.Valid)!.AsObject();
+        foreach (var block in (JsonArray)doc["blocks"]!)
+        {
+            ((JsonObject)block!).Remove("bbox");
+        }
+        var ir = doc.ToJsonString();
+
+        var result = _validator.Validate(ir);
+        result.IsValid.ShouldBeTrue(string.Join("; ", result.Errors));
+    }
+
+    [Fact]
+    public void Confidence_Out_Of_Range_Should_Fail()
     {
         var ir = SampleIr.Valid.Replace("\"confidence\": 1.0", "\"confidence\": 1.7");
         _validator.Validate(ir).IsValid.ShouldBeFalse();
     }
 
     [Fact]
-    public void Ocr_LowConfidence_Ratio_Should_Be_Calculated() // spec §4.5
+    public void Ocr_LowConfidence_Ratio_Should_Be_Calculated()
     {
         using var doc = JsonDocument.Parse(SampleIr.Valid);
         var ratio = IrValidator.CalculateOcrLowConfidenceRatio(doc.RootElement);

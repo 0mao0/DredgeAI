@@ -99,6 +99,10 @@ public class BidCompareDbContext :
             b.Property(x => x.ProgressStage).IsRequired().HasMaxLength(32);
             b.Property(x => x.ProgressMessage).HasMaxLength(1024);
             b.Property(x => x.FailureReason).HasMaxLength(2048);
+            b.Property(x => x.SuggestedName).HasMaxLength(256);
+            b.Property(x => x.NameEditedByUser).HasDefaultValue(false);
+            b.Property(x => x.PairsJson).HasColumnType("text");
+            b.Property(x => x.AutoCompareOnParseComplete).HasDefaultValue(true);
             b.HasIndex(x => x.Status);
         });
 

@@ -64,3 +64,65 @@ You can see the following resources to learn more about your solution and the AB
 
 * [Web Application Development Tutorial](https://docs.abp.io/en/abp/latest/Tutorials/Part-1)
 * [Application Startup Template Structure](https://docs.abp.io/en/abp/latest/Startup-Templates/Application)
+
+---
+
+## 后端比标流程
+
+比标是一条「创建任务 → 解析 → 确认条款 → 算法比对 → AI 分析 → 出报告」的异步流水线，每个环节由后台任务推进，前端通过任务状态与进度轮询。
+
+### 总体流程
+
+```mermaid
+flowchart TD
+  A[创建任务 Parsing 0%] --> B[上传标书 / 招标文件]
+  B --> C[每份文档入队 ParseDocumentJob]
+
+  C --> D[下载原文件 → 提交 AnGIneer 解析]
+  D --> E[轮询解析状态 → 下载产物包 graph / meta / content.md / images]
+  E --> F{IR 映射与校验}
+  F -- 校验失败 --> F1[文档标记解析失败]
+  F -- 通过 --> G[保存 raw / ir.json / content.md → 文档 Parsed]
+
+  G --> H{全部文档解析完成?}
+  H -- 还有待解析 --> C
+  H -- 全部失败 --> H1[任务 Failed]
+  H -- 部分失败 --> H2[任务 Partial 可继续]
+  H -- 全部成功且有招标文件未确认条款 --> I[AwaitingClauses 40%<br/>LLM 提取条款草稿 → 用户确认]
+  H -- 全部成功且无招标文件或条款已确认 --> J
+  I --> J[锁定条款快照 → Comparing 60%]
+
+  J --> K[CompareDocumentsJob 汇总已解析标书<br/>并读取 AnGIneer 原始产物]
+  K --> L[依次调用 compare-algo 三个分析端点]
+  L --> L1[similarity 两两雷同 + 雷同簇]
+  L1 --> L2[pricing 等差 / 尾数相同 / 报价异常贴近]
+  L2 --> L3[metadata 作者 / 创建时间 / 工具 / 相同错别字]
+  L3 -- 算法服务不可用 --> L4[任务 Failed]
+  L3 -- 成功 --> M[证据落库 → Analyzing 80%]
+
+  M --> N[AiAnalysisJob]
+  N --> N1[逐份标书判定条款响应 responded / partial / none]
+  N1 --> N2[跨标书抽取关键指标 summaries]
+  N2 -- AI 异常 --> N3[降级为仅算法证据 仍 Done]
+  N2 -- 成功 --> O[MarkDone 100%]
+
+  O --> P[GET /report 惰性生成并缓存报告]
+  P --> Q[POST /export 异步导出 → 轮询 → 下载 URL]
+```
+
+### 阶段说明
+
+| 阶段 | 任务状态 | 进度 | 主要动作 |
+|------|----------|------|----------|
+| 解析 | `Parsing` | 按已解析份数 / 总份数 | 每份文档独立入队：下载原文件 → 提交 AnGIneer → 轮询完成 → 下载产物 → 映射 / 校验 IR → 落库 |
+| 条款确认（可选） | `AwaitingClauses` | 40% | 仅当存在招标文件且未确认条款时进入：LLM 提取强制条款草稿 → 用户确认 → 锁定条款快照 |
+| 两两比对 | `Comparing` | 60% | 汇总已解析标书的 AnGIneer 原始产物，依次调用 compare-algo 的 similarity / pricing / metadata，证据落库 |
+| AI 分析 | `Analyzing` | 80% | 有条款快照时逐份标书做条款响应判定（responded / partial / none），并跨标书抽取关键指标 |
+| 完成 | `Done` | 100% | 报告首次访问时惰性生成并缓存；导出走异步任务，完成后返回临时下载 URL |
+
+### 失败策略
+
+- 全部文档解析失败 → 任务 `Failed`，给出明确原因。
+- 部分文档解析失败 → 任务 `Partial`，已成功文档继续参与比对。
+- compare-algo 算法服务不可用 → 任务直接 `Failed`，不静默降级。
+- AI 分析失败 / 超时 → 不阻塞任务：仅保留算法证据，任务仍 `Done`，进度消息标注「AI 分析暂不可用」。

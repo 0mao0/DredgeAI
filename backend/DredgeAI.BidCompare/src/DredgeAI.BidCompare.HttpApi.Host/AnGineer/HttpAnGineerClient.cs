@@ -14,9 +14,10 @@ using Volo.Abp.DependencyInjection;
 namespace DredgeAI.BidCompare.AnGineer;
 
 /// <summary>
-/// AnGIneer HTTP API adapter（v1 documents API，实际端口 8789）：
-///   POST {BaseUrl}/api/v1/documents/parse  multipart 文件（stages=source_prep,convert,raw_parse,structure，
-///        绕开 v1 默认 structure 单阶段缺少 mineru_raw 的缺陷）→ { doc_id, task_id, status }
+/// AnGIneer HTTP API adapter（v1 documents API，docs-api 端口 8790）：
+///   POST {BaseUrl}/api/v1/documents/parse  multipart 文件（stages=all：
+///        source_prep→convert→raw_parse→popo→structure→fts→vectors→graph，
+///        后续阶段可能改写 content.md 等产物，必须全量跑完再下载）→ { doc_id, task_id, status }
 ///   GET  {BaseUrl}/api/v1/documents/{docId}/status → { status: queued|processing|completed|failed|cancelled }
 ///   GET  {BaseUrl}/api/v1/documents/{docId}/artifacts → items[{ name, url }]
 ///   GET  {BaseUrl}/api/v1/documents/{docId}/artifacts/{name} → 产物文件字节
@@ -42,7 +43,7 @@ public class HttpAnGineerClient : IAnGineerClient, ITransientDependency
         form.Add(fileContent, "file", fileName);
 
         using var response = await client.PostAsync(
-            "/api/v1/documents/parse?stages=source_prep,convert,raw_parse,structure", form, cancellationToken);
+            "/api/v1/documents/parse?stages=all", form, cancellationToken);
         response.EnsureSuccessStatusCode();
         var payload = await response.Content.ReadFromJsonAsync<SubmitResponse>(cancellationToken: cancellationToken);
         return payload?.DocId

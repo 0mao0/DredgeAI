@@ -1,24 +1,21 @@
 <template>
   <div class="collusion-panel">
-    <SectionCard title="文档元数据对比" flush>
+    <SectionCard v-if="metaRows.length" title="文档元数据对比" flush>
       <div class="meta-table__wrap">
         <table class="meta-table">
           <thead>
             <tr>
               <th class="meta-table__head">字段</th>
+              <th class="meta-table__head">一致值</th>
               <th v-for="d in documents" :key="d.id" class="meta-table__head">{{ docLabel(d.id) }}</th>
             </tr>
           </thead>
           <tbody>
-            <tr v-for="f in fields" :key="f.key">
-              <td class="meta-table__label">{{ f.label }}</td>
-              <td
-                v-for="d in documents"
-                :key="d.id"
-                class="meta-table__cell"
-                :class="{ 'meta-table__cell--dup': isDup(f.key, d.id) }"
-              >
-                {{ metaOf(d.id)?.[f.key] ?? '—' }}
+            <tr v-for="row in metaRows" :key="`${row.field}-${row.value}`">
+              <td class="meta-table__label">{{ row.label }}</td>
+              <td class="meta-table__value" :title="row.title">{{ row.value }}</td>
+              <td v-for="d in documents" :key="d.id" class="meta-table__cell" :class="{ 'meta-table__cell--dup': row.docIds.includes(d.id) }">
+                {{ row.docIds.includes(d.id) ? '✓' : '—' }}
               </td>
             </tr>
           </tbody>
@@ -42,8 +39,7 @@
 import { computed } from 'vue'
 import SectionCard from '@shared/web/components/SectionCard.vue'
 import EvidenceTable from './EvidenceTable.vue'
-import { mockDocMetaInfos } from '@shared/mock/data/compare'
-import type { CompareDocMeta, CompareDocMetaInfo, EvidenceItem } from '@/types'
+import type { CompareDocMeta, EvidenceItem } from '@/types'
 
 const props = defineProps<{
   documents: CompareDocMeta[]
@@ -52,25 +48,28 @@ const props = defineProps<{
 
 const emit = defineEmits<{ locate: [item: EvidenceItem] }>()
 
-const fields: { key: keyof Omit<CompareDocMetaInfo, 'docId' | 'createdAt'>, label: string }[] = [
-  { key: 'author', label: '作者' },
-  { key: 'creatorTool', label: '创建工具' },
-  { key: 'producer', label: 'Producer' },
-  { key: 'guid', label: 'GUID' },
-  { key: 'ip', label: 'IP 地址' },
-]
+const FIELD_LABELS: Record<string, string> = {
+  author: '作者',
+  createdAt: '创建时间',
+  creatorTool: '创建工具',
+}
 
 const metaEvidence = computed(() => props.evidence.filter((e) => e.type === 'metadata'))
 
-function metaOf(docId: string): CompareDocMetaInfo | undefined {
-  return mockDocMetaInfos.find((m) => m.docId === docId)
-}
-
-function isDup(key: (typeof fields)[number]['key'], docId: string): boolean {
-  const v = metaOf(docId)?.[key]
-  if (!v) return false
-  return props.documents.filter((d) => metaOf(d.id)?.[key] === v).length > 1
-}
+/** 后端 metadata 证据的 metrics 形如 { field, value }，逐条渲染成对比行。 */
+const metaRows = computed(() =>
+  metaEvidence.value.flatMap((ev) => {
+    const m = ev.metrics
+    if (!m || typeof m.field !== 'string' || typeof m.value !== 'string') return []
+    return [{
+      field: m.field,
+      label: FIELD_LABELS[m.field] ?? m.field,
+      value: m.value,
+      docIds: ev.docIds,
+      title: ev.title,
+    }]
+  }),
+)
 
 function docLabel(docId: string): string {
   const idx = props.documents.findIndex((d) => d.id === docId)
@@ -113,6 +112,15 @@ function docLabel(docId: string): string {
   text-align: left !important;
   color: @text-primary;
   font-weight: @font-weight-medium;
+  white-space: nowrap;
+}
+
+.meta-table__value {
+  color: @text-primary;
+  font-weight: @font-weight-medium;
+  max-width: 280px;
+  overflow: hidden;
+  text-overflow: ellipsis;
   white-space: nowrap;
 }
 

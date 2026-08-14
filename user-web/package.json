@@ -10,6 +10,7 @@
     "typecheck": "vue-tsc --noEmit"
   },
   "dependencies": {
+    "@angineer/docs-ui": "https://codeload.github.com/0mao0/angineer-docs-ui/tar.gz/refs/heads/main",
     "@ant-design/icons-vue": "7.0.1",
     "@vueuse/core": "^11.3.0",
     "ant-design-vue": "4.2.6",
@@ -18,6 +19,7 @@
     "echarts": "^5.6.0",
     "katex": "0.18.4",
     "nprogress": "^0.2.0",
+    "pdfjs-dist": "6.2.108",
     "pinia": "^3.0.4",
     "pinia-plugin-persistedstate": "^4.2.0",
     "vue": "3.5.41",

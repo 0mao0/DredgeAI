@@ -1,5 +1,7 @@
 using System;
+using System.Collections.Generic;
 using System.Linq;
+using System.Text.Json;
 using Volo.Abp;
 using Volo.Abp.Domain.Entities.Auditing;
 
@@ -7,6 +9,12 @@ namespace DredgeAI.BidCompare.CompareTasks;
 
 public class CompareTask : FullAuditedAggregateRoot<Guid>
 {
+    internal static readonly JsonSerializerOptions PairJsonOptions = new()
+    {
+        PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
+        PropertyNameCaseInsensitive = true
+    };
+
     public string Name { get; private set; } = default!;
 
     public CompareTaskStatus Status { get; private set; }
@@ -30,6 +38,18 @@ public class CompareTask : FullAuditedAggregateRoot<Guid>
     /// <summary>Partial/Failed 的原因说明（spec §9 失败文档标注原因）。</summary>
     public string? FailureReason { get; private set; }
 
+    /// <summary>解析完成后由后端推断的项目名建议（spec §3.3），未取到为 null。</summary>
+    public string? SuggestedName { get; private set; }
+
+    /// <summary>用户是否手动编辑过项目名；true 后前端轮询不得再自动应用 suggestedName。</summary>
+    public bool NameEditedByUser { get; private set; }
+
+    /// <summary>两两对比对清单（JSON 数组，元素见 ComparePairItem）。</summary>
+    public string? PairsJson { get; private set; }
+
+    /// <summary>解析完成后是否自动进入两两对比；重新解析后置 false，由用户显式「重新对比」。</summary>
+    public bool AutoCompareOnParseComplete { get; private set; }
+
     protected CompareTask()
     {
     }
@@ -40,6 +60,28 @@ public class CompareTask : FullAuditedAggregateRoot<Guid>
         Status = CompareTaskStatus.Parsing;
         ProgressStage = "parsing";
         ProgressPercent = 0;
+        NameEditedByUser = false;
+        AutoCompareOnParseComplete = true;
+    }
+
+    public void SetName(string name)
+    {
+        Name = Check.NotNullOrWhiteSpace(name, nameof(name), maxLength: 128);
+        NameEditedByUser = true;
+    }
+
+    /// <summary>仅当尚无建议名时填充一次；用户编辑后仍可返回建议名，但前端不再自动应用。</summary>
+    public void SetSuggestedName(string? suggestedName)
+    {
+        if (suggestedName.IsNullOrWhiteSpace())
+        {
+            return;
+        }
+        SuggestedName = suggestedName!.Trim();
+        if (SuggestedName.Length > 128)
+        {
+            SuggestedName = SuggestedName[..128];
+        }
     }
 
     public void SetTenderDocument(Guid documentId)
@@ -65,21 +107,41 @@ public class CompareTask : FullAuditedAggregateRoot<Guid>
         Status = CompareTaskStatus.Parsed;
     }
 
+    /// <summary>失败后重新解析：状态回到 Parsing，清空失败原因、进度与旧比对对，且不再自动重跑比对。</summary>
+    public void RestartParsing()
+    {
+        EnsureStatus(nameof(RestartParsing),
+            CompareTaskStatus.Failed, CompareTaskStatus.Parsing,
+            CompareTaskStatus.Partial, CompareTaskStatus.Parsed,
+            CompareTaskStatus.AwaitingClauses);
+        Status = CompareTaskStatus.Parsing;
+        ProgressStage = "parsing";
+        ProgressPercent = 0;
+        ProgressMessage = null;
+        FailureReason = null;
+        PairsJson = null;
+        AutoCompareOnParseComplete = false;
+    }
+
     public void MarkPartial(string reason)
     {
         EnsureStatus(nameof(MarkPartial),
             CompareTaskStatus.Parsing, CompareTaskStatus.Parsed,
-            CompareTaskStatus.Partial, CompareTaskStatus.AwaitingClauses);
+            CompareTaskStatus.Partial, CompareTaskStatus.AwaitingClauses,
+            CompareTaskStatus.Comparing, CompareTaskStatus.Analyzing);
         Status = CompareTaskStatus.Partial;
-        FailureReason = Check.NotNullOrWhiteSpace(reason, nameof(reason), maxLength: 2048);
+        var value = Check.NotNullOrWhiteSpace(reason, nameof(reason));
+        FailureReason = value.Length <= 2048 ? value : value[..2048];
     }
 
     public void MarkFailed(string reason)
     {
         EnsureStatus(nameof(MarkFailed),
-            CompareTaskStatus.Parsing, CompareTaskStatus.Comparing, CompareTaskStatus.Analyzing);
+            CompareTaskStatus.Parsing, CompareTaskStatus.Parsed, CompareTaskStatus.Partial,
+            CompareTaskStatus.Comparing, CompareTaskStatus.Analyzing);
         Status = CompareTaskStatus.Failed;
-        FailureReason = Check.NotNullOrWhiteSpace(reason, nameof(reason), maxLength: 2048);
+        var value = Check.NotNullOrWhiteSpace(reason, nameof(reason));
+        FailureReason = value.Length <= 2048 ? value : value[..2048];
     }
 
     public void MarkAwaitingClauses()
@@ -91,7 +153,8 @@ public class CompareTask : FullAuditedAggregateRoot<Guid>
     public void MarkComparing()
     {
         EnsureStatus(nameof(MarkComparing),
-            CompareTaskStatus.Parsed, CompareTaskStatus.Partial, CompareTaskStatus.AwaitingClauses);
+            CompareTaskStatus.Parsed, CompareTaskStatus.Partial,
+            CompareTaskStatus.AwaitingClauses, CompareTaskStatus.Failed);
         Status = CompareTaskStatus.Comparing;
     }
 
@@ -120,6 +183,94 @@ public class CompareTask : FullAuditedAggregateRoot<Guid>
         EnsureStatus(nameof(SetReport), CompareTaskStatus.Done);
         ReportJson = Check.NotNullOrWhiteSpace(reportJson, nameof(reportJson));
         ReportGeneratedAt = generatedAt;
+    }
+
+    /// <summary>首次/全量重跑前按标书组合初始化全部比对对（waiting）。</summary>
+    public void InitializePairs(IReadOnlyList<(Guid DocA, Guid DocB)> pairs)
+    {
+        var items = pairs.Select(p => new ComparePairItem
+        {
+            PairId = Guid.NewGuid(),
+            DocAId = p.DocA,
+            DocBId = p.DocB,
+            Status = ComparePairStatus.Waiting
+        }).ToList();
+        PairsJson = JsonSerializer.Serialize(items, PairJsonOptions);
+    }
+
+    /// <summary>部分重跑前仅复位指定比对对为 waiting，其余对状态与结果保留。</summary>
+    public void ResetPairsForRetry(IReadOnlyCollection<Guid> pairIds)
+    {
+        var items = GetPairs();
+        foreach (var item in items.Where(i => pairIds.Contains(i.PairId)))
+        {
+            item.Status = ComparePairStatus.Waiting;
+            item.Similarity = null;
+            item.FailReason = null;
+            item.StartedAt = null;
+            item.FinishedAt = null;
+        }
+        PairsJson = JsonSerializer.Serialize(items, PairJsonOptions);
+    }
+
+    public List<ComparePairItem> GetPairs()
+        => PairsJson == null
+            ? new List<ComparePairItem>()
+            : JsonSerializer.Deserialize<List<ComparePairItem>>(PairsJson, PairJsonOptions) ?? new();
+
+    public void MarkPairProcessing(Guid pairId, DateTime startedAt)
+    {
+        var items = GetPairs();
+        var item = items.FirstOrDefault(p => p.PairId == pairId);
+        if (item == null)
+        {
+            return;
+        }
+        item.Status = ComparePairStatus.Processing;
+        item.StartedAt = startedAt;
+        item.FinishedAt = null;
+        PairsJson = JsonSerializer.Serialize(items, PairJsonOptions);
+    }
+
+    /// <summary>批处理模式下记录对的开始时间（算法一次分析全部对，不逐对置 processing）。</summary>
+    public void MarkPairBatchStarted(IEnumerable<Guid> pairIds, DateTime startedAt)
+    {
+        var items = GetPairs();
+        foreach (var item in items.Where(i => pairIds.Contains(i.PairId) && i.StartedAt == null))
+        {
+            item.StartedAt = startedAt;
+        }
+        PairsJson = JsonSerializer.Serialize(items, PairJsonOptions);
+    }
+
+    public void MarkPairDone(Guid pairId, DateTime finishedAt, double? similarity)
+    {
+        var items = GetPairs();
+        var item = items.FirstOrDefault(p => p.PairId == pairId);
+        if (item == null)
+        {
+            return;
+        }
+        item.Status = ComparePairStatus.Done;
+        item.Similarity = similarity;
+        item.FailReason = null;
+        item.FinishedAt = finishedAt;
+        PairsJson = JsonSerializer.Serialize(items, PairJsonOptions);
+    }
+
+    public void MarkPairFailed(Guid pairId, DateTime finishedAt, string reason)
+    {
+        var items = GetPairs();
+        var item = items.FirstOrDefault(p => p.PairId == pairId);
+        if (item == null)
+        {
+            return;
+        }
+        item.Status = ComparePairStatus.Failed;
+        item.Similarity = null;
+        item.FailReason = Check.NotNullOrWhiteSpace(reason, nameof(reason), maxLength: 2048);
+        item.FinishedAt = finishedAt;
+        PairsJson = JsonSerializer.Serialize(items, PairJsonOptions);
     }
 
     private void EnsureStatus(string action, params CompareTaskStatus[] allowed)

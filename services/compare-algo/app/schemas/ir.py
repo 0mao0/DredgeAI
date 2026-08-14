@@ -122,11 +122,9 @@ class IrDocument(BaseModel):
         for node in walk(self.outline):
             if node.blockId not in block_id_set:
                 raise ValueError(f"outline 引用了不存在的 blockId：{node.blockId}")
-        # pageIdx 必须存在；pages 保留页面真实尺寸（前端还原/打印用，不参与 bbox 校验）
+        # pages 保留页面真实尺寸（不参与分析）；AnGIneer 实测 pages 数组可能被截断
+        # （如 200 页）而块 page_idx 可达 213，缺页块不拒绝，仅保留原始 pageIdx 供溯源。
         page_map = {p.pageIdx: p for p in self.pages}
         if len(page_map) != len(self.pages):
             raise ValueError("pages 中 pageIdx 重复")
-        for b in self.blocks:
-            if b.pageIdx not in page_map:
-                raise ValueError(f"block {b.blockId} 的 pageIdx={b.pageIdx} 在 pages 中不存在")
         return self

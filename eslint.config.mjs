@@ -43,6 +43,11 @@ export default antfu(
     ignores: [
       '**/dist/**',
       '**/node_modules/**',
+      'backend/**',
+      'services/**',
+      '**/bin/**',
+      '**/obj/**',
+      '**/.venv/**',
       'docs/**',
       '**/*.log',
       'dev.mjs',

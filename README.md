@@ -33,7 +33,7 @@
 ## 快速启动
 
 前置依赖：Docker（PostgreSQL）、.NET 8 SDK、Node.js + pnpm、Python 3.11+（compare-algo
-虚拟环境）、本机 AnGIneer 服务（端口 8789，仅检测不托管）。
+虚拟环境）、本机 AnGIneer docs-api 服务（端口 8790，仅检测不托管）。
 
 一键启动（幂等，重复运行等于重启）：
 
@@ -51,7 +51,7 @@ compare-algo、比标后端、用户端前端 → 健康检查。日志在 `logs
 | 比标后端 | https://localhost:44361 | ABP 主服务，Swagger `/swagger` |
 | compare-algo | http://localhost:8100 | 比标算法服务 |
 | PostgreSQL | localhost:5432 | Docker 容器 `bidcompare-postgres` |
-| AnGIneer | http://localhost:8789 | 外部依赖，脚本仅检测 |
+| AnGIneer | http://localhost:8790 | 外部依赖（docs-api），脚本仅检测 |
 
 ## 配置
 

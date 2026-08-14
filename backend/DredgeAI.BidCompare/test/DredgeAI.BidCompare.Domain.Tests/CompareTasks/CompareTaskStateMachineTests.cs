@@ -79,6 +79,30 @@ public class CompareTaskStateMachineTests
     }
 
     [Fact]
+    public void MarkFailed_With_Long_Reason_Should_Truncate_To_2048()
+    {
+        var task = new CompareTask(Guid.NewGuid(), "t");
+
+        task.MarkFailed(new string('X', 3000));
+
+        task.Status.ShouldBe(CompareTaskStatus.Failed);
+        task.FailureReason.ShouldNotBeNull();
+        task.FailureReason!.Length.ShouldBe(2048);
+    }
+
+    [Fact]
+    public void MarkPartial_With_Long_Reason_Should_Truncate_To_2048()
+    {
+        var task = new CompareTask(Guid.NewGuid(), "t");
+
+        task.MarkPartial(new string('X', 3000));
+
+        task.Status.ShouldBe(CompareTaskStatus.Partial);
+        task.FailureReason.ShouldNotBeNull();
+        task.FailureReason!.Length.ShouldBe(2048);
+    }
+
+    [Fact]
     public void Invalid_Transitions_Should_Throw_BusinessException()
     {
         var task = new CompareTask(Guid.NewGuid(), "t");

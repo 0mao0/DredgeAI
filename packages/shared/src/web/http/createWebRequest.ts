@@ -1,4 +1,5 @@
 import { createRequest } from '@shared/core/http'
+import type { AxiosRequestConfig } from 'axios'
 import type { CreateRequestOptions, RequestInstance } from '@shared/core/http/types'
 
 /**
@@ -15,30 +16,48 @@ export interface CreateWebRequestOptions extends CreateRequestOptions {
   onError?: (msg: string) => void
 }
 
+function isSilentRequest(config?: AxiosRequestConfig): boolean {
+  const headers = config?.headers as Record<string, unknown> | undefined
+  return headers?.['X-Silent-Request'] === '1' || headers?.['x-silent-request'] === '1'
+}
+
 export function createWebRequest(opts: CreateWebRequestOptions): RequestInstance {
   const { onProgressStart, onProgressDone, onError, ...rest } = opts
   const instance = createRequest(rest)
 
-  instance.interceptors.request.use((config) => {
-    onProgressStart?.()
-    return config
-  })
+  function track<T>(promise: Promise<T>, silent: boolean): Promise<T> {
+    if (!silent) onProgressStart?.()
+    return promise.then(
+      (data) => {
+        if (!silent) onProgressDone?.()
+        return data
+      },
+      (error) => {
+        if (!silent) {
+          onProgressDone?.()
+          if (error.response?.status !== 401) {
+            const abpError = error.response?.data?.error
+            const msg = abpError?.message || error.message || '请求失败'
+            onError?.(msg)
+          }
+        }
+        return Promise.reject(error)
+      },
+    )
+  }
 
-  instance.interceptors.response.use(
-    (resp) => {
-      onProgressDone?.()
-      return resp
-    },
-    (error) => {
-      onProgressDone?.()
-      if (error.response?.status !== 401) {
-        const abpError = error.response?.data?.error
-        const msg = abpError?.message || error.message || '请求失败'
-        onError?.(msg)
-      }
-      return Promise.reject(error)
-    },
-  )
-
-  return instance
+  return {
+    get: <T = unknown>(url: string, config?: AxiosRequestConfig) =>
+      track(instance.get<T>(url, config), !isSilentRequest(config)),
+    post: <T = unknown>(url: string, data?: unknown, config?: AxiosRequestConfig) =>
+      track(instance.post<T>(url, data, config), !isSilentRequest(config)),
+    put: <T = unknown>(url: string, data?: unknown, config?: AxiosRequestConfig) =>
+      track(instance.put<T>(url, data, config), !isSilentRequest(config)),
+    patch: <T = unknown>(url: string, data?: unknown, config?: AxiosRequestConfig) =>
+      track(instance.patch<T>(url, data, config), !isSilentRequest(config)),
+    delete: <T = unknown>(url: string, config?: AxiosRequestConfig) =>
+      track(instance.delete<T>(url, config), !isSilentRequest(config)),
+    interceptors: instance.interceptors,
+    raw: instance.raw,
+  }
 }

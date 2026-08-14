@@ -3,6 +3,8 @@ using System.IO;
 using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
+using DredgeAI.BidCompare.Analysis;
+using DredgeAI.BidCompare.AnGineer;
 using DredgeAI.BidCompare.BackgroundJobs;
 using DredgeAI.BidCompare.Clauses;
 using DredgeAI.BidCompare.CompareTasks;
@@ -35,6 +37,9 @@ public class CompareTaskAppServiceTests : BidCompareApplicationTestBase<BidCompa
 
         created.Id.ShouldNotBe(Guid.Empty);
         created.Name.ShouldBe("一期工程比标");
+        created.NameEditedByUser.ShouldBeFalse();
+        created.SuggestedName.ShouldBeNull();
+        created.Pairs.ShouldBeNull();
         created.Status.ShouldBe(CompareTaskStatus.Parsing);
         created.DocIds.ShouldBeEmpty();
         created.TenderDocId.ShouldBeNull();
@@ -44,6 +49,100 @@ public class CompareTaskAppServiceTests : BidCompareApplicationTestBase<BidCompa
 
         var fetched = await _appService.GetAsync(created.Id);
         fetched.Name.ShouldBe("一期工程比标");
+    }
+
+    [Fact]
+    public async Task UpdateName_Should_Set_Edited_Flag()
+    {
+        var task = await _appService.CreateAsync(new CreateCompareTaskDto { Name = "初稿" });
+
+        var updated = await _appService.UpdateNameAsync(task.Id, new UpdateCompareTaskNameInput { Name = "一期工程比标" });
+
+        updated.Name.ShouldBe("一期工程比标");
+        updated.NameEditedByUser.ShouldBeTrue();
+
+        var fetched = await _appService.GetAsync(task.Id);
+        fetched.Name.ShouldBe("一期工程比标");
+        fetched.NameEditedByUser.ShouldBeTrue();
+    }
+
+    [Fact]
+    public async Task Reparse_Should_Only_Reprocess_Requested_Failed_Docs()
+    {
+        var task = await _appService.CreateAsync(new CreateCompareTaskDto { Name = "t" });
+        var good = await _appService.UploadDocumentAsync(task.Id, DocumentRole.Bid, "标书A.pdf",
+            new MemoryStream(Encoding.UTF8.GetBytes("a")));
+        var bad = await _appService.UploadDocumentAsync(task.Id, DocumentRole.Bid, "标书B.pdf",
+            new MemoryStream(Encoding.UTF8.GetBytes("b")));
+        var anGineer = (FakeAnGineerClient)GetRequiredService<IAnGineerClient>();
+        anGineer.FailWith = "OCR 崩溃";
+        await WithUnitOfWorkAsync(async () =>
+        {
+            await GetRequiredService<ParseDocumentJob>().ExecuteAsync(
+                new ParseDocumentArgs { TaskId = task.Id, DocumentId = bad.Id });
+        });
+        anGineer.FailWith = null;
+        await WithUnitOfWorkAsync(async () =>
+        {
+            await GetRequiredService<ParseDocumentJob>().ExecuteAsync(
+                new ParseDocumentArgs { TaskId = task.Id, DocumentId = good.Id });
+        });
+
+        _jobManager.Clear();
+        var reparse = await _appService.ReparseAsync(task.Id,
+            new ReparseDocumentsInput { DocIds = new() { bad.Id } });
+
+        reparse.Status.ShouldBe(CompareTaskStatus.Parsing);
+        var docRepo = GetRequiredService<IRepository<CompareDocument, Guid>>();
+        (await docRepo.GetAsync(bad.Id)).ParseStatus.ShouldBe(DocumentParseStatus.Pending);
+        (await docRepo.GetAsync(good.Id)).ParseStatus.ShouldBe(DocumentParseStatus.Parsed);
+        var enqueued = _jobManager.LastEnqueued<ParseDocumentArgs>();
+        enqueued.ShouldNotBeNull();
+        enqueued!.DocumentId.ShouldBe(bad.Id);
+
+        // 仅允许失败文档重新解析
+        var ex = await Should.ThrowAsync<BusinessException>(() =>
+            _appService.ReparseAsync(task.Id, new ReparseDocumentsInput { DocIds = new() { good.Id } }));
+        ex.Code.ShouldBe(BidCompareErrorCodes.InvalidTaskState);
+    }
+
+    [Fact]
+    public async Task RetryCompare_Should_Reject_While_Analyzing()
+    {
+        var (taskId, _, _) = await PrepareParsedBidsAsync();
+        var taskRepo = GetRequiredService<IRepository<CompareTask, Guid>>();
+        await WithUnitOfWorkAsync(async () =>
+        {
+            var task = await taskRepo.GetAsync(taskId);
+            task.MarkAnalyzing();
+            await taskRepo.UpdateAsync(task, autoSave: true);
+        });
+
+        var ex = await Should.ThrowAsync<BusinessException>(() =>
+            _appService.RetryCompareAsync(taskId, new RetryCompareInput()));
+        ex.Code.ShouldBe(BidCompareErrorCodes.InvalidTaskState);
+    }
+
+    [Fact]
+    public async Task RetryCompare_Should_Enqueue_After_Failure()
+    {
+        var (taskId, _, _) = await PrepareParsedBidsAsync();
+        var algo = (FakeCompareAlgoClient)GetRequiredService<ICompareAlgoClient>();
+        algo.FailWith = "connection refused";
+        await WithUnitOfWorkAsync(async () =>
+        {
+            await GetRequiredService<CompareDocumentsJob>().ExecuteAsync(
+                new CompareDocumentsArgs { TaskId = taskId });
+        });
+        var failed = await _appService.GetAsync(taskId);
+        failed.Status.ShouldBe(CompareTaskStatus.Failed);
+
+        algo.FailWith = null;
+        _jobManager.Clear();
+        var retried = await _appService.RetryCompareAsync(taskId, new RetryCompareInput());
+
+        retried.Status.ShouldBe(CompareTaskStatus.Comparing);
+        _jobManager.LastEnqueued<CompareDocumentsArgs>().ShouldNotBeNull();
     }
 
     [Fact]
@@ -81,7 +180,7 @@ public class CompareTaskAppServiceTests : BidCompareApplicationTestBase<BidCompa
     }
 
     [Fact]
-    public async Task UploadDocument_Should_Store_File_And_Enqueue_Parse()
+    public async Task UploadDocument_Should_Store_File_Without_Enqueue()
     {
         var task = await _appService.CreateAsync(new CreateCompareTaskDto { Name = "t" });
         var content = new MemoryStream(Encoding.UTF8.GetBytes("%PDF fake"));
@@ -93,13 +192,73 @@ public class CompareTaskAppServiceTests : BidCompareApplicationTestBase<BidCompa
         doc.ParseStatus.ShouldBe(DocumentParseStatus.Pending);
         _fileStorage.Objects.Keys.ShouldContain(k => k.StartsWith($"compare/{task.Id}/{doc.Id}/origin"));
 
-        var enqueued = _jobManager.LastEnqueued<ParseDocumentArgs>();
-        enqueued.ShouldNotBeNull();
-        enqueued!.TaskId.ShouldBe(task.Id);
-        enqueued.DocumentId.ShouldBe(doc.Id);
+        // v2 修订：上传不再逐份入队，改为全部上传后由 StartParsing 批量并发解析
+        _jobManager.LastEnqueued<ParseDocumentArgs>().ShouldBeNull();
 
         var detail = await _appService.GetAsync(task.Id);
         detail.DocIds.ShouldContain(doc.Id);
+    }
+
+    [Fact]
+    public async Task StartParsing_Should_Enqueue_Batch_For_Pending_Documents()
+    {
+        var task = await _appService.CreateAsync(new CreateCompareTaskDto { Name = "t" });
+        var docA = await _appService.UploadDocumentAsync(task.Id, DocumentRole.Bid, "a.pdf",
+            new MemoryStream(Encoding.UTF8.GetBytes("a")));
+        var docB = await _appService.UploadDocumentAsync(task.Id, DocumentRole.Bid, "b.pdf",
+            new MemoryStream(Encoding.UTF8.GetBytes("b")));
+        _jobManager.Clear();
+
+        var dto = await _appService.StartParsingAsync(task.Id);
+
+        var enqueued = _jobManager.LastEnqueued<ParseDocumentsArgs>();
+        enqueued.ShouldNotBeNull();
+        enqueued!.TaskId.ShouldBe(task.Id);
+        enqueued.DocumentIds.ShouldContain(docA.Id);
+        enqueued.DocumentIds.ShouldContain(docB.Id);
+        dto.Status.ShouldBe(CompareTaskStatus.Parsing);
+    }
+
+    [Fact]
+    public async Task StartParsing_With_No_Pending_Should_Not_Enqueue()
+    {
+        var task = await _appService.CreateAsync(new CreateCompareTaskDto { Name = "t" });
+        _jobManager.Clear();
+
+        var dto = await _appService.StartParsingAsync(task.Id);
+
+        _jobManager.LastEnqueued<ParseDocumentsArgs>().ShouldBeNull();
+        dto.Status.ShouldBe(CompareTaskStatus.Parsing);
+    }
+
+    [Fact]
+    public async Task GetDocumentFile_Should_Return_Original_Stream_And_Name()
+    {
+        var task = await _appService.CreateAsync(new CreateCompareTaskDto { Name = "t" });
+        var bytes = Encoding.UTF8.GetBytes("%PDF-1.4 fake");
+        var doc = await _appService.UploadDocumentAsync(task.Id, DocumentRole.Bid, "标书A.pdf",
+            new MemoryStream(bytes));
+
+        var result = await _appService.GetDocumentFileAsync(task.Id, doc.Id);
+
+        result.FileName.ShouldBe("标书A.pdf");
+        result.ContentType.ShouldBe("application/pdf");
+        using var reader = new MemoryStream();
+        await result.Content.CopyToAsync(reader);
+        reader.ToArray().ShouldBe(bytes);
+    }
+
+    [Fact]
+    public async Task GetDocumentFile_Should_Reject_Doc_From_Another_Task()
+    {
+        var taskA = await _appService.CreateAsync(new CreateCompareTaskDto { Name = "A" });
+        var taskB = await _appService.CreateAsync(new CreateCompareTaskDto { Name = "B" });
+        var doc = await _appService.UploadDocumentAsync(taskA.Id, DocumentRole.Bid, "标书A.pdf",
+            new MemoryStream(new byte[] { 1 }));
+
+        var ex = await Should.ThrowAsync<BusinessException>(() =>
+            _appService.GetDocumentFileAsync(taskB.Id, doc.Id));
+        ex.Code.ShouldBe(BidCompareErrorCodes.DocumentNotFound);
     }
 
     [Fact]
@@ -169,5 +328,21 @@ public class CompareTaskAppServiceTests : BidCompareApplicationTestBase<BidCompa
         var repo = GetRequiredService<IRepository<CompareTask, Guid>>();
         (await repo.FindAsync(task.Id)).ShouldBeNull();
         _fileStorage.Objects.Keys.Any(k => k.Contains(doc.Id.ToString())).ShouldBeFalse();
+    }
+
+    private async Task<(Guid TaskId, Guid DocA, Guid DocB)> PrepareParsedBidsAsync()
+    {
+        var task = await _appService.CreateAsync(new CreateCompareTaskDto { Name = "t" });
+        var docA = await _appService.UploadDocumentAsync(task.Id, DocumentRole.Bid, "标书A.pdf",
+            new MemoryStream(Encoding.UTF8.GetBytes("a")));
+        var docB = await _appService.UploadDocumentAsync(task.Id, DocumentRole.Bid, "标书B.pdf",
+            new MemoryStream(Encoding.UTF8.GetBytes("b")));
+        var parseJob = GetRequiredService<ParseDocumentJob>();
+        await WithUnitOfWorkAsync(async () =>
+        {
+            await parseJob.ExecuteAsync(new ParseDocumentArgs { TaskId = task.Id, DocumentId = docA.Id });
+            await parseJob.ExecuteAsync(new ParseDocumentArgs { TaskId = task.Id, DocumentId = docB.Id });
+        });
+        return (task.Id, docA.Id, docB.Id);
     }
 }

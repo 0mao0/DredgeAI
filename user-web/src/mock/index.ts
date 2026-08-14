@@ -1,7 +1,9 @@
 import MockAdapter from 'axios-mock-adapter'
+import axios from 'axios'
+import type { AxiosHeaders, AxiosRequestConfig } from 'axios'
 import request from '@/api/request'
 import { ttsClient } from '@/api/modules/dubbing'
-import { USE_MOCK, USE_TTS_MOCK, MOCK_MODULES } from '@/utils/constants'
+import { API_BASE_URL, USE_MOCK, USE_TTS_MOCK, MOCK_MODULES } from '@/utils/constants'
 import { registerUserMock } from './routes/user'
 import { registerAppMock } from './routes/app'
 import { registerTaskMock } from './routes/task'
@@ -24,8 +26,43 @@ export function registerMock(): void {
     return [200, handler()]
   }
 
+  // 模块 mock 关闭时转发到真实 API（保留 baseURL，避免 mock 库 passThrough 丢 /api 前缀）
+  const forwardToRealApi = async (config: AxiosRequestConfig): Promise<[number, unknown]> => {
+    const headers: Record<string, string> = {}
+    const rawHeaders = config.headers as AxiosHeaders | undefined
+    if (rawHeaders && typeof rawHeaders.toJSON === 'function') {
+      Object.assign(headers, rawHeaders.toJSON())
+    }
+
+    // FormData 的 Content-Type 由浏览器自动生成（含 boundary），显式转发会破坏上传
+    if (typeof FormData !== 'undefined' && config.data instanceof FormData) {
+      delete headers['Content-Type']
+    }
+
+    try {
+      const res = await axios.request<unknown>({
+        method: config.method,
+        url: config.url,
+        baseURL: API_BASE_URL,
+        data: config.data,
+        params: config.params,
+        headers,
+        responseType: config.responseType,
+        timeout: config.timeout,
+        onUploadProgress: config.onUploadProgress,
+        onDownloadProgress: config.onDownloadProgress,
+      })
+      return [res.status, res.data]
+    } catch (error) {
+      if (axios.isAxiosError(error) && error.response) {
+        return [error.response.status, error.response.data]
+      }
+      throw error
+    }
+  }
+
   // 按模块注册 mock，模块开关关闭则该模块请求直连真实 API
-  const modules: { key: string, register: (m: MockAdapter, w: typeof wrap) => void }[] = [
+  const modules: { key: string, register: (m: MockAdapter, w: typeof wrap) => void, passthrough?: RegExp }[] = [
     { key: 'user', register: registerUserMock },
     { key: 'app', register: registerAppMock },
     { key: 'task', register: registerTaskMock },
@@ -38,9 +75,12 @@ export function registerMock(): void {
   ]
 
   for (const mod of modules) {
-    if (MOCK_MODULES[mod.key] !== false) {
-      mod.register(mock, wrap)
+    if (MOCK_MODULES[mod.key] === false) {
+      // 模块 mock 关闭时直连真实 API（Vite 代理在 vite.config.ts 中配置）
+      if (mod.passthrough) mock.onAny(mod.passthrough).reply(forwardToRealApi)
+      continue
     }
+    mod.register(mock, wrap)
   }
 
   // ABP 格式：未匹配的请求返回错误响应

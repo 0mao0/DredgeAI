@@ -6,6 +6,20 @@ from app.angineer.pdf_date import parse_pdf_date
 from tests.conftest import adapt, make_raw_block, make_raw_doc
 
 
+def test_block_page_beyond_declared_pages_allowed():
+    # AnGIneer 实测：pages 数组被截断（如 200 页），但部分块 page_idx 可达 213；
+    # 分析逻辑不依赖页面尺寸，缺页块不应导致整篇拒绝。
+    raw = make_raw_doc(
+        "d-out",
+        file_name="o.pdf",
+        author=None,
+        created_at=None,
+        blocks=[make_raw_block("o1", "正文", page_idx=200)],
+    )
+    doc = adapt(raw)
+    assert doc.blocks[0].pageIdx == 200
+
+
 class TestPdfDate:
     def test_full_pdf_date(self):
         assert parse_pdf_date("D:20251229164720+08'00'") == "2025-12-29T16:47:20+08:00"
@@ -214,12 +228,13 @@ class TestInternalModelGuards:
         with pytest.raises(ValidationError):
             adapt(raw)
 
-    def test_page_idx_must_exist_in_pages(self):
+    def test_page_idx_beyond_pages_allowed(self):
+        # AnGIneer 实测 pages 数组可能截断，块 page_idx 可超出；缺页块不拒绝
         raw = make_raw_doc("d-p", file_name="p.pdf", author=None, created_at=None, blocks=[
             make_raw_block("p1", "正文", page_idx=5),
         ])
-        with pytest.raises(ValidationError):
-            adapt(raw)
+        doc = adapt(raw)
+        assert doc.blocks[0].pageIdx == 5
 
 
 class TestRealFixtures:

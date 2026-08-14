@@ -40,6 +40,28 @@ public class CompareDocumentsJobTests : BidCompareApplicationTestBase<BidCompare
         return (task.Id, docA.Id, docB.Id);
     }
 
+    private async Task<(Guid TaskId, List<Guid> Docs)> PrepareParsedTaskAsync(int count)
+    {
+        var task = await _appService.CreateAsync(new CreateCompareTaskDto { Name = "t" });
+        var docs = new List<Guid>();
+        for (var i = 0; i < count; i++)
+        {
+            var doc = await _appService.UploadDocumentAsync(
+                task.Id, DocumentRole.Bid, $"标书{Convert.ToChar('A' + i)}.pdf",
+                new MemoryStream(new byte[] { (byte)(i + 1) }));
+            docs.Add(doc.Id);
+        }
+        var parseJob = GetRequiredService<ParseDocumentJob>();
+        await WithUnitOfWorkAsync(async () =>
+        {
+            foreach (var docId in docs)
+            {
+                await parseJob.ExecuteAsync(new ParseDocumentArgs { TaskId = task.Id, DocumentId = docId });
+            }
+        });
+        return (task.Id, docs);
+    }
+
     private void SetupAlgoEvidences(Guid docA, Guid docB)
     {
         _algoClient.SimilarityEvidences = new List<AlgoEvidence>
@@ -77,12 +99,12 @@ public class CompareDocumentsJobTests : BidCompareApplicationTestBase<BidCompare
         };
     }
 
-    private async Task RunCompareJobAsync(Guid taskId)
+    private async Task RunCompareJobAsync(Guid taskId, List<Guid>? pairIds = null)
     {
         var job = GetRequiredService<CompareDocumentsJob>();
         await WithUnitOfWorkAsync(async () =>
         {
-            await job.ExecuteAsync(new CompareDocumentsArgs { TaskId = taskId });
+            await job.ExecuteAsync(new CompareDocumentsArgs { TaskId = taskId, PairIds = pairIds });
         });
     }
 
@@ -112,6 +134,17 @@ public class CompareDocumentsJobTests : BidCompareApplicationTestBase<BidCompare
         var detail = await _appService.GetAsync(taskId);
         detail.Status.ShouldBe(CompareTaskStatus.Analyzing); // P1 尾部：比对完成进入 AI 分析（Done 由 AiAnalysisJob 收尾）
         detail.Progress.Percent.ShouldBe(80);
+        detail.Progress.PairIndex.ShouldBe(1);
+        detail.Progress.PairCount.ShouldBe(1);
+
+        detail.Pairs.ShouldNotBeNull();
+        var pair = detail.Pairs!.Single();
+        pair.DocAId.ShouldBe(docA);
+        pair.DocBId.ShouldBe(docB);
+        pair.Status.ShouldBe(ComparePairStatus.Done);
+        pair.Similarity.ShouldBe(0.93);
+        pair.StartedAt.ShouldNotBeNull();
+        pair.FinishedAt.ShouldNotBeNull();
 
         var list = await _appService.GetEvidencesAsync(taskId, new GetEvidenceListInput { MaxResultCount = 10 });
         list.TotalCount.ShouldBe(2);
@@ -178,6 +211,65 @@ public class CompareDocumentsJobTests : BidCompareApplicationTestBase<BidCompare
 
         var detail = await _appService.GetAsync(taskId);
         detail.Status.ShouldBe(CompareTaskStatus.Failed);
+        detail.Pairs.ShouldNotBeNull();
+        detail.Pairs!.Single().Status.ShouldBe(ComparePairStatus.Failed);
+        detail.Pairs!.Single().FailReason.ShouldNotBeNullOrWhiteSpace();
+    }
+
+    [Fact]
+    public async Task Batch_Pass_Should_Keep_Multi_Doc_Cluster_Evidence()
+    {
+        // 逐对调用只覆盖 2 文档组合；≥3 份共同雷同簇必须由全量批处理补充（v2 §8.2 不丢多文档证据）
+        var (taskId, docs) = await PrepareParsedTaskAsync(3);
+        _algoClient.SimilarityEvidences = new List<AlgoEvidence>
+        {
+            new()
+            {
+                Type = "similarity",
+                Severity = "high",
+                DocIds = docs.Select(d => d.ToString()).ToList(),
+                Locations = new List<AlgoEvidenceLocation>(),
+                Metrics = new Dictionary<string, JsonElement>
+                {
+                    ["cluster"] = JsonDocument.Parse("true").RootElement.Clone(),
+                    ["memberCount"] = JsonDocument.Parse("3").RootElement.Clone()
+                },
+                Title = "3 份标书存在共同雷同",
+                Description = "簇级证据"
+            }
+        };
+        _algoClient.PricingEvidences = new List<AlgoEvidence>();
+        _algoClient.MetadataEvidences = new List<AlgoEvidence>();
+
+        await RunCompareJobAsync(taskId);
+
+        var detail = await _appService.GetAsync(taskId);
+        detail.Status.ShouldBe(CompareTaskStatus.Analyzing);
+        var list = await _appService.GetEvidencesAsync(taskId, new GetEvidenceListInput { MaxResultCount = 10 });
+        list.TotalCount.ShouldBe(1); // 逐对调用不重复插入，仅批处理吸收一次
+        list.Items.ShouldContain(e => e.Type == EvidenceType.Similarity && e.DocIds.Count == 3);
+    }
+
+    [Fact]
+    public async Task Retry_Should_Reuse_Existing_Pairs_And_Reset_Progress()
+    {
+        var (taskId, _, _) = await PrepareParsedTaskAsync();
+        _algoClient.FailWith = "connection refused";
+        await RunCompareJobAsync(taskId);
+
+        var failedDetail = await _appService.GetAsync(taskId);
+        var pairId = failedDetail.Pairs!.Single().PairId;
+
+        // 失败后重新对比：仅重跑指定对
+        _algoClient.FailWith = null;
+        await _appService.RetryCompareAsync(taskId, new RetryCompareInput { PairIds = new() { pairId } });
+        await RunCompareJobAsync(taskId, new List<Guid> { pairId });
+
+        var detail = await _appService.GetAsync(taskId);
+        detail.Status.ShouldBe(CompareTaskStatus.Analyzing);
+        detail.Pairs!.Single().PairId.ShouldBe(pairId); // 对 id 稳定，前端进度可继续合并
+        detail.Pairs!.Single().Status.ShouldBe(ComparePairStatus.Done);
+        detail.Progress.PairCount.ShouldBe(1);
     }
 
     [Fact]

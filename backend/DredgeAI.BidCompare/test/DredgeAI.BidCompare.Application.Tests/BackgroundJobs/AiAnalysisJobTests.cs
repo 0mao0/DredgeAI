@@ -3,6 +3,7 @@ using System.IO;
 using System.Linq;
 using System.Threading.Tasks;
 using DredgeAI.BidCompare.AI;
+using DredgeAI.BidCompare.AnGineer;
 using DredgeAI.BidCompare.Clauses;
 using DredgeAI.BidCompare.CompareTasks;
 using DredgeAI.BidCompare.Documents;
@@ -129,5 +130,38 @@ public class AiAnalysisJobTests : BidCompareApplicationTestBase<BidCompareApplic
         var detail = await _appService.GetAsync(task.Id);
         detail.Status.ShouldBe(CompareTaskStatus.Done); // 算法证据照常展示
         detail.Progress.Message.ShouldContain("AI 分析暂不可用");
+    }
+
+    [Fact]
+    public async Task Failed_Document_Should_Leave_Task_Partial_After_Ai() // v2 §5.3：partial 终态 = 结果 + 失败文档内联重试
+    {
+        var task = await _appService.CreateAsync(new CreateCompareTaskDto { Name = "t" });
+        var goodA = await _appService.UploadDocumentAsync(task.Id, DocumentRole.Bid, "标书A.pdf", new MemoryStream(new byte[] { 1 }));
+        var goodB = await _appService.UploadDocumentAsync(task.Id, DocumentRole.Bid, "标书B.pdf", new MemoryStream(new byte[] { 2 }));
+        var bad = await _appService.UploadDocumentAsync(task.Id, DocumentRole.Bid, "标书C.pdf", new MemoryStream(new byte[] { 3 }));
+        var anGineer = (FakeAnGineerClient)GetRequiredService<IAnGineerClient>();
+        var parseJob = GetRequiredService<ParseDocumentJob>();
+        await WithUnitOfWorkAsync(async () =>
+        {
+            await parseJob.ExecuteAsync(new ParseDocumentArgs { TaskId = task.Id, DocumentId = goodA.Id });
+            await parseJob.ExecuteAsync(new ParseDocumentArgs { TaskId = task.Id, DocumentId = goodB.Id });
+            anGineer.FailWith = "OCR 崩溃";
+            await parseJob.ExecuteAsync(new ParseDocumentArgs { TaskId = task.Id, DocumentId = bad.Id });
+        });
+
+        var detail = await _appService.GetAsync(task.Id);
+        detail.Status.ShouldBe(CompareTaskStatus.Comparing); // 2 份解析成功 → 自动进入比对
+
+        await WithUnitOfWorkAsync(async () =>
+        {
+            await GetRequiredService<CompareDocumentsJob>().ExecuteAsync(
+                new CompareDocumentsArgs { TaskId = task.Id });
+        });
+        await RunAiAnalysisAsync(task.Id);
+
+        var final = await _appService.GetAsync(task.Id);
+        final.Status.ShouldBe(CompareTaskStatus.Partial);
+        final.FailureReason.ShouldContain("标书C.pdf");
+        final.Progress.Message.ShouldContain("1 份文档解析失败");
     }
 }

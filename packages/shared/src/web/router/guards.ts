@@ -46,7 +46,7 @@ export function createPermissionGuard(
 export function createTitleGuard(appName: string): (to: { meta: { title?: string } }) => void {
   return (to) => {
     const title = to.meta.title
-    document.title = title ? `${title} · ${appName}` : appName
+    document.title = title ? `${appName} · ${title}` : appName
   }
 }
 

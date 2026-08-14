@@ -12,9 +12,9 @@ from typing import Literal, Optional
 from lxml import html as lxml_html
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
-# table html 纯净结构（实测 132 表仅 table/tr/td + rowspan/colspan）
-_ALLOWED_TABLE_TAGS = {"table", "tr", "td", "th"}
-_ALLOWED_TABLE_ATTRS = {"rowspan", "colspan"}
+# table html 纯净结构（实测表格内可嵌 <img>，如检验检测报告样品图）
+_ALLOWED_TABLE_TAGS = {"table", "tr", "td", "th", "img"}
+_ALLOWED_TABLE_ATTRS = {"rowspan", "colspan", "src", "alt", "width", "height"}
 
 # 实测词表（solo_engine.py:1225-1257）：原生文本 = "text"（v2 文档 "native" 系措辞）
 RawSource = Literal["text", "ocr", "table", "formula"]
@@ -69,6 +69,9 @@ class RawBlock(BaseModel):
     def _check_table_html_purity(cls, v):
         if v is None:
             return v
+        v = v.strip()
+        if not v:
+            return None  # AnGIneer 对缺失 html 的表格输出空串，等价于缺省
         try:
             root = lxml_html.fromstring(v)
         except Exception as exc:

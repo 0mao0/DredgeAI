@@ -104,7 +104,22 @@ public class AiAnalysisJob : AsyncBackgroundJob<AiAnalysisArgs>, ITransientDepen
             task.UpdateProgress("done", 100, "AI 分析暂不可用，可重新触发条款确认以重试");
         }
 
-        task.MarkDone();
+        // v2 §5.3：仍有失败文档时以 partial 收尾（结果正常 + 失败文档内联重试），否则 Done
+        var failedDocs = await _documentRepository.GetListAsync(d =>
+            d.TaskId == args.TaskId && d.ParseStatus == DocumentParseStatus.Failed);
+        if (failedDocs.Count > 0)
+        {
+            task.MarkPartial(string.Join("；", failedDocs.Select(f => $"{f.FileName}: {f.ParseError}")));
+            var partialSuffix = $"{failedDocs.Count} 份文档解析失败，已跳过；其余结果不受影响";
+            task.UpdateProgress("done", 100,
+                task.ProgressMessage.IsNullOrWhiteSpace()
+                    ? partialSuffix
+                    : $"{task.ProgressMessage}；{partialSuffix}");
+        }
+        else
+        {
+            task.MarkDone();
+        }
         await _taskRepository.UpdateAsync(task, autoSave: true, cancellationToken: cancellationToken);
     }
 
@@ -142,6 +157,12 @@ public class AiAnalysisJob : AsyncBackgroundJob<AiAnalysisArgs>, ITransientDepen
                     (false, "none") => EvidenceSeverity.Mid,
                     _ => EvidenceSeverity.Low
                 };
+                var clauseMetricsJson = JsonSerializer.Serialize(new
+                {
+                    clauseId = judgement.ClauseId,
+                    clauseText = clause?.Text ?? "",
+                    status = judgement.Status
+                }, CompareTaskAppService.SnapshotJsonOptions);
 
                 await _evidenceRepository.InsertAsync(new EvidenceItem(
                     _guidGenerator.Create(),
@@ -153,7 +174,7 @@ public class AiAnalysisJob : AsyncBackgroundJob<AiAnalysisArgs>, ITransientDepen
                     {
                         new EvidenceLocationDto { DocId = doc.Id, BlockIds = judgement.BlockIds }
                     }),
-                    metricsJson: null,
+                    metricsJson: clauseMetricsJson,
                     title: $"条款未实质响应（{doc.FileName}）：{clause?.Text ?? judgement.ClauseId}",
                     description: judgement.Reason,
                     aiGenerated: true), cancellationToken: cancellationToken);
@@ -181,6 +202,10 @@ public class AiAnalysisJob : AsyncBackgroundJob<AiAnalysisArgs>, ITransientDepen
                 .Select(s => Guid.TryParse(s.DocId, out var id) ? id : Guid.Empty)
                 .Where(id => id != Guid.Empty)
                 .ToList();
+            var indicatorMetricsJson = JsonSerializer.Serialize(new
+            {
+                summaries = indicator.Summaries.Select(s => new { s.DocId, s.Summary })
+            }, CompareTaskAppService.SnapshotJsonOptions);
 
             await _evidenceRepository.InsertAsync(new EvidenceItem(
                 _guidGenerator.Create(),
@@ -189,7 +214,7 @@ public class AiAnalysisJob : AsyncBackgroundJob<AiAnalysisArgs>, ITransientDepen
                 EvidenceSeverity.Low,
                 EvidenceMapper.SerializeDocIds(relatedDocIds),
                 EvidenceMapper.SerializeLocations(Enumerable.Empty<EvidenceLocationDto>()),
-                metricsJson: null,
+                metricsJson: indicatorMetricsJson,
                 title: $"指标比选：{indicator.Indicator}",
                 description: string.Join("；", indicator.Summaries.Select(s => $"{s.DocId}: {s.Summary}")),
                 aiGenerated: true), cancellationToken: cancellationToken);

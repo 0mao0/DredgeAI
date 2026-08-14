@@ -7,12 +7,45 @@ export type CompareTaskStatus
     | 'partial'
     | 'failed'
 
+export type ComparePairStatus = 'waiting' | 'processing' | 'done' | 'failed'
+
+export interface ComparePair {
+  pairId: string
+  docAId: string
+  docBId: string
+  status: ComparePairStatus
+  similarity?: number
+  failReason?: string
+  startedAt?: string
+  finishedAt?: string
+}
+
 export interface CompareTask {
   id: string
   name: string
   status: CompareTaskStatus
   documents: CompareDocMeta[]
-  progress: { parse: number, compare: number, ai: number }
+  /** 用户是否手动编辑过项目名；true 后轮询不得再自动应用 suggestedName */
+  nameEditedByUser?: boolean
+  /** 解析完成后后端推断的项目名建议 */
+  suggestedName?: string | null
+  progress: {
+    /** 后端阶段：parsing / clauses / comparing / analyzing / done */
+    stage?: string
+    parse: number
+    compare: number
+    ai: number
+    /** 当前比对对序号（1 起），来自后端 pairs，禁止前端估算 */
+    pairIndex?: number
+    pairCount?: number
+    message?: string
+  }
+  /** 两两对比对清单（spec §8.2 逐对进度契约） */
+  pairs?: ComparePair[]
+  /** 条款快照（任务确认后锁定，结果页「要求」Tab 使用，禁止读全局条款库） */
+  clauseSnapshot?: ClauseItem[] | null
+  /** 招标文件文档 id（可选，未上传为 null） */
+  tenderDocId?: string | null
   riskSummary?: { high: number, mid: number, low: number, clauseMissing: number }
   matrixClauses?: string[]
   responseMatrix?: string[][]
@@ -28,25 +61,18 @@ export interface CompareDocMeta {
   pages: number
   sizeBytes: number
   parseStatus: 'pending' | 'parsing' | 'done' | 'failed'
+  /** 文档原文预览 URL（由宿主 API 模块生成，PDF Viewer 直接消费） */
+  fileUrl?: string
+  /** 文档角色：招标文件不参与标书两两对比 */
+  role?: 'bid' | 'tender'
   failReason?: string
   /** 扫描件标记：true 时 UI 提示「查重结果可能偏差」 */
   isLowConfidenceOcr?: boolean
 }
 
-/** 文档元数据（串标排查：作者/GUID/IP/创建工具等一致性对比） */
-export interface CompareDocMetaInfo {
-  docId: string
-  author: string
-  creatorTool: string
-  producer: string
-  guid: string
-  ip: string
-  createdAt: string
-}
-
 export type RiskLevel = 'high' | 'mid' | 'low'
 
-export type EvidenceType = 'similarity' | 'price' | 'metadata' | 'clause'
+export type EvidenceType = 'similarity' | 'price' | 'metadata' | 'clause' | 'indicator'
 
 export interface BlockRange {
   docId: string
@@ -66,6 +92,8 @@ export interface EvidenceItem {
   summary: string
   detail?: string
   confidence?: number
+  /** 后端证据明细（相似度、报价规律、元数据值、条款状态、指标摘要等） */
+  metrics?: Record<string, unknown>
   refs: BlockRange[]
   source: 'algo' | 'ai'
   status: 'final' | 'pending'
@@ -92,6 +120,17 @@ export interface SimilarityPair {
   textSim: number
   structureSim: number
   priceSim: number
+}
+
+export interface SimilarityCell {
+  docAId: string
+  docBId: string
+  similarity: number
+}
+
+export interface SimilarityMatrix {
+  docIds: string[]
+  cells: SimilarityCell[]
 }
 
 export interface TaskOverview {

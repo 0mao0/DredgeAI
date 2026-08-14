@@ -50,6 +50,26 @@ public class CompareTaskController : AbpControllerBase
         return NoContent();
     }
 
+    /// <summary>POST /api/compare/tasks/{id}/reparse 重新解析失败文档（旧路由兼容，等价于缺省全部失败文档）</summary>
+    [HttpPost("{id}/reparse")]
+    public Task<CompareTaskDto> ReparseAsync(Guid id)
+        => _appService.ReparseAsync(id, new CompareTasks.ReparseDocumentsInput());
+
+    /// <summary>POST /api/compare/tasks/{id}/documents/reparse 重新解析失败文档（v2 §8.2，body.docIds 缺省为全部失败文档）</summary>
+    [HttpPost("{id}/documents/reparse")]
+    public Task<CompareTaskDto> ReparseDocumentsAsync(Guid id, [FromBody] CompareTasks.ReparseDocumentsInput? input)
+        => _appService.ReparseAsync(id, input ?? new CompareTasks.ReparseDocumentsInput());
+
+    /// <summary>POST /api/compare/tasks/{id}/compare/retry 重新对比（v2 §8.2，body.pairIds 缺省为全量；analyzing 时 409）</summary>
+    [HttpPost("{id}/compare/retry")]
+    public Task<CompareTaskDto> RetryCompareAsync(Guid id, [FromBody] CompareTasks.RetryCompareInput? input)
+        => _appService.RetryCompareAsync(id, input ?? new CompareTasks.RetryCompareInput());
+
+    /// <summary>PUT /api/compare/tasks/{id}/name 编辑项目名（v2 §3.3，置 nameEditedByUser = true）</summary>
+    [HttpPut("{id}/name")]
+    public Task<CompareTaskDto> UpdateNameAsync(Guid id, [FromBody] CompareTasks.UpdateCompareTaskNameInput input)
+        => _appService.UpdateNameAsync(id, input);
+
     /// <summary>POST /api/compare/tasks/{id}/documents 上传文档（标书/招标文件，区分 role）</summary>
     [HttpPost("{id}/documents")]
     [RequestSizeLimit(200 * 1024 * 1024)] // 单份标书 100~500 页 PDF，放宽到 200MB
@@ -57,6 +77,23 @@ public class CompareTaskController : AbpControllerBase
     {
         await using var stream = form.File.OpenReadStream();
         return await _appService.UploadDocumentAsync(id, form.Role, form.File.FileName, stream);
+    }
+
+    /// <summary>POST /api/compare/tasks/{id}/documents/parse 上传完成后批量并发解析（v2 修订：不再逐份入队）</summary>
+    [HttpPost("{id}/documents/parse")]
+    public Task<CompareTaskDto> StartParsingAsync(Guid id)
+        => _appService.StartParsingAsync(id);
+
+    /// <summary>GET /api/compare/tasks/{id}/documents/{docId}/file 文档原文（PDF Viewer 预览用）</summary>
+    [HttpGet("{id}/documents/{docId}/file")]
+    public async Task<IActionResult> GetDocumentFileAsync(Guid id, Guid docId)
+    {
+        var result = await _appService.GetDocumentFileAsync(id, docId);
+        return new FileStreamResult(result.Content, result.ContentType)
+        {
+            FileDownloadName = result.FileName,
+            EnableRangeProcessing = true, // pdf.js 流式加载依赖 Range 请求
+        };
     }
 
     /// <summary>GET /api/compare/tasks/{id}/ir/{docId} 某文档的 IR（前端对比视图画 bbox 用）</summary>

@@ -197,3 +197,27 @@ def test_table_html_with_rowspan_colspan_passes():
     data["blocks"][0]["image_path"] = "images/t.jpg"
     doc = validate_raw_document(data)
     assert doc.blocks[0].table_html is not None
+
+
+def test_empty_table_html_normalized_to_none():
+    # AnGIneer 对缺失 html 的表格输出空串，等价于缺省（pricing 会跳过该表）
+    data = _minimal_raw()
+    data["blocks"][0]["block_type"] = "table"
+    data["blocks"][0]["plain_text"] = ""
+    data["blocks"][0]["table_html"] = "   "
+    data["blocks"][0]["image_path"] = "images/t.jpg"
+    doc = validate_raw_document(data)
+    assert doc.blocks[0].table_html is None
+
+
+def test_table_html_with_img_accepted():
+    # 实测 AnGIneer 表格单元格内嵌图片（src 指向产物 images/）
+    data = _minimal_raw()
+    data["blocks"][0]["block_type"] = "table"
+    data["blocks"][0]["plain_text"] = ""
+    data["blocks"][0]["table_html"] = (
+        '<table><tr><td>a</td><td><img src="images/a42.jpg"/></td></tr></table>'
+    )
+    data["blocks"][0]["image_path"] = "images/t.jpg"
+    doc = validate_raw_document(data)
+    assert doc.blocks[0].table_html is not None

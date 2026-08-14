@@ -1,13 +1,16 @@
 import { urls } from '@shared/core/api'
 import request from '@/api/request'
+import { API_BASE_URL } from '@/utils/constants'
 import type {
   ClauseItem,
   CompareDocMeta,
+  ComparePair,
   CompareTask,
   CompareTaskStatus,
   ConfirmClausesPayload,
   EvidenceItem,
   RiskLevel,
+  SimilarityMatrix,
   TaskOverview,
 } from '@/types'
 
@@ -15,17 +18,42 @@ function fillUrl(template: string, params: Record<string, string>): string {
   return Object.entries(params).reduce((url, [key, value]) => url.replace(`:${key}`, value), template)
 }
 
+function silentConfig(silent: boolean): { headers: { 'X-Silent-Request': '1' } } | undefined {
+  return silent ? { headers: { 'X-Silent-Request': '1' } } : undefined
+}
+
 /* —— 后端 DTO（ABP 契约：枚举为 int，字段 camelCase） —— */
 
 interface CompareTaskDto {
   id: string
   name: string
+  nameEditedByUser: boolean
+  suggestedName?: string | null
   status: number
+  failureReason?: string | null
   docIds: string[]
   tenderDocId?: string | null
-  clauseSnapshot?: unknown[] | null
-  progress: { stage: string, percent: number, message?: string | null }
+  clauseSnapshot?: ClauseDto[] | null
+  progress: {
+    stage: string
+    percent: number
+    message?: string | null
+    pairIndex?: number | null
+    pairCount?: number | null
+  }
+  pairs?: ComparePairDto[] | null
   createdAt: string
+}
+
+interface ComparePairDto {
+  pairId: string
+  docAId: string
+  docBId: string
+  status: number
+  similarity?: number | null
+  failReason?: string | null
+  startedAt?: string | null
+  finishedAt?: string | null
 }
 
 interface CompareDocumentDto {
@@ -55,18 +83,8 @@ interface EvidenceDto {
   locations: EvidenceLocationDto[]
   title: string
   description: string
+  metrics?: Record<string, unknown> | null
   aiGenerated: boolean
-}
-
-interface SimilarityMatrixCellDto {
-  docAId: string
-  docBId: string
-  similarity: number
-}
-
-interface SimilarityMatrixDto {
-  docIds: string[]
-  cells: SimilarityMatrixCellDto[]
 }
 
 interface ClauseDto {
@@ -131,7 +149,7 @@ const EVIDENCE_TYPE_MAP: Record<number, EvidenceItem['type']> = {
   1: 'price', // Pricing
   2: 'metadata', // Metadata
   3: 'clause', // Clause
-  4: 'metadata', // Indicator（前端暂无独立视图，归入 metadata）
+  4: 'indicator', // Indicator
 }
 
 const SEVERITY_MAP: Record<number, RiskLevel> = {
@@ -144,6 +162,13 @@ const EXPORT_STATUS_MAP: Record<number, 'processing' | 'done' | 'failed'> = {
   0: 'processing', // Pending
   1: 'processing', // Running
   2: 'done', // Succeeded
+  3: 'failed', // Failed
+}
+
+const PAIR_STATUS_MAP: Record<number, ComparePair['status']> = {
+  0: 'waiting', // Waiting
+  1: 'processing', // Processing
+  2: 'done', // Done
   3: 'failed', // Failed
 }
 
@@ -161,10 +186,35 @@ function mapTask(dto: CompareTaskDto, documents: CompareDocMeta[]): CompareTask 
   return {
     id: dto.id,
     name: dto.name,
+    nameEditedByUser: dto.nameEditedByUser ?? false,
+    suggestedName: dto.suggestedName ?? null,
     status: TASK_STATUS_MAP[dto.status] ?? 'parsing',
+    failReason: dto.failureReason ?? undefined,
     documents,
-    progress,
+    tenderDocId: dto.tenderDocId ?? null,
+    progress: {
+      stage,
+      ...progress,
+      pairIndex: dto.progress?.pairIndex ?? undefined,
+      pairCount: dto.progress?.pairCount ?? undefined,
+      message: dto.progress?.message ?? undefined,
+    },
+    pairs: dto.pairs?.map(mapPair) ?? undefined,
+    clauseSnapshot: dto.clauseSnapshot?.map((c) => mapClause(c, 'ai_extracted')) ?? null,
     createdAt: dto.createdAt,
+  }
+}
+
+function mapPair(dto: ComparePairDto): ComparePair {
+  return {
+    pairId: dto.pairId,
+    docAId: dto.docAId,
+    docBId: dto.docBId,
+    status: PAIR_STATUS_MAP[dto.status] ?? 'waiting',
+    similarity: dto.similarity ?? undefined,
+    failReason: dto.failReason ?? undefined,
+    startedAt: dto.startedAt ?? undefined,
+    finishedAt: dto.finishedAt ?? undefined,
   }
 }
 
@@ -176,9 +226,16 @@ function mapDocument(dto: CompareDocumentDto): CompareDocMeta {
     pages: dto.pageCount ?? 0,
     sizeBytes: dto.fileSize,
     parseStatus: PARSE_STATUS_MAP[dto.parseStatus] ?? 'pending',
+    role: dto.role === 1 ? 'tender' : 'bid',
     failReason: dto.parseError ?? undefined,
     isLowConfidenceOcr: dto.ocrLowConfidenceRatio != null && dto.ocrLowConfidenceRatio > 0.3,
   }
+}
+
+/** 生成文档原文预览 URL（PDF Viewer 经 fetch/pdf.js 直接请求，不走 axios 实例）。 */
+export function getDocumentFileUrl(taskId: string, docId: string): string {
+  const path = fillUrl(urls.compareTaskDocumentFile, { id: taskId, docId }).replace(/^\//, '')
+  return `${API_BASE_URL}${path}`
 }
 
 function mapClause(dto: ClauseDto, source: ClauseItem['source']): ClauseItem {
@@ -214,7 +271,9 @@ function mapExportJob(dto: ExportJobDto): { exportId: string, status: 'processin
 /* —— 任务 —— */
 
 export async function getTasks(): Promise<CompareTask[]> {
-  const res = await request.get<{ items: CompareTaskDto[] }>(urls.compareTasks)
+  const res = await request.get<{ items: CompareTaskDto[], totalCount: number }>(urls.compareTasks, {
+    params: { MaxResultCount: 10 },
+  })
   return Promise.all(res.items.map(async (t) => mapTask(t, await getDocuments(t.id))))
 }
 
@@ -223,16 +282,56 @@ export async function createTask(name: string): Promise<CompareTask> {
   return mapTask(dto, [])
 }
 
-export async function getTask(id: string): Promise<CompareTask> {
+export async function startParse(id: string, silent = false): Promise<CompareTask> {
+  const dto = await request.post<CompareTaskDto>(
+    fillUrl(urls.compareTaskStartParse, { id }),
+    undefined,
+    silentConfig(silent),
+  )
+  const documents = await getDocuments(id, silent)
+  return mapTask(dto, documents)
+}
+
+export async function reparseTask(id: string, docIds?: string[], silent = false): Promise<CompareTask> {
+  const dto = await request.post<CompareTaskDto>(
+    fillUrl(urls.compareTaskReparse, { id }),
+    docIds?.length ? { docIds } : undefined,
+    silentConfig(silent),
+  )
+  const documents = await getDocuments(id, silent)
+  return mapTask(dto, documents)
+}
+
+export async function retryCompare(id: string, pairIds?: string[], silent = false): Promise<CompareTask> {
+  const dto = await request.post<CompareTaskDto>(
+    fillUrl(urls.compareTaskCompareRetry, { id }),
+    pairIds?.length ? { pairIds } : undefined,
+    silentConfig(silent),
+  )
+  const documents = await getDocuments(id, silent)
+  return mapTask(dto, documents)
+}
+
+export async function updateTaskName(id: string, name: string, silent = false): Promise<CompareTask> {
+  const dto = await request.put<CompareTaskDto>(
+    fillUrl(urls.compareTaskName, { id }),
+    { name },
+    silentConfig(silent),
+  )
+  const documents = await getDocuments(id, silent)
+  return mapTask(dto, documents)
+}
+
+export async function getTask(id: string, silent = false): Promise<CompareTask> {
   const [dto, documents] = await Promise.all([
-    request.get<CompareTaskDto>(fillUrl(urls.compareTask, { id })),
-    getDocuments(id),
+    request.get<CompareTaskDto>(fillUrl(urls.compareTask, { id }), silentConfig(silent)),
+    getDocuments(id, silent),
   ])
   return mapTask(dto, documents)
 }
 
-export async function getDocuments(id: string): Promise<CompareDocMeta[]> {
-  const res = await request.get<CompareDocumentDto[]>(fillUrl(urls.compareTaskDocuments, { id }))
+export async function getDocuments(id: string, silent = false): Promise<CompareDocMeta[]> {
+  const res = await request.get<CompareDocumentDto[]>(fillUrl(urls.compareTaskDocuments, { id }), silentConfig(silent))
   return res.map(mapDocument)
 }
 
@@ -257,18 +356,18 @@ export async function uploadDocument(
 
 /* —— 证据 / 矩阵 —— */
 
-async function getIr(taskId: string, docId: string): Promise<DocumentIrDto | null> {
+async function getIr(taskId: string, docId: string, silent = false): Promise<DocumentIrDto | null> {
   try {
-    return await request.get<DocumentIrDto>(fillUrl(urls.compareTaskIr, { id: taskId, docId }))
+    return await request.get<DocumentIrDto>(fillUrl(urls.compareTaskIr, { id: taskId, docId }), silentConfig(silent))
   } catch {
     return null
   }
 }
 
-async function buildRefs(taskId: string, ev: EvidenceDto): Promise<EvidenceItem['refs']> {
+async function buildRefs(taskId: string, ev: EvidenceDto, silent = false): Promise<EvidenceItem['refs']> {
   const refs: EvidenceItem['refs'] = []
   for (const loc of ev.locations) {
-    const ir = await getIr(taskId, loc.docId)
+    const ir = await getIr(taskId, loc.docId, silent)
     if (!ir) continue
     for (const blockId of loc.blockIds) {
       const block = ir.blocks.find((b) => b.blockId === blockId)
@@ -286,8 +385,11 @@ async function buildRefs(taskId: string, ev: EvidenceDto): Promise<EvidenceItem[
   return refs
 }
 
-export async function getEvidence(id: string): Promise<EvidenceItem[]> {
-  const res = await request.get<{ items: EvidenceDto[] }>(fillUrl(urls.compareTaskEvidences, { id }))
+export async function getEvidence(id: string, silent = false): Promise<EvidenceItem[]> {
+  const res = await request.get<{ items: EvidenceDto[] }>(fillUrl(urls.compareTaskEvidences, { id }), {
+    ...silentConfig(silent),
+    params: { MaxResultCount: 100 },
+  })
   const items: EvidenceItem[] = []
   for (const ev of res.items) {
     items.push({
@@ -299,7 +401,8 @@ export async function getEvidence(id: string): Promise<EvidenceItem[]> {
       title: ev.title,
       summary: ev.description,
       detail: ev.description,
-      refs: await buildRefs(id, ev),
+      metrics: ev.metrics ?? undefined,
+      refs: await buildRefs(id, ev, silent),
       source: ev.aiGenerated ? 'ai' : 'algo',
       status: 'final',
     })
@@ -307,8 +410,8 @@ export async function getEvidence(id: string): Promise<EvidenceItem[]> {
   return items
 }
 
-export async function getMatrix(id: string): Promise<SimilarityMatrixDto> {
-  return request.get<SimilarityMatrixDto>(fillUrl(urls.compareTaskMatrix, { id }))
+export async function getMatrix(id: string, silent = false): Promise<SimilarityMatrix> {
+  return request.get<SimilarityMatrix>(fillUrl(urls.compareTaskMatrix, { id }), silentConfig(silent))
 }
 
 export async function getOverview(id: string): Promise<TaskOverview> {
@@ -336,18 +439,22 @@ export async function extractClauses(taskId: string): Promise<ClauseItem[]> {
   return res.map((c) => mapClause(c, 'ai_extracted'))
 }
 
-export async function confirmClauses(payload: ConfirmClausesPayload): Promise<void> {
-  await request.put<void>(fillUrl(urls.compareTaskClauses, { id: payload.taskId }), {
+export async function confirmClauses(payload: ConfirmClausesPayload): Promise<CompareTask> {
+  const dto = await request.put<CompareTaskDto>(fillUrl(urls.compareTaskClauses, { id: payload.taskId }), {
     clauses: payload.clauses.map((c) => ({
       clauseId: c.clauseId,
       text: c.content || c.title,
       mandatory: c.mandatory,
     })),
   })
+  const documents = await getDocuments(payload.taskId)
+  return mapTask(dto, documents)
 }
 
 export async function getClauseLibrary(): Promise<ClauseItem[]> {
-  const res = await request.get<{ items: ClauseTemplateDto[] }>(urls.compareClauseTemplates)
+  const res = await request.get<{ items: ClauseTemplateDto[] }>(urls.compareClauseTemplates, {
+    params: { MaxResultCount: 100 },
+  })
   return res.items.map(mapTemplate)
 }
 

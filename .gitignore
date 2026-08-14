@@ -87,3 +87,14 @@ Desktop.ini
 *.temp
 .cache/
 **/.cache/
+
+.superpowers/
+
+# 本地包缓存 / 测试标书（不入库）
+.pnpm-store/
+tests/
+
+# pdf.js 运行资源（由 user-web vite 插件启动时复制到 public，不入库）
+**/public/cmaps/
+**/public/standard_fonts/
+**/public/wasm/

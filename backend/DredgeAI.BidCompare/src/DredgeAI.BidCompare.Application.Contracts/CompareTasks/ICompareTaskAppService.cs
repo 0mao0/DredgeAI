@@ -27,8 +27,19 @@ public interface ICompareTaskAppService : IApplicationService
 
     Task DeleteAsync(Guid id);
 
+    Task<CompareTaskDto> ReparseAsync(Guid id, ReparseDocumentsInput? input);
+
+    Task<CompareTaskDto> RetryCompareAsync(Guid id, RetryCompareInput? input);
+
+    Task<CompareTaskDto> UpdateNameAsync(Guid id, UpdateCompareTaskNameInput input);
+
     [DisableValidation] // Stream 参数无法被验证拦截器递归校验（ReadTimeout 等属性不可读）
     Task<CompareDocumentDto> UploadDocumentAsync(Guid id, DocumentRole role, string fileName, Stream content);
+
+    /// <summary>上传完成后批量并发解析所有待解析文档（v2 修订：不再逐份入队）。</summary>
+    Task<CompareTaskDto> StartParsingAsync(Guid id);
+
+    Task<CompareDocumentFileResult> GetDocumentFileAsync(Guid id, Guid docId);
 
     Task<DocumentIrDto> GetDocumentIrAsync(Guid id, Guid docId);
 

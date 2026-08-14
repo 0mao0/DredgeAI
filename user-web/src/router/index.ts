@@ -17,7 +17,7 @@ const router = createRouter({
 })
 
 installGuards(router, {
-  appName: '智浚 AI · 用户端',
+  appName: '智浚AI',
   getPermissions: async () => {
     const store = useUserStore()
     try {

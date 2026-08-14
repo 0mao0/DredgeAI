@@ -90,6 +90,11 @@ namespace DredgeAI.BidCompare.Migrations
 
             modelBuilder.Entity("DredgeAI.BidCompare.CompareTasks.CompareTask", b =>
                 {
+                    b.Property<bool>("AutoCompareOnParseComplete")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("boolean")
+                        .HasDefaultValue(true);
+
                     b.Property<Guid>("Id")
                         .HasColumnType("uuid");
 
@@ -147,6 +152,14 @@ namespace DredgeAI.BidCompare.Migrations
                         .HasMaxLength(128)
                         .HasColumnType("character varying(128)");
 
+                    b.Property<bool>("NameEditedByUser")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("boolean")
+                        .HasDefaultValue(false);
+
+                    b.Property<string>("PairsJson")
+                        .HasColumnType("text");
+
                     b.Property<string>("ProgressMessage")
                         .HasMaxLength(1024)
                         .HasColumnType("character varying(1024)");
@@ -167,6 +180,10 @@ namespace DredgeAI.BidCompare.Migrations
 
                     b.Property<byte>("Status")
                         .HasColumnType("smallint");
+
+                    b.Property<string>("SuggestedName")
+                        .HasMaxLength(256)
+                        .HasColumnType("character varying(256)");
 
                     b.Property<Guid?>("TenderDocumentId")
                         .HasColumnType("uuid");

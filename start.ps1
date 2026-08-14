@@ -26,7 +26,7 @@ $postgresPort = 5432
 $compareAlgoPort = 8100
 $backendPort = 44361
 $frontendPort = 5373
-$angineerPort = 8789
+$angineerPort = 8790
 
 $backendUrl = "https://localhost:$backendPort"
 $compareAlgoUrl = "http://localhost:$compareAlgoPort"
@@ -123,14 +123,27 @@ function Start-ServiceProcess {
 
     Stop-ServiceProcess -ServiceName $ServiceName -PidPath $PidPath
 
+    # 轮转旧日志：历史文件可能是 UTF-8 头 + UTF-16 正文混写，统一改为纯 UTF-8（无 BOM）后从干净文件开始
+    if (Test-Path -LiteralPath $LogPath) {
+        $rotatedLogPath = "$LogPath.1"
+        if (Test-Path -LiteralPath $rotatedLogPath) {
+            Remove-Item -LiteralPath $rotatedLogPath -Force -ErrorAction SilentlyContinue
+        }
+        Move-Item -LiteralPath $LogPath -Destination $rotatedLogPath -Force
+    }
+
     $escapedRootDir = $rootDir.Replace("'", "''")
     $escapedLogPath = $LogPath.Replace("'", "''")
     $escapedCommand = $ServiceCommand.Replace("'", "''")
     $startupBanner = "[$(Get-Date -Format 'yyyy-MM-dd HH:mm:ss')] starting: $ServiceName"
     $startupScript = @"
 Set-Location '$escapedRootDir'
-'$startupBanner' | Out-File -FilePath '$escapedLogPath' -Encoding utf8 -Append
-Invoke-Expression '$escapedCommand' *>> '$escapedLogPath'
+`$utf8 = New-Object System.Text.UTF8Encoding(`$false)
+`$writer = New-Object System.IO.StreamWriter('$escapedLogPath', `$true, `$utf8)
+`$writer.AutoFlush = `$true
+`$writer.WriteLine('$startupBanner')
+& { Invoke-Expression '$escapedCommand' } 2>&1 | ForEach-Object { `$writer.WriteLine("`$_") }
+`$writer.Close()
 "@
 
     $encodedCommand = [Convert]::ToBase64String([System.Text.Encoding]::Unicode.GetBytes($startupScript))
@@ -235,7 +248,7 @@ function Watch-ServiceLogs {
 
     Write-Host "Following logs..." -ForegroundColor Cyan
     $existingLogs | ForEach-Object { Write-Host "  $_" -ForegroundColor DarkGray }
-    Get-Content -Path $existingLogs -Tail 30 -Wait
+    Get-Content -Path $existingLogs -Tail 30 -Wait -Encoding UTF8
 }
 
 Write-Host "========================================" -ForegroundColor Cyan
@@ -344,7 +357,7 @@ $compareAlgoHealthy = Test-HttpHealth -Label "compare-algo" -Url "$compareAlgoUr
 $backendHealthy = Test-HttpHealth -Label "Backend" -Url "$backendUrl/swagger/v1/swagger.json" -TimeoutSeconds 180
 $frontendHealthy = Test-HttpHealth -Label "Frontend" -Url $frontendUrl -TimeoutSeconds 60
 
-# AnGIneer 检测（不属于 DredgeAI 仓库，仅提示）
+# AnGIneer 检测（docs-api 端口 8790，不属于 DredgeAI 仓库，仅提示）
 $angineerReady = Test-HttpHealth -Label "AnGIneer" -Url "$angineerUrl/docs" -TimeoutSeconds 5
 if (-not $angineerReady) {
     Write-Host ""
