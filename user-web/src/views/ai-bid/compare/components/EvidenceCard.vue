@@ -23,6 +23,7 @@
 import { computed } from 'vue'
 import { SearchOutlined } from '@ant-design/icons-vue'
 import { EVIDENCE_TYPE_META, SEVERITY_META, evidenceMetricLines } from '../evidenceMetrics'
+import { docLabel } from '../constants'
 import type { CompareDocMeta, EvidenceItem } from '@/types'
 
 const props = defineProps<{
@@ -34,13 +35,9 @@ const emit = defineEmits<{ trace: [item: EvidenceItem] }>()
 
 const metricLines = computed(() => evidenceMetricLines(props.evidence))
 
-const docLabels = computed(() => {
-  const docs = props.documents ?? []
-  return props.evidence.docIds.map((id) => {
-    const idx = docs.findIndex((d) => d.id === id)
-    return idx >= 0 ? String.fromCharCode(65 + idx) : id
-  }).join(' / ')
-})
+const docLabels = computed(() =>
+  props.evidence.docIds.map((id) => docLabel(props.documents ?? [], id)).join(' / '),
+)
 </script>
 
 <style scoped lang="less">

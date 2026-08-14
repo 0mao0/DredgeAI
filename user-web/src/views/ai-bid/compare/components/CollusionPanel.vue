@@ -7,7 +7,7 @@
             <tr>
               <th class="meta-table__head">字段</th>
               <th class="meta-table__head">一致值</th>
-              <th v-for="d in documents" :key="d.id" class="meta-table__head">{{ docLabel(d.id) }}</th>
+              <th v-for="d in documents" :key="d.id" class="meta-table__head">{{ docLabel(documents, d.id) }}</th>
             </tr>
           </thead>
           <tbody>
@@ -39,6 +39,7 @@
 import { computed } from 'vue'
 import SectionCard from '@shared/web/components/SectionCard.vue'
 import EvidenceTable from './EvidenceTable.vue'
+import { docLabel } from '../constants'
 import type { CompareDocMeta, EvidenceItem } from '@/types'
 
 const props = defineProps<{
@@ -70,11 +71,6 @@ const metaRows = computed(() =>
     }]
   }),
 )
-
-function docLabel(docId: string): string {
-  const idx = props.documents.findIndex((d) => d.id === docId)
-  return idx >= 0 ? String.fromCharCode(65 + idx) : docId
-}
 </script>
 
 <style scoped lang="less">

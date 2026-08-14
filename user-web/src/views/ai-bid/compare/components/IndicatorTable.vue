@@ -29,6 +29,7 @@
 <script setup lang="ts">
 import { computed } from 'vue'
 import SectionCard from '@shared/web/components/SectionCard.vue'
+import { docLabel } from '../constants'
 import type { CompareDocMeta, EvidenceItem } from '@/types'
 
 const props = defineProps<{
@@ -42,8 +43,8 @@ const indicatorEvidence = computed(() => props.evidence.filter((e) => e.type ===
 
 const columns = computed(() => [
   { title: '指标', dataIndex: 'indicator', width: 180 },
-  ...props.documents.map((d, i) => ({
-    title: `文档${String.fromCharCode(65 + i)}`,
+  ...props.documents.map((d) => ({
+    title: docLabel(props.documents, d.id),
     dataIndex: d.id,
     width: 220,
   })),

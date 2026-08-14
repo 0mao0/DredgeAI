@@ -5,7 +5,7 @@
         <thead>
           <tr>
             <th class="matrix-table__head">条款</th>
-            <th v-for="d in bidDocs" :key="d.id" class="matrix-table__head">{{ docLabel(d.id) }}</th>
+            <th v-for="d in bidDocs" :key="d.id" class="matrix-table__head">{{ docLabel(bidDocs, d.id) }}</th>
           </tr>
         </thead>
         <tbody>
@@ -35,6 +35,7 @@
 <script setup lang="ts">
 import { computed } from 'vue'
 import SectionCard from '@shared/web/components/SectionCard.vue'
+import { docLabel } from '../constants'
 import type { CompareDocMeta, EvidenceItem } from '@/types'
 
 const props = defineProps<{
@@ -78,11 +79,6 @@ function cellText(ev: EvidenceItem): string {
 
 function cellClass(ev: EvidenceItem): string {
   return ev.metrics?.status === 'partial' ? 'matrix-cell--partial' : 'matrix-cell--missing'
-}
-
-function docLabel(docId: string): string {
-  const idx = bidDocs.value.findIndex((d) => d.id === docId)
-  return idx >= 0 ? String.fromCharCode(65 + idx) : docId
 }
 </script>
 

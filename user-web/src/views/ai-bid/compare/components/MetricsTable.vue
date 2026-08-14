@@ -5,7 +5,7 @@
         <thead>
           <tr>
             <th class="metrics-table__head">指标</th>
-            <th v-for="d in documents" :key="d.id" class="metrics-table__head">{{ docLabel(d.id) }}</th>
+            <th v-for="d in documents" :key="d.id" class="metrics-table__head">{{ docLabel(documents, d.id) }}</th>
           </tr>
         </thead>
         <tbody>
@@ -22,13 +22,11 @@
 </template>
 
 <script setup lang="ts">
-import { computed } from 'vue'
 import SectionCard from '@shared/web/components/SectionCard.vue'
+import { docLabel } from '../constants'
 import type { CompareDocMeta } from '@/types'
 
-const props = defineProps<{ documents: CompareDocMeta[] }>()
-
-const documents = computed(() => props.documents)
+defineProps<{ documents: CompareDocMeta[] }>()
 
 const rows = [
   { label: '报价（万元）', values: ['28500', '28300', '29100', '27800', '28600'] },
@@ -36,11 +34,6 @@ const rows = [
   { label: '资质等级', values: ['一级', '一级', '一级', '二级', '一级'] },
   { label: '质量目标', values: ['优良', '优良', '合格', '优良', '优良'] },
 ]
-
-function docLabel(docId: string): string {
-  const idx = documents.value.findIndex((d) => d.id === docId)
-  return idx >= 0 ? String.fromCharCode(65 + idx) : docId
-}
 </script>
 
 <style scoped lang="less">

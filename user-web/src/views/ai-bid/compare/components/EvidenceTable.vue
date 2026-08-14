@@ -25,7 +25,7 @@
           <a-tag :color="typeColor(record.type)">{{ typeText(record.type) }}</a-tag>
         </template>
         <template v-else-if="column.dataIndex === 'docIds'">
-          {{ (record.docIds as string[]).map(docLabel).join(' / ') }}
+          {{ (record.docIds as string[]).map((id) => docLabel(documents ?? [], id)).join(' / ') }}
         </template>
         <template v-else-if="column.dataIndex === 'title'">
           <div class="evidence-table__title">{{ record.title }}</div>
@@ -53,6 +53,7 @@
 import { ref, computed } from 'vue'
 import SectionCard from '@shared/web/components/SectionCard.vue'
 import { evidenceMetricLines } from '../evidenceMetrics'
+import { docLabel } from '../constants'
 import type { CompareDocMeta, EvidenceItem, EvidenceType, RiskLevel } from '@/types'
 
 const props = withDefaults(defineProps<{
@@ -111,11 +112,6 @@ function customRow(record: EvidenceItem) {
       if (props.clickable) emit('jump', record)
     },
   }
-}
-
-function docLabel(docId: string): string {
-  const idx = props.documents?.findIndex((d) => d.id === docId) ?? -1
-  return idx >= 0 ? String.fromCharCode(65 + idx) : docId
 }
 
 function severityColor(s: RiskLevel): string {
