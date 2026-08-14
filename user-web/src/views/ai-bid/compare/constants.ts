@@ -15,12 +15,12 @@ export function isTerminalStatus(status: CompareTaskStatus): boolean {
   return status === 'completed' || status === 'partial' || status === 'failed'
 }
 
-/** 文档编号：标书按创建时间 A~N；招标文件不参与编号（返回「招标」）。 */
-export function docLabel(documents: { id: string, role?: string }[], docId: string): string {
-  const bidDocs = documents.filter((d) => d.role !== 'tender')
-  const idx = bidDocs.findIndex((d) => d.id === docId)
-  return idx >= 0 ? String.fromCharCode(65 + idx) : '招标'
+/** 是否可走 PDF 预览链路：仅 .pdf；Word 等格式 PDF_Viewer 无法渲染，硬塞会触发浏览器下载 */
+export function isPdfFileName(fileName: string | undefined): boolean {
+  return /\.pdf$/i.test((fileName ?? '').trim())
 }
+
+export { buildDocLabels, docLabel, MAX_BID_DOCUMENTS, overviewDocLabels } from '@shared/core/utils/compare'
 
 export function formatFileSize(size: number): string {
   if (size >= 1024 * 1024) return `${(size / 1024 / 1024).toFixed(1)} MB`
