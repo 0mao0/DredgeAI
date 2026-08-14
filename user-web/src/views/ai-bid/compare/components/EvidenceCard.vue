@@ -1,13 +1,19 @@
 <template>
-  <div class="evidence-card">
+  <div
+    class="evidence-card"
+    role="button"
+    tabindex="0"
+    @click="emit('trace', evidence)"
+    @keydown.enter="emit('trace', evidence)"
+  >
     <div class="evidence-card__head">
       <a-tag :color="SEVERITY_META[evidence.severity].color">{{ SEVERITY_META[evidence.severity].label }}</a-tag>
       <a-tag :color="EVIDENCE_TYPE_META[evidence.type].color">{{ EVIDENCE_TYPE_META[evidence.type].label }}</a-tag>
       <span class="evidence-card__docs">{{ docLabels }}</span>
       <span class="evidence-card__spacer" />
-      <a-button type="link" size="small" @click="emit('trace', evidence)">
-        <SearchOutlined />溯源
-      </a-button>
+      <a-tooltip title="点击卡片溯源">
+        <SearchOutlined class="evidence-card__trace-icon" />
+      </a-tooltip>
     </div>
     <div class="evidence-card__title">{{ evidence.title }}</div>
     <div class="evidence-card__desc">{{ evidence.summary }}</div>
@@ -48,6 +54,18 @@ const docLabels = computed(() =>
   border: 1px solid @border-color;
   border-radius: @radius-base;
   background: @card-bg;
+  cursor: pointer;
+  transition: border-color @transition-fast, box-shadow @transition-fast;
+
+  &:hover {
+    border-color: @brand-primary;
+    box-shadow: @shadow-sm;
+  }
+
+  &:focus-visible {
+    outline: 2px solid @brand-primary;
+    outline-offset: 2px;
+  }
 
   &__head {
     display: flex;
@@ -62,6 +80,11 @@ const docLabels = computed(() =>
 
   &__spacer {
     flex: 1;
+  }
+
+  &__trace-icon {
+    color: @text-tertiary;
+    font-size: @font-size-sm;
   }
 
   &__title {
