@@ -307,17 +307,28 @@ function formatSeconds(totalSeconds: number): string {
   return minutes > 0 ? `${minutes}分${rest}秒` : `${seconds}秒`
 }
 
+/** 后端解析时间按 UTC 存储，DB 回读后序列化可能不带 Z；无时区标记时按 UTC 解析，避免被当成本地时间多算 8 小时。 */
+function parseServerTime(value: string | undefined): number | undefined {
+  if (!value) return undefined
+  const normalized = /(?:Z|[+-]\d{2}:\d{2})$/i.test(value) ? value : `${value}Z`
+  const time = Date.parse(normalized)
+  return Number.isNaN(time) ? undefined : time
+}
+
 function elapsedText(d: CompareDocMeta): string {
-  const start = d.parseStartedAt ? Date.parse(d.parseStartedAt) : undefined
+  const start = parseServerTime(d.parseStartedAt)
   if (!start) return '0秒'
-  const end = d.parseFinishedAt ? Date.parse(d.parseFinishedAt) : nowTick.value
+  const end = parseServerTime(d.parseFinishedAt) ?? nowTick.value
   return formatSeconds((end - start) / 1000)
 }
 
 function parseDurationText(d: CompareDocMeta): string {
   if (d.parseStatus !== 'done' && d.parseStatus !== 'failed') return ''
   if (!d.parseStartedAt || !d.parseFinishedAt) return ''
-  return formatSeconds((Date.parse(d.parseFinishedAt) - Date.parse(d.parseStartedAt)) / 1000)
+  const start = parseServerTime(d.parseStartedAt)
+  const end = parseServerTime(d.parseFinishedAt)
+  if (start == null || end == null) return ''
+  return formatSeconds((end - start) / 1000)
 }
 
 function stepText(d: CompareDocMeta): string {
