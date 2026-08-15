@@ -572,6 +572,7 @@ function onHeatmapCell(pair: { docA: string, docB: string }): void {
   border-radius: @radius-lg;
   background: @card-bg;
   overflow: hidden;
+  flex-shrink: 0;
 
   &__head {
     width: 100%;
