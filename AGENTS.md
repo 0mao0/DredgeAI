@@ -43,7 +43,7 @@
 5. 创建 mock   → src/mock/routes/<module>.ts（export registerXxxMock(mock, wrap)）
 6. 注册 mock   → src/utils/constants.ts 的 MOCK_MODULES 新增 key
                  + src/mock/index.ts 的 modules 数组新增条目
-7. 添加路由    → user-web: router/manifests.ts / admin-web: router/index.ts
+7. 添加路由    → 两端均在 router/manifests.ts 新增 manifest（admin-web 亦已 manifest 化，index.ts 仅做 manifestToRoutes）
 8. 创建页面    → src/views/<module>/index.vue（+ components/ 子目录如需）
 9. 验证        → pnpm run typecheck
 ```
@@ -117,6 +117,25 @@ const columns = [
   { title: '操作', dataIndex: 'action', width: 180 },
 ]
 ```
+
+#### 表格上方筛选栏（Filter Bar）
+
+- 筛选栏**优先**放在 `SectionCard` 外面、表格卡片上方；若受结构限制仍在卡片内，也必须去掉内边距和边框，避免出现独立背景工具栏。
+- 筛选栏本身**不加背景、不加边框**，只使用 flex 行 + 8px 间距 + 下方 16px 间距。
+- 样式参考 `admin-web/src/views/data/static/standards/index.vue` 的 `.standards-filter-bar`：
+
+```less
+.standards-filter-bar {
+  display: flex;
+  align-items: center;
+  gap: @spacing-sm;
+  flex-wrap: wrap;
+  margin-bottom: @spacing-base;
+}
+```
+
+- 筛选控件使用默认尺寸（不写 `size`），搜索框/选择器宽度建议 100~240px，按实际字段数调整。
+- 若某页有“重置”按钮，应紧跟最后一个筛选字段，不要用 `margin-left: auto` 推到右侧。
 
 
 
