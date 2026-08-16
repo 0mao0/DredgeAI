@@ -35,8 +35,8 @@
 import { ref, watch, computed } from 'vue'
 import { message } from 'ant-design-vue'
 import DataSkeleton from '@shared/web/components/DataSkeleton.vue'
-import EmptyState from '@shared/web/components/EmptyState.vue'
-import AIChat from '@shared/web/components/AIChat.vue'
+import { EmptyState, AIChat } from '@shared/web'
+
 import type { ChatMessage } from '@shared/core/types/chat'
 import type { StandardProperty } from '@/types'
 

@@ -101,8 +101,9 @@ import {
   CloseCircleFilled,
 } from '@ant-design/icons-vue'
 import { message } from 'ant-design-vue'
-import EmptyState from '@shared/web/components/EmptyState.vue'
+import { EmptyState } from '@shared/web'
 import type { VoiceItem } from '@/types'
+// 规范例外（AGENTS §2.13）：试听需即时调用生成接口取回 blob 播放，属"音频播放须即时生成 blob"的允许场景
 import { generateDubbing } from '@/api/modules/dubbing'
 
 const props = defineProps<{

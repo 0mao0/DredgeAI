@@ -107,7 +107,7 @@
               <span class="app-count">（{{ sidebarApps.length }} / {{ appStore.authorizedApps.length }}）</span>
             </div>
             <div class="category-bar">
-              <span v-for="cat in categoryOptions" :key="cat.key" class="cat-tag" :style="{ color: catColorMap[cat.key], borderColor: catColorMap[cat.key], background: `${catColorMap[cat.key]}22` }">{{ cat.label }}<span class="cat-tag-count">({{ cat.count }})</span></span>
+              <span v-for="cat in categoryOptions" :key="cat.key" class="cat-tag" :style="{ color: getCategoryColor(cat.key), borderColor: getCategoryColor(cat.key), background: getCategoryAlphaBg(cat.key) }">{{ cat.label }}<span class="cat-tag-count">({{ cat.count }})</span></span>
             </div>
           </div>
           <div class="sc-body">
@@ -132,14 +132,14 @@
                 <div class="app-card-drag"><HolderOutlined /></div>
                 <div
                   class="app-card-icon"
-                  :style="{ '--app-icon-color': catColorMap[app.category] || '#94A3B8' }"
+                  :style="{ '--app-icon-color': getCategoryColor(app.category) }"
                 >
                   <component :is="iconMap[app.icon]" />
                 </div>
                 <div class="app-card-body">
                   <div class="app-card-name-row">
                     <span class="app-cat-pill" :style="catPillStyle(app.category)">{{ app.category }}</span>
-                    <span class="app-card-name" :style="{ color: catColorMap[app.category] || 'var(--color-text-primary)' }">{{ app.title }}</span>
+                    <span class="app-card-name" :style="{ color: getCategoryColor(app.category) }">{{ app.title }}</span>
                   </div>
                   <span class="app-card-desc">{{ app.description }}</span>
                 </div>
@@ -173,6 +173,7 @@ import * as Icons from '@ant-design/icons-vue'
 import { useUserStore } from '@/stores/user'
 import { useAppStore } from '@/stores/app'
 import { useThemeStore } from '@shared/web/stores'
+import { getCategoryColor, getCategoryAlphaBg } from '@shared/core/utils'
 import type { Component } from 'vue'
 
 const userStore = useUserStore()
@@ -245,16 +246,9 @@ function toggleNotif(value: string): void {
 
 const sidebarApps = computed(() => appStore.sidebarApps)
 
-const catColorMap: Record<string, string> = {
-  通用: '#3B82F6',
-  经营: '#10B981',
-  设计: '#8B5CF6',
-  施工: '#F59E0B',
-}
-
 function catPillStyle(category: string) {
-  const c = catColorMap[category] || '#94A3B8'
-  return { color: c, borderColor: c, background: `${c}22` }
+  const c = getCategoryColor(category)
+  return { color: c, borderColor: c, background: getCategoryAlphaBg(category) }
 }
 
 // 按可见顺序排序，已激活在前、未激活在后
@@ -558,9 +552,9 @@ function onDrop(idx: number): void {
   border-radius: 50%;
   flex-shrink: 0;
 
-  &.light { background: #F59E0B; }
-  &.dark { background: #1E293B; }
-  &.auto { background: linear-gradient(135deg, #F59E0B 50%, #1E293B 50%); }
+  &.light { background: @warning; }
+  &.dark { background: @theme-dot-dark; }
+  &.auto { background: linear-gradient(135deg, @warning 50%, @theme-dot-dark 50%); }
 }
 
 // 通知偏好 checkbox

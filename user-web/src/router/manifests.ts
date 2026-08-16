@@ -147,7 +147,7 @@ export const userAppManifests: AppManifest[] = [
     name: 'IntelligenceDredge',
     title: '疏浚情报',
     icon: 'BookOutlined',
-    component: () => import('@/views/placeholder/PlaceholderView.vue'),
+    component: () => import('@/views/intelligence/dredge.vue'),
     defaultVisible: true,
     category: '经营',
   },

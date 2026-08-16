@@ -8,9 +8,11 @@
         <DubbingHistoryTable
           :tasks="tasks"
           :loading="loading"
+          :regenerating-id="regeneratingId"
           @play="emit('play', $event)"
           @delete="emit('delete', $event)"
           @re-edit="emit('reEdit', $event)"
+          @regenerate="emit('regenerate', $event)"
         />
       </div>
     </SectionCard>
@@ -25,12 +27,14 @@ import type { DubbingTask } from '@/types'
 const props = defineProps<{
   tasks: DubbingTask[]
   loading: boolean
+  regeneratingId?: string | null
 }>()
 
 const emit = defineEmits<{
   play: [task: DubbingTask]
   delete: [id: string]
   reEdit: [task: DubbingTask]
+  regenerate: [task: DubbingTask]
 }>()
 
 void props

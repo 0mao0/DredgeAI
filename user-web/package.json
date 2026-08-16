@@ -7,27 +7,23 @@
     "dev": "vite",
     "build": "vue-tsc -b && vite build",
     "preview": "vite preview",
-    "typecheck": "vue-tsc --noEmit"
+    "typecheck": "vue-tsc --noEmit",
+    "test": "vitest run"
   },
   "dependencies": {
     "@angineer/docs-ui": "file:../vendor/angineer-docs-ui",
     "@ant-design/icons-vue": "7.0.1",
-    "@vueuse/core": "^11.3.0",
+    "@shared": "link:../packages/shared/src",
     "ant-design-vue": "4.2.6",
     "axios": "^1.7.9",
-    "dayjs": "^1.11.13",
     "echarts": "^5.6.0",
-    "katex": "0.18.4",
     "nprogress": "^0.2.0",
-    "pdfjs-dist": "6.2.108",
     "pinia": "^3.0.4",
     "pinia-plugin-persistedstate": "^4.2.0",
     "vue": "3.5.41",
-    "vue-echarts": "^7.0.3",
     "vue-router": "^4.5.0"
   },
   "devDependencies": {
-    "@types/katex": "^0.16.8",
     "@types/node": "^26.1.1",
     "@types/nprogress": "^0.2.3",
     "@vitejs/plugin-vue": "^5.2.3",
@@ -36,6 +32,7 @@
     "typescript": "~5.7.3",
     "unocss": "^66.1.0",
     "vite": "^6.3.1",
+    "vitest": "^3",
     "vue-tsc": "^2.2.8"
   }
 }

@@ -4,38 +4,38 @@
 
     <a-tabs v-model:active-key="activeTab" class="api-tabs">
       <a-tab-pane key="keys" tab="API 管理">
-      <SectionCard nopad class="mb-24">
-        <template #extra>
-          <a-button type="primary" size="small" @click="showCreateModal = true">
-            <PlusOutlined />
-            创建 Key
-          </a-button>
-        </template>
-        <a-table
-          size="small"
-          :data-source="apiKeys"
-          :columns="columns"
-          :pagination="{ pageSize: 10 }"
-          row-key="id"
-        >
-          <template #bodyCell="{ column, record }">
-            <template v-if="column.key === 'key'">
-              <code class="key-text">{{ record.key }}</code>
-            </template>
-            <template v-else-if="column.key === 'doc'">
-              <a-button type="link" size="small" @click="openDoc(record.docUrl)">
-                <FileTextOutlined /> 文档
-              </a-button>
-            </template>
-            <template v-else-if="column.key === 'action'">
-              <a-button type="link" size="small" @click="handleEdit(record)">编辑</a-button>
-              <a-popconfirm title="确认删除？" @confirm="handleDelete(record.id)">
-                <a-button type="link" size="small" danger>删除</a-button>
-              </a-popconfirm>
-            </template>
+        <SectionCard nopad class="mb-24">
+          <template #extra>
+            <a-button type="primary" size="small" @click="showCreateModal = true">
+              <PlusOutlined />
+              创建 Key
+            </a-button>
           </template>
-        </a-table>
-      </SectionCard>
+          <a-table
+            size="small"
+            :data-source="apiKeys"
+            :columns="columns"
+            :pagination="{ pageSize: 10 }"
+            row-key="id"
+          >
+            <template #bodyCell="{ column, record }">
+              <template v-if="column.key === 'key'">
+                <code class="key-text">{{ record.key }}</code>
+              </template>
+              <template v-else-if="column.key === 'doc'">
+                <a-button type="link" size="small" @click="openDoc(record.docUrl)">
+                  <FileTextOutlined /> 文档
+                </a-button>
+              </template>
+              <template v-else-if="column.key === 'action'">
+                <a-button type="link" size="small" @click="handleEdit(record)">编辑</a-button>
+                <a-popconfirm title="确认删除？" @confirm="handleDelete(record.id)">
+                  <a-button type="link" size="small" danger>删除</a-button>
+                </a-popconfirm>
+              </template>
+            </template>
+          </a-table>
+        </SectionCard>
       </a-tab-pane>
 
       <a-tab-pane key="calls" tab="调用记录">
@@ -213,12 +213,12 @@ const activeTab = ref('keys')
 // ─── API Key 管理 ──────────────────────────────────────
 
 const columns = [
-  { title: '名称', dataIndex: 'name', key: 'name', align: 'center' },
-  { title: 'Key', key: 'key', width: 240, align: 'center' },
-  { title: '模型', dataIndex: 'modelType', key: 'modelType', align: 'center' },
-  { title: '创建日期', dataIndex: 'createdAt', key: 'createdAt', width: 120, align: 'center' },
-  { title: 'API 文档', key: 'doc', width: 110, align: 'center' },
-  { title: '操作', key: 'action', width: 130, align: 'center' },
+  { title: '名称', dataIndex: 'name', key: 'name' },
+  { title: 'Key', key: 'key', width: 240 },
+  { title: '模型', dataIndex: 'modelType', key: 'modelType' },
+  { title: '创建日期', dataIndex: 'createdAt', key: 'createdAt', width: 120 },
+  { title: 'API 文档', key: 'doc', width: 110 },
+  { title: '操作', key: 'action', width: 130 },
 ]
 
 const apiKeys = ref<ApiKey[]>([])
@@ -390,13 +390,13 @@ const mockCallRecords: CallRecord[] = (() => {
 })()
 
 const callColumns = [
-  { title: '时间', dataIndex: 'time', key: 'time', width: 160, align: 'center' },
-  { title: '模型', dataIndex: 'modelName', key: 'modelName', align: 'center' },
-  { title: '用户', key: 'userName', width: 100, align: 'center' },
-  { title: '输入 Token', key: 'inputTokens', width: 100, align: 'center' },
-  { title: '输出 Token', key: 'outputTokens', width: 100, align: 'center' },
-  { title: '延迟', key: 'latency', width: 90, align: 'center' },
-  { title: '状态', key: 'status', width: 80, align: 'center' },
+  { title: '时间', dataIndex: 'time', key: 'time', width: 160 },
+  { title: '模型', dataIndex: 'modelName', key: 'modelName' },
+  { title: '用户', key: 'userName', width: 100 },
+  { title: '输入 Token', key: 'inputTokens', width: 100 },
+  { title: '输出 Token', key: 'outputTokens', width: 100 },
+  { title: '延迟', key: 'latency', width: 90 },
+  { title: '状态', key: 'status', width: 80 },
 ]
 
 const callRecords = computed(() => {
@@ -429,10 +429,10 @@ const mockModels = [
 ]
 
 function formatConsumption(n: number): string {
-  if (n >= 1e12) return (n / 1e12).toFixed(1) + ' 兆'
-  if (n >= 1e8) return (n / 1e8).toFixed(1) + ' 亿'
-  if (n >= 1e7) return (n / 1e7).toFixed(1) + ' 千万'
-  if (n >= 1e4) return (n / 1e4).toFixed(1) + ' 万'
+  if (n >= 1e12) return `${(n / 1e12).toFixed(1)} 兆`
+  if (n >= 1e8) return `${(n / 1e8).toFixed(1)} 亿`
+  if (n >= 1e7) return `${(n / 1e7).toFixed(1)} 千万`
+  if (n >= 1e4) return `${(n / 1e4).toFixed(1)} 万`
   return n.toLocaleString()
 }
 
@@ -451,7 +451,8 @@ const modelRankingChartOption = computed(() => {
       nameLocation: 'end' as const,
       nameGap: 6,
       nameTextStyle: { color: t.axisColor, fontSize: 11 },
-      axisLine: { show: false }, axisTick: { show: false },
+      axisLine: { show: false },
+      axisTick: { show: false },
       axisLabel: { color: t.axisColor, fontSize: 11, formatter: (v: number) => String(Math.round(v / 1e7)) },
       splitLine: { lineStyle: { color: t.splitColor, type: 'dashed' as const } },
     },

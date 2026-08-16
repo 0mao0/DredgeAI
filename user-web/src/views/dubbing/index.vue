@@ -35,9 +35,11 @@
         v-else
         :tasks="historyTasks"
         :loading="false"
+        :regenerating-id="regeneratingId"
         @play="handlePlay"
         @delete="handleDelete"
         @re-edit="handleReEdit"
+        @regenerate="handleRegenerate"
       />
     </div>
 
@@ -95,21 +97,22 @@
           {{ currentTask?.text }}
         </p>
       </div>
-      <DubbingPlayer v-if="currentTask && currentTask.status === '已完成'" :task="currentTask" />
+      <DubbingPlayer v-if="currentTask && currentTask.status === '已完成' && currentTask.audioUrl" :task="currentTask" />
     </a-modal>
   </div>
 </template>
 
 <script setup lang="ts">
-import { ref, computed } from 'vue'
+import { ref, computed, onBeforeUnmount } from 'vue'
 import { message, notification } from 'ant-design-vue'
 import { CloseCircleFilled } from '@ant-design/icons-vue'
 import PageHeader from '@shared/web/components/PageHeader.vue'
 import OperationPanel from './components/OperationPanel.vue'
 import HistoryPanel from './components/HistoryPanel.vue'
 import DubbingPlayer from './components/DubbingPlayer.vue'
-import VoiceRegisterModal from '@shared/web/components/VoiceRegisterModal.vue'
+import { VoiceRegisterModal } from '@shared/web'
 import { getVoices, generateDubbing, registerVoice } from '@/api/modules/dubbing'
+import { estimateDubbingTokenCost } from '@shared/core/utils'
 import type { VoiceItem, DubbingTask } from '@/types'
 
 const HISTORY_KEY = 'DREDGE_AI_DUBBING_HISTORY'
@@ -137,6 +140,13 @@ const registerModalVisible = ref(false)
 const registerInitialTab = ref<'record' | 'upload'>('record')
 const failDetailVisible = ref(false)
 const failedVoice = ref<VoiceItem | null>(null)
+const regeneratingId = ref<string | null>(null)
+const liveAudioUrls = new Set<string>()
+
+onBeforeUnmount(() => {
+  liveAudioUrls.forEach((url) => URL.revokeObjectURL(url))
+  liveAudioUrls.clear()
+})
 
 const selectedVoiceName = computed(
   () => voices.value.find((v) => v.id === selectedVoiceId.value)?.name || '未选择',
@@ -159,7 +169,19 @@ function savePrivateVoice(voice: VoiceItem): void {
 function loadHistory(): void {
   try {
     const raw = localStorage.getItem(HISTORY_KEY)
-    historyTasks.value = raw ? (JSON.parse(raw) as DubbingTask[]) : []
+    if (!raw) {
+      historyTasks.value = []
+      return
+    }
+    const parsed: unknown = JSON.parse(raw)
+    const valid = Array.isArray(parsed) && parsed.every(
+      (t) => t && typeof t === 'object'
+        && typeof (t as DubbingTask).id === 'string'
+        && typeof (t as DubbingTask).text === 'string'
+        && typeof (t as DubbingTask).voiceId === 'string'
+        && typeof (t as DubbingTask).createdAt === 'string',
+    )
+    historyTasks.value = valid ? (parsed as DubbingTask[]) : []
   } catch {
     historyTasks.value = []
   }
@@ -167,7 +189,8 @@ function loadHistory(): void {
 
 function saveHistory(): void {
   try {
-    localStorage.setItem(HISTORY_KEY, JSON.stringify(historyTasks.value.slice(0, 100)))
+    const meta = historyTasks.value.slice(0, 100).map(({ audioUrl: _audioUrl, ...rest }) => rest)
+    localStorage.setItem(HISTORY_KEY, JSON.stringify(meta))
   } catch {
     /* 忽略存储异常 */
   }
@@ -337,6 +360,7 @@ async function handleGenerate(generateText: string): Promise<void> {
     if (!blob || blob.size === 0) throw new Error('empty audio')
 
     const audioUrl = URL.createObjectURL(blob)
+    liveAudioUrls.add(audioUrl)
     const voice = voices.value.find((v) => v.id === selectedVoiceId.value)
     const charCount = generateText.length
     const task: DubbingTask = {
@@ -350,7 +374,7 @@ async function handleGenerate(generateText: string): Promise<void> {
       status: '已完成',
       audioUrl,
       durationSec: 0,
-      tokenCost: Math.ceil(charCount / 1.5) + 50,
+      tokenCost: estimateDubbingTokenCost(charCount),
       createdAt: new Date().toISOString(),
     }
     currentTask.value = task
@@ -385,7 +409,34 @@ function handlePlay(task: DubbingTask): void {
   playerVisible.value = true
 }
 
+async function handleRegenerate(task: DubbingTask): Promise<void> {
+  if (regeneratingId.value) return
+  regeneratingId.value = task.id
+  try {
+    const blob = await generateDubbing(task.text, task.voiceId, task.speed)
+    if (!blob || blob.size === 0) throw new Error('empty audio')
+    const audioUrl = URL.createObjectURL(blob)
+    liveAudioUrls.add(audioUrl)
+    historyTasks.value = historyTasks.value.map((t) => (t.id === task.id ? { ...t, audioUrl } : t))
+    if (currentTask.value?.id === task.id) currentTask.value = { ...currentTask.value, audioUrl }
+    readDuration(blob).then((sec) => {
+      historyTasks.value = historyTasks.value.map((t) => (t.id === task.id ? { ...t, durationSec: sec } : t))
+      if (currentTask.value?.id === task.id) currentTask.value = { ...currentTask.value, durationSec: sec }
+    })
+    message.success('已重新生成，可点击播放')
+  } catch {
+    message.error('重新生成失败，请检查 TTS 服务后重试')
+  } finally {
+    regeneratingId.value = null
+  }
+}
+
 function handleDelete(id: string): void {
+  const removed = historyTasks.value.find((t) => t.id === id)
+  if (removed?.audioUrl && liveAudioUrls.has(removed.audioUrl)) {
+    URL.revokeObjectURL(removed.audioUrl)
+    liveAudioUrls.delete(removed.audioUrl)
+  }
   historyTasks.value = historyTasks.value.filter((t) => t.id !== id)
   saveHistory()
   if (currentTask.value?.id === id) currentTask.value = null

@@ -36,7 +36,7 @@
       <template #default="{ record }">
         <div class="history-actions">
           <a-button
-            v-if="record.status === '已完成'"
+            v-if="record.status === '已完成' && record.audioUrl"
             type="link"
             size="small"
             class="history-actions__btn"
@@ -44,6 +44,17 @@
           >
             播放
           </a-button>
+          <a-tooltip v-else-if="record.status === '已完成'" title="刷新后音频已失效，重新生成">
+            <a-button
+              type="link"
+              size="small"
+              class="history-actions__btn"
+              :loading="regeneratingId === record.id"
+              @click="emit('regenerate', record)"
+            >
+              重新生成
+            </a-button>
+          </a-tooltip>
           <a-tooltip title="载入文本与音色，重新编辑">
             <a-button type="link" size="small" class="history-actions__btn" @click="emit('reEdit', record)">
               编辑
@@ -72,12 +83,14 @@ import type { DubbingTask } from '@/types'
 const props = defineProps<{
   tasks: DubbingTask[]
   loading: boolean
+  regeneratingId?: string | null
 }>()
 
 const emit = defineEmits<{
   play: [task: DubbingTask]
   delete: [id: string]
   reEdit: [task: DubbingTask]
+  regenerate: [task: DubbingTask]
 }>()
 
 function statusColor(status: string): string {

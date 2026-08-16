@@ -95,9 +95,9 @@
 
     <a-layout class="main-layout">
       <a-layout-content class="content">
-        <router-view v-slot="{ Component, route }">
+        <router-view v-slot="{ Component: viewComponent, route: viewRoute }">
           <transition name="fade" mode="out-in">
-            <component :is="Component" :key="route.path" />
+            <component :is="viewComponent" :key="viewRoute.path" />
           </transition>
         </router-view>
       </a-layout-content>

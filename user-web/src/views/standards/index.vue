@@ -19,7 +19,7 @@
             :default-expand-all="true"
             :field-names="{ title: 'name', key: 'id' }"
             class="standard-tree"
-            @select="(keys: any) => keys[0] && selectStandard(keys[0])"
+            @select="(keys: (string | number)[]) => keys[0] && selectStandard(String(keys[0]))"
           />
         </SectionCard>
       </aside>
@@ -58,7 +58,7 @@ import { ref, computed, onMounted } from 'vue'
 import { message } from 'ant-design-vue'
 import PageHeader from '@shared/web/components/PageHeader.vue'
 import SectionCard from '@shared/web/components/SectionCard.vue'
-import DocViewer from '@shared/web/components/DocViewer.vue'
+import { DocViewer } from '@shared/web'
 import StandardPropertyPanel from './components/StandardProperty.vue'
 import { getStandardList, getStandardProperty, getStandardDocument, updateStandardProperty, getStandardHistory } from '@/api/modules/standard'
 import type { StandardListItem, StandardProperty, StandardDocument, StandardSearchHistory } from '@/types'
