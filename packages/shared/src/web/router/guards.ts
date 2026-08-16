@@ -62,6 +62,8 @@ export function installGuards(
     tokenKey?: string
     loginPath?: string
     enableAuth?: boolean
+    /** 是否安装动态标题守卫（默认 true；固定标题应用可设为 false） */
+    enableTitle?: boolean
     getPermissions?: () => string[] | Promise<string[]>
     permissionFallback?: string
   },
@@ -72,5 +74,7 @@ export function installGuards(
   if (opts.getPermissions) {
     router.beforeEach(createPermissionGuard(opts.getPermissions, opts.permissionFallback))
   }
-  router.afterEach(createTitleGuard(opts.appName))
+  if (opts.enableTitle !== false) {
+    router.afterEach(createTitleGuard(opts.appName))
+  }
 }

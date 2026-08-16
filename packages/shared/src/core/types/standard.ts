@@ -42,7 +42,22 @@ export interface StandardProperty {
   issuer?: string
   publishYear?: number
   parentId?: string
+  uploader?: string
   description?: string
+  /** 是否已完成解析（可展示原文 bbox 高亮） */
+  parsed?: boolean
+  /** 已解析文本块的归一化 bbox 高亮（0~1 坐标） */
+  highlights?: StandardHighlight[]
+}
+
+export interface StandardHighlight {
+  id: string
+  itemId: string
+  page: number
+  left: number
+  top: number
+  width: number
+  height: number
 }
 
 export interface StandardDocument {
@@ -57,4 +72,25 @@ export interface StandardAIAnalysis {
   keyPoints: string[]
   relatedStandards: { code: string, title: string }[]
   riskWarnings: string[]
+}
+
+export interface StandardPropertyInput {
+  name: string
+  code: string
+  industry?: string
+  nature?: string
+  level?: string
+  status?: string
+  issuer?: string
+  publishYear?: number
+  parentId?: string
+  uploader?: string
+  description?: string
+}
+
+export interface StandardParseBatchResult {
+  id: string
+  success: boolean
+  analysis?: StandardAIAnalysis
+  error?: string
 }

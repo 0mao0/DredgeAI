@@ -270,7 +270,7 @@ const renderedMd = computed(() => {
   const kw = searchText.value
   if (kw) {
     let n = 0
-    html = html.replace(new RegExp(escapeRegExp(kw), 'g'), (m) => {
+    html = html.replace(new RegExp(escapeRegExp(kw), 'g'), (m: string) => {
       const cls = n === currentMatch.value ? ' class="is-current"' : ''
       n += 1
       return `<mark${cls}>${m}</mark>`
