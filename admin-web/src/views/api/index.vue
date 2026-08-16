@@ -1,399 +1,152 @@
 <template>
-  <div class="page-container">
-    <PageHeader title="API 管理" description="管理接入的模型、统计平台用量与配置用户限制" />
+  <div class="page-container" :class="{ 'api-page--keys': activeTab === 'keys', 'api-page--alerts': activeTab === 'alerts', 'api-page--permissions': activeTab === 'permissions', 'api-page--calls': activeTab === 'calls' }">
+    <PageHeader title="API 管理" description="管理接入的模型、统计平台用量与配置用户限制">
+      <template #extra>
+        <a-button v-if="activeTab === 'keys'" type="primary" size="small" @click="showCreateModal = true">
+          <PlusOutlined />
+          添加模型
+        </a-button>
+        <a-radio-group v-if="activeTab === 'alerts'" v-model:value="alertFilter" size="small" button-style="solid">
+          <a-radio-button value="all">全部</a-radio-button>
+          <a-radio-button value="calls">调用超限</a-radio-button>
+          <a-radio-button value="tokens">Token 超限</a-radio-button>
+        </a-radio-group>
+      </template>
+    </PageHeader>
 
-    <a-tabs v-model:active-key="activeTab" class="api-tabs">
-      <a-tab-pane key="keys" tab="模型管理">
-        <SectionCard nopad>
-          <template #extra>
-            <a-button type="primary" size="small" @click="showCreateModal = true">
-              <PlusOutlined />
-              添加模型
-            </a-button>
+    <a-tabs v-model:active-key="activeTab" class="api-tabs" :class="{ 'api-tabs--keys': activeTab === 'keys', 'api-tabs--alerts': activeTab === 'alerts', 'api-tabs--permissions': activeTab === 'permissions', 'api-tabs--calls': activeTab === 'calls', 'api-tabs--usage': activeTab === 'usage' }">
+      <template #tabBarExtraContent>
+        <a-space v-if="activeTab === 'keys'" :size="8">
+          <a-button type="primary" size="small" @click="showCreateModal = true">
+            <PlusOutlined />
+            添加模型
+          </a-button>
+        </a-space>
+        <a-space v-else-if="activeTab === 'calls'" :size="8">
+          <a-input-search v-model:value="callUserKeyword" placeholder="搜索用户" allow-clear size="small" style="width:180px" />
+          <a-select v-model:value="callModelFilter" mode="multiple" allow-clear placeholder="模型" size="small" :max-tag-count="0" :max-tag-placeholder="callModelFilter.length ? `已选 ${callModelFilter.length}` : '全部'" style="width:140px">
+            <a-select-option v-for="m in allModelNames" :key="m" :value="m">{{ m }}</a-select-option>
+          </a-select>
+          <a-select v-model:value="callStatusFilter" allow-clear placeholder="状态" style="width:100px">
+            <a-select-option value="成功">成功</a-select-option>
+            <a-select-option value="失败">失败</a-select-option>
+          </a-select>
+        </a-space>
+        <a-space v-else-if="activeTab === 'permissions'" :size="8">
+          <a-input-search v-model:value="permissionKeyword" placeholder="搜索姓名 / 部门" allow-clear size="small" style="width:200px" />
+          <a-switch v-model:checked="partialOnly" checked-children="部分权限" un-checked-children="全部权限" size="small" />
+        </a-space>
+        <a-space v-else-if="activeTab === 'alerts'" :size="8">
+          <a-radio-group v-model:value="alertFilter" size="small" button-style="solid">
+            <a-radio-button value="all">全部</a-radio-button>
+            <a-radio-button value="calls">调用超限</a-radio-button>
+            <a-radio-button value="tokens">Token 超限</a-radio-button>
+          </a-radio-group>
+        </a-space>
+        <a-space v-else-if="activeTab === 'usage'" :size="8">
+          <a-segmented v-model:value="usageDimension" :options="['模型维度', '用户维度']" />
+          <template v-if="usageDimension === '用户维度'">
+            <a-input-search v-model:value="userKeyword" placeholder="搜索姓名 / 部门" allow-clear size="small" style="width:200px" />
+            <a-select v-model:value="userDepartment" allow-clear placeholder="部门" style="width:140px">
+              <a-select-option v-for="d in allDepartments" :key="d" :value="d">{{ d }}</a-select-option>
+            </a-select>
+            <a-select v-model:value="userModel" mode="multiple" allow-clear placeholder="全部" :max-tag-count="0" :max-tag-placeholder="userModel.length === 0 || userModel.length === allModelNames.length ? '全部' : `已选 ${userModel.length} 项`" style="width:140px">
+              <a-select-option v-for="m in allModelNames" :key="m" :value="m">{{ m }}</a-select-option>
+            </a-select>
           </template>
-          <a-table
-            size="small"
-            :data-source="models"
-            :columns="modelColumns"
-            :pagination="{ pageSize: 10 }"
-            row-key="id"
-          >
-            <template #bodyCell="{ column, record, index }">
-              <template v-if="column.key === 'index'">
-                {{ index + 1 }}
-              </template>
-              <template v-else-if="column.key === 'status'">
-                <a-tag :color="record.status === '启用' ? 'green' : 'default'">{{ record.status }}</a-tag>
-              </template>
-              <template v-else-if="column.key === 'consumption'">
-                {{ formatConsumption(record.consumption) }}
-              </template>
-              <template v-else-if="column.key === 'doc'">
-                <a-button type="link" size="small" @click="openDoc(record.docUrl)">
-                  <FileTextOutlined /> 文档
-                </a-button>
-              </template>
-              <template v-else-if="column.key === 'action'">
-                <a-button type="link" size="small" @click="handleEdit(record)">编辑</a-button>
-                <a-popconfirm title="确认删除？" @confirm="handleDelete(record.id)">
-                  <a-button type="link" size="small" danger>删除</a-button>
-                </a-popconfirm>
-              </template>
-            </template>
-          </a-table>
-        </SectionCard>
+        </a-space>
+      </template>
+
+      <a-tab-pane key="keys" tab="模型管理">
+        <KeysTab
+          v-model:create-open="showCreateModal"
+          v-model:edit-open="showEditModal"
+          v-model:new-model="newModel"
+          v-model:edit-form="editForm"
+          :models="models"
+          :edit-target="editTarget"
+          :deployed-model-options="deployedModelOptions"
+          :model-type-options="modelTypeOptions"
+          :status-options="statusOptions"
+          @open-create="showCreateModal = true"
+          @create="handleCreate"
+          @edit-ok="handleEditOk"
+          @cancel-create="resetNewModel()"
+          @edit="handleEdit"
+          @delete="handleDelete"
+        />
       </a-tab-pane>
 
       <a-tab-pane key="calls" tab="调用记录">
-        <SectionCard nopad>
-          <div class="user-filter-bar">
-            <a-input-search
-              v-model:value="callUserKeyword"
-              placeholder="搜索用户"
-              allow-clear
-              style="width:180px"
-            />
-            <a-select
-              v-model:value="callModelFilter"
-              mode="multiple"
-              allow-clear
-              placeholder="模型"
-              :max-tag-count="0"
-              :max-tag-placeholder="callModelFilter.length ? `已选 ${callModelFilter.length}` : '全部'"
-              style="width:140px"
-            >
-              <a-select-option v-for="m in allModelNames" :key="m" :value="m">{{ m }}</a-select-option>
-            </a-select>
-            <a-select v-model:value="callStatusFilter" allow-clear placeholder="状态" style="width:100px">
-              <a-select-option value="成功">成功</a-select-option>
-              <a-select-option value="失败">失败</a-select-option>
-            </a-select>
-          </div>
-          <a-table
-            size="small"
-            :data-source="callRecords"
-            :columns="callColumns"
-            :pagination="{ pageSize: 15, showTotal: (t: number) => `共 ${t} 条` }"
-            row-key="id"
-          >
-            <template #bodyCell="{ column, record }">
-              <template v-if="column.key === 'userName'">
-                <a-tooltip :title="`${record.department} · ${record.userName} · ${record.userPhone}`">
-                  <span>{{ record.userName }}</span>
-                </a-tooltip>
-              </template>
-              <template v-else-if="column.key === 'latency'">
-                {{ (record.latency ?? 0) }}ms
-              </template>
-              <template v-else-if="column.key === 'inputTokens'">
-                {{ ((record.inputTokens ?? 0) / 10000).toFixed(1) }} 万
-              </template>
-              <template v-else-if="column.key === 'outputTokens'">
-                {{ ((record.outputTokens ?? 0) / 10000).toFixed(1) }} 万
-              </template>
-              <template v-else-if="column.key === 'status'">
-                <a-tag :color="record.status === '成功' ? 'green' : 'red'">{{ record.status }}</a-tag>
-              </template>
-            </template>
-          </a-table>
-        </SectionCard>
+        <CallsTab
+          v-model:user-keyword="callUserKeyword"
+          v-model:model-filter="callModelFilter"
+          v-model:status-filter="callStatusFilter"
+          :records="callRecords"
+          :all-model-names="allModelNames"
+        />
       </a-tab-pane>
 
       <a-tab-pane key="usage" tab="用量分析">
-        <div class="stats-tab">
-          <div class="dimension-bar">
-            <a-segmented v-model:value="usageDimension" :options="['模型维度', '用户维度']" />
-          </div>
-
-          <template v-if="usageDimension === '模型维度'">
-          <a-row :gutter="16" class="mb-24">
-            <a-col :span="12">
-              <MetricCard
-                title="总调用次数"
-                :value="formatNumber(overviewTotalCalls)"
-                suffix="次"
-                icon="ThunderboltOutlined"
-                :color="brandColor"
-              />
-            </a-col>
-            <a-col :span="12">
-              <MetricCard
-                title="总 Token 消耗量"
-                :value="formatNumber(overviewTotalTokens)"
-                suffix="tokens"
-                icon="DatabaseOutlined"
-                :color="accentColor"
-              />
-            </a-col>
-          </a-row>
-
-          <SectionCard title="全平台调用趋势">
-            <div class="chart-header">
-              <a-radio-group v-model:value="overviewChartMode" size="small">
-                <a-radio-button value="model">按模型</a-radio-button>
-                <a-radio-button value="key">按 API Key</a-radio-button>
-                <a-radio-button value="total">调用次数</a-radio-button>
-              </a-radio-group>
-              <div class="time-range-wrap">
-                <a-radio-group v-model:value="overviewTimeRange" size="small">
-                  <a-radio-button value="7d">近7日</a-radio-button>
-                  <a-radio-button value="30d">近30日</a-radio-button>
-                  <a-radio-button value="month">本月</a-radio-button>
-                  <a-radio-button value="prevMonth">上月</a-radio-button>
-                  <a-radio-button value="custom">自定义</a-radio-button>
-                </a-radio-group>
-                <a-range-picker
-                  v-if="overviewTimeRange === 'custom'"
-                  v-model:value="overviewCustomDateRange"
-                  size="small"
-                  class="custom-date-picker"
-                  :allow-empty="false"
-                />
-              </div>
-            </div>
-            <ChartContainer :option="overviewChartOption" height="320px" />
-          </SectionCard>
-
-          <a-row :gutter="24" class="mt-24">
-            <a-col :span="14" class="mb-24">
-              <SectionCard title="模型消耗排名">
-                <ChartContainer :option="userRankingChartOption" height="340px" />
-              </SectionCard>
-            </a-col>
-            <a-col :span="10" class="mb-24">
-              <SectionCard title="模型用量占比">
-                <ChartContainer :option="modelPieOption" height="340px" />
-              </SectionCard>
-            </a-col>
-          </a-row>
-          </template>
-
-          <template v-if="usageDimension === '用户维度'">
-          <SectionCard nopad>
-            <div class="user-filter-bar">
-              <a-input-search
-                v-model:value="userKeyword"
-                placeholder="搜索姓名 / 部门"
-                allow-clear
-                style="width:200px"
-              />
-              <a-select v-model:value="userDepartment" allow-clear placeholder="部门" style="width:140px">
-                <a-select-option v-for="d in allDepartments" :key="d" :value="d">{{ d }}</a-select-option>
-              </a-select>
-              <a-select
-                v-model:value="userModel"
-                mode="multiple"
-                allow-clear
-                placeholder="全部"
-                :max-tag-count="0"
-                :max-tag-placeholder="userModel.length === 0 || userModel.length === allModelNames.length ? '全部' : `已选 ${userModel.length} 项`"
-                style="width:140px"
-              >
-                <a-select-option v-for="m in allModelNames" :key="m" :value="m">{{ m }}</a-select-option>
-              </a-select>
-            </div>
-            <a-table
-              size="small"
-              :data-source="mergedUserData"
-              :columns="consumptionColumns"
-              :pagination="{ pageSize: 15, showTotal: (t: number) => `共 ${t} 人` }"
-              row-key="userId"
-            >
-              <template #bodyCell="{ column, record, index }">
-                <template v-if="column.key === 'rank'">
-                  <span class="rank-badge" :class="[{ gold: index < 3 }]">{{ index + 1 }}</span>
-                </template>
-                <template v-else-if="column.key === 'calls'">
-                  {{ formatNumber(record.calls) }}
-                </template>
-                <template v-else-if="column.key === 'tokens'">
-                  {{ formatNumber(record.tokens) }}
-                </template>
-                <template v-else-if="column.key === 'models'">
-                  <a-tag :color="(record.modelLimits?.length ?? 0) === allModelNames.length ? 'green' : 'orange'">{{ (record.modelLimits?.length ?? 0) === allModelNames.length ? '全部' : '部分' }}</a-tag>
-                </template>
-              </template>
-            </a-table>
-          </SectionCard>
-          </template>
-        </div>
+        <UsageTab
+          v-model:usage-dimension="usageDimension"
+          v-model:chart-mode="overviewChartMode"
+          v-model:time-range="overviewTimeRange"
+          v-model:custom-date-range="overviewCustomDateRange"
+          v-model:user-keyword="userKeyword"
+          v-model:user-department="userDepartment"
+          v-model:user-model="userModel"
+          :overview-total-calls="overviewTotalCalls"
+          :overview-total-tokens="overviewTotalTokens"
+          :overview-chart-option="overviewChartOption"
+          :user-ranking-chart-option="userRankingChartOption"
+          :model-pie-option="modelPieOption"
+          :all-departments="allDepartments"
+          :all-model-names="allModelNames"
+          :merged-user-data="mergedUserData"
+        />
       </a-tab-pane>
 
       <a-tab-pane key="permissions" tab="权限控制">
-        <SectionCard nopad>
-          <div class="user-filter-bar">
-            <a-input-search
-              v-model:value="permissionKeyword"
-              placeholder="搜索姓名 / 部门"
-              allow-clear
-              style="width:200px"
-            />
-            <a-switch
-              v-model:checked="partialOnly"
-              checked-children="部分权限"
-              un-checked-children="全部权限"
-              class="perm-switch"
-            />
-          </div>
-          <a-table
-            size="small"
-            :data-source="permissionUsers"
-            :columns="permissionColumns"
-            :pagination="{ pageSize: 15, showTotal: (t: number) => `共 ${t} 人` }"
-            row-key="userId"
-          >
-            <template #bodyCell="{ column, record, index }">
-              <template v-if="column.key === 'index'">
-                {{ index + 1 }}
-              </template>
-              <template v-else-if="column.key === 'models'">
-                <a-tag :color="(record.modelLimits?.length ?? 0) === allModelNames.length ? 'green' : 'orange'">{{ (record.modelLimits?.length ?? 0) === allModelNames.length ? '全部' : '部分' }}</a-tag>
-              </template>
-              <template v-else-if="column.key === 'callsLimit'">
-                {{ formatLimit(record, 'calls') }}
-              </template>
-              <template v-else-if="column.key === 'tokensLimit'">
-                {{ formatLimit(record, 'tokens') }}
-              </template>
-              <template v-else-if="column.key === 'action'">
-                <a-button type="link" size="small" @click="handleEditLimits(record)">编辑</a-button>
-              </template>
-            </template>
-          </a-table>
-        </SectionCard>
+        <PermissionsTab
+          v-model:keyword="permissionKeyword"
+          v-model:partial-only="partialOnly"
+          v-model:limits-open="showLimitsModal"
+          v-model:limits-form="limitsForm"
+          :users="permissionUsers"
+          :all-model-names="allModelNames"
+          :limits-target="limitsTarget"
+          @edit-limits="handleEditLimits"
+          @limits-ok="handleLimitsOk"
+        />
       </a-tab-pane>
 
       <a-tab-pane key="alerts" tab="告警管理">
-        <SectionCard nopad>
-          <template #extra>
-            <a-radio-group v-model:value="alertFilter" size="small" button-style="solid">
-              <a-radio-button value="all">全部</a-radio-button>
-              <a-radio-button value="calls">调用超限</a-radio-button>
-              <a-radio-button value="tokens">Token 超限</a-radio-button>
-            </a-radio-group>
-          </template>
-          <a-table
-            size="small"
-            :data-source="alertData"
-            :columns="alertColumns"
-            :pagination="{ pageSize: 15, showTotal: (t: number) => `共 ${t} 条` }"
-            row-key="id"
-          >
-            <template #bodyCell="{ column, record }">
-              <template v-if="column.key === 'type'">
-                <a-tag :color="record.type === 'calls' ? 'orange' : 'purple'">{{ record.type === 'calls' ? '调用超限' : 'Token 超限' }}</a-tag>
-              </template>
-              <template v-else-if="column.key === 'ratio'">
-                {{ formatNumber(record.current) }} / {{ formatNumber(record.limit) }}
-              </template>
-            </template>
-          </a-table>
-        </SectionCard>
+        <AlertsTab
+          v-model:filter="alertFilter"
+          :alerts="alertData"
+        />
       </a-tab-pane>
     </a-tabs>
-
-    <!-- Create Modal -->
-    <a-modal v-model:open="showCreateModal" title="添加模型" @ok="handleCreate" @cancel="resetNewModel()">
-      <a-form layout="horizontal" :label-col="{ span: 7 }" :wrapper-col="{ span: 17 }">
-        <a-form-item label="模型名称" required>
-          <a-input v-model:value="newModel.name" placeholder="用户自定义名称" />
-        </a-form-item>
-        <a-form-item label="实际模型" required>
-          <a-select v-model:value="newModel.actualModel" :options="deployedModelOptions" placeholder="选择已部署的模型" />
-        </a-form-item>
-        <a-form-item label="模型类型" required>
-          <a-select v-model:value="newModel.modelType" :options="modelTypeOptions" placeholder="选择模型分类" />
-        </a-form-item>
-        <a-form-item label="IP 地址">
-          <a-input v-model:value="newModel.ipAddress" placeholder="如：192.168.1.100" />
-        </a-form-item>
-        <a-form-item label="API 文档链接">
-          <a-input v-model:value="newModel.docUrl" placeholder="https://docs.example.com/model" />
-        </a-form-item>
-        <a-form-item label="状态">
-          <a-select v-model:value="newModel.status" :options="statusOptions" />
-        </a-form-item>
-      </a-form>
-    </a-modal>
-
-    <!-- Edit Modal -->
-    <a-modal v-model:open="showEditModal" title="编辑模型" @ok="handleEditOk">
-      <a-form v-if="editTarget" layout="horizontal" :label-col="{ span: 7 }" :wrapper-col="{ span: 17 }">
-        <a-form-item label="模型名称" required>
-          <a-input v-model:value="editForm.name" placeholder="用户自定义名称" />
-        </a-form-item>
-        <a-form-item label="实际模型" required>
-          <a-select v-model:value="editForm.actualModel" :options="deployedModelOptions" placeholder="选择已部署的模型" />
-        </a-form-item>
-        <a-form-item label="模型类型" required>
-          <a-select v-model:value="editForm.modelType" :options="modelTypeOptions" placeholder="选择模型分类" />
-        </a-form-item>
-        <a-form-item label="IP 地址">
-          <a-input v-model:value="editForm.ipAddress" placeholder="如：192.168.1.100" />
-        </a-form-item>
-        <a-form-item label="API 文档链接">
-          <a-input v-model:value="editForm.docUrl" placeholder="https://docs.example.com/model" />
-        </a-form-item>
-        <a-form-item label="状态">
-          <a-select v-model:value="editForm.status" :options="statusOptions" />
-        </a-form-item>
-        <a-form-item label="创建日期">
-          <span class="readonly-field">{{ editTarget.createdAt }}</span>
-        </a-form-item>
-      </a-form>
-    </a-modal>
-
-    <!-- Edit Limits Modal -->
-    <a-modal v-model:open="showLimitsModal" title="编辑用户限制" width="820px" @ok="handleLimitsOk">
-      <template v-if="limitsTarget">
-        <p class="limits-dimension">限制维度：每周</p>
-        <a-table
-          :data-source="limitsForm"
-          :columns="limitColumns"
-          row-key="modelName"
-          :pagination="false"
-          size="small"
-          class="limits-table"
-        >
-          <template #bodyCell="{ column, record, index }">
-            <template v-if="column.key === 'enabled'">
-              <a-checkbox v-model:checked="limitsForm[index].enabled" />
-            </template>
-            <template v-else-if="column.key === 'modelName'">
-              <span :class="{ 'model-name--disabled': !record.enabled }">{{ record.modelName }}</span>
-            </template>
-            <template v-else-if="column.key === 'callsLimit'">
-              <a-input-number v-model:value="limitsForm[index].callsLimit" :min="0" :disabled="!record.enabled" style="width:100%" placeholder="0=无限制" />
-            </template>
-            <template v-else-if="column.key === 'callsWarn'">
-              <a-input-number v-model:value="limitsForm[index].callsWarn" :min="0" :disabled="!record.enabled" style="width:100%" placeholder="0=不预警" />
-            </template>
-            <template v-else-if="column.key === 'tokensLimit'">
-              <a-input-number v-model:value="limitsForm[index].tokensLimit" :min="0" :disabled="!record.enabled" style="width:100%" placeholder="0=无限制" />
-            </template>
-            <template v-else-if="column.key === 'tokensWarn'">
-              <a-input-number v-model:value="limitsForm[index].tokensWarn" :min="0" :disabled="!record.enabled" style="width:100%" placeholder="0=不预警" />
-            </template>
-          </template>
-        </a-table>
-      </template>
-    </a-modal>
   </div>
 </template>
 
 <script setup lang="ts">
 import { ref, computed, onMounted, watch } from 'vue'
 import { message } from 'ant-design-vue'
-import { PlusOutlined, FileTextOutlined } from '@ant-design/icons-vue'
+import { PlusOutlined } from '@ant-design/icons-vue'
 import PageHeader from '@shared/web/components/PageHeader.vue'
-import SectionCard from '@shared/web/components/SectionCard.vue'
-import ChartContainer from '@shared/web/components/ChartContainer.vue'
-import MetricCard from '@shared/web/components/MetricCard.vue'
-import { formatNumber } from '@shared/core/utils/format'
 import { useCssVar } from '@shared/web/composables/useCssVar'
 import { useChartTheme } from '@shared/web/composables/useChartTheme'
 import { getUsageTimeSeries } from '@/api/modules/apikey'
 import type { UsageTimeSeries } from '@/types'
+import KeysTab from './components/KeysTab.vue'
+import CallsTab from './components/CallsTab.vue'
+import UsageTab from './components/UsageTab.vue'
+import PermissionsTab from './components/PermissionsTab.vue'
+import AlertsTab from './components/AlertsTab.vue'
+import { formatConsumption } from './utils'
+import type { ModelItem, ModelLimitEntry, MergedUserRecord, CallRecord, AlertRecord, DayjsLike } from './types'
 
 const { chartTheme } = useChartTheme()
 
@@ -401,18 +154,6 @@ const activeTab = ref('keys')
 const usageDimension = ref('模型维度')
 
 // ─── Models (CRUD local state, no backend API) ──────────
-
-interface ModelItem {
-  id: string
-  name: string
-  actualModel: string
-  modelType: string
-  ipAddress: string
-  docUrl: string
-  status: string
-  createdAt: string
-  consumption: number
-}
 
 const deployedModelOptions = [
   { label: 'GPT-4o', value: 'GPT-4o' },
@@ -449,81 +190,6 @@ const statusOptions = [
   { label: '未启用', value: '未启用' },
 ]
 
-
-// ─── Columns ──────────────────────────────────────────
-
-function formatConsumption(n: number): string {
-  if (n >= 1e12) return (n / 1e12).toFixed(1) + ' 兆'
-  if (n >= 1e8) return (n / 1e8).toFixed(1) + ' 亿'
-  if (n >= 1e7) return (n / 1e7).toFixed(1) + ' 千万'
-  if (n >= 1e4) return (n / 1e4).toFixed(1) + ' 万'
-  return n.toLocaleString()
-}
-
-function formatLimit(record: MergedUserRecord, field: 'calls' | 'tokens'): string {
-  const total = record.modelLimits
-    .filter((m) => m.enabled)
-    .reduce((s, m) => s + (field === 'calls' ? m.callsLimit : m.tokensLimit), 0)
-  if (total === 0) return '-'
-  return formatConsumption(total).replace(/\s/g, '') + '/周'
-}
-
-const modelColumns = [
-  { title: '序号', key: 'index', width: 70, align: 'center' },
-  { title: '模型名称', dataIndex: 'name', key: 'name', align: 'center' },
-  { title: '模型类型', dataIndex: 'modelType', key: 'modelType', align: 'center' },
-  { title: '消耗额度', key: 'consumption', align: 'center' },
-  { title: '状态', key: 'status', width: 100, align: 'center' },
-  { title: 'API 文档', key: 'doc', width: 110, align: 'center' },
-  { title: '操作', key: 'action', width: 130, align: 'center' },
-]
-
-const limitColumns = [
-  { title: '启用', key: 'enabled', width: 60, align: 'center' },
-  { title: '模型', key: 'modelName', width: 130 },
-  { title: '调用次限制', key: 'callsLimit', width: 150 },
-  { title: '调用次预警', key: 'callsWarn', width: 150 },
-  { title: 'Token 限制', key: 'tokensLimit', width: 150 },
-  { title: 'Token 预警', key: 'tokensWarn', width: 150 },
-]
-
-interface ModelLimitEntry {
-  modelName: string
-  enabled: boolean
-  callsLimit: number
-  callsWarn: number
-  tokensLimit: number
-  tokensWarn: number
-}
-
-interface MergedUserRecord {
-  userId: string
-  name: string
-  department: string
-  calls: number
-  tokens: number
-  modelLimits: ModelLimitEntry[]
-}
-
-const consumptionColumns = [
-  { title: '排名', key: 'rank', width: 70, align: 'center' },
-  { title: '用户', dataIndex: 'name', key: 'name', align: 'center' },
-  { title: '部门', dataIndex: 'department', key: 'department', align: 'center' },
-  { title: '总调用次数', key: 'calls', align: 'center', sorter: (a: MergedUserRecord, b: MergedUserRecord) => a.calls - b.calls, sortDirections: ['ascend', 'descend'] as const },
-  { title: '总 Token 用量', key: 'tokens', align: 'center', sorter: (a: MergedUserRecord, b: MergedUserRecord) => a.tokens - b.tokens, sortDirections: ['ascend', 'descend'] as const },
-  { title: '授权模型', key: 'models', width: 100, align: 'center' },
-]
-
-const permissionColumns = [
-  { title: '序号', key: 'index', width: 70, align: 'center' },
-  { title: '用户', dataIndex: 'name', key: 'name', width: 100, align: 'center' },
-  { title: '部门', dataIndex: 'department', key: 'department', width: 100, align: 'center' },
-  { title: '已授权模型', key: 'models', width: 120, align: 'center' },
-  { title: '调用限制', key: 'callsLimit', width: 120, align: 'center' },
-  { title: 'Token 限制', key: 'tokensLimit', width: 120, align: 'center' },
-  { title: '操作', key: 'action', width: 100, align: 'center' },
-]
-
 // ─── CRUD State ───────────────────────────────────────
 
 const showCreateModal = ref(false)
@@ -552,7 +218,7 @@ const colors = computed(() => [brandColor.value, accentColor.value, successColor
 
 const overviewChartMode = ref<'model' | 'key' | 'total'>('model')
 const overviewTimeRange = ref('7d')
-const overviewCustomDateRange = ref<any>(undefined)
+const overviewCustomDateRange = ref<[DayjsLike, DayjsLike] | undefined>(undefined)
 
 /** API 返回的时序数据 */
 const timeSeriesData = ref<UsageTimeSeries | null>(null)
@@ -728,18 +394,6 @@ const userKeyword = ref('')
 const userDepartment = ref<string>('')
 const userModel = ref<string[]>([])
 
-const permissionKeyword = ref('')
-const partialOnly = ref(true)
-const permissionUsers = computed(() => {
-  let list = rawUsers
-  const kw = permissionKeyword.value.toLowerCase().trim()
-  if (kw) list = list.filter((u) => u.name.includes(kw) || u.department.includes(kw))
-  if (partialOnly.value) list = list.filter((u) => (u.modelLimits?.length ?? 0) < allModelNames.length)
-  else list = list.filter((u) => (u.modelLimits?.length ?? 0) === allModelNames.length)
-  return list
-})
-
-
 const rawUsers: MergedUserRecord[] = (() => {
   const surnames = '张李王赵陈刘杨周吴郑冯蒋沈韩朱'
   const given = ['伟', '芳', '敏', '浩', '洁', '鹏', '丽', '强', '明', '军', '杰', '婷', '勇', '刚', '静', '雷', '娜', '鑫', '丹', '超']
@@ -780,20 +434,18 @@ const rawUsers: MergedUserRecord[] = (() => {
   return users
 })()
 
-// ─── 调用记录 ───────────────────────────────────────────
+const permissionKeyword = ref('')
+const partialOnly = ref(true)
+const permissionUsers = computed(() => {
+  let list = rawUsers
+  const kw = permissionKeyword.value.toLowerCase().trim()
+  if (kw) list = list.filter((u) => u.name.includes(kw) || u.department.includes(kw))
+  if (partialOnly.value) list = list.filter((u) => (u.modelLimits?.length ?? 0) < allModelNames.length)
+  else list = list.filter((u) => (u.modelLimits?.length ?? 0) === allModelNames.length)
+  return list
+})
 
-interface CallRecord {
-  id: string
-  userName: string
-  userPhone: string
-  department: string
-  modelName: string
-  inputTokens: number
-  outputTokens: number
-  latency: number
-  status: '成功' | '失败'
-  time: string
-}
+// ─── 调用记录 ───────────────────────────────────────────
 
 const callUserKeyword = ref('')
 const callModelFilter = ref<string[]>([])
@@ -815,9 +467,9 @@ const mockCallRecords: CallRecord[] = (() => {
       id: `call-${i}`,
       userName: userNames[userIdx],
       department: rawUsers[userIdx].department,
-    modelName: mockModels[modelIdx].actualModel,
-    inputTokens: Math.round(100 + Math.random() * 4000),
-    outputTokens: Math.round(100 + Math.random() * 4000),
+      modelName: mockModels[modelIdx].actualModel,
+      inputTokens: Math.round(100 + Math.random() * 4000),
+      outputTokens: Math.round(100 + Math.random() * 4000),
       userPhone: phones[userIdx % phones.length],
       latency: success ? Math.round(300 + Math.random() * 5000) : Math.round(8000 + Math.random() * 12000),
       status: success ? '成功' : '失败',
@@ -826,16 +478,6 @@ const mockCallRecords: CallRecord[] = (() => {
   }
   return records.sort((a, b) => b.time.localeCompare(a.time))
 })()
-
-const callColumns = [
-  { title: '时间', dataIndex: 'time', key: 'time', width: 160, align: 'center' },
-  { title: '模型', dataIndex: 'modelName', key: 'modelName', align: 'center' },
-  { title: '用户', key: 'userName', width: 100, align: 'center' },
-  { title: '输入 Token', key: 'inputTokens', width: 100, align: 'center' },
-  { title: '输出 Token', key: 'outputTokens', width: 100, align: 'center' },
-  { title: '延迟', key: 'latency', width: 90, align: 'center' },
-  { title: '状态', key: 'status', width: 80, align: 'center' },
-]
 
 const callRecords = computed(() => {
   let list = mockCallRecords
@@ -851,17 +493,6 @@ const callRecords = computed(() => {
 })
 
 // ─── 告警管理 ───────────────────────────────────────────
-
-interface AlertRecord {
-  id: string
-  userName: string
-  department: string
-  modelName: string
-  type: 'calls' | 'tokens'
-  current: number
-  limit: number
-  time: string
-}
 
 const alertFilter = ref<'all' | 'calls' | 'tokens'>('all')
 
@@ -906,15 +537,6 @@ const mockAlerts: AlertRecord[] = (() => {
   return alerts.sort((a, b) => b.time.localeCompare(a.time))
 })()
 
-const alertColumns = [
-  { title: '用户', dataIndex: 'userName', key: 'userName', align: 'center' },
-  { title: '部门', dataIndex: 'department', key: 'department', align: 'center' },
-  { title: '模型', dataIndex: 'modelName', key: 'modelName', align: 'center' },
-  { title: '超限类型', key: 'type', width: 110, align: 'center' },
-  { title: '当前用量 / 限制', key: 'ratio', align: 'center' },
-  { title: '时间', dataIndex: 'time', key: 'time', width: 160, align: 'center' },
-]
-
 const alertData = computed(() => {
   if (alertFilter.value === 'all') return mockAlerts
   return mockAlerts.filter((a) => a.type === alertFilter.value)
@@ -946,10 +568,6 @@ onMounted(() => {
 watch(overviewTimeRange, () => { fetchTimeSeries() })
 
 // ─── CRUD Handlers ────────────────────────────────────
-
-function openDoc(url: string): void {
-  window.open(url, '_blank')
-}
 
 function handleDelete(id: string): void {
   models.value = models.value.filter((m) => m.id !== id)
@@ -1040,16 +658,45 @@ function handleLimitsOk(): void {
 <style scoped lang="less">
 @import '@shared/web/styles/variables.less';
 
-.mb-24 { margin-bottom: @spacing-xl; }
-.mt-24 { margin-top: @spacing-xl; }
-
 .api-tabs {
   :deep(.ant-tabs-nav) { margin-bottom: @spacing-sm; }
+    :deep(.ant-tabs-nav::before) { border-bottom: none; }
   :deep(.ant-tabs-nav-wrap) { padding: 0; }
   :deep(.ant-tabs-nav-list) { gap: 0; }
   :deep(.ant-tabs-tab) { padding: 4px 10px; }
   :deep(.ant-tabs-tab + .ant-tabs-tab) { margin-left: @spacing-md; }
   :deep(.ant-tabs-content-holder) { margin-top: 0; }
+}
+.api-tabs :deep(.section-card-header) {
+  background: transparent;
+  border-bottom: none;
+  padding: @spacing-sm @spacing-xl;
+}
+.api-tabs--keys :deep(.section-card-header),
+.api-tabs--alerts :deep(.section-card-header) {
+  display: none;
+}
+.api-page--keys :deep(.page-header-right),
+.api-page--alerts :deep(.page-header-right) {
+  display: none;
+}
+.api-tabs--calls :deep(.user-filter-bar),
+.api-tabs--permissions :deep(.user-filter-bar) {
+  display: none;
+}
+.api-tabs--usage :deep(.dimension-bar),
+.api-tabs--usage :deep(.user-filter-bar) {
+  display: none;
+}
+.api-page--permissions :deep(.user-filter-bar) {
+  background: @content-bg;
+  margin: -1px -1px 0;
+  padding: @spacing-sm @spacing-base;
+}
+.api-page--calls :deep(.user-filter-bar) {
+  background: @content-bg;
+  margin: -1px -1px 0;
+  padding: @spacing-sm @spacing-base;
 }
 .page-container :deep(.page-header-left) {
   display: flex;
@@ -1064,80 +711,33 @@ function handleLimitsOk(): void {
   margin-bottom: @spacing-md;
 }
 
-.chart-header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  margin-bottom: @spacing-lg;
-}
-
-.time-range-wrap {
-  display: flex;
-  align-items: center;
-  gap: @spacing-sm;
-}
-.custom-date-picker {
-  min-width: 200px;
-}
-
-.limits-table {
-  margin-top: @spacing-md;
-}
-.model-name--disabled {
-  color: @text-tertiary;
-}
-.limits-dimension {
-  font-weight: @font-weight-semibold;
-  margin-bottom: @spacing-md;
-  color: @text-primary;
-}
-
-.readonly-field {
-  color: @text-secondary;
-  padding: 4px 0;
-  display: inline-block;
-  line-height: 32px;
-}
-
-.dimension-bar {
-  display: flex;
-  justify-content: flex-end;
-  margin-bottom: @spacing-md;
-}
-
-.stats-tab :deep(.section-card-header) {
-  padding: @spacing-md @spacing-xl;
-}
-.stats-tab :deep(.section-card-body) {
-  padding: @spacing-md @spacing-xl;
-}
-
-.user-filter-bar {
-  display: flex;
-  gap: @spacing-sm;
-  align-items: center;
-  padding: @spacing-md @spacing-xl;
-  border-bottom: 1px solid @border-color;
-  flex-wrap: wrap;
-}
-.perm-switch {
-  margin-left: auto;
-}
-
-.rank-badge {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 24px;
+.api-tabs :deep(.ant-tabs-nav .ant-select-selector) {
   height: 24px;
-  border-radius: 50%;
-  font-size: @font-size-xs;
-  font-weight: @font-weight-semibold;
-  background: @content-bg;
-  color: @text-secondary;
-  &.gold {
-    background: @brand-gradient;
-    color: #fff;
-  }
+}
+.api-tabs :deep(.ant-tabs-nav .ant-select-selection-item),
+.api-tabs :deep(.ant-tabs-nav .ant-select-selection-placeholder) {
+  line-height: 22px;
+}
+.api-tabs :deep(.ant-tabs-nav .ant-switch) {
+  height: 24px;
+  min-width: 80px;
+  line-height: 24px;
+}
+.api-tabs :deep(.ant-tabs-nav .ant-switch-handle) {
+  width: 18px;
+  height: 18px;
+  top: 3px;
+}
+.api-tabs :deep(.ant-tabs-nav .ant-switch-handle::before) {
+  border-radius: 9px;
+}
+.api-tabs :deep(.ant-tabs-nav .ant-switch-checked .ant-switch-handle) {
+  inset-inline-start: calc(100% - 21px);
+}
+.api-tabs :deep(.ant-tabs-nav .ant-radio-button-wrapper) {
+  padding: 0 12px;
+}
+.api-tabs :deep(.ant-tabs-nav .ant-radio-button-wrapper + .ant-radio-button-wrapper) {
+  margin-left: 4px;
 }
 </style>

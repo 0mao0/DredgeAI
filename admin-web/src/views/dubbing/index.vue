@@ -11,7 +11,13 @@
         <AdminHistoryTable :tasks="tasks" :loading="loading" @play="handlePlay" @delete="handleDelete" />
       </a-tab-pane>
       <a-tab-pane key="voice" tab="音色管理">
-        <AdminVoiceManager />
+        <AdminVoiceManager
+          :voices="voices"
+          :loading="loadingVoices"
+          @search="handleVoiceSearch"
+          @create="handleVoiceCreate"
+          @delete="handleVoiceDelete"
+        />
       </a-tab-pane>
       <a-tab-pane key="permissions" tab="权限配置">
         <PermissionPanel />
@@ -37,8 +43,8 @@ import AdminVoiceManager from './components/AdminVoiceManager.vue'
 import UsageMetrics from './components/UsageMetrics.vue'
 import UsageCharts from './components/UsageCharts.vue'
 import PermissionPanel from './components/PermissionPanel.vue'
-import { getAdminDubbingTasks, deleteAdminDubbingTask, getAdminDubbingUsageSummary, getAdminDubbingUsageTimeseries } from '@/api/modules/dubbing'
-import type { DubbingTask, DubbingUsageSummary, DubbingUsageTimeSeries } from '@/types'
+import { getAdminDubbingTasks, deleteAdminDubbingTask, getAdminDubbingUsageSummary, getAdminDubbingUsageTimeseries, getAdminVoices, createAdminVoice, deleteAdminVoice } from '@/api/modules/dubbing'
+import type { DubbingTask, DubbingUsageSummary, DubbingUsageTimeSeries, VoiceItem } from '@/types'
 
 const activeTab = ref('stats')
 const tasks = ref<DubbingTask[]>([])
@@ -49,6 +55,9 @@ const loadingSummary = ref(false)
 const currentFilters = ref({ keyword: '', status: '', deletedOnly: false, dateRange: ['', ''] as [string, string] })
 const currentTask = ref<DubbingTask | null>(null)
 const playerVisible = ref(false)
+const voices = ref<VoiceItem[]>([])
+const loadingVoices = ref(false)
+const voiceFilters = ref({ keyword: '', deletedOnly: false })
 
 async function fetchTasks(filters?: typeof currentFilters.value): Promise<void> {
   loading.value = true
@@ -106,9 +115,50 @@ function handleRangeChange(range: string): void {
   fetchUsage(range)
 }
 
+async function fetchVoices(): Promise<void> {
+  loadingVoices.value = true
+  try {
+    const params: Record<string, string | number> = {}
+    if (voiceFilters.value.keyword) params.keyword = voiceFilters.value.keyword
+    if (voiceFilters.value.deletedOnly) params.deletedOnly = 1
+    const res = await getAdminVoices(Object.keys(params).length ? params : undefined)
+    voices.value = res as VoiceItem[]
+  } catch {
+    message.error('加载音色列表失败')
+  } finally {
+    loadingVoices.value = false
+  }
+}
+
+function handleVoiceSearch(params: { keyword: string, deletedOnly: boolean }): void {
+  voiceFilters.value = params
+  fetchVoices()
+}
+
+async function handleVoiceCreate(formData: FormData): Promise<void> {
+  try {
+    await createAdminVoice(formData)
+    message.success('公有音色已添加')
+    fetchVoices()
+  } catch {
+    message.error('添加失败')
+  }
+}
+
+async function handleVoiceDelete(id: string): Promise<void> {
+  try {
+    await deleteAdminVoice(id)
+    message.success('已删除')
+    fetchVoices()
+  } catch {
+    message.error('删除失败')
+  }
+}
+
 onMounted(() => {
   fetchTasks()
   fetchUsage()
+  fetchVoices()
 })
 </script>
 

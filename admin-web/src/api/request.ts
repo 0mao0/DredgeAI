@@ -6,6 +6,7 @@ const instance = createNprogressRequest({
   baseURL: API_BASE_URL,
   tokenKey: STORAGE_TOKEN_KEY,
   onUnauthorized: () => {
+    // 路由守卫层处理跳转，这里仅清理 token
     localStorage.removeItem(STORAGE_TOKEN_KEY)
   },
 })

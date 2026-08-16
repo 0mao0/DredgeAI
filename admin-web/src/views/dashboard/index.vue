@@ -6,47 +6,61 @@
       </template>
     </PageHeader>
 
-    <a-row :gutter="[16, 16]" class="metrics-row">
-      <a-col v-for="(m, i) in metrics" :key="m.id" :xs="24" :sm="12" :lg="6" :style="itemStyle(i)">
-        <MetricCard v-bind="m" />
-      </a-col>
-    </a-row>
+    <a-result
+      v-if="error && metrics.length === 0"
+      status="error"
+      title="数据加载失败"
+      :sub-title="error.message"
+    >
+      <template #extra>
+        <a-button type="primary" @click="refresh">重新加载</a-button>
+      </template>
+    </a-result>
 
-    <a-row :gutter="[16, 16]" class="charts-row">
-      <a-col :xs="24" :lg="16">
-        <SectionCard title="API 调用趋势" flush>
-          <ChartContainer :option="apiCallsChartOption" height="300px" :loading="loading" />
-        </SectionCard>
-      </a-col>
-      <a-col :xs="24" :lg="8">
-        <SectionCard title="应用调用分布" flush>
-          <ChartContainer :option="appDistChartOption" height="300px" :loading="loading" />
-        </SectionCard>
-      </a-col>
-    </a-row>
+    <template v-else>
+      <a-row :gutter="[16, 16]" class="metrics-row">
+        <a-col v-for="(m, i) in metrics" :key="m.id" :xs="24" :sm="12" :lg="6" :style="itemStyle(i)">
+          <MetricCard v-bind="m" />
+        </a-col>
+      </a-row>
 
-    <a-row :gutter="[16, 16]" class="charts-row">
-      <a-col :span="24">
-        <SectionCard title="活跃用户趋势" flush>
-          <ChartContainer :option="activeUsersChartOption" height="300px" :loading="loading" />
-        </SectionCard>
-      </a-col>
-    </a-row>
+      <a-row :gutter="[16, 16]" class="charts-row">
+        <a-col :xs="24" :lg="16">
+          <SectionCard title="API 调用趋势" flush>
+            <ChartContainer :option="apiCallsChartOption" height="300px" :loading="loading" />
+          </SectionCard>
+        </a-col>
+        <a-col :xs="24" :lg="8">
+          <SectionCard title="应用调用分布" flush>
+            <ChartContainer :option="appDistChartOption" height="300px" :loading="loading" />
+          </SectionCard>
+        </a-col>
+      </a-row>
 
-    <SectionCard title="最近操作日志">
-      <a-table
-        :data-source="recentLogs"
-        :columns="logColumns"
-        :pagination="false"
-        size="small"
-        :loading="loading"
-      />
-    </SectionCard>
+      <a-row :gutter="[16, 16]" class="charts-row">
+        <a-col :span="24">
+          <SectionCard title="活跃用户趋势" flush>
+            <ChartContainer :option="activeUsersChartOption" height="300px" :loading="loading" />
+          </SectionCard>
+        </a-col>
+      </a-row>
+
+      <SectionCard title="最近操作日志">
+        <a-table
+          :data-source="recentLogs"
+          :columns="logColumns"
+          :pagination="false"
+          size="small"
+          :loading="loading"
+          :locale="{ emptyText: '暂无数据' }"
+        />
+      </SectionCard>
+    </template>
   </div>
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted } from 'vue'
+import { ref, computed } from 'vue'
 import PageHeader from '@shared/web/components/PageHeader.vue'
 import SectionCard from '@shared/web/components/SectionCard.vue'
 import MetricCard from '@shared/web/components/MetricCard.vue'
@@ -54,7 +68,7 @@ import ChartContainer from '@shared/web/components/ChartContainer.vue'
 import { useCssVar } from '@shared/web/composables/useCssVar'
 import { useChartTheme } from '@shared/web/composables/useChartTheme'
 import { useStaggerReveal } from '@shared/web/composables/useStaggerReveal'
-import { useAsync } from '@shared/web/composables/useAsync'
+import { useRequest } from '@shared/web/composables/useRequest'
 import type { DashboardMetric, SystemLog } from '@/types'
 import { getDashboardMetrics, getApiCallsTrend, getAppDistribution, getActiveUsersTrend, getRecentLogs } from '@/api/modules/dashboard'
 
@@ -148,7 +162,7 @@ const activeUsersChartOption = computed(() => {
   }
 })
 
-const { loading, execute: fetchData } = useAsync(async () => {
+const { loading, error, refresh } = useRequest('admin-dashboard', async () => {
   const [m, t, d, a, logs] = await Promise.all([
     getDashboardMetrics(),
     getApiCallsTrend(),
@@ -161,13 +175,8 @@ const { loading, execute: fetchData } = useAsync(async () => {
   appDistribution.value = d
   activeUsersTrend.value = a
   recentLogs.value = logs
+  return m
 })
-
-async function refresh(): Promise<void> {
-  await fetchData()
-}
-
-onMounted(fetchData)
 </script>
 
 <style scoped lang="less">

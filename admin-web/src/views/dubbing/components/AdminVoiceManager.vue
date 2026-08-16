@@ -10,13 +10,13 @@
         placeholder="搜索音色名称 / 用户"
         allow-clear
         style="width:240px"
-        @search="fetchVoices"
-        @change="fetchVoices"
+        @search="emitSearch"
+        @change="emitSearch"
       />
       <div class="toolbar-spacer" />
       <div class="toolbar-item">
         <span class="toolbar-label">仅看用户已删除</span>
-        <a-switch v-model:checked="deletedOnly" size="small" @change="fetchVoices" />
+        <a-switch v-model:checked="deletedOnly" size="small" @change="emitSearch" />
       </div>
     </div>
 
@@ -98,7 +98,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted } from 'vue'
+import { ref } from 'vue'
 import {
   PlusOutlined,
   ManOutlined,
@@ -109,41 +109,34 @@ import {
 } from '@ant-design/icons-vue'
 import { message } from 'ant-design-vue'
 import type { VoiceItem } from '@/types'
-import { getAdminVoices, createAdminVoice, deleteAdminVoice } from '@/api/modules/dubbing'
-import VoiceRegisterModal from '@shared/web/components/VoiceRegisterModal.vue'
+import { VoiceRegisterModal } from '@shared/web'
+
+defineProps<{ voices: VoiceItem[], loading?: boolean }>()
+
+const emit = defineEmits<{
+  search: [params: { keyword: string, deletedOnly: boolean }]
+  create: [formData: FormData]
+  delete: [id: string]
+}>()
 
 const columns = [
   { title: '音色名称', dataIndex: 'name', key: 'name', width: 180 },
-  { title: '性别', key: 'gender', width: 60, align: 'center' },
-  { title: '公有/私有', key: 'visibility', width: 100, align: 'center' },
-  { title: '所属用户', key: 'user', width: 100, align: 'center' },
-  { title: '用户删除状态', key: 'deletedByUser', width: 140, align: 'center' },
-  { title: '创建时间', key: 'createdAt', width: 160, align: 'center' },
-  { title: '操作', key: 'action', width: 150, align: 'center', fixed: 'right' },
+  { title: '性别', key: 'gender', width: 60 },
+  { title: '公有/私有', key: 'visibility', width: 100 },
+  { title: '所属用户', key: 'user', width: 100 },
+  { title: '用户删除状态', key: 'deletedByUser', width: 140 },
+  { title: '创建时间', key: 'createdAt', width: 160 },
+  { title: '操作', key: 'action', width: 150, fixed: 'right' },
 ]
 
-const voices = ref<VoiceItem[]>([])
-const loading = ref(false)
 const query = ref('')
 const deletedOnly = ref(false)
 const showAddModal = ref(false)
 const playingId = ref<string | null>(null)
 const audioRef = ref<HTMLAudioElement>()
 
-async function fetchVoices(): Promise<void> {
-  loading.value = true
-  try {
-    const params: Record<string, string | number> = {}
-    const q = query.value.trim()
-    if (q) params.keyword = q
-    if (deletedOnly.value) params.deletedOnly = 1
-    const res = await getAdminVoices(params)
-    voices.value = res as VoiceItem[]
-  } catch {
-    message.error('加载音色列表失败')
-  } finally {
-    loading.value = false
-  }
+function emitSearch(): void {
+  emit('search', { keyword: query.value.trim(), deletedOnly: deletedOnly.value })
 }
 
 function playSample(voice: VoiceItem): void {
@@ -158,24 +151,12 @@ function playSample(voice: VoiceItem): void {
   }
 }
 
-async function handleVoiceConfirmed(payload: { voice: VoiceItem, formData: FormData }): Promise<void> {
-  try {
-    await createAdminVoice(payload.formData)
-    message.success('公有音色已添加')
-    fetchVoices()
-  } catch {
-    message.error('添加失败')
-  }
+function handleVoiceConfirmed(payload: { voice: VoiceItem, formData: FormData }): void {
+  emit('create', payload.formData)
 }
 
-async function handleDelete(id: string): Promise<void> {
-  try {
-    await deleteAdminVoice(id)
-    message.success('已删除')
-    fetchVoices()
-  } catch {
-    message.error('删除失败')
-  }
+function handleDelete(id: string): void {
+  emit('delete', id)
 }
 
 function formatTime(iso?: string): string {
@@ -188,8 +169,6 @@ function formatTime(iso?: string): string {
   const mi = String(d.getMinutes()).padStart(2, '0')
   return `${y}-${mo}-${da} ${h}:${mi}`
 }
-
-onMounted(fetchVoices)
 </script>
 
 <style scoped lang="less">
@@ -198,10 +177,10 @@ onMounted(fetchVoices)
 .admin-voice-manager {
   &__toolbar {
     display: flex;
-    gap: 16px;
+    gap: @spacing-base;
     flex-wrap: wrap;
     align-items: center;
-    margin-bottom: 16px;
+    margin-bottom: @spacing-base;
   }
   &__table {
     :deep(.ant-table-cell) {
@@ -216,11 +195,11 @@ onMounted(fetchVoices)
 .toolbar-item {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: @spacing-sm;
   margin-left: auto;
 }
 .toolbar-label {
-  font-size: 13px;
+  font-size: @font-size-sm;
   white-space: nowrap;
 }
 

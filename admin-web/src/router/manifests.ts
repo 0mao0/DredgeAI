@@ -129,7 +129,7 @@ export const adminAppManifests: AppManifest[] = [
         name: 'KnowledgeStandards',
         title: '标准规范',
         icon: 'AuditOutlined',
-        component: () => import('@/views/data/static/standards.vue'),
+        component: () => import('@/views/data/static/standards/index.vue'),
         parentKeys: ['knowledge'],
       },
       {

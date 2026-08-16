@@ -14,14 +14,13 @@ export const MOCK_MODULES: Record<string, boolean> = {
   dubbing: true,
   orgUsers: true,
   roles: true,
+  standards: true,
 }
 
 export const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || '/api/admin/'
 export const STORAGE_TOKEN_KEY = 'DREDGE_AI_ADMIN_TOKEN'
 
 export const USER_WEB_URL = import.meta.env.VITE_USER_WEB_URL || 'http://localhost:5373'
-
-export const PAGE_SIZE = 20
 
 export const MENU_GROUP_MAIN = 'main'
 export const MENU_GROUP_ACCOUNT = 'account'

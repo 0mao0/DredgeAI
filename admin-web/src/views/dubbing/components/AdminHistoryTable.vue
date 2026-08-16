@@ -59,14 +59,14 @@ const paginationProps = computed(() => ({
 }))
 
 const columns = [
-  { title: '用户', key: 'user', width: 160, align: 'center' },
+  { title: '用户', key: 'user', width: 160 },
   { title: '文本', key: 'text', ellipsis: true, width: 240 },
-  { title: '配音音色', key: 'voice', dataIndex: 'voiceName', width: 120, align: 'center' },
-  { title: '状态', key: 'status', width: 100, align: 'center' },
-  { title: '时长 / Token', key: 'duration', width: 140, align: 'center' },
-  { title: '用户删除状态', key: 'deletedByUser', width: 140, align: 'center' },
-  { title: '创建时间', key: 'createdAt', dataIndex: 'createdAt', width: 160, align: 'center' },
-  { title: '操作', key: 'actions', width: 160, align: 'center', fixed: 'right' },
+  { title: '配音音色', key: 'voice', dataIndex: 'voiceName', width: 120 },
+  { title: '状态', key: 'status', width: 100 },
+  { title: '时长 / Token', key: 'duration', width: 140 },
+  { title: '用户删除状态', key: 'deletedByUser', width: 140 },
+  { title: '创建时间', key: 'createdAt', dataIndex: 'createdAt', width: 160 },
+  { title: '操作', key: 'actions', width: 160, fixed: 'right' },
 ]
 
 function statusColor(status: string): string {

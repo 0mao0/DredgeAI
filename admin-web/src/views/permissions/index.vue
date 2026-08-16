@@ -41,7 +41,7 @@
 
     <a-modal
       v-model:open="formModalVisible"
-      :title="'新增角色'"
+      title="新增角色"
       width="440px"
       @ok="handleSaveForm"
     >
@@ -68,31 +68,31 @@
         </div>
         <a-tabs v-model:active-key="drawerTab" class="drawer-tabs">
           <a-tab-pane key="users" :tab="userTabLabel">
-          <RoleUserTab
-            :role="drawerRole"
-            :role-users="drawerRoleUsers"
-            :loading="drawerLoading"
-            @add="handleAddRoleUser"
-            @remove="handleRemoveRoleUser"
-          />
-        </a-tab-pane>
-        <a-tab-pane key="menus" :tab="menuTabLabel">
-          <RoleMenuTab
-            :checked-keys="drawerPendingMenuKeys"
-            :tree="menuPermTree"
-            @change="(keys: string[]) => { drawerPendingMenuKeys = keys }"
-          />
-        </a-tab-pane>
-        <a-tab-pane key="apps" :tab="appTabLabel">
-          <RoleAppTab
-            :checked-keys="drawerPendingAppIds"
-            :tree="appPermTree"
-            :loading="appTreeLoading"
-            @change="(keys: string[]) => { drawerPendingAppIds = keys }"
-          />
-        </a-tab-pane>
-      </a-tabs>
-    </template>
+            <RoleUserTab
+              :role="drawerRole"
+              :role-users="drawerRoleUsers"
+              :loading="drawerLoading"
+              @add="handleAddRoleUser"
+              @remove="handleRemoveRoleUser"
+            />
+          </a-tab-pane>
+          <a-tab-pane key="menus" :tab="menuTabLabel">
+            <RoleMenuTab
+              :checked-keys="drawerPendingMenuKeys"
+              :tree="menuPermTree"
+              @change="(keys: string[]) => { drawerPendingMenuKeys = keys }"
+            />
+          </a-tab-pane>
+          <a-tab-pane key="apps" :tab="appTabLabel">
+            <RoleAppTab
+              :checked-keys="drawerPendingAppIds"
+              :tree="appPermTree"
+              :loading="appTreeLoading"
+              @change="(keys: string[]) => { drawerPendingAppIds = keys }"
+            />
+          </a-tab-pane>
+        </a-tabs>
+      </template>
     </a-drawer>
   </div>
 </template>
@@ -104,13 +104,20 @@ import PageHeader from '@shared/web/components/PageHeader.vue'
 import SectionCard from '@shared/web/components/SectionCard.vue'
 import type { Role, OrgUser, ApplicationItem } from '@/types'
 import {
-  getRoles, createRole, updateRole, deleteRole,
-  getRoleUsers, addRoleUsers, removeRoleUser, setRolePermissions,
+  getRoles,
+  createRole,
+  updateRole,
+  deleteRole,
+  getRoleUsers,
+  addRoleUsers,
+  removeRoleUser,
+  setRolePermissions,
 } from '@/api/modules/roles'
 import { getApplications } from '@/api/modules/applications'
 import { adminAppManifests, adminMenuGroups } from '@/router/manifests'
 import { manifestToMenu } from '@shared/web/router/manifest'
 import type { MenuNode } from '@shared/web/router/manifest'
+import { getCategoryColor, getCategoryAlphaBg } from '@shared/core/utils'
 import RoleUserTab from './components/RoleUserTab.vue'
 import RoleMenuTab from './components/RoleMenuTab.vue'
 import RoleAppTab from './components/RoleAppTab.vue'
@@ -263,12 +270,6 @@ const appTreeLoading = ref(false)
 const apps = ref<ApplicationItem[]>([])
 
 const appPermTree = computed<PermTreeNode[]>(() => {
-  const catColorMap: Record<string, string> = {
-    通用: '#3B82F6',
-    经营: '#10B981',
-    设计: '#8B5CF6',
-    施工: '#F59E0B',
-  }
   const catOrder = ['通用', '经营', '设计', '施工']
 
   const catGroups = new Map<string, ApplicationItem[]>()
@@ -279,10 +280,10 @@ const appPermTree = computed<PermTreeNode[]>(() => {
   }
 
   const catLabel = (cat: string) => {
-    const color = catColorMap[cat] || '#94A3B8'
+    const color = getCategoryColor(cat)
     return h('span', {
       class: 'cat-tag-inline',
-      style: { color, borderColor: color, background: `${color}22` },
+      style: { color, borderColor: color, background: getCategoryAlphaBg(cat) },
     }, cat)
   }
 

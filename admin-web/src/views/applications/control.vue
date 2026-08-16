@@ -18,12 +18,12 @@
         <template v-else-if="column.key === 'name'">
           <div class="cell-left">
             <span class="tree-name" :class="{ 'tree-name--sub': record.level === 1 }">
-            <span v-if="record.level === 1" class="tree-connector" />
-            <component :is="iconOptionsMap[record.icon] || iconOptionsMap.AppstoreOutlined" class="row-icon" />
-            <a-tag :color="catColor(record.category)">{{ record.category }}</a-tag>
-            <span class="name-text">{{ record.name }}</span>
-            <span v-if="record.level === 0 && hasSub(record)" class="sub-hint">（含 {{ subCount(record) }} 个子应用）</span>
-          </span>
+              <span v-if="record.level === 1" class="tree-connector" />
+              <component :is="iconOptionsMap[record.icon] || iconOptionsMap.AppstoreOutlined" class="row-icon" />
+              <a-tag :color="catColor(record.category)">{{ record.category }}</a-tag>
+              <span class="name-text">{{ record.name }}</span>
+              <span v-if="record.level === 0 && hasSub(record)" class="sub-hint">（含 {{ subCount(record) }} 个子应用）</span>
+            </span>
           </div>
         </template>
         <template v-else-if="column.key === 'status'">
@@ -89,7 +89,7 @@
 import { ref, computed, onMounted } from 'vue'
 import { message } from 'ant-design-vue'
 import PageHeader from '@shared/web/components/PageHeader.vue'
-import type { ApplicationItem } from '@/types'
+import type { ApplicationItem, Role } from '@/types'
 import * as Icons from '@ant-design/icons-vue'
 import {
   getApplications,
@@ -103,7 +103,6 @@ import {
 } from '@/api/modules/applications'
 import { getRoles } from '@/api/modules/roles'
 import type { CategoryConfig } from '@/api/modules/applications'
-import type { Role } from '@/types'
 
 interface TreeRow {
   key: string
@@ -204,11 +203,11 @@ function onExpand(keys: string[]): void {
 }
 
 const columns = [
-  { title: '序号', key: 'index', width: 60, align: 'center' },
+  { title: '序号', key: 'index', width: 60 },
   { title: '应用', key: 'name', width: 120, align: 'left' },
-  { title: '状态', key: 'status', width: 70, align: 'center' },
+  { title: '状态', key: 'status', width: 70 },
   { title: '授权角色', key: 'scope', width: 160, align: 'left' },
-  { title: '操作', key: 'setting', width: 20, align: 'center' },
+  { title: '操作', key: 'setting', width: 20 },
 ]
 
 async function onToggle(row: TreeRow, val: boolean): Promise<void> {

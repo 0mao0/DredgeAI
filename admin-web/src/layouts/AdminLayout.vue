@@ -61,9 +61,9 @@
 
     <a-layout class="main-layout">
       <a-layout-content class="content">
-        <router-view v-slot="{ Component, route }">
+        <router-view v-slot="{ Component: viewComponent, route: viewRoute }">
           <transition name="fade" mode="out-in">
-            <component :is="Component" :key="route.path" />
+            <component :is="viewComponent" :key="viewRoute.path" />
           </transition>
         </router-view>
       </a-layout-content>
@@ -86,6 +86,7 @@ import Logo from '@shared/web/components/Logo.vue'
 import { useAppStore } from '@/stores/app'
 import { useSidebarStore, useThemeStore } from '@shared/web/stores'
 import { getApplications } from '@/api/modules/applications'
+import { getCategoryColor, getCategoryAlphaBg } from '@shared/core/utils'
 import ThemeToggle from '@shared/web/components/ThemeToggle.vue'
 import { adminAppManifests, adminMenuGroups } from '@/router/manifests'
 import { manifestToMenu, collectMenuKeys } from '@shared/web/router/manifest'
@@ -106,15 +107,8 @@ const collapsed = computed({
 })
 const selectedKeys = ref<string[]>([route.path])
 
-interface AppMenuItem { id: string, name: string, category: string, catColor: string, route: string, icon?: string }
+interface AppMenuItem { id: string, name: string, category: string, route: string, icon?: string }
 const appMenuItems = ref<AppMenuItem[]>([])
-
-const catColorMap: Record<string, string> = {
-  通用: '#3B82F6',
-  经营: '#10B981',
-  设计: '#8B5CF6',
-  施工: '#F59E0B',
-}
 
 // ─── 菜单：由 manifest 生成，动态应用列表并入 apps 分组 ───
 
@@ -151,7 +145,11 @@ function appToMenuItem(app: AppMenuItem): MenuItemNode {
     label: h('span', { class: 'app-menu-entry' }, [
       h('span', {
         class: 'app-cat-tag',
-        style: { color: app.catColor, borderColor: app.catColor, background: `${app.catColor}22` },
+        style: {
+          color: getCategoryColor(app.category),
+          borderColor: getCategoryColor(app.category),
+          background: getCategoryAlphaBg(app.category),
+        },
       }, app.category),
       h('span', { class: 'app-menu-label' }, app.name),
     ]),
@@ -165,6 +163,12 @@ const menuItems = computed<MenuItemNode[]>(() => {
   const configIdx = items.findIndex((i) => i.key === 'base-config')
   if (configIdx !== -1) {
     items.splice(configIdx + 1, 0, { key: 'divider-1', type: 'divider' } as MenuItemNode)
+  }
+
+  // 在知识库组后插入分隔线
+  const knowledgeIdx = items.findIndex((i) => i.key === 'knowledge')
+  if (knowledgeIdx !== -1) {
+    items.splice(knowledgeIdx + 1, 0, { key: 'divider-2', type: 'divider' } as MenuItemNode)
   }
 
   const dynamic = appMenuItems.value
@@ -195,18 +199,17 @@ onMounted(async () => {
       id: a.id,
       name: a.name,
       category: a.category,
-      catColor: catColorMap[a.category] || '#94A3B8',
       route: a.route || `/applications/${a.id}`,
       icon: a.icon,
     }))
   } catch {
     message.warning('应用列表加载失败，使用默认菜单')
     appMenuItems.value = [
-      { id: '1', name: '标准查询', category: '通用', catColor: '#3B82F6', route: '/applications/standard', icon: 'BookOutlined' },
-      { id: '2', name: 'AI视频', category: '通用', catColor: '#3B82F6', route: '/applications/ai-video', icon: 'VideoCameraOutlined' },
-      { id: '3', name: 'AI 配音', category: '通用', catColor: '#3B82F6', route: '/applications/dubbing', icon: 'CustomerServiceOutlined' },
-      { id: '4', name: '设计经验', category: '设计', catColor: '#8B5CF6', route: '/applications/design-experience', icon: 'BulbOutlined' },
-      { id: '5', name: '施工经验', category: '施工', catColor: '#F59E0B', route: '/applications/construction-experience', icon: 'ToolOutlined' },
+      { id: '1', name: '标准查询', category: '通用', route: '/applications/standard', icon: 'BookOutlined' },
+      { id: '2', name: 'AI视频', category: '通用', route: '/applications/ai-video', icon: 'VideoCameraOutlined' },
+      { id: '3', name: 'AI 配音', category: '通用', route: '/applications/dubbing', icon: 'CustomerServiceOutlined' },
+      { id: '4', name: '设计经验', category: '设计', route: '/applications/design-experience', icon: 'BulbOutlined' },
+      { id: '5', name: '施工经验', category: '施工', route: '/applications/construction-experience', icon: 'ToolOutlined' },
     ]
   }
 })

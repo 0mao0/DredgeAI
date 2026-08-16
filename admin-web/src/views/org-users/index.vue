@@ -36,7 +36,7 @@
                 </template>
                 <span v-else class="no-role-label">未分配</span>
               </span>
-              <a-button type="link" size="small" @click="openRoleModal(record)" class="role-set-btn"><SettingOutlined /></a-button>
+              <a-button type="link" size="small" class="role-set-btn" @click="openRoleModal(record)"><SettingOutlined /></a-button>
             </div>
           </template>
           <template v-else-if="column.key === 'action'">

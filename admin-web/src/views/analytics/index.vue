@@ -43,6 +43,7 @@ const dailyApi = ref<{ categories: string[], series: { name: string, data: numbe
 
 const brandColor = useCssVar('--color-brand')
 const dangerColor = useCssVar('--color-danger')
+const tertiaryColor = useCssVar('--color-text-tertiary')
 const modelUsage = ref<{ name: string, data: { name: string, value: number }[] }>({ name: '', data: [] })
 const userGrowth = ref<{ categories: string[], series: { name: string, data: number[] }[] }>({ categories: [], series: [] })
 const errorRate = ref<{ categories: string[], series: { name: string, data: number[] }[] }>({ categories: [], series: [] })
@@ -58,7 +59,7 @@ const dailyApiOption = computed(() => ({
     type: 'line' as const,
     smooth: true,
     data: s.data,
-    itemStyle: { color: i === 0 ? brandColor.value : '#94A3B8' },
+    itemStyle: { color: i === 0 ? brandColor.value : tertiaryColor.value },
     areaStyle: { opacity: 0.08 },
   })),
 }))

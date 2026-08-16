@@ -11,7 +11,7 @@ function parseBody(data: unknown): Record<string, unknown> {
 }
 
 let roles = [...mockRoles]
-let userRolesMap = new Map<string, string[]>(
+const userRolesMap = new Map<string, string[]>(
   mockOrgUsers.map((u) => [u.id, [...u.roleIds]]),
 )
 
@@ -108,7 +108,7 @@ export function registerRolesMock(mock: MockAdapter, wrap: (handler: () => unkno
   mock.onPut(/\/api\/admin\/roles\/[^/]+\/permissions$/).reply((config) => {
     const roleId = extractId(config.url, /\/roles\/([^/]+)\/permissions/)
     if (!roleId) return [404, null]
-    const body = parseBody(config.data) as { menuKeys: string[]; appIds: string[] }
+    const body = parseBody(config.data) as { menuKeys: string[], appIds: string[] }
     const r = roles.find((r) => r.id === roleId)
     if (r) {
       r.menuKeys = body.menuKeys || []

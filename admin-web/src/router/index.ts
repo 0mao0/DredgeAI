@@ -26,6 +26,7 @@ const router = createRouter({
 
 installGuards(router, {
   appName: '智浚AI',
+  enableTitle: false,
   getPermissions: async () => {
     const store = useAppStore()
     try {

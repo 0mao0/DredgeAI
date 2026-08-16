@@ -1,18 +1,14 @@
 import request from '@/api/request'
-import { urls } from '@shared/core/api'
+import { urls, fillUrl } from '@shared/core/api'
 import type { DubbingTask, DubbingUsageSummary, DubbingUsageTimeSeries, VoiceItem } from '@/types'
 import type { PagedResult } from '@shared/types'
-
-function buildUrl(tpl: string, id: string): string {
-  return tpl.replace(':id', id)
-}
 
 export function getAdminDubbingTasks(params?: Record<string, string | number>): Promise<PagedResult<DubbingTask>> {
   return request.get<PagedResult<DubbingTask>>(urls.adminDubbingTasks, { params })
 }
 
 export function deleteAdminDubbingTask(id: string): Promise<void> {
-  return request.delete(buildUrl(urls.adminDubbingTask, id))
+  return request.delete(fillUrl(urls.adminDubbingTask, { id }))
 }
 
 export function getAdminDubbingUsageSummary(): Promise<DubbingUsageSummary> {
@@ -24,8 +20,9 @@ export function getAdminDubbingUsageTimeseries(range: string): Promise<DubbingUs
 }
 
 export function getAdminVoices(params?: Record<string, string | number>): Promise<VoiceItem[]> {
-  return request.get(urls.adminVoices, { params }).then(
-    (r: unknown) => (Array.isArray(r) ? r : (r as Record<string, unknown>)?.data || r) as VoiceItem[],
+  // 后端响应形状未固定（数组或 { data } 包裹），统一收窄为数组
+  return request.get<VoiceItem[] | { data?: VoiceItem[] }>(urls.adminVoices, { params }).then(
+    (r) => (Array.isArray(r) ? r : r?.data || []),
   )
 }
 
