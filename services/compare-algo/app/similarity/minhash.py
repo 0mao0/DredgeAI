@@ -3,11 +3,12 @@ from collections import namedtuple
 
 from datasketch import LeanMinHash, MinHash, MinHashLSH
 
+from app.settings import get_settings
 from app.similarity.shingle import DEFAULT_NGRAM, block_shingles, jaccard
 
-NUM_PERM = 128
-LSH_THRESHOLD = 0.5      # LSH 召回阈值（近似 Jaccard）
-CANDIDATE_JACCARD = 0.5  # 精确 Jaccard 复核阈值
+NUM_PERM = 128         # 默认值文档；运行期以 settings.num_perm 为准
+LSH_THRESHOLD = 0.5      # 默认值文档：LSH 召回阈值（近似 Jaccard）
+CANDIDATE_JACCARD = 0.5  # 默认值文档：精确 Jaccard 复核阈值
 
 BlockKey = namedtuple("BlockKey", ["doc_id", "block_id"])
 CandidatePair = namedtuple(
@@ -15,10 +16,13 @@ CandidatePair = namedtuple(
 )
 
 
-def build_minhash(shingles: set[str], num_perm: int = NUM_PERM) -> LeanMinHash:
+def build_minhash(shingles: set[str], num_perm: int | None = None) -> LeanMinHash:
+    if num_perm is None:
+        num_perm = get_settings().num_perm
     mh = MinHash(num_perm=num_perm)
-    for s in shingles:
-        mh.update(s.encode("utf-8"))
+    # update_batch 一次性批量哈希（datasketch>=1.6，内部 numpy 向量化），
+    # 与逐条 update 产出的 hashvalues 完全一致，但避免逐 shingle 的 Python 调用开销
+    mh.update_batch([s.encode("utf-8") for s in shingles])
     return LeanMinHash(mh)
 
 
@@ -45,11 +49,16 @@ def _lsh_key(key: BlockKey) -> str:
 
 def find_candidate_pairs(
     index: dict,
-    threshold: float = LSH_THRESHOLD,
-    min_jaccard: float = CANDIDATE_JACCARD,
+    threshold: float | None = None,
+    min_jaccard: float | None = None,
 ) -> list[CandidatePair]:
     """LSH 粗筛跨文档候选块对，再用精确 Jaccard 复核。只保留跨文档对。"""
-    lsh = MinHashLSH(threshold=threshold, num_perm=NUM_PERM)
+    settings = get_settings()
+    if threshold is None:
+        threshold = settings.lsh_threshold
+    if min_jaccard is None:
+        min_jaccard = settings.candidate_jaccard
+    lsh = MinHashLSH(threshold=threshold, num_perm=settings.num_perm)
     keys = list(index.keys())
     str_to_key = {_lsh_key(k): k for k in keys}
     with lsh.insertion_session() as session:

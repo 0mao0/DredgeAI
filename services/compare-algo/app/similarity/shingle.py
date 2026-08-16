@@ -1,11 +1,13 @@
 """段落级 n-gram shingling：中文按字 trigram（tech 决策：bigram/trigram）。
 
-规范化剔除空白与标点，只保留 CJK 表意文字与字母数字，
+规范化剔除空白与标点，保留 CJK 表意文字（基本区 + 扩展A）、ASCII 与全角字母数字，
 使排版/换行差异不影响查重。equation 块的 LaTeX 源码同样参与（spec §4.3.6）。
 """
 import re
 
-_KEEP_RE = re.compile(r"[一-鿿A-Za-z0-9]+")
+# 㐀-䶿 = CJK 扩展A（U+3400-4DBF）；一-鿿 = CJK 基本区（U+4E00-9FFF）；
+# ０-９Ａ-Ｚａ-ｚ = 全角字母数字（U+FF10-FF19 / FF21-FF3A / FF41-FF5A，标书常见全角编号）
+_KEEP_RE = re.compile(r"[㐀-䶿一-鿿A-Za-z0-9０-９Ａ-Ｚａ-ｚ]+")
 
 # 参与文本查重的块类型；table 由 pricing 域单独处理，header/footer（页眉页脚页码）不查重
 # （实测：不同文档常共享同一规范名页眉，参与会产生伪雷同）

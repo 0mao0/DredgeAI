@@ -11,6 +11,7 @@
   <ItemGroup>
     <ProjectReference Include="..\..\src\DredgeAI.BidCompare.Application\DredgeAI.BidCompare.Application.csproj" />
     <ProjectReference Include="..\..\src\DredgeAI.BidCompare.HttpApi\DredgeAI.BidCompare.HttpApi.csproj" />
+    <ProjectReference Include="..\..\src\DredgeAI.BidCompare.HttpApi.Host\DredgeAI.BidCompare.HttpApi.Host.csproj" />
     <ProjectReference Include="..\..\src\DredgeAI.BidCompare.EntityFrameworkCore\DredgeAI.BidCompare.EntityFrameworkCore.csproj" />
     <ProjectReference Include="..\DredgeAI.BidCompare.Domain.Tests\DredgeAI.BidCompare.Domain.Tests.csproj" />
   </ItemGroup>

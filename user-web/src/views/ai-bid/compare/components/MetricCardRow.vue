@@ -6,7 +6,7 @@
     <MetricCard title="低风险" :value="counts.low" icon="InfoCircleOutlined" color="var(--color-info)" />
     <MetricCard title="条款不响应" :value="counts.clauseMissing" icon="FileSearchOutlined" color="var(--color-accent)" />
     <MetricCard title="报价异常" :value="counts.price" icon="MoneyCollectOutlined" color="var(--color-warning)" />
-    <MetricCard title="元数据痕迹" :value="counts.meta" icon="SafetyCertificateOutlined" color="var(--color-info)" />
+    <MetricCard title="属性信息痕迹" :value="counts.meta" icon="SafetyCertificateOutlined" color="var(--color-info)" />
   </div>
 </template>
 

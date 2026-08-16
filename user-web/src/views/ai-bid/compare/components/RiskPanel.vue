@@ -34,7 +34,7 @@
       <a-empty v-else description="未发现报价规律异常" />
     </SectionCard>
 
-    <SectionCard title="元数据痕迹" flush>
+    <SectionCard title="属性信息痕迹" flush>
       <div v-if="metaEvidence.length" class="risk-panel__list">
         <EvidenceCard
           v-for="ev in metaEvidence"
@@ -44,7 +44,7 @@
           @trace="(e) => emit('trace', e)"
         />
       </div>
-      <a-empty v-else description="未发现元数据同源痕迹" />
+      <a-empty v-else description="未发现属性信息同源痕迹" />
     </SectionCard>
   </div>
 </template>

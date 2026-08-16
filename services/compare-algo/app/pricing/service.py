@@ -8,6 +8,7 @@ from app.pricing.patterns import (
 from app.pricing.table_parse import extract_total_amount, parse_table_html
 from app.schemas.evidence import Evidence, EvidenceLocation, build_evidence
 from app.schemas.ir import IrDocument
+from app.settings import get_settings
 
 
 def _best_price_block(doc: IrDocument) -> tuple[str, float] | None:
@@ -78,7 +79,7 @@ def analyze_pricing(task_id: str, documents: list[IrDocument]) -> list[Evidence]
         evidences.append(build_evidence(
             task_id=task_id,
             type="pricing",
-            severity="high" if spread_raw <= 0.005 else "mid",
+            severity="high" if spread_raw <= get_settings().closeness_high_spread else "mid",
             doc_ids=doc_ids,
             locations=locations,
             metrics={

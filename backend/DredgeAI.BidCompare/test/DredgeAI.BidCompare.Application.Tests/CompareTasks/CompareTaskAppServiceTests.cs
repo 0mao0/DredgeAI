@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.IO;
 using System.Linq;
 using System.Text;
@@ -71,9 +71,9 @@ public class CompareTaskAppServiceTests : BidCompareApplicationTestBase<BidCompa
     {
         var task = await _appService.CreateAsync(new CreateCompareTaskDto { Name = "t" });
         var good = await _appService.UploadDocumentAsync(task.Id, DocumentRole.Bid, "标书A.pdf",
-            new MemoryStream(Encoding.UTF8.GetBytes("a")));
+            TestFiles.Pdf(10));
         var bad = await _appService.UploadDocumentAsync(task.Id, DocumentRole.Bid, "标书B.pdf",
-            new MemoryStream(Encoding.UTF8.GetBytes("b")));
+            TestFiles.Pdf(11));
         var anGineer = (FakeAnGineerClient)GetRequiredService<IAnGineerClient>();
         anGineer.FailWith = "OCR 崩溃";
         await WithUnitOfWorkAsync(async () =>
@@ -204,9 +204,9 @@ public class CompareTaskAppServiceTests : BidCompareApplicationTestBase<BidCompa
     {
         var task = await _appService.CreateAsync(new CreateCompareTaskDto { Name = "t" });
         var docA = await _appService.UploadDocumentAsync(task.Id, DocumentRole.Bid, "a.pdf",
-            new MemoryStream(Encoding.UTF8.GetBytes("a")));
+            TestFiles.Pdf(10));
         var docB = await _appService.UploadDocumentAsync(task.Id, DocumentRole.Bid, "b.pdf",
-            new MemoryStream(Encoding.UTF8.GetBytes("b")));
+            TestFiles.Pdf(11));
         _jobManager.Clear();
 
         var dto = await _appService.StartParsingAsync(task.Id);
@@ -254,7 +254,7 @@ public class CompareTaskAppServiceTests : BidCompareApplicationTestBase<BidCompa
         var taskA = await _appService.CreateAsync(new CreateCompareTaskDto { Name = "A" });
         var taskB = await _appService.CreateAsync(new CreateCompareTaskDto { Name = "B" });
         var doc = await _appService.UploadDocumentAsync(taskA.Id, DocumentRole.Bid, "标书A.pdf",
-            new MemoryStream(new byte[] { 1 }));
+            TestFiles.Pdf(1));
 
         var ex = await Should.ThrowAsync<BusinessException>(() =>
             _appService.GetDocumentFileAsync(taskB.Id, doc.Id));
@@ -265,8 +265,8 @@ public class CompareTaskAppServiceTests : BidCompareApplicationTestBase<BidCompa
     public async Task GetDocuments_Should_Return_Task_Documents_In_Upload_Order()
     {
         var task = await _appService.CreateAsync(new CreateCompareTaskDto { Name = "t" });
-        var docA = await _appService.UploadDocumentAsync(task.Id, DocumentRole.Bid, "标书A.pdf", new MemoryStream(Encoding.UTF8.GetBytes("a")));
-        var docB = await _appService.UploadDocumentAsync(task.Id, DocumentRole.Bid, "标书B.pdf", new MemoryStream(Encoding.UTF8.GetBytes("b")));
+        var docA = await _appService.UploadDocumentAsync(task.Id, DocumentRole.Bid, "标书A.pdf", TestFiles.Pdf(10));
+        var docB = await _appService.UploadDocumentAsync(task.Id, DocumentRole.Bid, "标书B.pdf", TestFiles.Pdf(11));
 
         var documents = await _appService.GetDocumentsAsync(task.Id);
 
@@ -275,7 +275,7 @@ public class CompareTaskAppServiceTests : BidCompareApplicationTestBase<BidCompa
         documents[0].FileName.ShouldBe("标书A.pdf");
         documents[0].Role.ShouldBe(DocumentRole.Bid);
         documents[0].ParseStatus.ShouldBe(DocumentParseStatus.Pending);
-        documents[0].FileSize.ShouldBe(1);
+        documents[0].FileSize.ShouldBe(5); // "%PDF" 头 + 1 字节标记
     }
 
     [Fact]
@@ -285,7 +285,7 @@ public class CompareTaskAppServiceTests : BidCompareApplicationTestBase<BidCompa
 
         var ex = await Should.ThrowAsync<BusinessException>(() =>
             _appService.UploadDocumentAsync(task.Id, DocumentRole.Bid, "名单.xlsx",
-                new MemoryStream(new byte[] { 1 })));
+                TestFiles.Pdf(1)));
         ex.Code.ShouldBe(BidCompareErrorCodes.UnsupportedFileType);
     }
 
@@ -296,12 +296,12 @@ public class CompareTaskAppServiceTests : BidCompareApplicationTestBase<BidCompa
         for (var i = 0; i < 8; i++)
         {
             await _appService.UploadDocumentAsync(task.Id, DocumentRole.Bid, $"标书{i}.pdf",
-                new MemoryStream(new byte[] { 1 }));
+                TestFiles.Pdf(1));
         }
 
         var ex = await Should.ThrowAsync<BusinessException>(() =>
             _appService.UploadDocumentAsync(task.Id, DocumentRole.Bid, "第9份.pdf",
-                new MemoryStream(new byte[] { 1 })));
+                TestFiles.Pdf(1)));
         ex.Code.ShouldBe(BidCompareErrorCodes.DocumentCountOutOfRange);
     }
 
@@ -310,7 +310,7 @@ public class CompareTaskAppServiceTests : BidCompareApplicationTestBase<BidCompa
     {
         var task = await _appService.CreateAsync(new CreateCompareTaskDto { Name = "t" });
         var doc = await _appService.UploadDocumentAsync(task.Id, DocumentRole.Tender, "招标文件.pdf",
-            new MemoryStream(new byte[] { 1 }));
+            TestFiles.Pdf(1));
 
         var detail = await _appService.GetAsync(task.Id);
         detail.TenderDocId.ShouldBe(doc.Id);
@@ -321,7 +321,7 @@ public class CompareTaskAppServiceTests : BidCompareApplicationTestBase<BidCompa
     {
         var task = await _appService.CreateAsync(new CreateCompareTaskDto { Name = "t" });
         var doc = await _appService.UploadDocumentAsync(task.Id, DocumentRole.Bid, "标书A.pdf",
-            new MemoryStream(new byte[] { 1 }));
+            TestFiles.Pdf(1));
 
         await _appService.DeleteAsync(task.Id);
 
@@ -334,9 +334,9 @@ public class CompareTaskAppServiceTests : BidCompareApplicationTestBase<BidCompa
     {
         var task = await _appService.CreateAsync(new CreateCompareTaskDto { Name = "t" });
         var docA = await _appService.UploadDocumentAsync(task.Id, DocumentRole.Bid, "标书A.pdf",
-            new MemoryStream(Encoding.UTF8.GetBytes("a")));
+            TestFiles.Pdf(10));
         var docB = await _appService.UploadDocumentAsync(task.Id, DocumentRole.Bid, "标书B.pdf",
-            new MemoryStream(Encoding.UTF8.GetBytes("b")));
+            TestFiles.Pdf(11));
         var parseJob = GetRequiredService<ParseDocumentJob>();
         await WithUnitOfWorkAsync(async () =>
         {

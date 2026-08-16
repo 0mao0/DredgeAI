@@ -2,6 +2,7 @@
 from app.display import display_names
 from app.schemas.evidence import Evidence, EvidenceLocation, Severity, build_evidence
 from app.schemas.ir import IrDocument
+from app.settings import get_settings
 from app.similarity.shingle import SHINGLABLE_TYPES, normalize_text
 
 
@@ -76,20 +77,28 @@ def compare_meta_fields(task_id: str, documents: list[IrDocument]) -> list[Evide
 
 # ---------- 相同错别字检测：低频错字 n-gram 碰撞 ----------
 
-TYPO_NGRAM = 6
-_TYPO_SAMPLES_MAX = 10
+TYPO_NGRAM = 6        # 默认值文档；运行期以 settings.typo_ngram 为准
+_TYPO_SAMPLES_MAX = 10  # 默认值文档；运行期以 settings.typo_samples_max 为准
+
+
+def _native_text_blocks(doc: IrDocument) -> list:
+    """原生文本块（source == "text"）中可参与 shingling 的块。"""
+    return [
+        b for b in doc.blocks
+        if b.type in SHINGLABLE_TYPES and b.source == "text"
+    ]
 
 
 def _native_full_text(doc: IrDocument) -> str:
     """原生文本块（source == "text"）规范化后拼接的全文。"""
-    eligible = [
-        b for b in doc.blocks
-        if b.type in SHINGLABLE_TYPES and b.source == "text"
-    ]
-    return "".join(normalize_text(b.text) for b in eligible)
+    return "".join(normalize_text(b.text) for b in _native_text_blocks(doc))
 
 
-def _block_typo_ngrams(doc: IrDocument, n: int = TYPO_NGRAM) -> dict[str, dict[str, int]]:
+def _block_typo_ngrams(
+    doc: IrDocument,
+    n: int | None = None,
+    full_text: str | None = None,
+) -> dict[str, dict[str, int]]:
     """blockId -> {可疑异常 n-gram: 块内起始偏移}。
 
     可疑 = 该 gram 在全文仅出现一次，且包含「全文仅出现一次的字符」
@@ -97,12 +106,13 @@ def _block_typo_ngrams(doc: IrDocument, n: int = TYPO_NGRAM) -> dict[str, dict[s
     仅统计原生文本块（source == "text"）：OCR/表格/公式块中「错得一样」
     可能只是同一识别器对同一模板犯了同样的错（实测事实 #1：真实数据
     confidence 全 1.0，置信度过滤识别不出 OCR 误碰撞），非强证据。
+    full_text 可由调用方预先算好传入（detect_shared_typos 中复用，避免重复拼接）。
     """
-    eligible = [
-        b for b in doc.blocks
-        if b.type in SHINGLABLE_TYPES and b.source == "text"
-    ]
-    full_text = "".join(normalize_text(b.text) for b in eligible)
+    if n is None:
+        n = get_settings().typo_ngram
+    eligible = _native_text_blocks(doc)
+    if full_text is None:
+        full_text = "".join(normalize_text(b.text) for b in eligible)
     if len(full_text) < n:
         return {}
     gram_freq: dict[str, int] = {}
@@ -127,7 +137,7 @@ def _block_typo_ngrams(doc: IrDocument, n: int = TYPO_NGRAM) -> dict[str, dict[s
 
 
 def detect_shared_typos(
-    task_id: str, documents: list[IrDocument], n: int = TYPO_NGRAM
+    task_id: str, documents: list[IrDocument], n: int | None = None
 ) -> list[Evidence]:
     """相同错别字：可疑 n-gram 在 ≥2 份文档中逐字碰撞 → metadata 证据。
 
@@ -136,13 +146,17 @@ def detect_shared_typos(
     连续段覆盖区间内的碰撞合并为极大连续段，每段计 1 处——一个错字会被
     ~n 个滑动窗口同时覆盖，窗口数不等于错字数。≥2 处 → high（「错得一样」
     强证据）；仅 1 处 → mid（套话/正式用语巧合可能，文案降为疑似）。
-    samples 每处取中间窗口为代表；样本为规范化文本（标点/空白已剥离），
-    前端高亮需先做同样规范化再定位。
+    samples/items 每处取中间窗口为代表，统一按 typo_samples_max 截断防膨胀；
+    样本为规范化文本（标点/空白已剥离），前端高亮需先做同样规范化再定位。
     """
+    if n is None:
+        n = get_settings().typo_ngram
+    samples_max = get_settings().typo_samples_max
     names = display_names(documents)
+    full_texts = {d.docId: _native_full_text(d) for d in documents}
     gram_index: dict[str, dict[str, tuple[str, int]]] = {}  # gram -> {docId: (blockId, start)}
     for d in documents:
-        for block_id, grams in _block_typo_ngrams(d, n).items():
+        for block_id, grams in _block_typo_ngrams(d, n, full_text=full_texts[d.docId]).items():
             for g, start in grams.items():
                 gram_index.setdefault(g, {})[d.docId] = (block_id, start)
 
@@ -151,7 +165,6 @@ def detect_shared_typos(
         if len(m) >= 2:
             by_docs.setdefault(tuple(sorted(m)), []).append((g, m))
 
-    full_texts = {d.docId: _native_full_text(d) for d in documents}
     evidences: list[Evidence] = []
     for doc_ids, hits in sorted(by_docs.items()):
         # 全文完全一致的副本组合不出 typo 证据：雷同已由 similarity 证据
@@ -180,7 +193,18 @@ def detect_shared_typos(
             )
             for doc_id in doc_ids
         ]
-        samples = [run[len(run) // 2] for run in runs][:_TYPO_SAMPLES_MAX]
+        hit_map = {g: m for g, m in hits}
+        items = []
+        for i, run in enumerate(runs[:samples_max], start=1):
+            rep = run[len(run) // 2]
+            rep_map = hit_map[rep]
+            items.append({
+                "index": i,
+                "text": rep,
+                "blockIds": {doc_id: rep_map[doc_id][0] for doc_id in doc_ids},
+                "starts": {doc_id: rep_map[doc_id][1] for doc_id in doc_ids},
+            })
+        samples = [item["text"] for item in items]
         if site_count >= 2:
             severity: Severity = "high"
             title = f"{len(doc_ids)} 份标书出现相同错别字/低频异常串（{site_count} 处）"
@@ -199,6 +223,7 @@ def detect_shared_typos(
                 "pattern": "shared-typo",
                 "sharedNgramCount": site_count,
                 "samples": samples,
+                "items": items,
             },
             title=title,
             description=f"{description}涉及文件：{'、'.join(names[doc_id] for doc_id in doc_ids)}。",

@@ -108,14 +108,19 @@ public class ParseTaskStateAdvancer : ITransientDependency
             return;
         }
 
-        if (task.Status != CompareTaskStatus.Comparing)
+        // 先落库后入队：并发下若 ConcurrencyStamp 冲突导致落库失败，不会残留已入队的孤儿任务
+        var shouldEnqueueCompare = task.Status != CompareTaskStatus.Comparing;
+        if (shouldEnqueueCompare)
         {
             task.MarkComparing();
-            await _backgroundJobManager.EnqueueAsync(new CompareDocumentsArgs { TaskId = task.Id });
         }
         task.UpdateProgress("comparing", 60, "两两比对中");
 
         await _taskRepository.UpdateAsync(task, autoSave: true, cancellationToken: cancellationToken);
+        if (shouldEnqueueCompare)
+        {
+            await _backgroundJobManager.EnqueueAsync(new CompareDocumentsArgs { TaskId = task.Id });
+        }
     }
 
     /// <summary>从 IR 读取项目名建议：outline 首节点标题优先，其次 meta.fileName 去扩展名。</summary>

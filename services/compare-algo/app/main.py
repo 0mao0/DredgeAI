@@ -3,9 +3,12 @@
 无状态计算服务，由 ABP 主服务调用；请求体为 AnGIneer 解析产物原文
 （doc_blocks_graph.jsonl 节点 + meta 的 {docMeta, outlines, pages}），
 本服务不直接对接 AnGIneer/MinerU。产物经 app/angineer/ 适配层转为内部模型后分析。
+
+部署基线见 README「部署注意」：同步 def 端点跑 CPU 密集管线，GIL 下单进程
+无法并行，须以 uvicorn --workers N 多进程横向扩展；调用方应串行/有限并发调用。
 """
 import logging
-import os
+import time
 
 from fastapi import FastAPI, Request
 from fastapi.exceptions import RequestValidationError, ResponseValidationError
@@ -13,6 +16,7 @@ from fastapi.responses import JSONResponse
 from pydantic import ValidationError
 
 from app.angineer.adapter import adapt_document
+from app.errors import EvidenceBuildError
 from app.metadata.service import analyze_metadata
 from app.pricing.service import analyze_pricing
 from app.schemas.api import (
@@ -21,9 +25,30 @@ from app.schemas.api import (
     ErrorDetail,
     ErrorResponse,
 )
+from app.settings import DEFAULT_MAX_BODY_BYTES, Settings
 from app.similarity.service import analyze_similarity
 
 logger = logging.getLogger("compare-algo")
+
+
+def _configure_logging() -> None:
+    """统一日志格式（uvicorn 友好）：仅在无 handler 时挂载，避免与 uvicorn 重复输出。
+
+    部署在 uvicorn 下时 uvicorn 已配置 root handler，本函数不重复挂；
+    直接运行（python -m / 测试）时补上标准格式，保证 info 日志可见。
+    """
+    root = logging.getLogger()
+    if root.handlers:
+        return
+    handler = logging.StreamHandler()
+    handler.setFormatter(logging.Formatter(
+        "%(asctime)s %(levelname)s [%(name)s] %(message)s"
+    ))
+    root.addHandler(handler)
+    root.setLevel(logging.INFO)
+
+
+_configure_logging()
 
 
 class BodySizeLimitMiddleware:
@@ -102,19 +127,21 @@ def _header_value(scope: dict, name: bytes) -> bytes | None:
     return None
 
 
-_DEFAULT_MAX_BODY_BYTES = 50 * 1024 * 1024  # 默认 50MB（实测 5 份真实文档产物 ≈ 15MB）
+_DEFAULT_MAX_BODY_BYTES = DEFAULT_MAX_BODY_BYTES  # 默认 96MB（8 份真实文档产物 ≈ 24MB）
 
 
 def _max_body_bytes() -> int:
-    raw = os.environ.get("COMPARE_ALGO_MAX_BODY_BYTES", "")
+    """读取请求体限额：每次新构 Settings（不走缓存），便于测试 monkeypatch env。
+
+    非法取值（"50MB"、"²" 等）触发 pydantic ValidationError → 回退默认并告警（不静默）。
+    """
     try:
-        return int(raw)
-    except ValueError:
-        if raw:  # 未设置属正常；设置了却解析不了才告警（"50MB"、"²" 等）
-            logger.warning(
-                "COMPARE_ALGO_MAX_BODY_BYTES=%r 无法解析为整数，回退默认 %d 字节",
-                raw, _DEFAULT_MAX_BODY_BYTES,
-            )
+        return Settings().max_body_bytes
+    except ValidationError:
+        logger.warning(
+            "COMPARE_ALGO_MAX_BODY_BYTES 无法解析为整数，回退默认 %d 字节",
+            _DEFAULT_MAX_BODY_BYTES,
+        )
         return _DEFAULT_MAX_BODY_BYTES
 
 
@@ -154,6 +181,14 @@ async def adapt_exception_handler(request: Request, exc: ValidationError) -> JSO
     return JSONResponse(status_code=422, content=body.model_dump())
 
 
+@app.exception_handler(EvidenceBuildError)
+async def evidence_build_exception_handler(request: Request, exc: EvidenceBuildError) -> JSONResponse:
+    """服务端组装 Evidence 失败（内部 bug）→ 500，不误报为调用方 422。"""
+    logger.error("evidence build failed on %s: %s", request.url.path, exc)
+    body = ErrorResponse(code="INTERNAL_ERROR", message="内部证据组装失败，请联系算法服务负责人")
+    return JSONResponse(status_code=500, content=body.model_dump())
+
+
 @app.exception_handler(ResponseValidationError)
 async def response_validation_exception_handler(
     request: Request, exc: ResponseValidationError
@@ -188,20 +223,40 @@ def _adapt(req: AnalyzeRequest):
     return [adapt_document(d) for d in req.documents]
 
 
+def _run_pipeline(path: str, req: AnalyzeRequest, analyze) -> AnalyzeResponse:
+    """适配 → 分析 → 响应：统一证据构建错误包装（→500）与端点 info 日志。
+
+    分析阶段的 pydantic.ValidationError 只会来自服务端组装 Evidence
+    （内部不变量破坏），包装为 EvidenceBuildError；适配阶段的 ValidationError
+    在此之外抛出，仍按调用方数据错误走 422。
+    """
+    started = time.perf_counter()
+    docs = _adapt(req)
+    try:
+        evidences = analyze(req.taskId, docs)
+    except ValidationError as exc:
+        raise EvidenceBuildError(f"taskId={req.taskId} 证据组装失败：{exc}") from exc
+    logger.info(
+        "taskId=%s %s docs=%d evidences=%d elapsed=%.3fs",
+        req.taskId, path, len(docs), len(evidences), time.perf_counter() - started,
+    )
+    return AnalyzeResponse(evidences=evidences)
+
+
 @app.post("/analyze/similarity", response_model=AnalyzeResponse)
 def post_analyze_similarity(req: AnalyzeRequest) -> AnalyzeResponse:
     """两两查重 + 雷同簇：同一文档集可同时产出 pairwise 与 cluster 证据，
     消费方按 type + docIds / metrics.cluster 分组。"""
-    return AnalyzeResponse(evidences=analyze_similarity(req.taskId, _adapt(req)))
+    return _run_pipeline("/analyze/similarity", req, analyze_similarity)
 
 
 @app.post("/analyze/pricing", response_model=AnalyzeResponse)
 def post_analyze_pricing(req: AnalyzeRequest) -> AnalyzeResponse:
     """报价规律分析：多个检测器（等差/贴近度/尾数）可在同一文档集上同时命中，
     消费方按 type + docIds / metrics.pattern 分组。"""
-    return AnalyzeResponse(evidences=analyze_pricing(req.taskId, _adapt(req)))
+    return _run_pipeline("/analyze/pricing", req, analyze_pricing)
 
 
 @app.post("/analyze/metadata", response_model=AnalyzeResponse)
 def post_analyze_metadata(req: AnalyzeRequest) -> AnalyzeResponse:
-    return AnalyzeResponse(evidences=analyze_metadata(req.taskId, _adapt(req)))
+    return _run_pipeline("/analyze/metadata", req, analyze_metadata)

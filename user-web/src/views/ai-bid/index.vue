@@ -144,10 +144,10 @@ function openCompareTask(id: string): void {
 }
 
 const features = [
-  { route: '/ai-bid/read', name: '读标', icon: FileSearchOutlined, bg: 'linear-gradient(135deg, #2563EB, #3B82F6)' },
-  { route: '/ai-bid/write', name: '写标', icon: EditOutlined, bg: 'linear-gradient(135deg, #059669, #10B981)' },
-  { route: '/ai-bid/compare', name: '比标', icon: SwapOutlined, bg: 'linear-gradient(135deg, #D97706, #F59E0B)' },
-  { route: '/ai-bid/clear', name: '清标', icon: ClearOutlined, bg: 'linear-gradient(135deg, #7C3AED, #8B5CF6)' },
+  { route: '/ai-bid/read', name: '读标', icon: FileSearchOutlined, bg: 'linear-gradient(135deg, color-mix(in srgb, var(--color-info) 80%, black), var(--color-info))' },
+  { route: '/ai-bid/write', name: '写标', icon: EditOutlined, bg: 'linear-gradient(135deg, color-mix(in srgb, var(--color-success) 80%, black), var(--color-success))' },
+  { route: '/ai-bid/compare', name: '比标', icon: SwapOutlined, bg: 'linear-gradient(135deg, color-mix(in srgb, var(--color-warning) 80%, black), var(--color-warning))' },
+  { route: '/ai-bid/clear', name: '清标', icon: ClearOutlined, bg: 'linear-gradient(135deg, color-mix(in srgb, var(--color-accent) 80%, black), var(--color-accent))' },
 ]
 
 function goFeature(routePath: string): void {
@@ -171,6 +171,8 @@ getBidSessions().then((s) => { sessions.value = s; if (s.length > 0) activeSessi
   display: flex;
   align-items: center;
   justify-content: space-between;
+  border-bottom: 1px solid @border-color;
+  padding-bottom: @spacing-md;
   margin-bottom: @spacing-lg;
 }
 

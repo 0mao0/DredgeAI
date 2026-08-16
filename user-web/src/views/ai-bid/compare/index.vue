@@ -3,17 +3,14 @@
     <!-- 上传引导页 -->
     <UploadPage
       v-if="view === 'upload'"
-      :name="uploadName"
       :items="uploadItems"
       :creating="creating"
-      :history="historyTasks"
+
       :upload-error="uploadError"
-      @update:name="uploadName = $event"
       @add-files="onAddFiles"
       @remove="removeItem"
       @retry="retryItem"
       @start="handleStart"
-      @history-open="openTask"
     />
 
     <!-- 续传面板：点了「开始分析」但文件还没传完，先进入工作区继续上传 -->
@@ -47,21 +44,42 @@
     <!-- 工作区：analyzing / result / failed 共用同一左右分栏 -->
     <div v-else-if="task" class="compare-workspace">
       <div class="compare-workspace__bar">
-        <div class="compare-workspace__name">
-          <a-tag :color="statusInfo.color">{{ statusInfo.text }}</a-tag>
-          <a-input
-            v-model:value="nameDraft"
-            size="small"
-            :maxlength="128"
-            class="compare-workspace__name-input"
-            :loading="nameSaving"
-            @blur="saveName"
-            @press-enter="saveName"
-          />
-          <span v-if="nameError" class="compare-workspace__name-error">{{ nameError }}</span>
+        <div
+          class="compare-workspace__name"
+          @mouseenter="startEditName"
+          @mouseleave="cancelEditName"
+        >
+          <template v-if="projectNameVisible">
+            <span
+              v-if="!editingName"
+              class="compare-workspace__name-title"
+              title="悬停编辑项目名"
+            >{{ task.name }}</span>
+            <template v-else>
+              <a-input
+                v-model:value="nameDraft"
+                :maxlength="128"
+                class="compare-workspace__name-input"
+                :loading="nameSaving"
+                @input="nameDraftTouched = true"
+                @press-enter="saveName"
+              />
+              <a-button
+                size="small"
+                type="primary"
+                :loading="nameSaving"
+                :disabled="!canConfirmName"
+                @click="saveName"
+              >
+                保存
+              </a-button>
+              <a-button size="small" :disabled="nameSaving" @click="cancelEditName">取消</a-button>
+              <span v-if="nameError" class="compare-workspace__name-error">{{ nameError }}</span>
+            </template>
+          </template>
         </div>
 
-        <a-dropdown trigger="click" placement="bottomRight">
+        <!--
           <a-button size="small">
             <HistoryOutlined />历史任务
           </a-button>
@@ -75,8 +93,9 @@
             </a-menu>
           </template>
         </a-dropdown>
+        -->
 
-        <a-dropdown
+        <!--
           trigger="click"
           placement="bottomRight"
           :open="exportMenuVisible"
@@ -98,7 +117,7 @@
             </a-menu>
           </template>
         </a-dropdown>
-        <span v-if="exportError" class="compare-workspace__export-error">{{ exportError }}</span>
+        -->
 
         <a-tooltip :title="workspaceCollapsed ? '展开左侧面板' : '收起左侧面板'">
           <a-button size="small" @click="workspaceCollapsed = !workspaceCollapsed">
@@ -158,6 +177,7 @@
             @extract-clauses="onExtractClauses"
             @confirm-clauses="onConfirmClauses"
             @locate="onLocateEvidence"
+            @locate-refs="onLocateRefs"
           />
 
           <FailurePanel
@@ -170,6 +190,33 @@
             @retry-compare="onRetryCompare"
             @back="resetToUpload()"
           />
+
+          <div class="compare-workspace__export-footer">
+            <a-dropdown
+              trigger="click"
+              placement="topRight"
+              :open="exportMenuVisible"
+              @open-change="exportMenuVisible = $event"
+            >
+              <a-button
+                size="small"
+                type="primary"
+                :disabled="!canExport"
+                :loading="exporting"
+                @click.prevent
+              >
+                <DownloadOutlined />导出报告
+              </a-button>
+              <template #overlay>
+                <a-menu @click="onExportMenuClick">
+                  <a-menu-item key="docx">Word 报告（.docx）</a-menu-item>
+                  <a-menu-item key="pdf">PDF 报告</a-menu-item>
+                </a-menu>
+              </template>
+            </a-dropdown>
+
+            <span v-if="exportError" class="compare-workspace__export-error">{{ exportError }}</span>
+          </div>
         </div>
       </div>
     </div>
@@ -177,14 +224,14 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
+import { computed, nextTick, onMounted, onUnmounted, ref, watch } from 'vue'
 import { useRoute } from 'vue-router'
 import { message } from 'ant-design-vue'
 import {
   CompressOutlined,
   DownloadOutlined,
   ExpandOutlined,
-  HistoryOutlined,
+
   LoadingOutlined,
   PlusOutlined,
   UploadOutlined,
@@ -196,7 +243,7 @@ import UploadFileRow from './components/UploadFileRow.vue'
 import PdfWorkspace from './components/PdfWorkspace.vue'
 import ProcessPanel from './components/ProcessPanel.vue'
 import FailurePanel from './components/FailurePanel.vue'
-import { COMPARE_STATUS_MAP, MAX_BID_DOCUMENTS, deriveProjectName, isTerminalStatus } from './constants'
+import { MAX_BID_DOCUMENTS, formatProjectName, isTerminalStatus } from './constants'
 import {
   confirmClauses,
   createTask,
@@ -216,7 +263,7 @@ import {
   uploadDraftDocument,
   updateTaskName,
 } from '@/api/modules/compare'
-import type { ClauseItem, CompareDocMeta, CompareTask, EvidenceItem, TaskOverview } from '@/types'
+import type { BlockRange, ClauseItem, CompareDocMeta, CompareTask, EvidenceItem, TaskOverview } from '@/types'
 
 const route = useRoute()
 let disposed = false
@@ -232,7 +279,6 @@ const clauseDrafts = ref<ClauseItem[]>([])
 const historyTasks = ref<CompareTask[]>([])
 
 /* —— 上传页状态 —— */
-const uploadName = ref('')
 const uploadItems = ref<UploadFileItem[]>([])
 const creating = ref(false)
 const uploadError = ref('')
@@ -260,16 +306,14 @@ const scanningDocId = ref<string | null>(null)
 const connectionLost = ref(false)
 const workspaceRef = ref<InstanceType<typeof PdfWorkspace> | null>(null)
 const nameDraft = ref('')
+const nameDraftTouched = ref(false)
+const editingName = ref(false)
 const nameSaving = ref(false)
 const nameError = ref('')
 const suggestedApplied = ref(false)
 const lastManualTabAt = ref(0)
 const autoFocusedDocIds = ref(new Set<string>())
 const exportMenuVisible = ref(false)
-
-const statusInfo = computed(() =>
-  task.value ? COMPARE_STATUS_MAP[task.value.status] : { color: 'default', text: '' },
-)
 
 const panel = computed<'process' | 'failed'>(() => {
   if (!task.value) return 'process'
@@ -295,9 +339,39 @@ const canExport = computed(() =>
   task.value?.status === 'completed' || task.value?.status === 'partial',
 )
 
-watch(() => task.value?.name, (name) => {
-  if (name != null && !nameSaving.value) nameDraft.value = name
+const bidDocCount = computed(() =>
+  task.value?.documents.filter((d) => d.role === 'bid').length ?? 0,
+)
+
+const projectNameVisible = computed(() => {
+  const t = task.value
+  if (!t) return false
+  return t.nameEditedByUser === true || (t.suggestedName != null && t.suggestedName.trim() !== '')
 })
+
+const suggestedDisplayName = computed(() => {
+  const t = task.value
+  if (!t) return ''
+  if (t.nameEditedByUser) return t.name
+  return t.suggestedName ? formatProjectName(t.suggestedName, bidDocCount.value) : ''
+})
+
+const canConfirmName = computed(() => {
+  const t = task.value
+  if (!t) return false
+  const next = nameDraft.value.trim()
+  return next !== '' && next !== t.name
+})
+
+function syncNameDraft(): void {
+  if (nameSaving.value || nameDraftTouched.value) return
+  nameDraft.value = suggestedDisplayName.value
+}
+
+watch(
+  [() => task.value?.name, () => task.value?.suggestedName, () => task.value?.nameEditedByUser],
+  syncNameDraft,
+)
 
 watch(allUploadsSettled, (settled) => {
   if (settled && startRequested.value) void maybeFinalize()
@@ -390,8 +464,9 @@ function applySuggestedName(t: CompareTask): void {
     suggestedApplied.value = true
     return
   }
-  if (t.suggestedName && t.suggestedName !== t.name) {
-    task.value = { ...task.value!, name: t.suggestedName, suggestedName: t.suggestedName }
+  if (t.suggestedName && t.suggestedName.trim()) {
+    const bidCount = t.documents.filter((d) => d.role === 'bid').length
+    if (!nameDraftTouched.value) nameDraft.value = formatProjectName(t.suggestedName, bidCount)
     suggestedApplied.value = true
   }
 }
@@ -455,6 +530,9 @@ function resetWorkspace(): void {
   suggestedApplied.value = false
   autoFocusedDocIds.value = new Set()
   resultsLoading.value = false
+  nameDraft.value = ''
+  nameDraftTouched.value = false
+  nameSaving.value = false
   nameError.value = ''
   exportError.value = ''
 }
@@ -476,6 +554,12 @@ async function openTask(id: string): Promise<void> {
     task.value = t
     pendingTaskId.value = null
     suggestedApplied.value = t.nameEditedByUser === true
+    nameDraftTouched.value = false
+    nameDraft.value = t.nameEditedByUser
+      ? t.name
+      : (t.suggestedName
+          ? formatProjectName(t.suggestedName, t.documents.filter((d) => d.role === 'bid').length)
+          : '')
     view.value = 'workspace'
     workspaceCollapsed.value = false
     void loadHistory()
@@ -489,10 +573,11 @@ async function openTask(id: string): Promise<void> {
   }
 }
 
-function onHistoryClick({ key }: { key: string }): void {
+/* function onHistoryClick({ key }: { key: string }): void {
   if (key !== 'empty') void openTask(key)
 }
 
+*/
 function resetToUpload(reason = ''): void {
   stopPoll()
   if (draftId.value) void deleteDraft(draftId.value).catch(() => {})
@@ -500,7 +585,6 @@ function resetToUpload(reason = ''): void {
   task.value = null
   pendingTaskId.value = null
   uploadItems.value = []
-  uploadName.value = ''
   uploadError.value = reason
   creating.value = false
   startRequested.value = false
@@ -545,9 +629,6 @@ function onAddFiles(files: { file: File, role: 'bid' | 'tender' }[]): void {
       continue
     }
     pushUploadItem(key, file, role)
-  }
-  if (!uploadName.value) {
-    uploadName.value = deriveProjectName(uploadItems.value.filter((i) => i.role === 'bid').map((i) => i.name))
   }
 }
 
@@ -602,9 +683,6 @@ function removeItem(key: string): void {
     void deleteDraftDocument(draftId.value, item.docId).catch(() => {})
   }
   uploadItems.value = uploadItems.value.filter((i) => i.key !== key)
-  if (!uploadName.value) {
-    uploadName.value = deriveProjectName(uploadItems.value.filter((i) => i.role === 'bid').map((i) => i.name))
-  }
 }
 
 async function retryItem(key: string): Promise<void> {
@@ -641,7 +719,7 @@ async function finalizeTask(): Promise<void> {
   creating.value = true
   finalizeError.value = ''
   try {
-    const t = await createTask(uploadName.value.trim() || '比标任务', draftId.value)
+    const t = await createTask('比标任务', draftId.value)
     const started = await startParse(t.id, true)
     task.value = started
     pendingTaskId.value = null
@@ -744,7 +822,26 @@ async function onConfirmClauses(list: ClauseItem[]): Promise<void> {
   }
 }
 
-/* —— 项目名 —— */
+/* —— 项目名（悬停进入编辑态，离开恢复标题） —— */
+function startEditName(): void {
+  if (!task.value || editingName.value) return
+  nameDraft.value = task.value.name
+  nameDraftTouched.value = false
+  nameError.value = ''
+  editingName.value = true
+  nextTick(() => {
+    document.querySelector<HTMLInputElement>('.compare-workspace__name-input input')?.focus()
+  })
+}
+
+function cancelEditName(): void {
+  if (!task.value) return
+  nameDraft.value = task.value.name
+  nameDraftTouched.value = false
+  nameError.value = ''
+  editingName.value = false
+}
+
 async function saveName(): Promise<void> {
   if (!task.value || nameSaving.value) return
   const next = nameDraft.value.trim()
@@ -754,6 +851,9 @@ async function saveName(): Promise<void> {
   try {
     task.value = await updateTaskName(task.value.id, next)
     suggestedApplied.value = true
+    nameDraftTouched.value = false
+    nameDraft.value = next
+    editingName.value = false
   } catch {
     nameError.value = '名称保存失败，可重试'
   } finally {
@@ -764,6 +864,10 @@ async function saveName(): Promise<void> {
 /* —— 溯源 / 导出 —— */
 function onLocateEvidence(ev: EvidenceItem): void {
   workspaceRef.value?.locate(ev)
+}
+
+function onLocateRefs(refs: BlockRange[]): void {
+  workspaceRef.value?.locateRefs(refs)
 }
 
 async function handleExport(format: 'docx' | 'pdf'): Promise<void> {
@@ -908,8 +1012,27 @@ function onDividerDown(e: PointerEvent): void {
   gap: @spacing-sm;
 }
 
+.compare-workspace__name-title {
+  flex: 0 1 auto;
+  width: fit-content;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: @font-size-lg;
+  font-weight: @font-weight-bold;
+  color: @text-primary;
+  cursor: text;
+}
+
 .compare-workspace__name-input {
-  max-width: 360px;
+  flex: 0 1 auto;
+  width: auto;
+  min-width: 160px;
+  max-width: 100%;
+  font-size: @font-size-lg;
+  font-weight: @font-weight-semibold;
+  field-sizing: content;
 }
 
 .compare-workspace__name-error {
@@ -918,7 +1041,7 @@ function onDividerDown(e: PointerEvent): void {
   white-space: nowrap;
 }
 
-.compare-workspace__history {
+/* .compare-workspace__history {
   max-width: 320px;
 
   &-name {
@@ -930,6 +1053,7 @@ function onDividerDown(e: PointerEvent): void {
   }
 }
 
+*/
 .compare-workspace__export-error {
   font-size: @font-size-xs;
   color: @danger;
@@ -1006,4 +1130,21 @@ function onDividerDown(e: PointerEvent): void {
   display: flex;
   flex-direction: column;
 }
+
+  .compare-workspace__right > .process-panel,
+  .compare-workspace__right > .failure-panel {
+    flex: 1;
+    min-height: 0;
+    height: auto;
+  }
+
+  .compare-workspace__export-footer {
+    flex-shrink: 0;
+    display: flex;
+    align-items: center;
+    justify-content: flex-end;
+    gap: @spacing-sm;
+    padding: @spacing-md @spacing-base @spacing-base;
+    border-top: 1px solid @border-color;
+  }
 </style>

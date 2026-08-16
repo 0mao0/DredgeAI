@@ -44,8 +44,13 @@ def align_document_pair(
 ) -> PairSimilarityResult:
     pos_a = _shinglable_positions(doc_a)
     pos_b = _shinglable_positions(doc_b)
-    norm_len_a = {b.blockId: len(normalize_text(b.text)) for b in doc_a.blocks}
-    norm_len_b = {b.blockId: len(normalize_text(b.text)) for b in doc_b.blocks}
+    # 只对可查重块计算规范化长度（候选对命中的块必在其中）；非查重块跳过归一化开销
+    norm_len_a = {
+        b.blockId: len(normalize_text(b.text)) for b in doc_a.blocks if b.blockId in pos_a
+    }
+    norm_len_b = {
+        b.blockId: len(normalize_text(b.text)) for b in doc_b.blocks if b.blockId in pos_b
+    }
 
     # 按 A 侧阅读顺序排列候选对，在 B 侧位置序列上取不交叉单调链（启发式）
     ordered = sorted(pairs, key=lambda p: (pos_a.get(p.block_id_a, 0), pos_b.get(p.block_id_b, 0)))
@@ -65,8 +70,9 @@ def align_document_pair(
 
     matched_a = {m.block_id_a for m in matches}
     matched_b = {m.block_id_b for m in matches}
-    chars_a = sum(norm_len_a[bid] for bid in matched_a)
-    chars_b = sum(norm_len_b[bid] for bid in matched_b)
+    # 候选对命中块必为可查重块（∈ pos_*），get 兜底防御直接构造的越界对
+    chars_a = sum(norm_len_a.get(bid, 0) for bid in matched_a)
+    chars_b = sum(norm_len_b.get(bid, 0) for bid in matched_b)
     total_a = sum(norm_len_a[bid] for bid in pos_a)
     total_b = sum(norm_len_b[bid] for bid in pos_b)
     similarity = 0.0

@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.IO;
 using System.Linq;
 using System.Threading.Tasks;
@@ -28,9 +28,9 @@ public class AiAnalysisJobTests : BidCompareApplicationTestBase<BidCompareApplic
     private async Task<(Guid TaskId, Guid DocA, Guid DocB)> PrepareAnalyzingTaskAsync()
     {
         var task = await _appService.CreateAsync(new CreateCompareTaskDto { Name = "t" });
-        var tender = await _appService.UploadDocumentAsync(task.Id, DocumentRole.Tender, "招标文件.pdf", new MemoryStream(new byte[] { 0 }));
-        var docA = await _appService.UploadDocumentAsync(task.Id, DocumentRole.Bid, "标书A.pdf", new MemoryStream(new byte[] { 1 }));
-        var docB = await _appService.UploadDocumentAsync(task.Id, DocumentRole.Bid, "标书B.pdf", new MemoryStream(new byte[] { 2 }));
+        var tender = await _appService.UploadDocumentAsync(task.Id, DocumentRole.Tender, "招标文件.pdf", TestFiles.Pdf(0));
+        var docA = await _appService.UploadDocumentAsync(task.Id, DocumentRole.Bid, "标书A.pdf", TestFiles.Pdf(1));
+        var docB = await _appService.UploadDocumentAsync(task.Id, DocumentRole.Bid, "标书B.pdf", TestFiles.Pdf(2));
         var parseJob = GetRequiredService<ParseDocumentJob>();
         await WithUnitOfWorkAsync(async () =>
         {
@@ -105,9 +105,9 @@ public class AiAnalysisJobTests : BidCompareApplicationTestBase<BidCompareApplic
     public async Task Llm_Failure_Should_Not_Block_Task() // spec §9：AI 失败不阻塞整体
     {
         var task = await _appService.CreateAsync(new CreateCompareTaskDto { Name = "t" });
-        var tender = await _appService.UploadDocumentAsync(task.Id, DocumentRole.Tender, "招标文件.pdf", new MemoryStream(new byte[] { 0 }));
-        var docA = await _appService.UploadDocumentAsync(task.Id, DocumentRole.Bid, "标书A.pdf", new MemoryStream(new byte[] { 1 }));
-        var docB = await _appService.UploadDocumentAsync(task.Id, DocumentRole.Bid, "标书B.pdf", new MemoryStream(new byte[] { 2 }));
+        var tender = await _appService.UploadDocumentAsync(task.Id, DocumentRole.Tender, "招标文件.pdf", TestFiles.Pdf(0));
+        var docA = await _appService.UploadDocumentAsync(task.Id, DocumentRole.Bid, "标书A.pdf", TestFiles.Pdf(1));
+        var docB = await _appService.UploadDocumentAsync(task.Id, DocumentRole.Bid, "标书B.pdf", TestFiles.Pdf(2));
         var parseJob = GetRequiredService<ParseDocumentJob>();
         await WithUnitOfWorkAsync(async () =>
         {
@@ -136,9 +136,9 @@ public class AiAnalysisJobTests : BidCompareApplicationTestBase<BidCompareApplic
     public async Task Failed_Document_Should_Leave_Task_Partial_After_Ai() // v2 §5.3：partial 终态 = 结果 + 失败文档内联重试
     {
         var task = await _appService.CreateAsync(new CreateCompareTaskDto { Name = "t" });
-        var goodA = await _appService.UploadDocumentAsync(task.Id, DocumentRole.Bid, "标书A.pdf", new MemoryStream(new byte[] { 1 }));
-        var goodB = await _appService.UploadDocumentAsync(task.Id, DocumentRole.Bid, "标书B.pdf", new MemoryStream(new byte[] { 2 }));
-        var bad = await _appService.UploadDocumentAsync(task.Id, DocumentRole.Bid, "标书C.pdf", new MemoryStream(new byte[] { 3 }));
+        var goodA = await _appService.UploadDocumentAsync(task.Id, DocumentRole.Bid, "标书A.pdf", TestFiles.Pdf(1));
+        var goodB = await _appService.UploadDocumentAsync(task.Id, DocumentRole.Bid, "标书B.pdf", TestFiles.Pdf(2));
+        var bad = await _appService.UploadDocumentAsync(task.Id, DocumentRole.Bid, "标书C.pdf", TestFiles.Pdf(3));
         var anGineer = (FakeAnGineerClient)GetRequiredService<IAnGineerClient>();
         var parseJob = GetRequiredService<ParseDocumentJob>();
         await WithUnitOfWorkAsync(async () =>

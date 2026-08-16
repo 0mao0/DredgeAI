@@ -107,7 +107,7 @@ public class CompareTask : FullAuditedAggregateRoot<Guid>
         Status = CompareTaskStatus.Parsed;
     }
 
-    /// <summary>失败后重新解析：状态回到 Parsing，清空失败原因、进度与旧比对对，且不再自动重跑比对。</summary>
+    /// <summary>失败后重新解析：状态回到 Parsing，清空失败原因、进度、旧比对对与报告缓存，且不再自动重跑比对。</summary>
     public void RestartParsing()
     {
         EnsureStatus(nameof(RestartParsing),
@@ -121,6 +121,7 @@ public class CompareTask : FullAuditedAggregateRoot<Guid>
         FailureReason = null;
         PairsJson = null;
         AutoCompareOnParseComplete = false;
+        ClearReportCache();
     }
 
     public void MarkPartial(string reason)
@@ -156,6 +157,8 @@ public class CompareTask : FullAuditedAggregateRoot<Guid>
             CompareTaskStatus.Parsed, CompareTaskStatus.Partial,
             CompareTaskStatus.AwaitingClauses, CompareTaskStatus.Failed);
         Status = CompareTaskStatus.Comparing;
+        // 重新比对将使既有报告过期（证据集变化），清空缓存防止陈旧报告被直接返回
+        ClearReportCache();
     }
 
     public void MarkAnalyzing()
@@ -271,6 +274,12 @@ public class CompareTask : FullAuditedAggregateRoot<Guid>
         item.FailReason = Check.NotNullOrWhiteSpace(reason, nameof(reason), maxLength: 2048);
         item.FinishedAt = finishedAt;
         PairsJson = JsonSerializer.Serialize(items, PairJsonOptions);
+    }
+
+    private void ClearReportCache()
+    {
+        ReportJson = null;
+        ReportGeneratedAt = null;
     }
 
     private void EnsureStatus(string action, params CompareTaskStatus[] allowed)

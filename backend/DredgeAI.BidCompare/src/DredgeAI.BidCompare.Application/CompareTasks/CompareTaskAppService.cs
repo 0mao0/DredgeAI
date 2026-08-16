@@ -9,6 +9,7 @@ using DredgeAI.BidCompare.Analysis;
 using DredgeAI.BidCompare.BackgroundJobs;
 using DredgeAI.BidCompare.Clauses;
 using DredgeAI.BidCompare.Documents;
+using DredgeAI.BidCompare.Drafts;
 using DredgeAI.BidCompare.Evidences;
 using DredgeAI.BidCompare.Exports;
 using DredgeAI.BidCompare.Ir;
@@ -42,6 +43,7 @@ public class CompareTaskAppService : ApplicationService, ICompareTaskAppService
 
     private readonly IRepository<CompareTask, Guid> _taskRepository;
     private readonly IRepository<CompareDocument, Guid> _documentRepository;
+    private readonly IRepository<CompareDraftDocument, Guid> _draftDocumentRepository;
     private readonly IRepository<EvidenceItem, Guid> _evidenceRepository;
     private readonly IRepository<ExportJob, Guid> _exportJobRepository;
     private readonly IFileStorage _fileStorage;
@@ -52,6 +54,7 @@ public class CompareTaskAppService : ApplicationService, ICompareTaskAppService
     public CompareTaskAppService(
         IRepository<CompareTask, Guid> taskRepository,
         IRepository<CompareDocument, Guid> documentRepository,
+        IRepository<CompareDraftDocument, Guid> draftDocumentRepository,
         IRepository<EvidenceItem, Guid> evidenceRepository,
         IRepository<ExportJob, Guid> exportJobRepository,
         IFileStorage fileStorage,
@@ -61,6 +64,7 @@ public class CompareTaskAppService : ApplicationService, ICompareTaskAppService
     {
         _taskRepository = taskRepository;
         _documentRepository = documentRepository;
+        _draftDocumentRepository = draftDocumentRepository;
         _evidenceRepository = evidenceRepository;
         _exportJobRepository = exportJobRepository;
         _fileStorage = fileStorage;
@@ -72,14 +76,55 @@ public class CompareTaskAppService : ApplicationService, ICompareTaskAppService
     public async Task<CompareTaskDto> CreateAsync(CreateCompareTaskDto input)
     {
         var task = new CompareTask(GuidGenerator.Create(), input.Name.Trim());
+        await _taskRepository.InsertAsync(task, autoSave: true);
+
         if (input.Clauses is { Count: > 0 })
         {
             var snapshot = BuildSnapshot(input.Clauses);
             task.LockClauseSnapshot(JsonSerializer.Serialize(snapshot, SnapshotJsonOptions));
+            await _taskRepository.UpdateAsync(task, autoSave: true);
         }
 
-        await _taskRepository.InsertAsync(task, autoSave: true);
-        return MapToDto(task, new List<CompareDocument>());
+        var documents = new List<CompareDocument>();
+        if (input.DraftId.HasValue)
+        {
+            var draftQueryable = await _draftDocumentRepository.GetQueryableAsync();
+            var draftDocuments = await AsyncExecuter.ToListAsync(draftQueryable
+                .Where(d => d.DraftId == input.DraftId.Value)
+                .OrderBy(d => d.CreationTime));
+
+            var draftBidCount = draftDocuments.Count(d => d.Role == DocumentRole.Bid);
+            if (draftBidCount < 2)
+            {
+                throw new BusinessException(BidCompareErrorCodes.InvalidTaskState)
+                    .WithData("action", "CreateFromDraft")
+                    .WithData("bidCount", draftBidCount)
+                    .WithData("reason", "投标文件不足 2 份，无法开始解析");
+            }
+
+            foreach (var draft in draftDocuments)
+            {
+                var document = new CompareDocument(
+                    GuidGenerator.Create(),
+                    task.Id,
+                    draft.Role,
+                    draft.FileName,
+                    draft.FileSize,
+                    draft.OriginStorageKey);
+                documents.Add(document);
+                await _documentRepository.InsertAsync(document, autoSave: true);
+
+                if (draft.Role == DocumentRole.Tender)
+                {
+                    task.SetTenderDocument(document.Id);
+                    await _taskRepository.UpdateAsync(task, autoSave: true);
+                }
+            }
+
+            await _draftDocumentRepository.DeleteManyAsync(draftDocuments, autoSave: true);
+        }
+
+        return MapToDto(task, documents);
     }
 
     public async Task<CompareTaskDto> GetAsync(Guid id)
@@ -142,6 +187,13 @@ public class CompareTaskAppService : ApplicationService, ICompareTaskAppService
     {
         var task = await _taskRepository.GetAsync(id);
         var documents = await GetTaskDocumentsAsync(id);
+        // 与运行中的解析互斥：进行中重复触发会导致同一文档被重复提交 AnGIneer
+        if (documents.Any(d => d.ParseStatus == DocumentParseStatus.Parsing))
+        {
+            throw new BusinessException(BidCompareErrorCodes.InvalidTaskState)
+                .WithData("action", "Reparse")
+                .WithData("reason", "存在解析中的文档，请等待当前解析结束后再重试");
+        }
         var failed = documents.Where(d => d.ParseStatus == DocumentParseStatus.Failed).ToList();
         if (failed.Count == 0)
         {
@@ -268,15 +320,23 @@ public class CompareTaskAppService : ApplicationService, ICompareTaskAppService
                 .WithData("max", MaxBidDocuments);
         }
 
-        using var buffer = new MemoryStream();
-        await content.CopyToAsync(buffer);
-        var bytes = buffer.ToArray();
+        // 魔数嗅探：仅校验扩展名可被改后缀绕过
+        var header = new byte[8];
+        var headerLength = await content.ReadAtLeastAsync(header, header.Length, throwOnEndOfStream: false);
+        if (!UploadFileSignature.Matches(extension, header.AsSpan(0, headerLength)))
+        {
+            throw new BusinessException(BidCompareErrorCodes.UnsupportedFileType)
+                .WithData("extension", extension)
+                .WithData("reason", "文件内容与扩展名不符（魔数校验失败）");
+        }
 
+        // 流式直通存储（不整文件内存缓冲），实际上传字节数由直通流统计
         var documentId = GuidGenerator.Create();
         var storageKey = $"compare/{id}/{documentId}/origin{extension}";
-        await _fileStorage.UploadAsync(storageKey, new MemoryStream(bytes), ContentTypeOf(extension));
+        var uploadStream = new PrefixCountingStream(header, headerLength, content);
+        await _fileStorage.UploadAsync(storageKey, uploadStream, ContentTypeOf(extension));
 
-        var document = new CompareDocument(documentId, id, role, Path.GetFileName(fileName), bytes.Length, storageKey);
+        var document = new CompareDocument(documentId, id, role, Path.GetFileName(fileName), uploadStream.TotalBytesRead, storageKey);
         await _documentRepository.InsertAsync(document, autoSave: true);
 
         if (role == DocumentRole.Tender)
@@ -291,7 +351,22 @@ public class CompareTaskAppService : ApplicationService, ICompareTaskAppService
     public async Task<CompareTaskDto> StartParsingAsync(Guid id)
     {
         var task = await _taskRepository.GetAsync(id);
+        if (task.Status is CompareTaskStatus.Comparing or CompareTaskStatus.Analyzing or CompareTaskStatus.Done)
+        {
+            throw new BusinessException(BidCompareErrorCodes.InvalidTaskState)
+                .WithData("action", "StartParsing")
+                .WithData("status", task.Status.ToString())
+                .WithData("reason", "任务已进入比对阶段，不能重复触发解析");
+        }
+
         var documents = await GetTaskDocumentsAsync(id);
+        // 幂等守卫：解析进行中重复触发会导致同一批文档被重复提交 AnGIneer
+        if (documents.Any(d => d.ParseStatus == DocumentParseStatus.Parsing))
+        {
+            throw new BusinessException(BidCompareErrorCodes.InvalidTaskState)
+                .WithData("action", "StartParsing")
+                .WithData("reason", "解析进行中，请勿重复触发");
+        }
         var pendingIds = documents
             .Where(d => d.ParseStatus == DocumentParseStatus.Pending)
             .Select(d => d.Id)
@@ -356,18 +431,27 @@ public class CompareTaskAppService : ApplicationService, ICompareTaskAppService
             .WhereIf(input.Type.HasValue, e => e.Type == input.Type!.Value)
             .WhereIf(input.Severity.HasValue, e => e.Severity == input.Severity!.Value);
 
-        // 文档对过滤涉及 JSON 负载，原型规模（单任务证据量有限）在内存过滤后再分页
-        var entities = await AsyncExecuter.ToListAsync(queryable.OrderBy(e => e.Severity).ThenBy(e => e.CreationTime));
-        var dtos = entities.Select(EvidenceMapper.ToDto).ToList();
-
         if (input.DocIdA.HasValue && input.DocIdB.HasValue)
         {
-            dtos = dtos.Where(e => e.DocIds.Contains(input.DocIdA.Value) && e.DocIds.Contains(input.DocIdB.Value)).ToList();
+            // 文档对过滤涉及 JSON 负载，原型规模（单任务证据量有限）在内存过滤后再分页
+            var all = await AsyncExecuter.ToListAsync(queryable.OrderBy(e => e.Severity).ThenBy(e => e.CreationTime));
+            var dtos = all.Select(EvidenceMapper.ToDto)
+                .Where(e => e.DocIds.Contains(input.DocIdA.Value) && e.DocIds.Contains(input.DocIdB.Value))
+                .ToList();
+            return new PagedResultDto<EvidenceDto>(
+                dtos.Count,
+                dtos.Skip(input.SkipCount).Take(input.MaxResultCount).ToList());
         }
 
+        // 常规路径：分页与计数下沉 DB
+        var totalCount = await AsyncExecuter.CountAsync(queryable);
+        var entities = await AsyncExecuter.ToListAsync(queryable
+            .OrderBy(e => e.Severity)
+            .ThenBy(e => e.CreationTime)
+            .PageBy(input.SkipCount, input.MaxResultCount));
         return new PagedResultDto<EvidenceDto>(
-            dtos.Count,
-            dtos.Skip(input.SkipCount).Take(input.MaxResultCount).ToList());
+            totalCount,
+            entities.Select(EvidenceMapper.ToDto).ToList());
     }
 
     public async Task<SimilarityMatrixDto> GetMatrixAsync(Guid id)
@@ -652,6 +736,11 @@ public class CompareTaskAppService : ApplicationService, ICompareTaskAppService
             FileSize = document.FileSize,
             ParseStatus = document.ParseStatus,
             ParseError = document.ParseError,
+            ParseProgress = document.ParseProgress,
+            ParseStage = document.ParseStage,
+            ParseStageMessage = document.ParseStageMessage,
+            ParseStartedAt = document.ParseStartedAt,
+            ParseFinishedAt = document.ParseFinishedAt,
             PageCount = document.PageCount,
             OcrLowConfidenceRatio = document.OcrLowConfidenceRatio,
             CreatedAt = document.CreationTime

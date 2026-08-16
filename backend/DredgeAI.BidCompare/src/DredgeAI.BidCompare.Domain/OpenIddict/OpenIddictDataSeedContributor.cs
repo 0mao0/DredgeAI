@@ -79,11 +79,6 @@ public class OpenIddictDataSeedContributor : IDataSeedContributor, ITransientDep
 
         var configurationSection = _configuration.GetSection("OpenIddict:Applications");
 
-
-
-
-
-
         // Swagger Client
         var swaggerClientId = configurationSection["BidCompare_Swagger:ClientId"];
         if (!swaggerClientId.IsNullOrWhiteSpace())
@@ -100,6 +95,21 @@ public class OpenIddictDataSeedContributor : IDataSeedContributor, ITransientDep
                 scopes: commonScopes,
                 redirectUri: $"{swaggerRootUrl}/swagger/oauth2-redirect.html",
                 clientUri: swaggerRootUrl
+            );
+        }
+
+        // SPA 客户端：user-web / admin-web 通过密码流换取访问令牌（/connect/token）
+        var appClientId = configurationSection["BidCompare_App:ClientId"];
+        if (!appClientId.IsNullOrWhiteSpace())
+        {
+            await CreateApplicationAsync(
+                name: appClientId!,
+                type: OpenIddictConstants.ClientTypes.Public,
+                consentType: OpenIddictConstants.ConsentTypes.Implicit,
+                displayName: "BidCompare Web Application",
+                secret: null,
+                grantTypes: new List<string> { OpenIddictConstants.GrantTypes.Password },
+                scopes: commonScopes
             );
         }
     }

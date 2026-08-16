@@ -1,6 +1,8 @@
 """报价规律检测：等差 / 尾数 / 贴近度。全部纯函数，输入为各文档投标总价。"""
 from dataclasses import dataclass
 
+from app.settings import get_settings
+
 
 @dataclass
 class ArithmeticProgression:
@@ -10,9 +12,11 @@ class ArithmeticProgression:
 
 
 def detect_arithmetic_progression(
-    amounts: list[float], rel_tol: float = 0.01
+    amounts: list[float], rel_tol: float | None = None
 ) -> ArithmeticProgression | None:
     """≥3 份报价构成等差数列：相邻差值相对平均公差的偏差 ≤ rel_tol。"""
+    if rel_tol is None:
+        rel_tol = get_settings().arithmetic_rel_tol
     if len(amounts) < 3:
         return None
     s = sorted(amounts)
@@ -32,11 +36,13 @@ class TailPattern:
     amounts: list[float]   # 升序
 
 
-def detect_tail_pattern(amounts: list[float], tail_len: int = 2) -> TailPattern | None:
+def detect_tail_pattern(amounts: list[float], tail_len: int | None = None) -> TailPattern | None:
     """≥3 份报价整数部分末 tail_len 位完全相同（尾数规律，疑似同源编制）。
 
     末位全 0（如 "00"，百元取整）是报价常态而非规律，排除以免误报。
     """
+    if tail_len is None:
+        tail_len = get_settings().tail_len
     if len(amounts) < 3:
         return None
     tails = [str(int(a)).zfill(tail_len)[-tail_len:] for a in amounts]
@@ -52,8 +58,10 @@ class Closeness:
     spread_ratio: float
 
 
-def detect_closeness(amounts: list[float], max_spread: float = 0.01) -> Closeness | None:
+def detect_closeness(amounts: list[float], max_spread: float | None = None) -> Closeness | None:
     """(max-min)/max ≤ max_spread（默认 1%）视为异常贴近。"""
+    if max_spread is None:
+        max_spread = get_settings().closeness_max_spread
     if len(amounts) < 2:
         return None
     lo, hi = min(amounts), max(amounts)

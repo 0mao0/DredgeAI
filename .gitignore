@@ -47,6 +47,9 @@ lerna-debug.log*
 # 本地磁盘存储根目录（开发模式 Local 存储，文件不入库）
 **/App_Data/
 
+# 运行时数据总目录（基础数据/业务文件/PostgreSQL/日志/备份，统一不入库）
+/data/
+
 # 包管理器锁文件（项目使用 pnpm，忽略其他包管理器的锁文件）
 package-lock.json
 **/package-lock.json

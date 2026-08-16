@@ -1,4 +1,4 @@
-# DredgeAI.BidCompare
+﻿# DredgeAI.BidCompare
 
 ## About this solution
 
@@ -126,3 +126,25 @@ flowchart TD
 - 部分文档解析失败 → 任务 `Partial`，已成功文档继续参与比对。
 - compare-algo 算法服务不可用 → 任务直接 `Failed`，不静默降级。
 - AI 分析失败 / 超时 → 不阻塞任务：仅保留算法证据，任务仍 `Done`，进度消息标注「AI 分析暂不可用」。
+
+## 密钥与部署配置（安全默认为开）
+
+`appsettings.json` 不含任何密钥（连接串密码、MinIO 凭据、StringEncryption passphrase、本地存储签名密钥均为空占位）。运行时经环境变量注入，本地开发用仓库根目录 `.env`（从 `.env.example` 复制，已在 .gitignore）：
+
+| 环境变量 | 配置节 | 说明 |
+|---|---|---|
+| `BIDCOMPARE_DB_CONNECTION` | `ConnectionStrings:Default` | PostgreSQL 连接串（Host / DbMigrator 共用） |
+| `STORAGE_S3_ACCESSKEY` / `STORAGE_S3_SECRETKEY` | `Storage:S3` | MinIO/S3 凭据 |
+| `STORAGE_LOCAL_SIGNING_SECRET` | `Storage:Local:SigningSecret` | 本地存储签名下载 URL 的 HMAC 密钥（Local provider 必填） |
+| `STRING_ENCRYPTION_PASSPHRASE` | `StringEncryption:DefaultPassPhrase` | ABP 字符串加密 |
+| `ANGINEER_API_KEY` | `AnGIneer:ApiKey` | AnGIneer docs-api |
+| `LLM_API_KEY` / `LLM_ENDPOINT` / `LLM_MODEL` | `Llm` | OpenAI 兼容网关 |
+| `AUTH_REQUIRE_HTTPS_METADATA` | `AuthServer:RequireHttpsMetadata` | 生产必须为 `true` |
+| `SWAGGER_ENABLED` | `Swagger:Enabled` | 生产默认关闭 Swagger，显式 `true` 才开启 |
+
+生产环境注意：
+
+* Swagger 仅在 Development 或 `Swagger:Enabled=true` 时挂载。
+* CORS 生产环境仅允许 `App:CorsOrigins` 精确枚举的域名（不再放行通配子域）。
+* 本地存储（`Storage:Provider=Local`）不再暴露匿名 `/storage` 静态目录；下载链接为带过期时间的 HMAC-SHA256 签名 URL（`GET /api/compare/storage/file`）。
+* 全部 `/api/compare/*` 业务端点要求认证 + `BidCompare.*` 权限，数据按创建者隔离。

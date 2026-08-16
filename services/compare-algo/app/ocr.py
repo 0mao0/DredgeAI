@@ -5,8 +5,9 @@
 """
 from app.schemas.evidence import Severity
 from app.schemas.ir import IrBlock, IrDocument
+from app.settings import get_settings
 
-OCR_LOW_CONFIDENCE_THRESHOLD = 0.5
+OCR_LOW_CONFIDENCE_THRESHOLD = 0.5  # 默认值文档；运行期以 settings.ocr_low_confidence_threshold 为准
 
 _SEVERITY_ORDER: list[Severity] = ["low", "mid", "high"]
 
@@ -16,7 +17,7 @@ def is_low_confidence_ocr(block: IrBlock) -> bool:
     return (
         block.source == "ocr"
         and block.confidence is not None
-        and block.confidence < OCR_LOW_CONFIDENCE_THRESHOLD
+        and block.confidence < get_settings().ocr_low_confidence_threshold
     )
 
 

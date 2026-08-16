@@ -83,7 +83,7 @@ const typeOptions = [
   { label: '全部', value: 'all' },
   { label: '雷同', value: 'similarity' },
   { label: '报价', value: 'price' },
-  { label: '元数据', value: 'metadata' },
+  { label: '属性信息', value: 'metadata' },
   { label: '条款', value: 'clause' },
   { label: '指标', value: 'indicator' },
 ]
@@ -115,7 +115,7 @@ function customRow(record: EvidenceItem) {
 }
 
 function severityColor(s: RiskLevel): string {
-  return s === 'high' ? '#EF4444' : s === 'mid' ? '#F59E0B' : '#3B82F6'
+  return s === 'high' ? 'var(--color-danger)' : s === 'mid' ? 'var(--color-warning)' : 'var(--color-info)'
 }
 
 function severityText(s: RiskLevel): string {
@@ -137,7 +137,7 @@ function typeText(t: EvidenceType): string {
   const map: Record<EvidenceType, string> = {
     similarity: '雷同',
     price: '报价',
-    metadata: '元数据',
+    metadata: '属性信息',
     clause: '条款',
     indicator: '指标',
   }

@@ -16,6 +16,10 @@ from pydantic import BaseModel, ConfigDict, Field, field_validator, model_valida
 _ALLOWED_TABLE_TAGS = {"table", "tr", "td", "th", "img"}
 _ALLOWED_TABLE_ATTRS = {"rowspan", "colspan", "src", "alt", "width", "height"}
 
+# rowspan/colspan 展开上限：pricing 按 O(rowspan×colspan) 展开网格，
+# 无上限时畸形大值构成内存 DoS；真实标书表格跨度远低于 200
+_TABLE_SPAN_MAX = 200
+
 # 实测词表（solo_engine.py:1225-1257）：原生文本 = "text"（v2 文档 "native" 系措辞）
 RawSource = Literal["text", "ocr", "table", "formula"]
 
@@ -83,6 +87,19 @@ class RawBlock(BaseModel):
             for attr in el.attrib:
                 if attr not in _ALLOWED_TABLE_ATTRS:
                     raise ValueError(f"table_html 含非法属性 {attr!r}，仅允许 rowspan/colspan")
+            for span_attr in ("rowspan", "colspan"):
+                raw_span = el.attrib.get(span_attr)
+                if raw_span is None:
+                    continue
+                try:
+                    span = int(raw_span)
+                except ValueError:
+                    continue  # 非数值（如 "abc"）留给 pricing 解析层跳过该表，保持宽容
+                if span > _TABLE_SPAN_MAX:
+                    raise ValueError(
+                        f"table_html 含超限 {span_attr}={span}（上限 {_TABLE_SPAN_MAX}），"
+                        "疑似恶意构造的展开炸弹"
+                    )
         return v
 
 

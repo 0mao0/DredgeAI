@@ -14,6 +14,35 @@ export const COMPARE_STATUS_MAP: Record<CompareTaskStatus, { color: string, text
 export function isTerminalStatus(status: CompareTaskStatus): boolean {
   return status === 'completed' || status === 'partial' || status === 'failed'
 }
+
+/** AnGIneer 解析管线阶段顺序（DredgeAI 以 stages=all 调用），用于把 stage 映射成“第几步/百分比”。 */
+export const AN_GINEER_PARSE_STAGES = [
+  'source_prep',
+  'convert',
+  'raw_parse',
+  'popo',
+  'structure',
+  'fts',
+  'vectors',
+  'graph',
+] as const
+
+/**
+ * 由 AnGIneer stage 推导单文档解析进度：
+ * step = 当前是第几步（1 起）；percent = 已完成阶段占比（0~100，当前阶段尚未计入）。
+ * 无法识别的 stage（queued 等）返回 null，由调用方回退到 AnGIneer 原始 progress。
+ */
+export function anGineerStepInfo(stage: string | null | undefined): { step: number, total: number, percent: number } | null {
+  if (!stage) return null
+  const index = (AN_GINEER_PARSE_STAGES as readonly string[]).indexOf(stage)
+  if (index < 0) return null
+  const total = AN_GINEER_PARSE_STAGES.length
+  return {
+    step: index + 1,
+    total,
+    percent: Math.round((index / total) * 100),
+  }
+}
 export { buildDocLabels, docLabel, isPdfFileName, MAX_BID_DOCUMENTS, overviewDocLabels } from '@shared/core/utils/compare'
 
 export function formatFileSize(size: number): string {
@@ -33,4 +62,15 @@ export function deriveProjectName(fileNames: string[]): string {
   const cleaned = prefix.replace(/(投标文件|报价文件|标书)+[\s_（(]?[A-E甲丁乙丙]?[)）]?$/g, '').trim()
   const base = cleaned.length >= 2 ? cleaned : stems[0]
   return base.slice(0, 20)
+}
+
+/** 解析完成后生成项目名：xxx项目-比标-N本（N = 投标文件份数）。 */
+export function formatProjectName(suggestedName: string, bidCount: number): string {
+  const base = suggestedName
+    .trim()
+    .replace(/项目-比标-\d+本$/, '')
+    .replace(/项目$/, '')
+    .trim()
+    .slice(0, 80)
+  return `${base || '比标项目'}项目-比标-${bidCount}本`
 }

@@ -90,13 +90,13 @@ namespace DredgeAI.BidCompare.Migrations
 
             modelBuilder.Entity("DredgeAI.BidCompare.CompareTasks.CompareTask", b =>
                 {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uuid");
+
                     b.Property<bool>("AutoCompareOnParseComplete")
                         .ValueGeneratedOnAdd()
                         .HasColumnType("boolean")
                         .HasDefaultValue(true);
-
-                    b.Property<Guid>("Id")
-                        .HasColumnType("uuid");
 
                     b.Property<string>("ClauseSnapshotJson")
                         .HasColumnType("text");
@@ -200,6 +200,10 @@ namespace DredgeAI.BidCompare.Migrations
                     b.Property<Guid>("Id")
                         .HasColumnType("uuid");
 
+                    b.Property<string>("AnGineerDocId")
+                        .HasMaxLength(128)
+                        .HasColumnType("character varying(128)");
+
                     b.Property<DateTime>("CreationTime")
                         .HasColumnType("timestamp without time zone")
                         .HasColumnName("CreationTime");
@@ -266,6 +270,23 @@ namespace DredgeAI.BidCompare.Migrations
                         .HasMaxLength(2048)
                         .HasColumnType("character varying(2048)");
 
+                    b.Property<DateTime?>("ParseFinishedAt")
+                        .HasColumnType("timestamp without time zone");
+
+                    b.Property<int?>("ParseProgress")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("ParseStage")
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
+                    b.Property<string>("ParseStageMessage")
+                        .HasMaxLength(1024)
+                        .HasColumnType("character varying(1024)");
+
+                    b.Property<DateTime?>("ParseStartedAt")
+                        .HasColumnType("timestamp without time zone");
+
                     b.Property<byte>("ParseStatus")
                         .HasColumnType("smallint");
 
@@ -280,6 +301,72 @@ namespace DredgeAI.BidCompare.Migrations
                     b.HasIndex("TaskId");
 
                     b.ToTable("BcCompareDocuments", (string)null);
+                });
+
+            modelBuilder.Entity("DredgeAI.BidCompare.Drafts.CompareDraftDocument", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTime>("CreationTime")
+                        .HasColumnType("timestamp without time zone")
+                        .HasColumnName("CreationTime");
+
+                    b.Property<Guid?>("CreatorId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("CreatorId");
+
+                    b.Property<Guid?>("DeleterId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("DeleterId");
+
+                    b.Property<DateTime?>("DeletionTime")
+                        .HasColumnType("timestamp without time zone")
+                        .HasColumnName("DeletionTime");
+
+                    b.Property<Guid>("DraftId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("FileExtension")
+                        .IsRequired()
+                        .HasMaxLength(16)
+                        .HasColumnType("character varying(16)");
+
+                    b.Property<string>("FileName")
+                        .IsRequired()
+                        .HasMaxLength(256)
+                        .HasColumnType("character varying(256)");
+
+                    b.Property<long>("FileSize")
+                        .HasColumnType("bigint");
+
+                    b.Property<bool>("IsDeleted")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("boolean")
+                        .HasDefaultValue(false)
+                        .HasColumnName("IsDeleted");
+
+                    b.Property<DateTime?>("LastModificationTime")
+                        .HasColumnType("timestamp without time zone")
+                        .HasColumnName("LastModificationTime");
+
+                    b.Property<Guid?>("LastModifierId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("LastModifierId");
+
+                    b.Property<string>("OriginStorageKey")
+                        .IsRequired()
+                        .HasMaxLength(512)
+                        .HasColumnType("character varying(512)");
+
+                    b.Property<byte>("Role")
+                        .HasColumnType("smallint");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("DraftId");
+
+                    b.ToTable("BcCompareDraftDocuments", (string)null);
                 });
 
             modelBuilder.Entity("DredgeAI.BidCompare.Evidences.EvidenceItem", b =>

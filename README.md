@@ -69,7 +69,9 @@ LLM_API_KEY=xxx
 Model 默认在 `backend/DredgeAI.BidCompare/src/DredgeAI.BidCompare.HttpApi.Host/appsettings.json`
 的 `Llm` 节（当前为 Qwen3.6，OpenAI 兼容协议）。
 
-开发模式存储为本地文件（`App_Data/storage`），无需 MinIO；生产默认 S3/MinIO。
+开发模式存储为本地文件（仓库根 `data/storage`），无需 MinIO；生产默认 S3/MinIO。
+运行时数据统一放在仓库根 `data/`（基础数据 / 业务文件 / PostgreSQL / 日志 / 备份），
+目录约定见 [docs/data-architecture.md](docs/data-architecture.md)。
 
 ## 开发命令
 

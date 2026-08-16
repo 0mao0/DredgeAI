@@ -3,20 +3,22 @@ from app.display import display_names
 from app.ocr import downgrade_severity, low_confidence_ocr_block_ids
 from app.schemas.evidence import Evidence, EvidenceLocation, Severity, build_evidence
 from app.schemas.ir import IrDocument
+from app.settings import get_settings
 from app.similarity.align import PairSimilarityResult, align_document_pair
 from app.similarity.cluster import find_similarity_clusters
 from app.similarity.minhash import CandidatePair, build_block_index, find_candidate_pairs
 
-EVIDENCE_MIN_SIMILARITY = 0.3   # 低于该值不出证据
-SEVERITY_HIGH = 0.8
-SEVERITY_MID = 0.5
-CLUSTER_MIN_SIMILARITY = 0.5    # 簇归并阈值
+EVIDENCE_MIN_SIMILARITY = 0.3   # 默认值文档；运行期以 settings 为准（低于该值不出证据）
+SEVERITY_HIGH = 0.8             # 默认值文档
+SEVERITY_MID = 0.5              # 默认值文档
+CLUSTER_MIN_SIMILARITY = 0.5    # 默认值文档（簇归并阈值）
 
 
 def _severity_of(similarity: float) -> Severity:
-    if similarity >= SEVERITY_HIGH:
+    settings = get_settings()
+    if similarity >= settings.severity_high:
         return "high"
-    if similarity >= SEVERITY_MID:
+    if similarity >= settings.severity_mid:
         return "mid"
     return "low"
 
@@ -69,6 +71,7 @@ def _pair_evidence(
 
 
 def analyze_similarity(task_id: str, documents: list[IrDocument]) -> list[Evidence]:
+    settings = get_settings()
     index = build_block_index(documents)
     pairs = find_candidate_pairs(index)
     by_doc_pair: dict[tuple[str, str], list[CandidatePair]] = {}
@@ -85,19 +88,21 @@ def analyze_similarity(task_id: str, documents: list[IrDocument]) -> list[Eviden
 
     evidences: list[Evidence] = []
     for r in results:
-        if r.similarity < EVIDENCE_MIN_SIMILARITY or not r.matches:
+        if r.similarity < settings.evidence_min_similarity or not r.matches:
             continue
         evidences.append(_pair_evidence(task_id, r, _is_ocr_suspect(r, ocr_ids), names))
 
-    for members in find_similarity_clusters(results, CLUSTER_MIN_SIMILARITY):
+    for members in find_similarity_clusters(results, settings.cluster_min_similarity):
         # 只统计构成归并的边（≥簇阈值）：弱边/非证据对不稀释均值、不进入定位
         sub = [
             r for r in results
             if r.doc_id_a in members
             and r.doc_id_b in members
-            and r.similarity >= CLUSTER_MIN_SIMILARITY
+            and r.similarity >= settings.cluster_min_similarity
             and r.matches
         ]
+        if not sub:
+            continue  # 防御：簇由 ≥阈值的边归并而来必有边，显式守卫除零
         avg_sim = round(sum(r.similarity for r in sub) / len(sub), 4)
         suspect = any(_is_ocr_suspect(r, ocr_ids) for r in sub)
         severity, ocr_note = _apply_ocr_downgrade("high", suspect)

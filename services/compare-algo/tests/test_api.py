@@ -1,4 +1,5 @@
 import asyncio
+import copy
 import logging
 
 from fastapi.testclient import TestClient
@@ -94,9 +95,27 @@ def test_single_document_rejected(ir_payload):
 
 
 def test_too_many_documents_rejected(ir_payload):
-    ir_payload["documents"] = ir_payload["documents"] + ir_payload["documents"]  # 6 份
+    # 上限 8 份（对齐 C# 端 MaxBidDocuments=8）：9 份唯一 docId → 422
+    docs = []
+    for i in range(9):
+        d = copy.deepcopy(ir_payload["documents"][i % 3])
+        d["docId"] = f"doc-extra-{i}"
+        docs.append(d)
+    ir_payload["documents"] = docs
     r = client.post("/analyze/pricing", json=ir_payload)
     assert r.status_code == 422
+
+
+def test_eight_documents_accepted(ir_payload):
+    # 8 份上限边界：唯一 docId 的 8 份产物不再 422（修复前 6~8 份必然 422 拖垮整个任务）
+    docs = []
+    for i in range(8):
+        d = copy.deepcopy(ir_payload["documents"][i % 3])
+        d["docId"] = f"doc-extra-{i}"
+        docs.append(d)
+    ir_payload["documents"] = docs
+    r = client.post("/analyze/pricing", json=ir_payload)
+    assert r.status_code == 200
 
 
 def test_duplicate_doc_ids_rejected(ir_payload):
@@ -192,7 +211,7 @@ def test_response_validation_failure_returns_500_not_422(monkeypatch, ir_payload
 
 def test_max_body_bytes_defaults_without_env(monkeypatch):
     monkeypatch.delenv("COMPARE_ALGO_MAX_BODY_BYTES", raising=False)
-    assert _max_body_bytes() == 50 * 1024 * 1024
+    assert _max_body_bytes() == 96 * 1024 * 1024
 
 
 def test_max_body_bytes_valid_env(monkeypatch):
@@ -201,16 +220,16 @@ def test_max_body_bytes_valid_env(monkeypatch):
 
 
 def test_max_body_bytes_invalid_env_falls_back_with_warning(monkeypatch, caplog):
-    # "50MB" 非纯数字 → 回退默认并告警（不得静默）
-    monkeypatch.setenv("COMPARE_ALGO_MAX_BODY_BYTES", "50MB")
+    # "96MB" 非纯数字 → 回退默认并告警（不得静默）
+    monkeypatch.setenv("COMPARE_ALGO_MAX_BODY_BYTES", "96MB")
     with caplog.at_level(logging.WARNING, logger="compare-algo"):
-        assert _max_body_bytes() == 50 * 1024 * 1024
+        assert _max_body_bytes() == 96 * 1024 * 1024
     assert any("COMPARE_ALGO_MAX_BODY_BYTES" in r.message for r in caplog.records)
     caplog.clear()
-    # "²".isdigit() 为 True 但 int("²") 抛 ValueError → 同样回退并告警
+    # "²".isdigit() 为 True 但无法解析为 int → 同样回退并告警
     monkeypatch.setenv("COMPARE_ALGO_MAX_BODY_BYTES", "²")
     with caplog.at_level(logging.WARNING, logger="compare-algo"):
-        assert _max_body_bytes() == 50 * 1024 * 1024
+        assert _max_body_bytes() == 96 * 1024 * 1024
     assert any("COMPARE_ALGO_MAX_BODY_BYTES" in r.message for r in caplog.records)
 
 

@@ -1,3 +1,4 @@
+using System;
 using System.Diagnostics;
 using System.IO;
 using System.Threading;
@@ -40,14 +41,38 @@ public class LibreOfficePdfConverter : IPdfConverter, ITransientDependency
             using var process = Process.Start(startInfo)
                 ?? throw new BusinessException(BidCompareErrorCodes.ExportFailed).WithData("reason", "无法启动 soffice");
 
+            // 重定向输出必须持续 drain，否则缓冲区写满后 soffice 阻塞形成死锁
+            var stdoutTask = process.StandardOutput.ReadToEndAsync();
+            var stderrTask = process.StandardError.ReadToEndAsync();
+
             using var timeoutCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
             timeoutCts.CancelAfter(System.TimeSpan.FromSeconds(_options.TimeoutSeconds));
-            await process.WaitForExitAsync(timeoutCts.Token);
+            try
+            {
+                await process.WaitForExitAsync(timeoutCts.Token);
+            }
+            catch (OperationCanceledException)
+            {
+                // 超时/取消后杀掉整棵进程树，避免孤儿 soffice 常驻
+                try
+                {
+                    process.Kill(entireProcessTree: true);
+                }
+                catch (InvalidOperationException)
+                {
+                    // 进程已退出
+                }
+                await Task.WhenAll(stdoutTask, stderrTask).ContinueWith(_ => { });
+                throw new BusinessException(BidCompareErrorCodes.ExportFailed)
+                    .WithData("reason", $"soffice 转换超时（{_options.TimeoutSeconds}s）或已取消");
+            }
+
+            var stderr = await stderrTask;
+            await stdoutTask;
 
             var pdfPath = Path.Combine(workDir, "report.pdf");
             if (process.ExitCode != 0 || !File.Exists(pdfPath))
             {
-                var stderr = await process.StandardError.ReadToEndAsync(cancellationToken);
                 throw new BusinessException(BidCompareErrorCodes.ExportFailed)
                     .WithData("exitCode", process.ExitCode)
                     .WithData("stderr", stderr);

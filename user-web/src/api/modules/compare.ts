@@ -1,4 +1,4 @@
-import { urls } from '@shared/core/api'
+import { urls, fillUrl } from '@shared/core/api'
 import { overviewDocLabels } from '@shared/core/utils/compare'
 import request from '@/api/request'
 import { API_BASE_URL } from '@/utils/constants'
@@ -11,27 +11,33 @@ import type {
   CompareTaskStatus,
   ConfirmClausesPayload,
   EvidenceItem,
-  RiskLevel,
   SimilarityMatrix,
   TaskOverview,
 } from '@/types'
-
-function fillUrl(template: string, params: Record<string, string>): string {
-  return Object.entries(params).reduce((url, [key, value]) => url.replace(`:${key}`, value), template)
-}
 
 function silentConfig(silent: boolean): { headers: { 'X-Silent-Request': '1' } } | undefined {
   return silent ? { headers: { 'X-Silent-Request': '1' } } : undefined
 }
 
-/* —— 后端 DTO（ABP 契约：枚举为 int，字段 camelCase） —— */
+/* —— 后端 DTO（ABP 契约：枚举序列化为 snake_case 字符串，字段 camelCase） —— */
+
+/** 后端任务状态（经 TASK_STATUS_MAP 折叠为前端展示态） */
+type BackendTaskStatus = 'parsing' | 'parsed' | 'awaiting_clauses' | 'comparing' | 'analyzing' | 'done' | 'failed' | 'partial'
+type BackendPairStatus = 'waiting' | 'processing' | 'done' | 'failed'
+type BackendParseStatus = 'pending' | 'parsing' | 'parsed' | 'failed'
+type BackendDocRole = 'bid' | 'tender'
+type BackendEvidenceType = 'similarity' | 'pricing' | 'metadata' | 'clause' | 'indicator'
+type BackendSeverity = 'high' | 'mid' | 'low'
+type BackendClauseSource = 'extracted' | 'manual' | 'template'
+type BackendExportFormat = 'pdf' | 'word'
+type BackendExportStatus = 'pending' | 'running' | 'succeeded' | 'failed'
 
 interface CompareTaskDto {
   id: string
   name: string
   nameEditedByUser: boolean
   suggestedName?: string | null
-  status: number
+  status: BackendTaskStatus
   failureReason?: string | null
   docIds: string[]
   tenderDocId?: string | null
@@ -51,7 +57,7 @@ interface ComparePairDto {
   pairId: string
   docAId: string
   docBId: string
-  status: number
+  status: BackendPairStatus
   similarity?: number | null
   failReason?: string | null
   startedAt?: string | null
@@ -61,10 +67,10 @@ interface ComparePairDto {
 interface CompareDocumentDto {
   id: string
   taskId: string
-  role: number
+  role: BackendDocRole
   fileName: string
   fileSize: number
-  parseStatus: number
+  parseStatus: BackendParseStatus
   parseError?: string | null
   parseProgress?: number | null
   parseStage?: string | null
@@ -79,7 +85,7 @@ interface CompareDocumentDto {
 interface CompareDraftDocumentDto {
   id: string
   draftId: string
-  role: number
+  role: BackendDocRole
   fileName: string
   fileSize: number
   createdAt: string
@@ -93,8 +99,8 @@ interface EvidenceLocationDto {
 interface EvidenceDto {
   id: string
   taskId: string
-  type: number
-  severity: number
+  type: BackendEvidenceType
+  severity: BackendSeverity
   docIds: string[]
   locations: EvidenceLocationDto[]
   title: string
@@ -105,7 +111,7 @@ interface EvidenceDto {
 
 interface ClauseDto {
   clauseId: string
-  source: number
+  source: BackendClauseSource
   text: string
   mandatory: boolean
   category?: string | null
@@ -121,8 +127,8 @@ interface ClauseTemplateDto {
 interface ExportJobDto {
   jobId: string
   taskId: string
-  format: number
-  status: number
+  format: BackendExportFormat
+  status: BackendExportStatus
   downloadUrl?: string | null
   error?: string | null
 }
@@ -140,52 +146,40 @@ interface DocumentIrDto {
   blocks: IrBlockDto[]
 }
 
-/* —— 枚举映射（后端按 ABP 标准输出 int） —— */
+/* —— 枚举映射（后端输出 snake_case 字符串，此处折叠为前端展示语义） —— */
 
-const TASK_STATUS_MAP: Record<number, CompareTaskStatus> = {
-  0: 'parsing', // Parsing
-  1: 'parsing', // Parsed（尚未进入比对，进度由 stage 区分）
-  2: 'parsing', // AwaitingClauses
-  3: 'comparing', // Comparing
-  4: 'ai_analyzing', // Analyzing
-  5: 'completed', // Done
-  6: 'failed', // Failed
-  7: 'partial', // Partial
+/** 后端 8 态折叠为前端 7 态：Parsed / AwaitingClauses 均展示为 parsing（进度细节由 stage 区分） */
+const TASK_STATUS_MAP: Record<BackendTaskStatus, CompareTaskStatus> = {
+  parsing: 'parsing',
+  parsed: 'parsing',
+  awaiting_clauses: 'parsing',
+  comparing: 'comparing',
+  analyzing: 'ai_analyzing',
+  done: 'completed',
+  failed: 'failed',
+  partial: 'partial',
 }
 
-const PARSE_STATUS_MAP: Record<number, CompareDocMeta['parseStatus']> = {
-  0: 'pending', // Pending
-  1: 'parsing', // Parsing
-  2: 'done', // Parsed
-  3: 'failed', // Failed
+const PARSE_STATUS_MAP: Record<BackendParseStatus, CompareDocMeta['parseStatus']> = {
+  pending: 'pending',
+  parsing: 'parsing',
+  parsed: 'done',
+  failed: 'failed',
 }
 
-const EVIDENCE_TYPE_MAP: Record<number, EvidenceItem['type']> = {
-  0: 'similarity', // Similarity
-  1: 'price', // Pricing
-  2: 'metadata', // Metadata
-  3: 'clause', // Clause
-  4: 'indicator', // Indicator
+const EVIDENCE_TYPE_MAP: Record<BackendEvidenceType, EvidenceItem['type']> = {
+  similarity: 'similarity',
+  pricing: 'price',
+  metadata: 'metadata',
+  clause: 'clause',
+  indicator: 'indicator',
 }
 
-const SEVERITY_MAP: Record<number, RiskLevel> = {
-  0: 'high', // High
-  1: 'mid', // Mid
-  2: 'low', // Low
-}
-
-const EXPORT_STATUS_MAP: Record<number, 'processing' | 'done' | 'failed'> = {
-  0: 'processing', // Pending
-  1: 'processing', // Running
-  2: 'done', // Succeeded
-  3: 'failed', // Failed
-}
-
-const PAIR_STATUS_MAP: Record<number, ComparePair['status']> = {
-  0: 'waiting', // Waiting
-  1: 'processing', // Processing
-  2: 'done', // Done
-  3: 'failed', // Failed
+const EXPORT_STATUS_MAP: Record<BackendExportStatus, 'processing' | 'done' | 'failed'> = {
+  pending: 'processing',
+  running: 'processing',
+  succeeded: 'done',
+  failed: 'failed',
 }
 
 /* —— DTO → 视图模型 —— */
@@ -204,7 +198,7 @@ function mapTask(dto: CompareTaskDto, documents: CompareDocMeta[]): CompareTask 
     name: dto.name,
     nameEditedByUser: dto.nameEditedByUser ?? false,
     suggestedName: dto.suggestedName ?? null,
-    status: TASK_STATUS_MAP[dto.status] ?? 'parsing',
+    status: TASK_STATUS_MAP[dto.status],
     failReason: dto.failureReason ?? undefined,
     documents,
     tenderDocId: dto.tenderDocId ?? null,
@@ -226,7 +220,7 @@ function mapPair(dto: ComparePairDto): ComparePair {
     pairId: dto.pairId,
     docAId: dto.docAId,
     docBId: dto.docBId,
-    status: PAIR_STATUS_MAP[dto.status] ?? 'waiting',
+    status: dto.status,
     similarity: dto.similarity ?? undefined,
     failReason: dto.failReason ?? undefined,
     startedAt: dto.startedAt ?? undefined,
@@ -241,13 +235,13 @@ function mapDocument(dto: CompareDocumentDto): CompareDocMeta {
     fileName: dto.fileName,
     pages: dto.pageCount ?? 0,
     sizeBytes: dto.fileSize,
-    parseStatus: PARSE_STATUS_MAP[dto.parseStatus] ?? 'pending',
+    parseStatus: PARSE_STATUS_MAP[dto.parseStatus],
     parseProgress: dto.parseProgress ?? undefined,
     parseStage: dto.parseStage ?? undefined,
     parseStageMessage: dto.parseStageMessage ?? undefined,
     parseStartedAt: dto.parseStartedAt ?? undefined,
     parseFinishedAt: dto.parseFinishedAt ?? undefined,
-    role: dto.role === 1 ? 'tender' : 'bid',
+    role: dto.role,
     failReason: dto.parseError ?? undefined,
     isLowConfidenceOcr: dto.ocrLowConfidenceRatio != null && dto.ocrLowConfidenceRatio > 0.3,
   }
@@ -257,7 +251,7 @@ function mapDraftDocument(dto: CompareDraftDocumentDto): CompareDraftDocument {
   return {
     id: dto.id,
     draftId: dto.draftId,
-    role: dto.role === 1 ? 'tender' : 'bid',
+    role: dto.role,
     fileName: dto.fileName,
     fileSize: dto.fileSize,
     createdAt: dto.createdAt,
@@ -378,7 +372,7 @@ export async function uploadDocument(
 ): Promise<CompareDocMeta> {
   const formData = new FormData()
   formData.append('file', file)
-  formData.append('role', role === 'tender' ? '1' : '0')
+  formData.append('role', role)
   const dto = await request.post<CompareDocumentDto>(fillUrl(urls.compareTaskDocuments, { id: taskId }), formData, {
     headers: { 'Content-Type': 'multipart/form-data' },
     timeout: 120000,
@@ -399,7 +393,7 @@ export async function uploadDraftDocument(
 ): Promise<CompareDraftDocument> {
   const formData = new FormData()
   formData.append('file', file)
-  formData.append('role', role === 'tender' ? '1' : '0')
+  formData.append('role', role)
   const dto = await request.post<CompareDraftDocumentDto>(
     fillUrl(urls.compareDraftDocuments, { draftId }),
     formData,
@@ -439,6 +433,32 @@ async function getIr(taskId: string, docId: string): Promise<DocumentIrDto | nul
 
 async function buildRefs(taskId: string, ev: EvidenceDto): Promise<EvidenceItem['refs']> {
   const refs: EvidenceItem['refs'] = []
+
+  const items = ev.metrics?.items
+  if (Array.isArray(items) && items.length > 0) {
+    for (const item of items) {
+      const blockIds = (item as { blockIds?: Record<string, string> }).blockIds
+      if (!blockIds) continue
+      for (const [docId, blockId] of Object.entries(blockIds)) {
+        const ir = await getIr(taskId, docId)
+        if (!ir) continue
+        const block = ir.blocks.find((b) => b.blockId === blockId)
+        if (block && block.bbox.length === 4) {
+          refs.push({
+            docId,
+            page: block.pageIdx + 1,
+            bbox: [block.bbox[0], block.bbox[1], block.bbox[2], block.bbox[3]],
+            pairId: `${ev.id}-${(item as { index?: number }).index ?? refs.length}`,
+            excerpt: typeof (item as { text?: unknown }).text === 'string'
+              ? (item as { text: string }).text
+              : block.text,
+          })
+        }
+      }
+    }
+    return refs
+  }
+
   for (const loc of ev.locations) {
     const ir = await getIr(taskId, loc.docId)
     if (!ir) continue
@@ -468,8 +488,8 @@ export async function getEvidence(id: string, silent = false): Promise<EvidenceI
     items.push({
       id: ev.id,
       taskId: ev.taskId,
-      type: EVIDENCE_TYPE_MAP[ev.type] ?? 'metadata',
-      severity: SEVERITY_MAP[ev.severity] ?? 'low',
+      type: EVIDENCE_TYPE_MAP[ev.type],
+      severity: ev.severity,
       docIds: ev.docIds,
       title: ev.title,
       summary: ev.description,
@@ -563,7 +583,7 @@ export interface ExportJob {
 
 export async function exportReport(taskId: string, format: 'docx' | 'pdf'): Promise<ExportJob> {
   const dto = await request.post<ExportJobDto>(fillUrl(urls.compareTaskExport, { id: taskId }), {
-    format: format === 'pdf' ? 0 : 1,
+    format: format === 'pdf' ? 'pdf' : 'word',
   })
   return mapExportJob(dto)
 }

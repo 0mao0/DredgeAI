@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Text.Json;
 using DredgeAI.BidCompare.Analysis;
+using Microsoft.Extensions.Logging;
 
 namespace DredgeAI.BidCompare.Evidences;
 
@@ -34,7 +35,7 @@ public static class EvidenceMapper
         };
     }
 
-    public static EvidenceItem ToEntity(Guid id, Guid taskId, AlgoEvidence algo)
+    public static EvidenceItem ToEntity(Guid id, Guid taskId, AlgoEvidence algo, ILogger? logger = null)
     {
         var docIds = algo.DocIds.Select(Guid.Parse).ToList();
         var locations = algo.Locations.Select(l => new EvidenceLocationDto
@@ -46,8 +47,8 @@ public static class EvidenceMapper
         return new EvidenceItem(
             id,
             taskId,
-            ParseEnum<EvidenceType>(algo.Type, EvidenceType.Metadata),
-            ParseEnum<EvidenceSeverity>(algo.Severity, EvidenceSeverity.Low),
+            ParseEnum<EvidenceType>(algo.Type, EvidenceType.Metadata, "type", logger),
+            ParseEnum<EvidenceSeverity>(algo.Severity, EvidenceSeverity.Low, "severity", logger),
             JsonSerializer.Serialize(docIds, JsonOptions),
             JsonSerializer.Serialize(locations, JsonOptions),
             algo.Metrics == null ? null : JsonSerializer.Serialize(algo.Metrics, JsonOptions),
@@ -75,6 +76,14 @@ public static class EvidenceMapper
         return metrics?.Similarity;
     }
 
-    private static TEnum ParseEnum<TEnum>(string value, TEnum fallback) where TEnum : struct
-        => Enum.TryParse<TEnum>(value, ignoreCase: true, out var parsed) ? parsed : fallback;
+    private static TEnum ParseEnum<TEnum>(string value, TEnum fallback, string field, ILogger? logger) where TEnum : struct
+    {
+        if (Enum.TryParse<TEnum>(value, ignoreCase: true, out var parsed))
+        {
+            return parsed;
+        }
+        // 未识别枚举值保留 fallback 不中断导入，但记录 warning 便于发现算法端契约漂移
+        logger?.LogWarning("算法证据 {Field} 未识别：\"{Value}\"，回退为 {Fallback}", field, value, fallback);
+        return fallback;
+    }
 }

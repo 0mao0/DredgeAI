@@ -1,6 +1,6 @@
 <template>
   <div class="collusion-panel">
-    <SectionCard v-if="metaRows.length" title="文档元数据对比" flush>
+    <SectionCard v-if="metaRows.length" title="文档属性信息对比" flush>
       <div class="meta-table__wrap">
         <table class="meta-table">
           <thead>
@@ -29,7 +29,7 @@
       :documents="documents"
       hide-type-filter
       clickable
-      title="元数据证据"
+      title="属性信息证据"
       @jump="(ev) => emit('locate', ev)"
     />
   </div>

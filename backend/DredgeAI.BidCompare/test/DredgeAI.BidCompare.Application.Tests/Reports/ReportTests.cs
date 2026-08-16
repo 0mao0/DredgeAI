@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.IO;
 using System.Linq;
 using System.Threading.Tasks;
@@ -28,9 +28,9 @@ public class ReportTests : BidCompareApplicationTestBase<BidCompareApplicationTe
     private async Task<Guid> PrepareDoneTaskAsync()
     {
         var task = await _appService.CreateAsync(new CreateCompareTaskDto { Name = "一期比标" });
-        var tender = await _appService.UploadDocumentAsync(task.Id, DocumentRole.Tender, "招标文件.pdf", new MemoryStream(new byte[] { 0 }));
-        var docA = await _appService.UploadDocumentAsync(task.Id, DocumentRole.Bid, "标书A.pdf", new MemoryStream(new byte[] { 1 }));
-        var docB = await _appService.UploadDocumentAsync(task.Id, DocumentRole.Bid, "标书B.pdf", new MemoryStream(new byte[] { 2 }));
+        var tender = await _appService.UploadDocumentAsync(task.Id, DocumentRole.Tender, "招标文件.pdf", TestFiles.Pdf(0));
+        var docA = await _appService.UploadDocumentAsync(task.Id, DocumentRole.Bid, "标书A.pdf", TestFiles.Pdf(1));
+        var docB = await _appService.UploadDocumentAsync(task.Id, DocumentRole.Bid, "标书B.pdf", TestFiles.Pdf(2));
         var parseJob = GetRequiredService<ParseDocumentJob>();
         await WithUnitOfWorkAsync(async () =>
         {

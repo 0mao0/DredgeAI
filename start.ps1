@@ -3,17 +3,23 @@
     [switch]$NoBrowser
 )
 
-# DredgeAI Startup Script（比标后端 + 算法服务 + 前端；AnGIneer 仅检测）
+# DredgeAI Startup Script（比标后端 + 算法服务 + 用户端/管理端前端；AnGIneer 仅检测）
 [Console]::OutputEncoding = [System.Text.Encoding]::UTF8
 
 $rootDir = if ($PSScriptRoot) { $PSScriptRoot } else { (Get-Location).Path }
-$logsDir = Join-Path $rootDir "logs"
+$dataDir = Join-Path $rootDir "data"
+$logsDir = Join-Path $dataDir "logs"
+$postgresDataDir = Join-Path $dataDir "postgres"
+$storageDir = Join-Path $dataDir "storage"
+$backupDir = Join-Path $dataDir "backup"
 $compareAlgoLogPath = Join-Path $logsDir "compare-algo.log"
 $backendLogPath = Join-Path $logsDir "backend.log"
 $frontendLogPath = Join-Path $logsDir "frontend.log"
+$adminLogPath = Join-Path $logsDir "admin-web.log"
 $compareAlgoPidPath = Join-Path $logsDir "compare-algo.pid"
 $backendPidPath = Join-Path $logsDir "backend.pid"
 $frontendPidPath = Join-Path $logsDir "frontend.pid"
+$adminPidPath = Join-Path $logsDir "admin-web.pid"
 
 # 优先使用用户目录下的真实 dotnet SDK（部分机器 C:\Program Files\dotnet 只是无 SDK 的空壳）
 $localDotnetDir = Join-Path $env:LOCALAPPDATA "Microsoft\dotnet"
@@ -26,11 +32,13 @@ $postgresPort = 5432
 $compareAlgoPort = 8100
 $backendPort = 44361
 $frontendPort = 5373
+$adminPort = 5374
 $angineerPort = 8790
 
 $backendUrl = "https://localhost:$backendPort"
 $compareAlgoUrl = "http://localhost:$compareAlgoPort"
 $frontendUrl = "http://localhost:$frontendPort"
+$adminUrl = "http://localhost:$adminPort"
 $angineerUrl = "http://localhost:$angineerPort"
 
 # 关键路径
@@ -38,7 +46,15 @@ $compareAlgoDir = Join-Path $rootDir "services\compare-algo"
 $compareAlgoPython = Join-Path $compareAlgoDir ".venv\Scripts\python.exe"
 $backendProject = Join-Path $rootDir "backend\DredgeAI.BidCompare\src\DredgeAI.BidCompare.HttpApi.Host"
 $frontendDir = Join-Path $rootDir "user-web"
+$adminDir = Join-Path $rootDir "admin-web"
 $postgresContainer = "bidcompare-postgres"
+
+# 运行时数据目录（monorepo 约定：仓库根 data/，统一不入库）
+foreach ($dir in @($dataDir, $logsDir, $postgresDataDir, $storageDir, $backupDir, (Join-Path $dataDir "base"))) {
+    if (-not (Test-Path $dir)) {
+        New-Item -ItemType Directory -Path $dir -Force | Out-Null
+    }
+}
 
 # 递归停止进程树（含子进程）
 function Stop-ProcessTree {
@@ -285,12 +301,17 @@ if (-not (Test-Path (Join-Path $frontendDir "package.json"))) {
 }
 Write-Host "  user-web OK" -ForegroundColor DarkGray
 
+if (-not (Test-Path (Join-Path $adminDir "package.json"))) {
+    Write-Error "admin-web not found: $adminDir"; exit 1
+}
+Write-Host "  admin-web OK" -ForegroundColor DarkGray
+
 if (-not (Test-Path $logsDir)) {
     New-Item -ItemType Directory -Path $logsDir | Out-Null
 }
 
 if ($TailLogs) {
-    Watch-ServiceLogs -LogPaths @($backendLogPath, $compareAlgoLogPath, $frontendLogPath)
+    Watch-ServiceLogs -LogPaths @($backendLogPath, $compareAlgoLogPath, $frontendLogPath, $adminLogPath)
     exit 0
 }
 
@@ -299,6 +320,7 @@ Write-Host "[2/5] Cleaning up stale processes..." -ForegroundColor Yellow
 Stop-PortProcess -Label "compare-algo" -Port $compareAlgoPort
 Stop-PortProcess -Label "Backend" -Port $backendPort
 Stop-PortProcess -Label "Frontend" -Port $frontendPort
+Stop-PortProcess -Label "Admin Web" -Port $adminPort
 
 # 3. PostgreSQL（Docker）
 Write-Host "[3/5] Ensuring PostgreSQL (Docker)..." -ForegroundColor Yellow
@@ -317,6 +339,7 @@ if (-not $dockerCmd) {
                 -e POSTGRES_PASSWORD=postgres `
                 -e POSTGRES_DB=BidCompare `
                 -p "${postgresPort}:5432" `
+                -v "${postgresDataDir}:/var/lib/postgresql/data" `
                 postgres:16 | Out-Null
             Write-Host "  Created container $postgresContainer" -ForegroundColor Green
         }
@@ -334,6 +357,7 @@ Write-Host "[4/5] Starting services..." -ForegroundColor Yellow
 Write-Host "      compare-algo: $compareAlgoUrl" -ForegroundColor Green
 Write-Host "      Backend:      $backendUrl" -ForegroundColor Green
 Write-Host "      Frontend:     $frontendUrl" -ForegroundColor Green
+Write-Host "      Admin Web:    $adminUrl" -ForegroundColor Green
 
 $escapedAlgoDir = $compareAlgoDir.Replace("'", "''")
 $escapedPython = $compareAlgoPython.Replace("'", "''")
@@ -348,14 +372,19 @@ $escapedFrontendDir = $frontendDir.Replace("'", "''")
 $frontendCommand = "Set-Location '$escapedFrontendDir'; pnpm dev"
 $frontendProcess = Start-ServiceProcess -ServiceName "Frontend" -ServiceCommand $frontendCommand -LogPath $frontendLogPath -PidPath $frontendPidPath
 
+$escapedAdminDir = $adminDir.Replace("'", "''")
+$adminCommand = "Set-Location '$escapedAdminDir'; pnpm dev"
+$adminProcess = Start-ServiceProcess -ServiceName "Admin Web" -ServiceCommand $adminCommand -LogPath $adminLogPath -PidPath $adminPidPath
+
 Write-Host "      Logs: $logsDir" -ForegroundColor DarkGray
-Write-Host "      Backend PID: $($backendProcess.Id), compare-algo PID: $($compareAlgoProcess.Id), frontend PID: $($frontendProcess.Id)" -ForegroundColor DarkGray
+Write-Host "      Backend PID: $($backendProcess.Id), compare-algo PID: $($compareAlgoProcess.Id), frontend PID: $($frontendProcess.Id), admin-web PID: $($adminProcess.Id)" -ForegroundColor DarkGray
 
 # 5. 健康检查
 Write-Host "[5/5] Waiting for services..." -ForegroundColor Yellow
 $compareAlgoHealthy = Test-HttpHealth -Label "compare-algo" -Url "$compareAlgoUrl/healthz" -TimeoutSeconds 60
 $backendHealthy = Test-HttpHealth -Label "Backend" -Url "$backendUrl/swagger/v1/swagger.json" -TimeoutSeconds 180
 $frontendHealthy = Test-HttpHealth -Label "Frontend" -Url $frontendUrl -TimeoutSeconds 60
+$adminHealthy = Test-HttpHealth -Label "Admin Web" -Url $adminUrl -TimeoutSeconds 60
 
 # AnGIneer 检测（docs-api 端口 8790，不属于 DredgeAI 仓库，仅提示）
 $angineerReady = Test-HttpHealth -Label "AnGIneer" -Url "$angineerUrl/docs" -TimeoutSeconds 5
@@ -372,13 +401,19 @@ Write-Host "========================================" -ForegroundColor Cyan
 Write-Host ("  compare-algo {0}" -f $(if ($compareAlgoHealthy) { "OK" } else { "FAILED" })) -ForegroundColor $(if ($compareAlgoHealthy) { "Green" } else { "Red" })
 Write-Host ("  Backend      {0}" -f $(if ($backendHealthy) { "OK" } else { "FAILED" })) -ForegroundColor $(if ($backendHealthy) { "Green" } else { "Red" })
 Write-Host ("  Frontend     {0}" -f $(if ($frontendHealthy) { "OK" } else { "FAILED" })) -ForegroundColor $(if ($frontendHealthy) { "Green" } else { "Red" })
+Write-Host ("  Admin Web    {0}" -f $(if ($adminHealthy) { "OK" } else { "FAILED" })) -ForegroundColor $(if ($adminHealthy) { "Green" } else { "Red" })
 Write-Host ("  AnGIneer     {0}" -f $(if ($angineerReady) { "OK" } else { "not running" })) -ForegroundColor $(if ($angineerReady) { "Green" } else { "DarkYellow" })
 Write-Host ""
 Write-Host "  Frontend: $frontendUrl" -ForegroundColor Cyan
+Write-Host "  Admin Web: $adminUrl" -ForegroundColor Cyan
 Write-Host "  Backend Swagger: $backendUrl/swagger" -ForegroundColor Cyan
 Write-Host "  Logs: $logsDir" -ForegroundColor DarkGray
 Write-Host "  Tail logs with: .\start.ps1 -TailLogs" -ForegroundColor DarkGray
 
 if ($backendHealthy -and -not $NoBrowser) {
     Start-Process $frontendUrl
+}
+
+if ($adminHealthy -and -not $NoBrowser) {
+    Start-Process $adminUrl
 }

@@ -54,7 +54,7 @@ export function evidenceMetricLines(ev: EvidenceItem): string[] {
 export const EVIDENCE_TYPE_META: Record<EvidenceItem['type'], { label: string, color: string }> = {
   similarity: { label: '雷同', color: 'red' },
   price: { label: '报价', color: 'orange' },
-  metadata: { label: '元数据', color: 'blue' },
+  metadata: { label: '属性信息', color: 'blue' },
   clause: { label: '条款', color: 'green' },
   indicator: { label: '指标', color: 'purple' },
 }

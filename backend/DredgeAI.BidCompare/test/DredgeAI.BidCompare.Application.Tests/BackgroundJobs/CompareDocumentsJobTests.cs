@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
@@ -29,8 +29,8 @@ public class CompareDocumentsJobTests : BidCompareApplicationTestBase<BidCompare
     private async Task<(Guid TaskId, Guid DocA, Guid DocB)> PrepareParsedTaskAsync()
     {
         var task = await _appService.CreateAsync(new CreateCompareTaskDto { Name = "t" });
-        var docA = await _appService.UploadDocumentAsync(task.Id, DocumentRole.Bid, "标书A.pdf", new MemoryStream(new byte[] { 1 }));
-        var docB = await _appService.UploadDocumentAsync(task.Id, DocumentRole.Bid, "标书B.pdf", new MemoryStream(new byte[] { 2 }));
+        var docA = await _appService.UploadDocumentAsync(task.Id, DocumentRole.Bid, "标书A.pdf", TestFiles.Pdf(1));
+        var docB = await _appService.UploadDocumentAsync(task.Id, DocumentRole.Bid, "标书B.pdf", TestFiles.Pdf(2));
         var parseJob = GetRequiredService<ParseDocumentJob>();
         await WithUnitOfWorkAsync(async () =>
         {
@@ -48,7 +48,7 @@ public class CompareDocumentsJobTests : BidCompareApplicationTestBase<BidCompare
         {
             var doc = await _appService.UploadDocumentAsync(
                 task.Id, DocumentRole.Bid, $"标书{Convert.ToChar('A' + i)}.pdf",
-                new MemoryStream(new byte[] { (byte)(i + 1) }));
+                TestFiles.Pdf((byte)(i + 1)));
             docs.Add(doc.Id);
         }
         var parseJob = GetRequiredService<ParseDocumentJob>();
@@ -276,7 +276,7 @@ public class CompareDocumentsJobTests : BidCompareApplicationTestBase<BidCompare
     public async Task Less_Than_Two_Parsed_Bids_Should_Fail_Task()
     {
         var task = await _appService.CreateAsync(new CreateCompareTaskDto { Name = "t" });
-        var docA = await _appService.UploadDocumentAsync(task.Id, DocumentRole.Bid, "标书A.pdf", new MemoryStream(new byte[] { 1 }));
+        var docA = await _appService.UploadDocumentAsync(task.Id, DocumentRole.Bid, "标书A.pdf", TestFiles.Pdf(1));
         await WithUnitOfWorkAsync(async () =>
         {
             await GetRequiredService<ParseDocumentJob>().ExecuteAsync(

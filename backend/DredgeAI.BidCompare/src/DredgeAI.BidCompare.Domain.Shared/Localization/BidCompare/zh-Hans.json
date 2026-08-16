@@ -4,6 +4,10 @@
     "AppName": "BidCompare",
     "Menu:Home": "首页",
     "Welcome": "欢迎",
-    "LongWelcomeMessage": "欢迎使用本应用程序。这是一个基于 ABP 框架的启动项目。更多信息，请访问 abp.io。"
+    "LongWelcomeMessage": "欢迎使用本应用程序。这是一个基于 ABP 框架的启动项目。更多信息，请访问 abp.io。",
+    "Permission:BidCompare": "标书比对",
+    "Permission:BidCompare.Tasks": "比标任务",
+    "Permission:BidCompare.Drafts": "上传暂存",
+    "Permission:BidCompare.ClauseTemplates": "条款库"
   }
 }

@@ -2,7 +2,6 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
-using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
 using DredgeAI.BidCompare.Analysis;
@@ -15,6 +14,7 @@ using Volo.Abp.BackgroundJobs;
 using Volo.Abp.DependencyInjection;
 using Volo.Abp.Domain.Repositories;
 using Volo.Abp.Guids;
+using Volo.Abp.Timing;
 
 namespace DredgeAI.BidCompare.BackgroundJobs;
 
@@ -35,6 +35,7 @@ public class CompareDocumentsJob : AsyncBackgroundJob<CompareDocumentsArgs>, ITr
     private readonly ICompareAlgoClient _algoClient;
     private readonly IGuidGenerator _guidGenerator;
     private readonly IBackgroundJobManager _backgroundJobManager;
+    private readonly IClock _clock;
 
     public CompareDocumentsJob(
         IRepository<CompareTask, Guid> taskRepository,
@@ -43,7 +44,8 @@ public class CompareDocumentsJob : AsyncBackgroundJob<CompareDocumentsArgs>, ITr
         IFileStorage fileStorage,
         ICompareAlgoClient algoClient,
         IGuidGenerator guidGenerator,
-        IBackgroundJobManager backgroundJobManager)
+        IBackgroundJobManager backgroundJobManager,
+        IClock clock)
     {
         _taskRepository = taskRepository;
         _documentRepository = documentRepository;
@@ -52,6 +54,7 @@ public class CompareDocumentsJob : AsyncBackgroundJob<CompareDocumentsArgs>, ITr
         _algoClient = algoClient;
         _guidGenerator = guidGenerator;
         _backgroundJobManager = backgroundJobManager;
+        _clock = clock;
     }
 
     public override async Task ExecuteAsync(CompareDocumentsArgs args)
@@ -80,10 +83,19 @@ public class CompareDocumentsJob : AsyncBackgroundJob<CompareDocumentsArgs>, ITr
             var rawGraphKey = doc.IrStorageKey!.Replace("/ir.json", "/raw/doc_blocks_graph.jsonl", System.StringComparison.Ordinal);
             var rawMetaKey = doc.IrStorageKey.Replace("/ir.json", "/raw/doc_blocks_graph_meta.json", System.StringComparison.Ordinal);
 
-            await using var graphStream = await _fileStorage.GetAsync(rawGraphKey, cancellationToken);
-            var graphJsonl = await ReadAllAsync(graphStream, cancellationToken);
-            await using var metaStream = await _fileStorage.GetAsync(rawMetaKey, cancellationToken);
-            var metaJson = await ReadAllAsync(metaStream, cancellationToken);
+            // 逐份读取构建请求，单份读完即释放（算法契约需全文，无法流式，但不做全量驻留之外的重复缓冲）
+            string graphJsonl;
+            await using (var stream = await _fileStorage.GetAsync(rawGraphKey, cancellationToken))
+            using (var reader = new StreamReader(stream))
+            {
+                graphJsonl = await reader.ReadToEndAsync(cancellationToken);
+            }
+            string metaJson;
+            await using (var stream = await _fileStorage.GetAsync(rawMetaKey, cancellationToken))
+            using (var reader = new StreamReader(stream))
+            {
+                metaJson = await reader.ReadToEndAsync(cancellationToken);
+            }
 
             rawByDocId[doc.Id] = new AlgoRawDocument(doc.Id.ToString(), graphJsonl, metaJson);
         }
@@ -115,7 +127,7 @@ public class CompareDocumentsJob : AsyncBackgroundJob<CompareDocumentsArgs>, ITr
         }
         await _taskRepository.UpdateAsync(task, autoSave: true, cancellationToken: cancellationToken);
 
-        task.MarkPairBatchStarted(pairs.Select(p => p.PairId), DateTime.Now);
+        task.MarkPairBatchStarted(pairs.Select(p => p.PairId), _clock.Now);
         task.UpdateProgress("comparing", 60, "算法分析中");
         await _taskRepository.UpdateAsync(task, autoSave: true, cancellationToken: cancellationToken);
 
@@ -123,9 +135,15 @@ public class CompareDocumentsJob : AsyncBackgroundJob<CompareDocumentsArgs>, ITr
         try
         {
             var allDocs = rawByDocId.Values.ToList();
-            algoEvidences = (await _algoClient.AnalyzeSimilarityAsync(task.Id.ToString(), allDocs, cancellationToken))
-                .Concat(await _algoClient.AnalyzePricingAsync(task.Id.ToString(), allDocs, cancellationToken))
-                .Concat(await _algoClient.AnalyzeMetadataAsync(task.Id.ToString(), allDocs, cancellationToken))
+            // 三端点并行：算法服务契约保留 similarity/pricing/metadata 拆分（不合并），
+            // 单次最长 600s 串行总计 1800s → 并行后 wall-clock ≈ 单端点耗时
+            var similarityTask = _algoClient.AnalyzeSimilarityAsync(task.Id.ToString(), allDocs, cancellationToken);
+            var pricingTask = _algoClient.AnalyzePricingAsync(task.Id.ToString(), allDocs, cancellationToken);
+            var metadataTask = _algoClient.AnalyzeMetadataAsync(task.Id.ToString(), allDocs, cancellationToken);
+            await Task.WhenAll(similarityTask, pricingTask, metadataTask);
+            algoEvidences = similarityTask.Result
+                .Concat(pricingTask.Result)
+                .Concat(metadataTask.Result)
                 .ToList();
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
@@ -133,7 +151,7 @@ public class CompareDocumentsJob : AsyncBackgroundJob<CompareDocumentsArgs>, ITr
             Logger.LogWarning(ex, "算法服务调用失败，任务 {TaskId} 标记 Failed", args.TaskId);
             foreach (var pair in pairs)
             {
-                task.MarkPairFailed(pair.PairId, DateTime.Now, ex.Message);
+                task.MarkPairFailed(pair.PairId, _clock.Now, ex.Message);
             }
             task.MarkFailed($"算法服务不可用：{ex.Message}");
             await _taskRepository.UpdateAsync(task, autoSave: true, cancellationToken: cancellationToken);
@@ -150,6 +168,36 @@ public class CompareDocumentsJob : AsyncBackgroundJob<CompareDocumentsArgs>, ITr
             }
         }
 
+        // 重跑幂等：先删旧证据再插入新证据（同一工作单元），避免每次重跑证据翻倍。
+        // 全量重跑 → 清空本任务全部算法证据（AI 证据由随后 AiAnalysisJob 按 AiGenerated 维度自清）；
+        // 部分重跑 → 仅删恰好涉及重跑对两份文档的算法证据（多文档簇证据随全量重跑更新）。
+        var existingEvidences = await _evidenceRepository.GetListAsync(
+            e => e.TaskId == args.TaskId && !e.AiGenerated, cancellationToken: cancellationToken);
+        List<EvidenceItem> staleEvidences;
+        if (retriedDocPairs.Count > 0)
+        {
+            staleEvidences = existingEvidences
+                .Where(e =>
+                {
+                    var docIds = EvidenceMapper.DeserializeDocIds(e.DocIdsJson);
+                    if (docIds.Count != 2)
+                    {
+                        return false;
+                    }
+                    var (a, b) = (docIds[0].ToString(), docIds[1].ToString());
+                    return retriedDocPairs.Contains((a, b)) || retriedDocPairs.Contains((b, a));
+                })
+                .ToList();
+        }
+        else
+        {
+            staleEvidences = existingEvidences;
+        }
+        if (staleEvidences.Count > 0)
+        {
+            await _evidenceRepository.DeleteManyAsync(staleEvidences, autoSave: true, cancellationToken: cancellationToken);
+        }
+
         foreach (var algoEvidence in algoEvidences)
         {
             if (retriedDocPairs.Count > 0)
@@ -159,14 +207,14 @@ public class CompareDocumentsJob : AsyncBackgroundJob<CompareDocumentsArgs>, ITr
                 if (!retriedDocPairs.Contains((a, b)) && !retriedDocPairs.Contains((b, a))) continue;
             }
             await _evidenceRepository.InsertAsync(
-                EvidenceMapper.ToEntity(_guidGenerator.Create(), args.TaskId, algoEvidence),
+                EvidenceMapper.ToEntity(_guidGenerator.Create(), args.TaskId, algoEvidence, Logger),
                 cancellationToken: cancellationToken);
         }
 
         // 批处理返回后逐对落定（本地快速处理，不伪造算法运行中的逐对进度）
         foreach (var pair in pairs)
         {
-            task.MarkPairDone(pair.PairId, DateTime.Now, ReadPairSimilarity(algoEvidences, pair.DocAId, pair.DocBId));
+            task.MarkPairDone(pair.PairId, _clock.Now, ReadPairSimilarity(algoEvidences, pair.DocAId, pair.DocBId));
         }
         await _taskRepository.UpdateAsync(task, autoSave: true, cancellationToken: cancellationToken);
 
@@ -196,12 +244,5 @@ public class CompareDocumentsJob : AsyncBackgroundJob<CompareDocumentsArgs>, ITr
             }
         }
         return null;
-    }
-
-    private static async Task<string> ReadAllAsync(Stream stream, CancellationToken cancellationToken)
-    {
-        using var buffer = new MemoryStream();
-        await stream.CopyToAsync(buffer, cancellationToken);
-        return Encoding.UTF8.GetString(buffer.ToArray());
     }
 }

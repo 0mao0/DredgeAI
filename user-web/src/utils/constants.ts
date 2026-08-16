@@ -19,6 +19,8 @@ export const MOCK_MODULES: Record<string, boolean> = {
   apikey: true,
   chart: true,
   dubbing: true,
+  // compare 直连真实后端（上传会话依赖后端存储），如需 mock 设为 true 并提供注册器
+  compare: false,
 }
 
 // TTS Mock 开关：关闭后 TTS 请求直连 CosyVoice server.py（http://localhost:8000）

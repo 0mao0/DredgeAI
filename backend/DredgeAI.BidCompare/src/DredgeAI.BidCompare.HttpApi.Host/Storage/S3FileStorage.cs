@@ -42,14 +42,11 @@ public class S3FileStorage : IFileStorage
         return key;
     }
 
+    /// <summary>流式读取：直接返回 S3 响应流（随流释放响应句柄），不整对象读入内存。</summary>
     public async Task<Stream> GetAsync(string key, CancellationToken cancellationToken = default)
     {
         var response = await _client.Value.GetObjectAsync(_options.Bucket, key, cancellationToken);
-        var buffer = new MemoryStream();
-        await response.ResponseStream.CopyToAsync(buffer, cancellationToken);
-        buffer.Position = 0;
-        response.Dispose();
-        return buffer;
+        return new OwnedStream(response.ResponseStream, response);
     }
 
     public async Task DeleteAsync(string key, CancellationToken cancellationToken = default)

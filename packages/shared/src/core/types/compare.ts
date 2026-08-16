@@ -61,6 +61,16 @@ export interface CompareDocMeta {
   pages: number
   sizeBytes: number
   parseStatus: 'pending' | 'parsing' | 'done' | 'failed'
+  /** AnGIneer 解析进度 0~100（处理中实时更新，终态 100） */
+  parseProgress?: number
+  /** AnGIneer 当前管线阶段（source_prep/convert/raw_parse/popo/structure/...） */
+  parseStage?: string
+  /** AnGIneer 当前阶段消息（如「MinerU 解析中」） */
+  parseStageMessage?: string
+  /** 本次解析开始时间（服务端时间戳，刷新后耗时仍可计算） */
+  parseStartedAt?: string
+  /** 本次解析结束时间 */
+  parseFinishedAt?: string
   /** 文档原文预览 URL（由宿主 API 模块生成，PDF Viewer 直接消费） */
   fileUrl?: string
   /** 文档角色：招标文件不参与标书两两对比 */
@@ -68,6 +78,16 @@ export interface CompareDocMeta {
   failReason?: string
   /** 扫描件标记：true 时 UI 提示「查重结果可能偏差」 */
   isLowConfidenceOcr?: boolean
+}
+
+/** 上传会话中的暂存文件（选中即上传，未建任务前的文件清单）。 */
+export interface CompareDraftDocument {
+  id: string
+  draftId: string
+  role: 'bid' | 'tender'
+  fileName: string
+  fileSize: number
+  createdAt: string
 }
 
 export type RiskLevel = 'high' | 'mid' | 'low'

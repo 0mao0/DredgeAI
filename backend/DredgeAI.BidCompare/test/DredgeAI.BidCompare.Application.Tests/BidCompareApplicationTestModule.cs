@@ -16,6 +16,7 @@ using Volo.Abp;
 using Volo.Abp.EntityFrameworkCore;
 using Volo.Abp.EntityFrameworkCore.Sqlite;
 using Volo.Abp.Modularity;
+using Volo.Abp.Uow;
 
 namespace DredgeAI.BidCompare;
 
@@ -31,6 +32,7 @@ public class BidCompareApplicationTestModule : AbpModule
 
     public override void ConfigureServices(ServiceConfigurationContext context)
     {
+        context.Services.AddAlwaysDisableUnitOfWorkTransaction();
         context.Services.Replace(ServiceDescriptor.Singleton<IBackgroundJobManager, RecordingBackgroundJobManager>());
         context.Services.Replace(ServiceDescriptor.Singleton<IFileStorage, InMemoryFileStorage>());
         context.Services.Replace(ServiceDescriptor.Singleton<IAnGineerClient, FakeAnGineerClient>());

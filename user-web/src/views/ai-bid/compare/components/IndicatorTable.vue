@@ -62,7 +62,7 @@ const rows = computed<IndicatorRow[]>(() => indicatorEvidence.value.map((ev) => 
   id: ev.id,
   name: ev.title.replace(/^指标比选：/, ''),
   cells: summariesOf(ev).reduce<Record<string, string>>((acc, s) => {
-    acc[s.docId] = s.summary
+    acc[s.docId] = replaceDocIds(s.summary, props.documents)
     return acc
   }, {}),
   evidence: ev,
@@ -83,6 +83,10 @@ function summariesOf(ev: EvidenceItem): { docId: string, summary: string }[] {
       return idx > 0 ? { docId: part.slice(0, idx).trim(), summary: part.slice(idx + 1).trim() } : null
     })
     .filter((s): s is { docId: string, summary: string } => !!s)
+}
+
+function replaceDocIds(text: string, documents: CompareDocMeta[]): string {
+  return text.replace(/\b[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\b/gi, (id) => docLabel(documents, id))
 }
 </script>
 

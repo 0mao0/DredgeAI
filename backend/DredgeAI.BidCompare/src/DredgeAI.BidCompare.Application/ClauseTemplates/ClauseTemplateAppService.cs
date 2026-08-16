@@ -59,6 +59,7 @@ public class ClauseTemplateAppService : ApplicationService, IClauseTemplateAppSe
 
     public async Task DeleteAsync(Guid id)
     {
-        await _repository.DeleteAsync(id, autoSave: true);
+        var entity = await _repository.GetAsync(id);
+        await _repository.DeleteAsync(entity, autoSave: true);
     }
 }

@@ -65,6 +65,10 @@ export const urls = {
   compareTaskExportStatus: '/compare/tasks/:id/exports/:exportId',
   compareClauseTemplates: '/compare/clause-templates',
   compareClauseTemplate: '/compare/clause-templates/:id',
+  // 上传会话（选中即上传，仅暂存文件，不建任务）
+  compareDraft: '/compare/drafts/:draftId',
+  compareDraftDocuments: '/compare/drafts/:draftId/documents',
+  compareDraftDocument: '/compare/drafts/:draftId/documents/:docId',
 
   // admin-web
   adminStats: '/dashboard/stats',
@@ -88,6 +92,16 @@ export const urls = {
   rolePermissions: '/roles/:id/permissions',
   datasources: '/datasources',
   adminProfile: '/profile',
+
+  // 知识库-标准规范（admin-web）
+  adminStandards: '/standards',
+  adminStandardUpdate: '/standards/:id',
+  adminStandardDelete: '/standards/:id',
+  adminStandardParse: '/standards/:id/parse',
+  adminStandardCreate: '/standards',
+  adminStandardPreview: '/standards/preview',
+  adminStandardsBatchDelete: '/standards/batch-delete',
+  adminStandardsBatchParse: '/standards/batch-parse',
 } as const
 
 export type UrlKey = keyof typeof urls

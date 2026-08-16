@@ -4,6 +4,7 @@ using Volo.Abp.BackgroundJobs.EntityFrameworkCore;
 using DredgeAI.BidCompare.Clauses;
 using DredgeAI.BidCompare.CompareTasks;
 using DredgeAI.BidCompare.Documents;
+using DredgeAI.BidCompare.Drafts;
 using DredgeAI.BidCompare.Evidences;
 using DredgeAI.BidCompare.Exports;
 using Volo.Abp.Data;
@@ -61,6 +62,7 @@ public class BidCompareDbContext :
 
     public DbSet<CompareTask> CompareTasks { get; set; }
     public DbSet<CompareDocument> CompareDocuments { get; set; }
+    public DbSet<CompareDraftDocument> CompareDraftDocuments { get; set; }
     public DbSet<EvidenceItem> EvidenceItems { get; set; }
     public DbSet<ClauseTemplate> ClauseTemplates { get; set; }
     public DbSet<ExportJob> ExportJobs { get; set; }
@@ -115,8 +117,21 @@ public class BidCompareDbContext :
             b.Property(x => x.OriginStorageKey).IsRequired().HasMaxLength(512);
             b.Property(x => x.IrStorageKey).HasMaxLength(512);
             b.Property(x => x.DocMdStorageKey).HasMaxLength(512);
+            b.Property(x => x.AnGineerDocId).HasMaxLength(128);
             b.Property(x => x.ParseError).HasMaxLength(2048);
+            b.Property(x => x.ParseStage).HasMaxLength(64);
+            b.Property(x => x.ParseStageMessage).HasMaxLength(1024);
             b.HasIndex(x => x.TaskId);
+        });
+
+        builder.Entity<CompareDraftDocument>(b =>
+        {
+            b.ToTable("BcCompareDraftDocuments");
+            b.ConfigureByConvention();
+            b.Property(x => x.FileName).IsRequired().HasMaxLength(256);
+            b.Property(x => x.FileExtension).IsRequired().HasMaxLength(16);
+            b.Property(x => x.OriginStorageKey).IsRequired().HasMaxLength(512);
+            b.HasIndex(x => x.DraftId);
         });
 
         builder.Entity<EvidenceItem>(b =>

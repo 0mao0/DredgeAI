@@ -1,8 +1,9 @@
-using System;
+﻿using System;
 using System.IO;
 using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
+using System.Collections.Concurrent;
 using DredgeAI.BidCompare.CompareTasks;
 using DredgeAI.BidCompare.Documents;
 using DredgeAI.BidCompare.AnGineer;
@@ -65,6 +66,17 @@ public class ParseDocumentJobTests : BidCompareApplicationTestBase<BidCompareApp
         _fileStorage.Objects.Keys.ShouldContain($"compare/{task.Id}/{doc.Id}/raw/doc_blocks_graph.jsonl"); // AnGIneer 原始产物留档
         _jobManager.LastEnqueued<CompareDocumentsArgs>().ShouldBeNull();
 
+        // AnGIneer 进度/阶段/耗时落库（v2 进度透传）
+        var docRepo = GetRequiredService<Volo.Abp.Domain.Repositories.IRepository<CompareDocument, Guid>>();
+        var parsedDoc = await docRepo.GetAsync(doc.Id);
+        parsedDoc.ParseProgress.ShouldBe(100);
+        parsedDoc.ParseStage.ShouldBe("completed");
+        parsedDoc.ParseStageMessage.ShouldContain("解析结束");
+        parsedDoc.ParseStartedAt.ShouldNotBeNull();
+        parsedDoc.ParseFinishedAt.ShouldNotBeNull();
+        var parseDuration = parsedDoc.ParseFinishedAt!.Value - parsedDoc.ParseStartedAt!.Value;
+        parseDuration.ShouldBeGreaterThanOrEqualTo(TimeSpan.Zero);
+
         // IR API 可读取（spec §6 GET ir；内容为内部适配形态）
         var ir = await _appService.GetDocumentIrAsync(task.Id, doc.Id);
         ir.DocId.ShouldBe(doc.Id.ToString()); // 内部适配 IR 的 docId 为本系统文档 id
@@ -75,7 +87,7 @@ public class ParseDocumentJobTests : BidCompareApplicationTestBase<BidCompareApp
 
         // 第二份标书解析完成 → 自动进入比对
         var docB = await _appService.UploadDocumentAsync(task.Id, DocumentRole.Bid, "标书B.pdf",
-            new MemoryStream(new byte[] { 2 }));
+            TestFiles.Pdf(2));
         await RunParseJobAsync(task.Id, docB.Id);
 
         var afterTwo = await _appService.GetAsync(task.Id);
@@ -88,9 +100,9 @@ public class ParseDocumentJobTests : BidCompareApplicationTestBase<BidCompareApp
     {
         var task = await _appService.CreateAsync(new CreateCompareTaskDto { Name = "t" });
         var tender = await _appService.UploadDocumentAsync(task.Id, DocumentRole.Tender, "招标文件.pdf",
-            new MemoryStream(new byte[] { 1 }));
+            TestFiles.Pdf(1));
         var bid = await _appService.UploadDocumentAsync(task.Id, DocumentRole.Bid, "标书A.pdf",
-            new MemoryStream(new byte[] { 1 }));
+            TestFiles.Pdf(1));
 
         await RunParseJobAsync(task.Id, tender.Id);
         await RunParseJobAsync(task.Id, bid.Id);
@@ -114,6 +126,10 @@ public class ParseDocumentJobTests : BidCompareApplicationTestBase<BidCompareApp
         var failed = await docRepo.GetAsync(doc.Id);
         failed.ParseStatus.ShouldBe(DocumentParseStatus.Failed);
         failed.ParseError.ShouldNotBeNullOrWhiteSpace();
+        failed.ParseProgress.ShouldBe(100);
+        failed.ParseStage.ShouldBe("failed");
+        failed.ParseStartedAt.ShouldNotBeNull();
+        failed.ParseFinishedAt.ShouldNotBeNull();
     }
 
     [Fact]
@@ -130,14 +146,125 @@ public class ParseDocumentJobTests : BidCompareApplicationTestBase<BidCompareApp
     }
 
     [Fact]
+    public async Task AnGIneer_Partial_With_Artifacts_Should_Parse_Successfully()
+    {
+        // docs-api soft 阶段（vectors/graph 等）失败时返回 partial，但 jsonl/meta 等核心产物仍完整；
+        // DredgeAI 应按成功继续下载产物并落库，而不是当作未知状态一直轮询。
+        _anGineerClient.StateSequence = new ConcurrentQueue<AnGineerJobStatus>(new[]
+        {
+            new AnGineerJobStatus(AnGineerJobState.Partial, 100, "partial", "解析结束: partial（向量阶段降级）")
+        });
+        var (task, doc) = await CreateTaskWithBidDocAsync();
+
+        await RunParseJobAsync(task.Id, doc.Id);
+
+        var detail = await _appService.GetAsync(task.Id);
+        detail.Status.ShouldBe(CompareTaskStatus.Parsed);
+        _fileStorage.Objects.Keys.ShouldContain($"compare/{task.Id}/{doc.Id}/ir.json");
+
+        var docRepo = GetRequiredService<Volo.Abp.Domain.Repositories.IRepository<CompareDocument, Guid>>();
+        var parsed = await docRepo.GetAsync(doc.Id);
+        parsed.ParseStatus.ShouldBe(DocumentParseStatus.Parsed);
+        parsed.ParseStage.ShouldBe("partial");
+        parsed.ParseStageMessage.ShouldContain("解析结束: partial");
+    }
+
+    [Fact]
+    public async Task AnGIneer_Partial_Without_Core_Artifacts_Should_Fail()
+    {
+        // partial 但核心结构产物缺失：不能静默当成解析成功，应明确失败并提示原因。
+        _anGineerClient.StateSequence = new ConcurrentQueue<AnGineerJobStatus>(new[]
+        {
+            new AnGineerJobStatus(AnGineerJobState.Partial, 100, "partial", "解析结束: partial")
+        });
+        _anGineerClient.MissingArtifacts.Add("doc_blocks_graph.jsonl");
+        _anGineerClient.MissingArtifacts.Add("doc_blocks_graph_meta.json");
+        var (task, doc) = await CreateTaskWithBidDocAsync();
+
+        await RunParseJobAsync(task.Id, doc.Id);
+
+        var docRepo = GetRequiredService<Volo.Abp.Domain.Repositories.IRepository<CompareDocument, Guid>>();
+        var failed = await docRepo.GetAsync(doc.Id);
+        failed.ParseStatus.ShouldBe(DocumentParseStatus.Failed);
+        failed.ParseError.ShouldContain("产物包缺少");
+    }
+
+    [Fact]
+    public async Task Stale_Processing_Record_Should_Resume_And_Recover()
+    {
+        // docs-api 重启遗留的 processing 记录：progress=0 + 空阶段消息。
+        // 新语义下不应直接判失败，而是 resume 后继续轮询到终态。
+        _anGineerClient.StateSequence = new ConcurrentQueue<AnGineerJobStatus>(new[]
+        {
+            new AnGineerJobStatus(AnGineerJobState.Processing, 0, "processing", null),
+            new AnGineerJobStatus(AnGineerJobState.Succeeded, 100, "completed", "解析结束: completed")
+        });
+        var (task, doc) = await CreateTaskWithBidDocAsync();
+
+        await RunParseJobAsync(task.Id, doc.Id);
+
+        var detail = await _appService.GetAsync(task.Id);
+        detail.Status.ShouldBe(CompareTaskStatus.Parsed);
+        _anGineerClient.ResumeCount.ShouldBeGreaterThanOrEqualTo(1);
+        _fileStorage.Objects.Keys.ShouldContain($"compare/{task.Id}/{doc.Id}/ir.json");
+    }
+
+    [Fact]
+    public async Task Failed_Reparse_Should_Resume_Existing_Doc_Instead_Of_Reupload()
+    {
+        _anGineerClient.FailWith = "OCR 崩溃";
+        var (task, doc) = await CreateTaskWithBidDocAsync();
+        await RunParseJobAsync(task.Id, doc.Id);
+
+        var docRepo = GetRequiredService<Volo.Abp.Domain.Repositories.IRepository<CompareDocument, Guid>>();
+        var failed = await docRepo.GetAsync(doc.Id);
+        failed.ParseStatus.ShouldBe(DocumentParseStatus.Failed);
+        _anGineerClient.SubmitCount.ShouldBe(1);
+
+        _anGineerClient.FailWith = null;
+        _anGineerClient.StateSequence = new ConcurrentQueue<AnGineerJobStatus>(new[]
+        {
+            new AnGineerJobStatus(AnGineerJobState.Failed, 100, "failed", "服务重启遗留失败"),
+            new AnGineerJobStatus(AnGineerJobState.Succeeded, 100, "completed", "恢复后完成")
+        });
+        await _appService.ReparseAsync(task.Id, new ReparseDocumentsInput { DocIds = new() { doc.Id } });
+        await RunParseJobAsync(task.Id, doc.Id);
+
+        var parsed = await docRepo.GetAsync(doc.Id);
+        parsed.ParseStatus.ShouldBe(DocumentParseStatus.Parsed);
+        parsed.AnGineerDocId.ShouldNotBeNullOrWhiteSpace();
+        _anGineerClient.SubmitCount.ShouldBe(1); // 未重新上传
+        _anGineerClient.ResumeCount.ShouldBeGreaterThanOrEqualTo(1);
+        _fileStorage.Objects.Keys.ShouldContain($"compare/{task.Id}/{doc.Id}/ir.json");
+    }
+
+    [Fact]
+    public async Task Live_Processing_Stage_Should_Not_Be_Treated_As_Stale()
+    {
+        // 正常解析中的任务带真实阶段与消息（raw_parse + MinerU 解析中），不应触发悬挂保护。
+        _anGineerClient.StateSequence = new ConcurrentQueue<AnGineerJobStatus>(new[]
+        {
+            new AnGineerJobStatus(AnGineerJobState.Processing, 0, "raw_parse", "MinerU 解析中"),
+            new AnGineerJobStatus(AnGineerJobState.Succeeded, 100, "completed", "解析结束: completed")
+        });
+        var (task, doc) = await CreateTaskWithBidDocAsync();
+
+        await RunParseJobAsync(task.Id, doc.Id);
+
+        var detail = await _appService.GetAsync(task.Id);
+        detail.Status.ShouldBe(CompareTaskStatus.Parsed);
+        _fileStorage.Objects.Keys.ShouldContain($"compare/{task.Id}/{doc.Id}/ir.json");
+    }
+
+    [Fact]
     public async Task Partial_Failure_With_Less_Than_Two_Bids_Should_Wait_For_Reparse()
     {
         // v2 §5.4：失败导致可用标书 < 2 份时，在两两对比之前停留并提示重新解析失败文档
         var task = await _appService.CreateAsync(new CreateCompareTaskDto { Name = "t" });
         var good = await _appService.UploadDocumentAsync(task.Id, DocumentRole.Bid, "标书A.pdf",
-            new MemoryStream(new byte[] { 1 }));
+            TestFiles.Pdf(1));
         var bad = await _appService.UploadDocumentAsync(task.Id, DocumentRole.Bid, "标书B.pdf",
-            new MemoryStream(new byte[] { 1 }));
+            TestFiles.Pdf(1));
 
         await RunParseJobAsync(task.Id, good.Id);
 

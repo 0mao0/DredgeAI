@@ -17,7 +17,8 @@ public class LocalFileStorageTests
         return new LocalFileStorage(Options.Create(new LocalStorageOptions
         {
             RootPath = root,
-            PublicBaseUrl = "https://localhost:44361"
+            PublicBaseUrl = "https://localhost:44361",
+            SigningSecret = "test-secret"
         }));
     }
 
@@ -35,12 +36,17 @@ public class LocalFileStorageTests
             await facade.UploadAsync("compare/task/doc/origin.pdf", new MemoryStream(bytes), "application/pdf");
             (await facade.ExistsAsync("compare/task/doc/origin.pdf")).ShouldBeTrue();
 
-            await using var stream = await facade.GetAsync("compare/task/doc/origin.pdf");
-            using var reader = new StreamReader(stream, Encoding.UTF8);
-            (await reader.ReadToEndAsync()).ShouldBe("hello 标书");
+            string content;
+            await using (var stream = await facade.GetAsync("compare/task/doc/origin.pdf"))
+            using (var reader = new StreamReader(stream, Encoding.UTF8))
+            {
+                content = await reader.ReadToEndAsync();
+            }
+            content.ShouldBe("hello 标书");
 
             var url = await facade.GetPresignedUrlAsync("compare/task/doc/origin.pdf", TimeSpan.FromHours(1));
-            url.ShouldBe("https://localhost:44361/storage/compare/task/doc/origin.pdf");
+            url.ShouldStartWith("https://localhost:44361/api/compare/storage/file?key=");
+            url.ShouldContain("&sig=");
 
             await facade.DeleteAsync("compare/task/doc/origin.pdf");
             (await facade.ExistsAsync("compare/task/doc/origin.pdf")).ShouldBeFalse();

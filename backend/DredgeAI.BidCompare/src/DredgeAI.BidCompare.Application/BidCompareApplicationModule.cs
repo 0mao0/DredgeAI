@@ -1,5 +1,6 @@
 ﻿using Volo.Abp.Account;
 using Volo.Abp.AutoMapper;
+using Volo.Abp.BackgroundWorkers;
 using Volo.Abp.FeatureManagement;
 using Volo.Abp.Identity;
 using Volo.Abp.Modularity;
@@ -13,6 +14,7 @@ namespace DredgeAI.BidCompare;
     typeof(BidCompareDomainModule),
     typeof(AbpAccountApplicationModule),
     typeof(BidCompareApplicationContractsModule),
+    typeof(AbpBackgroundWorkersModule),
     typeof(AbpIdentityApplicationModule),
     typeof(AbpPermissionManagementApplicationModule),
     typeof(AbpTenantManagementApplicationModule),

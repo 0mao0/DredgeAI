@@ -72,12 +72,22 @@ public class AiAnalysisJob : AsyncBackgroundJob<AiAnalysisArgs>, ITransientDepen
                 d.Role == DocumentRole.Bid &&
                 d.ParseStatus == DocumentParseStatus.Parsed);
 
+            // 重跑幂等：先清掉本任务旧的 AI 证据（条款判定 + 指标抽取整体重建），
+            // 删除与后续插入在同一工作单元，重跑不再重复累积
+            var staleAiEvidences = await _evidenceRepository.GetListAsync(
+                e => e.TaskId == args.TaskId && e.AiGenerated, cancellationToken: cancellationToken);
+            if (staleAiEvidences.Count > 0)
+            {
+                await _evidenceRepository.DeleteManyAsync(staleAiEvidences, autoSave: true, cancellationToken: cancellationToken);
+            }
+
             var docMds = new Dictionary<CompareDocument, string>();
             foreach (var doc in bidDocs.Where(d => d.DocMdStorageKey != null))
             {
+                // 流式限量读取：LLM prompt 只需前缀，整份 content.md 不再全量驻留后再截断
+                var maxChars = Math.Max(DocMdMaxChars, IndicatorDocMaxChars);
                 await using var stream = await _fileStorage.GetAsync(doc.DocMdStorageKey!, cancellationToken);
-                using var reader = new StreamReader(stream);
-                docMds[doc] = await reader.ReadToEndAsync(cancellationToken);
+                docMds[doc] = await ReadLimitedAsync(stream, maxChars, cancellationToken);
             }
 
             var snapshot = task.ClauseSnapshotJson == null
@@ -223,6 +233,25 @@ public class AiAnalysisJob : AsyncBackgroundJob<AiAnalysisArgs>, ITransientDepen
 
     private static string Truncate(string text, int maxChars)
         => text.Length <= maxChars ? text : text[..maxChars] + "\n（截断）";
+
+    /// <summary>限量读取文本流：最多 maxChars 字符即停，超长内容不再全量驻留内存。</summary>
+    private static async Task<string> ReadLimitedAsync(Stream stream, int maxChars, CancellationToken cancellationToken)
+    {
+        using var reader = new StreamReader(stream);
+        var buffer = new char[4096];
+        var builder = new System.Text.StringBuilder();
+        while (builder.Length < maxChars)
+        {
+            var read = await reader.ReadAsync(buffer, cancellationToken);
+            if (read == 0)
+            {
+                break;
+            }
+            builder.Append(buffer, 0, read); // 单块最多多读 4095 字符，最终统一截断
+        }
+        var text = builder.ToString();
+        return text.Length <= maxChars ? text : text[..maxChars];
+    }
 
     private static List<ClauseJudgement> ParseJudgements(string llmResponse)
     {

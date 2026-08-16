@@ -17,6 +17,9 @@ namespace DredgeAI.BidCompare;
 
 public class Program
 {
+    /// <summary>仓库根目录（由 .env 所在目录推断），用于把运行时数据统一落到根级 data/。</summary>
+    private static string? _repoRoot;
+
     public async static Task<int> Main(string[] args)
     {
         LoadDotEnv();
@@ -94,6 +97,7 @@ public class Program
         {
             return;
         }
+        _repoRoot = Path.GetDirectoryName(envPath);
 
         foreach (var line in File.ReadAllLines(envPath))
         {
@@ -117,7 +121,7 @@ public class Program
         }
     }
 
-    /// <summary>.env 中的命名密钥映射到 ABP 配置节（AnGIneer / Llm），供 IOptions 绑定。</summary>
+    /// <summary>.env/环境变量中的命名密钥映射到 ABP 配置节，供 IOptions 绑定；密钥不落 appsettings.json。</summary>
     private static void AddEnvConfigOverrides(WebApplicationBuilder builder)
     {
         var overrides = new Dictionary<string, string?>();
@@ -125,6 +129,20 @@ public class Program
         MapEnv(overrides, "LLM_API_KEY", "Llm:ApiKey");
         MapEnv(overrides, "LLM_ENDPOINT", "Llm:Endpoint");
         MapEnv(overrides, "LLM_MODEL", "Llm:Model");
+        MapEnv(overrides, "BIDCOMPARE_DB_CONNECTION", "ConnectionStrings:Default");
+        MapEnv(overrides, "STORAGE_S3_ACCESSKEY", "Storage:S3:AccessKey");
+        MapEnv(overrides, "STORAGE_S3_SECRETKEY", "Storage:S3:SecretKey");
+        MapEnv(overrides, "STORAGE_LOCAL_SIGNING_SECRET", "Storage:Local:SigningSecret");
+        MapEnv(overrides, "STORAGE_LOCAL_ROOT", "Storage:Local:RootPath");
+        MapEnv(overrides, "STRING_ENCRYPTION_PASSPHRASE", "StringEncryption:DefaultPassPhrase");
+        MapEnv(overrides, "AUTH_REQUIRE_HTTPS_METADATA", "AuthServer:RequireHttpsMetadata");
+        MapEnv(overrides, "SWAGGER_ENABLED", "Swagger:Enabled");
+        // monorepo 约定：未显式指定时，本地文件存储统一落在仓库根 data/storage
+        // （与启动脚本、PostgreSQL、日志共用同一 data/ 根目录，便于备份与迁移）。
+        if (!overrides.ContainsKey("Storage:Local:RootPath") && _repoRoot != null)
+        {
+            overrides["Storage:Local:RootPath"] = Path.Combine(_repoRoot, "data", "storage");
+        }
         if (overrides.Count > 0)
         {
             builder.Configuration.AddInMemoryCollection(overrides);

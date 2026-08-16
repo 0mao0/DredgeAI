@@ -44,7 +44,12 @@ def build_evidence(
     title: str,
     description: str,
 ) -> Evidence:
-    """组装确定性证据：id 自动生成，aiGenerated 恒为 False（spec §3.2）。"""
+    """组装确定性证据：id 自动生成，aiGenerated 恒为 False（spec §3.2）。
+
+    id 为 uuid4 随机值，仅供调试/日志关联：本服务是确定性计算服务，
+    同一输入多次调用产出的 id 不同；调用方（C# 端）忽略该字段，
+    不应持久化或以其做幂等键。
+    """
     return Evidence(
         id=str(uuid4()),
         taskId=task_id,

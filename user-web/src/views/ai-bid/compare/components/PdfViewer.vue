@@ -1,11 +1,5 @@
 <template>
-  <div class="pdf-viewer" :class="{ 'pdf-viewer--scanning': scanning }">
-    <div v-if="title" class="pdf-viewer__bar">
-      <FilePdfOutlined class="pdf-viewer__icon" />
-      <span class="pdf-viewer__title" :title="title">{{ title }}</span>
-      <a-tag v-if="scanning" color="processing" class="pdf-viewer__tag">解析中</a-tag>
-    </div>
-
+  <div class="pdf-viewer" :class="{ 'pdf-viewer-scanning': scanning }">
     <div class="pdf-viewer__body">
       <EmptyState v-if="!fileUrl" type="no-data" title="请选择文档" />
 
@@ -38,14 +32,56 @@
       />
     </div>
   </div>
+<!-- OLD_TEMPLATE_BELOW
+  <div class="pdf-viewer" :class="{ 'pdf-viewer-scanning': scanning }">
+    <div class="pdf-viewer__body">
+
+      <
+      <
+    </div>
+
+    <div class="pdf-viewer__body">
+      <EmptyState v-if="!fileUrl" type="no-data" title="请选择文档" />
+
+      <EmptyState
+        v-else-if="!canPreviewPdf"
+        type="no-data"
+        title="暂不支持在线预览"
+        description="Word 文档请下载后在本地查看"
+      />
+
+      <PDF_Viewer
+        v-else
+        class="pdf-viewer__viewer"
+        :class="{ 'pdf-viewer__viewer--no-original-label': hideOriginalLabel }"
+        :node="node"
+        :theme="theme"
+        :is-pdf="true"
+        :is-office="false"
+        :is-image="false"
+        :is-text="false"
+        :file-url="fileUrl"
+        :pdf-viewer-url="fileUrl"
+        office-preview-url=""
+        text-content=""
+        :current-pdf-page="page"
+        :pdf-page-count="totalPages && totalPages > 0 ? totalPages : undefined"
+        :highlights="highlights"
+        :active-highlight-id="activeHighlightId"
+        :text-scroll-percent="0"
+        @pdf-active-page="emit('update:page', $event)"
+      />
+    </div>
+  </div>
+-->
 </template>
 
 <script setup lang="ts">
 import { computed } from 'vue'
-import { FilePdfOutlined } from '@ant-design/icons-vue'
+
 import { PDF_Viewer } from '@angineer/docs-ui'
 import '@angineer/docs-ui/style'
-import EmptyState from '@shared/web/components/EmptyState.vue'
+import { EmptyState } from '@shared/web'
 import { normalizeRect } from '@shared/types'
 import { useThemeStore } from '@shared/web/stores'
 import { isPdfFileName } from '../constants'
@@ -59,11 +95,14 @@ const props = withDefaults(defineProps<{
   high?: BlockRange[]
   scanning?: boolean
   activeHighlightId?: string | null
+  /** 隐藏引用库 PDF_Viewer 标题栏左侧的「原文」标签（库源码不可改，经 CSS 覆盖） */
+  hideOriginalLabel?: boolean
 }>(), {
   page: 1,
   high: () => [],
   scanning: false,
   activeHighlightId: null,
+  hideOriginalLabel: false,
 })
 
 const emit = defineEmits<{
@@ -176,5 +215,13 @@ const highlights = computed<ViewerHighlight[]>(() =>
 .pdf-viewer__viewer {
   flex: 1;
   min-height: 0;
+}
+</style>
+
+<style lang="less">
+/* 非 scoped：第三方 PDF_Viewer 内部元素 scoped 穿透不可靠，
+   直接全局隐藏「原文」标签（.pane-title-prefix 仅该库使用，无副作用） */
+.pane-title-prefix {
+  display: none !important;
 }
 </style>

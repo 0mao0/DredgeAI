@@ -62,7 +62,7 @@ export function registerMock(): void {
   }
 
   // 按模块注册 mock，模块开关关闭则该模块请求直连真实 API
-  const modules: { key: string, register: (m: MockAdapter, w: typeof wrap) => void, passthrough?: RegExp }[] = [
+  const modules: { key: string, register?: (m: MockAdapter, w: typeof wrap) => void, passthrough?: RegExp }[] = [
     { key: 'user', register: registerUserMock },
     { key: 'app', register: registerAppMock },
     { key: 'task', register: registerTaskMock },
@@ -72,6 +72,7 @@ export function registerMock(): void {
     { key: 'apikey', register: registerApiKeyMock },
     { key: 'chart', register: registerChartMock },
     { key: 'dubbing', register: registerDubbingMock },
+    { key: 'compare', passthrough: /^\/compare\// },
   ]
 
   for (const mod of modules) {
@@ -80,7 +81,7 @@ export function registerMock(): void {
       if (mod.passthrough) mock.onAny(mod.passthrough).reply(forwardToRealApi)
       continue
     }
-    mod.register(mock, wrap)
+    mod.register?.(mock, wrap)
   }
 
   // ABP 格式：未匹配的请求返回错误响应

@@ -1,37 +1,46 @@
 <template>
   <div class="pdf-workspace">
     <div class="pdf-workspace__bar">
-      <a-tabs
-        v-model:active-key="leftDocId"
-        size="small"
-        class="pdf-workspace__tabs"
-        :animated="false"
-      >
-        <a-tab-pane v-for="d in documents" :key="d.id">
-          <template #tab>
-            <span class="pdf-workspace__tab" @click="onManualTab">
-              <a-tag v-if="d.role === 'tender'" class="pdf-workspace__tender">招标</a-tag>
-              <template v-else>{{ docLabel(documents, d.id) }}</template>
-              <span
-                class="pdf-workspace__dot"
-                :class="`pdf-workspace__dot--${d.parseStatus}`"
-                :title="statusTitle(d)"
-              />
-            </span>
-          </template>
-        </a-tab-pane>
-      </a-tabs>
-
-      <a-select
-        v-if="!singlePane"
-        v-model:value="rightDocId"
-        size="small"
-        class="pdf-workspace__select"
-        :options="docOptions"
-      />
+      <div v-if="singlePane" class="pdf-workspace__tabs-single">
+        <a-tabs
+          v-model:active-key="leftDocId"
+          size="small"
+          class="pdf-workspace__tabs"
+          :animated="false"
+        >
+          <a-tab-pane v-for="d in documents" :key="d.id">
+            <template #tab>
+              <span class="pdf-workspace__tab" @click="onManualTab">
+                <a-tag v-if="d.role === 'tender'" class="pdf-workspace__tender">招标</a-tag>
+                <template v-else>{{ docLabel(documents, d.id) }}</template>
+              </span>
+            </template>
+          </a-tab-pane>
+        </a-tabs>
+      </div>
+      <div v-else class="pdf-workspace__selects">
+        <div class="pdf-workspace__select-col">
+          <a-select
+            v-model:value="leftDocId"
+            size="small"
+            class="pdf-workspace__select"
+            :options="docOptions"
+            @change="onManualTab"
+          />
+        </div>
+        <div class="pdf-workspace__select-col">
+          <a-select
+            v-model:value="rightDocId"
+            size="small"
+            class="pdf-workspace__select"
+            :options="docOptions"
+            @change="onManualTab"
+          />
+        </div>
+      </div>
 
       <a-tooltip :title="singlePane ? '展开双栏对比' : '收起为单栏'">
-        <a-button size="small" type="text" class="pdf-workspace__toggle" @click="singlePane = !singlePane">
+        <a-button size="small" type="text" class="pdf-workspace__toggle" :class="{ 'pdf-workspace__toggle--center': !singlePane }" @click="singlePane = !singlePane">
           <ExpandOutlined v-if="singlePane" />
           <CompressOutlined v-else />
         </a-button>
@@ -46,6 +55,7 @@
         :total-pages="docPages(leftDocId)"
         :high="leftHigh"
         :scanning="scanningDocId === leftDocId"
+        hide-original-label
         @update:page="leftPage = $event"
       />
       <PdfViewer
@@ -56,6 +66,7 @@
         :total-pages="docPages(rightDocId)"
         :high="rightHigh"
         :scanning="scanningDocId === rightDocId"
+        hide-original-label
         @update:page="rightPage = $event"
       />
     </div>
@@ -76,7 +87,7 @@ const props = defineProps<{
 }>()
 
 const emit = defineEmits<{
-  'tabManual': []
+  tabManual: []
 }>()
 
 const singlePane = ref(false)
@@ -125,20 +136,11 @@ function docPages(id: string): number {
   return props.documents.find((d) => d.id === id)?.pages ?? 0
 }
 
-function statusTitle(d: CompareDocMeta): string {
-  return {
-    pending: '等待解析',
-    parsing: '解析中',
-    done: '解析完成',
-    failed: d.failReason ?? '解析失败',
-  }[d.parseStatus] ?? d.parseStatus
-}
-
 function onManualTab(): void {
   emit('tabManual')
 }
 
-/** 证据溯源：单份文档单栏定位，两份及以上自动展开双栏并分别定位高亮；无 bbox 时整页兜底。 */
+/** 证据溯源：单份文档单栏定位，两份及以上自动展开双栏并分别定位高亮；无可用 refs 时不画误导性整页高亮。 */
 function locate(ev: EvidenceItem): void {
   const [a, b] = ev.docIds
   if (b && singlePane.value) singlePane.value = false
@@ -146,13 +148,29 @@ function locate(ev: EvidenceItem): void {
     leftDocId.value = a
     const refs = refsOf(ev, a)
     leftPage.value = refs[0]?.page ?? 1
-    leftHigh.value = refs.length ? refs : fullPageRefs(ev, a)
+    leftHigh.value = refs
   }
   if (b) {
     rightDocId.value = b
     const refs = refsOf(ev, b)
     rightPage.value = refs[0]?.page ?? 1
-    rightHigh.value = refs.length ? refs : fullPageRefs(ev, b)
+    rightHigh.value = refs
+  }
+}
+
+function locateRefs(refs: BlockRange[]): void {
+  if (!refs.length) return
+  const [a, b] = refs
+  if (b && singlePane.value) singlePane.value = false
+  if (a) {
+    leftDocId.value = a.docId
+    leftPage.value = a.page
+    leftHigh.value = [a]
+  }
+  if (b) {
+    rightDocId.value = b.docId
+    rightPage.value = b.page
+    rightHigh.value = [b]
   }
 }
 
@@ -160,10 +178,11 @@ function refsOf(ev: EvidenceItem, docId: string): BlockRange[] {
   return ev.refs.filter((r) => r.docId === docId)
 }
 
-function fullPageRefs(ev: EvidenceItem, docId: string): BlockRange[] {
+/* function fullPageRefs(ev: EvidenceItem, docId: string): BlockRange[] {
   return [{ docId, page: 1, bbox: [0, 0, 1, 1], pairId: ev.id }]
 }
 
+*/
 /** 单文档定位（文档列表/来源 chip 跳转用）。 */
 function locateDoc(docId: string, page = 1): void {
   leftDocId.value = docId
@@ -179,7 +198,7 @@ function focusDoc(docId: string): void {
   leftHigh.value = []
 }
 
-defineExpose({ locate, locateDoc, focusDoc })
+defineExpose({ locate, locateRefs, locateDoc, focusDoc })
 </script>
 
 <style scoped lang="less">
@@ -199,6 +218,31 @@ defineExpose({ locate, locateDoc, focusDoc })
   margin-bottom: @spacing-sm;
   flex-shrink: 0;
 }
+
+  .pdf-workspace__bar {
+    position: relative;
+  }
+
+  .pdf-workspace__tabs-single {
+    flex: 1;
+    min-width: 0;
+  }
+
+  .pdf-workspace__selects {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+    gap: @spacing-md;
+    flex: 1;
+    min-width: 0;
+  }
+
+  .pdf-workspace__select-col {
+    display: flex;
+    flex-direction: column;
+    align-items: stretch;
+    gap: 2px;
+    min-width: 0;
+  }
 
 .pdf-workspace__tabs {
   flex: 1;
@@ -221,25 +265,24 @@ defineExpose({ locate, locateDoc, focusDoc })
   line-height: 18px;
 }
 
-.pdf-workspace__dot {
-  width: 6px;
-  height: 6px;
-  border-radius: 50%;
-  background: @text-tertiary;
-
-  &--parsing { background: @brand-primary; animation: pdf-workspace-pulse 1.2s ease-in-out infinite; }
-  &--done { background: @success; }
-  &--failed { background: @danger; }
-}
-
 .pdf-workspace__select {
-  width: 200px;
+  flex: 1;
+    min-width: 0;
+
   flex-shrink: 0;
 }
 
 .pdf-workspace__toggle {
   flex-shrink: 0;
 }
+
+  .pdf-workspace__toggle--center {
+    position: absolute;
+    left: 50%;
+    top: 50%;
+    transform: translate(-50%, -50%);
+    z-index: 1;
+  }
 
 .pdf-workspace__body {
   flex: 1;
@@ -250,17 +293,6 @@ defineExpose({ locate, locateDoc, focusDoc })
 
   &--single {
     grid-template-columns: minmax(0, 1fr);
-  }
-}
-
-@keyframes pdf-workspace-pulse {
-  0%, 100% { opacity: 1; }
-  50% { opacity: 0.35; }
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .pdf-workspace__dot--parsing {
-    animation: none;
   }
 }
 </style>

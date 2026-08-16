@@ -1,39 +1,5 @@
 <template>
   <div class="upload-page">
-    <div class="upload-page__intro">
-      <div class="upload-page__intro-text">
-        <h2 class="upload-page__title">比标分析</h2>
-        <p class="upload-page__desc">上传 2~5 份投标文件，系统自动解析、两两比对并生成风险发现</p>
-      </div>
-      <div class="upload-page__intro-actions">
-        <div class="upload-page__name">
-          <span class="upload-page__label">项目名称</span>
-          <a-input
-            :value="name"
-            :maxlength="20"
-            show-count
-            class="upload-page__name-input"
-            placeholder="AI 将根据上传文件自动命名，可修改"
-            @change="onNameChange"
-          />
-        </div>
-        <a-dropdown trigger="click" placement="bottomRight">
-          <a-button size="small">
-            <HistoryOutlined />历史任务
-          </a-button>
-          <template #overlay>
-            <a-menu class="upload-page__history" @click="onHistoryClick">
-              <a-menu-item v-for="t in history" :key="t.id">
-                <span class="upload-page__history-name" :title="t.name">{{ t.name }}</span>
-                <a-tag :color="COMPARE_STATUS_MAP[t.status].color">{{ COMPARE_STATUS_MAP[t.status].text }}</a-tag>
-              </a-menu-item>
-              <a-menu-item v-if="!history.length" key="empty" disabled>暂无历史任务</a-menu-item>
-            </a-menu>
-          </template>
-        </a-dropdown>
-      </div>
-    </div>
-
     <div class="upload-page__main">
       <div class="upload-card">
         <div class="upload-card__head">
@@ -55,72 +21,54 @@
             <p class="upload-drop__hint">已选 {{ bidCount }} 份，可继续添加至 {{ MAX_BID_DOCUMENTS }} 份</p>
           </div>
         </a-upload-dragger>
+
+        <div v-if="bidItems.length" class="upload-list">
+          <UploadFileRow
+            v-for="item in bidItems"
+            :key="item.key"
+            :item="item"
+            :disabled="creating"
+            @retry="emit('retry', item.key)"
+            @remove="emit('remove', item.key)"
+          />
+        </div>
       </div>
 
       <div class="upload-card upload-card--tender">
-        <div class="upload-card__head">
-          <div class="upload-card__titles">
-            <span class="upload-card__title">招标文件</span>
-          </div>
-          <span class="upload-card__hint">可选 · 用于提取招标要求与响应核对</span>
-        </div>
-        <a-upload
-          accept=".pdf,.doc,.docx"
-          :show-upload-list="false"
-          :before-upload="onPickTender"
-        >
-          <div class="tender-strip">
-            <PaperClipOutlined class="tender-strip__icon" />
-            <span class="tender-strip__text">添加招标文件</span>
-          </div>
-        </a-upload>
-      </div>
-
-      <div v-if="items.length" class="upload-list">
         <div
-          v-for="item in items"
-          :key="item.key"
-          class="upload-row"
-          :class="{ 'upload-row--error': item.status === 'error' }"
+          class="upload-card__head upload-card__head--tender"
+          @click="tenderExpanded = !tenderExpanded"
         >
-          <FilePdfOutlined v-if="!isWord(item.name)" class="upload-row__icon" />
-          <FileWordOutlined v-else class="upload-row__icon upload-row__icon--word" />
-          <span class="upload-row__name" :title="item.name">{{ item.name }}</span>
-          <a-tag v-if="item.role === 'tender'" class="upload-row__tag">招标</a-tag>
-          <span class="upload-row__size">{{ formatFileSize(item.size) }}</span>
-
-          <div v-if="item.status === 'uploading'" class="upload-row__progress">
-            <a-progress
-              :percent="item.percent ?? 0"
-              :show-info="false"
-              size="small"
-              class="upload-row__bar"
-            />
-            <span class="upload-row__percent">{{ item.percent ?? 0 }}%</span>
+          <div class="upload-card__titles">
+            <DownOutlined v-if="tenderExpanded" class="upload-card__caret" />
+            <RightOutlined v-else class="upload-card__caret" />
+            <span class="upload-card__title">招标文件</span>
+            <span class="upload-card__optional">可选</span>
           </div>
-          <CheckCircleFilled v-else-if="item.status === 'done'" class="upload-row__ok" />
-          <CloseCircleFilled v-else-if="item.status === 'error'" class="upload-row__bad" />
+          <span v-if="tenderExpanded" class="upload-card__hint">用于提取招标要求与响应核对</span>
+        </div>
+        <div v-if="tenderExpanded" class="upload-card__tender-body">
+          <a-upload
+            accept=".pdf,.doc,.docx"
+            :show-upload-list="false"
+            :before-upload="onPickTender"
+          >
+            <div class="tender-strip">
+              <PaperClipOutlined class="tender-strip__icon" />
+              <span class="tender-strip__text">添加招标文件</span>
+            </div>
+          </a-upload>
 
-          <span v-if="item.error" class="upload-row__error" :title="item.error">{{ item.error }}</span>
-          <a-button
-            v-if="item.status === 'error'"
-            type="link"
-            size="small"
-            class="upload-row__retry"
-            :disabled="creating"
-            @click="emit('retry', item.key)"
-          >
-            重试
-          </a-button>
-          <a-button
-            type="text"
-            size="small"
-            class="upload-row__remove"
-            :disabled="creating || item.status === 'uploading'"
-            @click="emit('remove', item.key)"
-          >
-            <DeleteOutlined />
-          </a-button>
+          <div v-if="tenderItems.length" class="upload-list">
+            <UploadFileRow
+              v-for="item in tenderItems"
+              :key="item.key"
+              :item="item"
+              :disabled="creating"
+              @retry="emit('retry', item.key)"
+              @remove="emit('remove', item.key)"
+            />
+          </div>
         </div>
       </div>
 
@@ -133,7 +81,7 @@
         </span>
         <span v-else class="upload-page__hint">上传失败可在行内重试，全部失败不会进入工作区</span>
 
-        <a-button type="primary" size="large" :loading="creating" :disabled="bidCount < 2" @click="emit('start', name)">
+        <a-button type="primary" size="large" :loading="creating" :disabled="bidCount < 2" @click="emit('start')">
           开始分析
         </a-button>
       </div>
@@ -143,19 +91,15 @@
 
 <script setup lang="ts">
 import {
-  CheckCircleFilled,
-  CloseCircleFilled,
-  DeleteOutlined,
   ExclamationCircleOutlined,
-  FilePdfOutlined,
-  FileWordOutlined,
-  HistoryOutlined,
+  DownOutlined,
   InboxOutlined,
   PaperClipOutlined,
+  RightOutlined,
 } from '@ant-design/icons-vue'
-import { computed } from 'vue'
-import { COMPARE_STATUS_MAP, MAX_BID_DOCUMENTS, formatFileSize } from '../constants'
-import type { CompareTask } from '@/types'
+import { computed, ref } from 'vue'
+import { MAX_BID_DOCUMENTS } from '../constants'
+import UploadFileRow from './UploadFileRow.vue'
 
 export interface UploadFileItem {
   key: string
@@ -167,34 +111,28 @@ export interface UploadFileItem {
   error?: string
   docId?: string
   percent?: number
+  startedAt?: number
 }
 
 const props = defineProps<{
-  name: string
   items: UploadFileItem[]
   creating: boolean
-  history: CompareTask[]
+
   uploadError?: string
 }>()
 
 const emit = defineEmits<{
-  'update:name': [value: string]
-  'addFiles': [files: { file: File, role: 'bid' | 'tender' }[]]
-  'remove': [key: string]
-  'retry': [key: string]
-  'start': [name: string]
-  'historyOpen': [taskId: string]
+  addFiles: [files: { file: File, role: 'bid' | 'tender' }[]]
+  remove: [key: string]
+  retry: [key: string]
+  start: []
 }>()
 
+const tenderExpanded = ref(false)
+
 const bidCount = computed(() => props.items.filter((i) => i.role === 'bid' && i.status !== 'error').length)
-
-function isWord(name: string): boolean {
-  return /\.docx?$/i.test(name)
-}
-
-function onNameChange(e: Event): void {
-  emit('update:name', (e.target as HTMLInputElement).value)
-}
+const bidItems = computed(() => props.items.filter((i) => i.role === 'bid'))
+const tenderItems = computed(() => props.items.filter((i) => i.role === 'tender'))
 
 function onPick(file: File, role: 'bid' | 'tender'): boolean {
   emit('addFiles', [{ file, role }])
@@ -209,9 +147,10 @@ function onPickTender(file: File): boolean {
   return onPick(file, 'tender')
 }
 
-function onHistoryClick({ key }: { key: string }): void {
+/* function onHistoryClick({ key }: { key: string }): void {
   if (key !== 'empty') emit('historyOpen', key)
 }
+*/
 </script>
 
 <style scoped lang="less">
@@ -220,74 +159,9 @@ function onHistoryClick({ key }: { key: string }): void {
 .upload-page {
   height: 100%;
   overflow: auto;
-  padding: @page-padding;
   display: flex;
   flex-direction: column;
   gap: @spacing-lg;
-}
-
-.upload-page__intro {
-  flex-shrink: 0;
-  display: flex;
-  align-items: flex-end;
-  justify-content: space-between;
-  gap: @spacing-lg;
-  flex-wrap: wrap;
-
-  &-text {
-    min-width: 280px;
-  }
-
-  &-actions {
-    display: flex;
-    align-items: center;
-    gap: @spacing-md;
-    flex-wrap: wrap;
-  }
-}
-
-.upload-page__title {
-  margin: 0;
-  font-size: 22px;
-  line-height: 1.3;
-  font-weight: @font-weight-semibold;
-  color: @text-primary;
-}
-
-.upload-page__desc {
-  margin: @spacing-xs 0 0;
-  font-size: @font-size-sm;
-  color: @text-tertiary;
-}
-
-.upload-page__name {
-  display: flex;
-  align-items: center;
-  gap: @spacing-md;
-}
-
-.upload-page__label {
-  flex-shrink: 0;
-  font-size: @font-size-sm;
-  font-weight: @font-weight-medium;
-  color: @text-primary;
-  white-space: nowrap;
-}
-
-.upload-page__name-input {
-  width: 300px;
-}
-
-.upload-page__history {
-  max-width: 320px;
-
-  &-name {
-    display: inline-block;
-    max-width: 180px;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    vertical-align: middle;
-  }
 }
 
 .upload-page__main {
@@ -335,6 +209,33 @@ function onHistoryClick({ key }: { key: string }): void {
   &__hint {
     font-size: @font-size-xs;
     color: @text-tertiary;
+  }
+
+  &__caret {
+    font-size: @font-size-xs;
+    color: @text-tertiary;
+  }
+
+  &__optional {
+    display: inline-flex;
+    align-items: center;
+    height: 18px;
+    padding: 0 6px;
+    border-radius: @radius-sm;
+    background: color-mix(in srgb, @text-tertiary 12%, transparent);
+    font-size: @font-size-xs;
+    color: @text-secondary;
+    line-height: 1;
+  }
+
+  &__head--tender {
+    margin-bottom: 0;
+    cursor: pointer;
+    user-select: none;
+  }
+
+  &__tender-body {
+    margin-top: @spacing-md;
   }
 
   :deep(.ant-upload-wrapper) {
@@ -419,75 +320,6 @@ function onHistoryClick({ key }: { key: string }): void {
   display: flex;
   flex-direction: column;
   gap: @spacing-xs;
-}
-
-.upload-row {
-  display: flex;
-  align-items: center;
-  gap: @spacing-sm;
-  padding: 8px @spacing-sm;
-  background: @card-bg;
-  border: 1px solid @border-color;
-  border-radius: @radius-base;
-  font-size: @font-size-sm;
-
-  &--error {
-    border-color: @danger;
-    background: color-mix(in srgb, @danger 6%, @card-bg);
-  }
-
-  &__icon { color: @danger; flex-shrink: 0; }
-  &__icon--word { color: @brand-primary; }
-
-  &__name {
-    flex: 1;
-    min-width: 0;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-    color: @text-primary;
-  }
-
-  &__tag { flex-shrink: 0; }
-  &__size { flex-shrink: 0; font-size: @font-size-xs; color: @text-tertiary; }
-
-  &__progress {
-    flex: 0 1 220px;
-    min-width: 140px;
-    display: flex;
-    align-items: center;
-    gap: @spacing-sm;
-  }
-
-  &__bar {
-    flex: 1;
-    min-width: 0;
-    margin: 0;
-  }
-
-  &__percent {
-    flex-shrink: 0;
-    width: 38px;
-    text-align: right;
-    font-size: @font-size-xs;
-    color: @text-secondary;
-    font-variant-numeric: tabular-nums;
-  }
-
-  &__ok { color: @success; flex-shrink: 0; }
-  &__bad { color: @danger; flex-shrink: 0; }
-
-  &__error {
-    max-width: 220px;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-    font-size: @font-size-xs;
-    color: @danger;
-  }
-
-  &__retry { flex-shrink: 0; }
-  &__remove { flex-shrink: 0; }
 }
 
 .upload-page__footer {
