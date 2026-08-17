@@ -150,6 +150,12 @@ public class BidCompareHttpApiHostModule : AbpModule
             client.BaseAddress = new Uri(options.BaseUrl.TrimEnd('/') + "/");
             client.Timeout = TimeSpan.FromSeconds(options.TimeoutSeconds);
         });
+        context.Services.AddHttpClient(nameof(HttpLlmGateway), (sp, client) =>
+        {
+            var options = sp.GetRequiredService<IOptions<AiGatewayOptions>>().Value;
+            client.BaseAddress = new Uri(options.BaseUrl.TrimEnd('/') + "/");
+            client.Timeout = TimeSpan.FromSeconds(options.TimeoutSeconds);
+        });
         context.Services.AddHttpClient();
     }
 
