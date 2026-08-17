@@ -94,6 +94,7 @@ interface TypoItem {
   index?: number
   text?: string
   blockIds?: Record<string, string>
+  tenderResponse?: boolean | null
 }
 
 interface CompareRow {
@@ -194,6 +195,7 @@ function evidenceRows(): CompareRow[] {
       : []
     if (typoItems.length) {
       for (const item of typoItems) {
+        const isTender = item.tenderResponse
         rows.push({
           __key: `t-${ev.id}-${item.index ?? rows.length}`,
           index: 0,
@@ -205,8 +207,8 @@ function evidenceRows(): CompareRow[] {
           docBId: ev.docIds[1] ?? ev.docIds[0],
           pagesA: [],
           pagesB: [],
-          tagText: severityText(ev.severity),
-          tagColor: severityColor(ev.severity),
+          tagText: isTender === true ? '招标响应' : isTender === false ? '雷同候选' : severityText(ev.severity),
+          tagColor: isTender === true ? 'green' : isTender === false ? 'red' : severityColor(ev.severity),
           evidence: ev,
           typoItem: item,
         })
