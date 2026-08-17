@@ -47,3 +47,21 @@ export interface ApiKey {
   usage: number
   docUrl: string
 }
+
+export interface ApiUsageRecord {
+  id: string
+  business: string
+  usedConfig: string
+  usedModel: string
+  inputTokens?: number
+  outputTokens?: number
+  totalTokens?: number
+  finishReason?: string
+  attempts: number
+  latencySeconds?: number
+  circuitBreakerState?: string
+  success: boolean
+  errorType?: string
+  errorMessage?: string
+  creationTime: string
+}

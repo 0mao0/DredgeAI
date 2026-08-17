@@ -8,4 +8,5 @@ export const {
   getUsageByKey,
   getUsageStats,
   getUsageTimeSeries,
+  getUsageRecords,
 } = createApikeyApi(request)

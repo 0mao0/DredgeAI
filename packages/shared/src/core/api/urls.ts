@@ -32,6 +32,7 @@ export const urls = {
   apiKeyUsageByKey: '/apikey/usage-by-key',
   apiKeyUsageStats: '/apikey/usage-stats',
   apiKeyUsageTimeSeries: '/apikey/usage-timeseries',
+  apiKeyRecords: '/apikey/records',
 
   // AI 配音（直连 CosyVoice TTS 服务，经 Vite /tts 代理转发到 localhost:8000）
   dubbingVoices: '/tts/voices',

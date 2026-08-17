@@ -28,6 +28,7 @@
     <a-table
       size="small"
       :data-source="records"
+      :loading="loading"
       :columns="callColumns"
       :pagination="{ pageSize: 15, showTotal: (t: number) => `共 ${t} 条` }"
       row-key="id"
@@ -62,6 +63,7 @@ import type { CallRecord } from '../types'
 
 defineProps<{
   records: CallRecord[]
+  loading?: boolean
   allModelNames: string[]
   userKeyword: string
   modelFilter: string[]

@@ -82,7 +82,8 @@
           v-model:user-keyword="callUserKeyword"
           v-model:model-filter="callModelFilter"
           v-model:status-filter="callStatusFilter"
-          :records="callRecords"
+          :records="filteredCallRecords"
+          :loading="callRecordsLoading"
           :all-model-names="allModelNames"
         />
       </a-tab-pane>
@@ -139,7 +140,7 @@ import { PlusOutlined } from '@ant-design/icons-vue'
 import PageHeader from '@shared/web/components/PageHeader.vue'
 import { useCssVar } from '@shared/web/composables/useCssVar'
 import { useChartTheme } from '@shared/web/composables/useChartTheme'
-import { getUsageTimeSeries } from '@/api/modules/apikey'
+import { getUsageRecords, getUsageTimeSeries } from '@/api/modules/apikey'
 import type { UsageTimeSeries } from '@/types'
 import KeysTab from './components/KeysTab.vue'
 import CallsTab from './components/CallsTab.vue'
@@ -451,37 +452,34 @@ const permissionUsers = computed(() => {
 const callUserKeyword = ref('')
 const callModelFilter = ref<string[]>([])
 const callStatusFilter = ref<string | undefined>(undefined)
+const callRecords = ref<CallRecord[]>([])
+const callRecordsLoading = ref(false)
 
-const phones = ['13800138001', '13900139002', '13700137003', '13600136004', '13500135005', '15800158006', '15900159007', '15700157008', '15600156009', '15500155010', '15200152011', '15300153012', '15100151013', '15000150014', '18800188015', '18900189016', '18600186017', '18700187018', '18500185019', '18400184020']
-
-const mockCallRecords: CallRecord[] = (() => {
-  const now = new Date()
-  const records: CallRecord[] = []
-  const userNames = rawUsers.map((u) => u.name)
-  for (let i = 0; i < 200; i++) {
-    const d = new Date(now)
-    d.setMinutes(d.getMinutes() - Math.floor(Math.random() * 4320))
-    const userIdx = Math.floor(Math.random() * userNames.length)
-    const modelIdx = Math.floor(Math.random() * mockModels.length)
-    const success = Math.random() > 0.15
-    records.push({
-      id: `call-${i}`,
-      userName: userNames[userIdx],
-      department: rawUsers[userIdx].department,
-      modelName: mockModels[modelIdx].actualModel,
-      inputTokens: Math.round(100 + Math.random() * 4000),
-      outputTokens: Math.round(100 + Math.random() * 4000),
-      userPhone: phones[userIdx % phones.length],
-      latency: success ? Math.round(300 + Math.random() * 5000) : Math.round(8000 + Math.random() * 12000),
-      status: success ? '成功' : '失败',
-      time: d.toISOString().slice(0, 19).replace('T', ' '),
-    })
+async function fetchCallRecords(): Promise<void> {
+  callRecordsLoading.value = true
+  try {
+    const page = await getUsageRecords({ MaxResultCount: '200' })
+    callRecords.value = page.items.map((r) => ({
+      id: r.id,
+      userName: r.business,
+      department: r.usedConfig,
+      modelName: r.usedModel,
+      inputTokens: r.inputTokens ?? 0,
+      outputTokens: r.outputTokens ?? 0,
+      userPhone: '',
+      latency: r.latencySeconds ? Math.round(r.latencySeconds * 1000) : 0,
+      status: r.success ? '成功' : '失败',
+      time: r.creationTime.slice(0, 19).replace('T', ' '),
+    }))
+  } catch {
+    message.error('加载调用记录失败')
+  } finally {
+    callRecordsLoading.value = false
   }
-  return records.sort((a, b) => b.time.localeCompare(a.time))
-})()
+}
 
-const callRecords = computed(() => {
-  let list = mockCallRecords
+const filteredCallRecords = computed(() => {
+  let list = callRecords.value
   const kw = callUserKeyword.value.toLowerCase().trim()
   if (kw) list = list.filter((r) => r.userName.includes(kw))
   if (callModelFilter.value.length > 0 && callModelFilter.value.length < allModelNames.length) {
@@ -564,6 +562,7 @@ const mergedUserData = computed(() => filteredUsers.value)
 
 onMounted(() => {
   fetchTimeSeries()
+  fetchCallRecords()
 })
 
 watch(overviewTimeRange, () => { fetchTimeSeries() })
