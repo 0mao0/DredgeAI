@@ -2,14 +2,16 @@
 import logging
 import threading
 
-from ai_inference import LLMClient, load_llm_config_from_env
+from ai_inference import LLMClient, achat_result_guarded, load_llm_config_from_env
+from ai_inference.errors import LLMError
 from fastapi import Depends, FastAPI, Request
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 
 from app.errors import LlmHttpError, error_status
-from app.schemas import ErrorResponse
+from app.schemas import ChatRequest, ChatResponse, ErrorResponse
 from app.settings import get_settings
+from app.usage import enqueue_usage, usage_payload
 
 logger = logging.getLogger("ai-gateway")
 
@@ -95,3 +97,49 @@ def healthz() -> dict[str, str]:
 @app.get("/v1/models", dependencies=[Depends(require_api_token)])
 def get_models() -> dict:
     return {"models": llm_client().configs}
+
+
+def _require_models() -> None:
+    if not llm_client().configs:
+        raise LlmHttpError(503, "NO_MODELS_CONFIGURED", "LLM_CONFIGS 为空或未启用任何模型")
+
+
+@app.post("/v1/chat", response_model=ChatResponse, dependencies=[Depends(require_api_token)])
+async def post_chat(req: ChatRequest) -> ChatResponse:
+    _require_models()
+    messages = [m.model_dump() for m in req.messages]
+    try:
+        result = await achat_result_guarded(
+            llm_client(),
+            messages,
+            mode=req.mode or "instruct",
+            config_name=req.config_name,
+            temperature=req.temperature,
+            max_tokens=req.max_tokens,
+        )
+    except LLMError as exc:
+        status, code = error_status(exc)
+        raise LlmHttpError(status, code, str(exc)) from exc
+
+    enqueue_usage(usage_payload(
+        business=req.business,
+        text=result.text or "",
+        finish_reason=result.finish_reason,
+        usage=result.usage,
+        used_config=result.used_config,
+        used_model=result.used_model,
+        attempts=result.attempts or 1,
+        latency_seconds=result.latency_seconds,
+        circuit_breaker_state=result.circuit_breaker_state,
+        success=True,
+    ))
+    return ChatResponse(
+        text=result.text or "",
+        finish_reason=result.finish_reason,
+        usage=result.usage,
+        used_config=result.used_config,
+        used_model=result.used_model,
+        attempts=result.attempts or 1,
+        latency_seconds=result.latency_seconds,
+        circuit_breaker_state=result.circuit_breaker_state,
+    )
