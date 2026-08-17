@@ -54,9 +54,9 @@ const props = defineProps<{
 }>()
 
 const columns = [
-  { title: '序号', key: 'index', width: 56 },
-  { title: '雷同片段', key: 'text' },
-  { title: '字数', key: 'length', width: 72 },
+  { title: '序号', dataIndex: 'index', key: 'index', width: 56 },
+  { title: '雷同片段', dataIndex: 'text', key: 'text' },
+  { title: '字数', dataIndex: 'length', key: 'length', width: 72 },
   { title: '位置', key: 'location', width: 220 },
   { title: '判定', key: 'tender', width: 110 },
 ]
