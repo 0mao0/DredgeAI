@@ -65,6 +65,11 @@ public class CompareTaskController : AbpControllerBase
     public Task<CompareTaskDto> RetryCompareAsync(Guid id, [FromBody] CompareTasks.RetryCompareInput? input)
         => _appService.RetryCompareAsync(id, input ?? new CompareTasks.RetryCompareInput());
 
+    /// <summary>POST /api/compare/tasks/{id}/ai/retry 重新抽取 AI 分析（关键指标 + 条款矩阵，不重跑两两对比）</summary>
+    [HttpPost("{id}/ai/retry")]
+    public Task<CompareTaskDto> RetryAiAnalysisAsync(Guid id)
+        => _appService.RetryAiAnalysisAsync(id);
+
     /// <summary>PUT /api/compare/tasks/{id}/name 编辑项目名（v2 §3.3，置 nameEditedByUser = true）</summary>
     [HttpPut("{id}/name")]
     public Task<CompareTaskDto> UpdateNameAsync(Guid id, [FromBody] CompareTasks.UpdateCompareTaskNameInput input)

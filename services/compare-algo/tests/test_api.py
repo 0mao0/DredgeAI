@@ -19,8 +19,11 @@ def test_similarity_endpoint(ir_payload):
     r = client.post("/analyze/similarity", json=ir_payload)
     assert r.status_code == 200
     evidences = r.json()["evidences"]
-    assert len(evidences) == 1
-    e = evidences[0]
+    visible = [e for e in evidences if not e["metrics"].get("matrixOnly")]
+    matrix_only = [e for e in evidences if e["metrics"].get("matrixOnly")]
+    assert len(visible) == 1
+    assert len(matrix_only) == 2
+    e = visible[0]
     # Evidence 字段逐字遵守 spec §6.1
     assert set(e) == {
         "id", "taskId", "type", "severity", "docIds",
@@ -46,8 +49,7 @@ def test_similarity_endpoint_ocr_downgrade_pinned(ir_payload):
     r = client.post("/analyze/similarity", json=ir_payload)
     assert r.status_code == 200
     evidences = r.json()["evidences"]
-    assert len(evidences) == 1
-    e = evidences[0]
+    e = next(e for e in evidences if not e["metrics"].get("matrixOnly"))
     assert e["severity"] == "mid"
     assert e["metrics"]["ocrSuspect"] is True
     assert e["metrics"]["similarity"] > 0.8

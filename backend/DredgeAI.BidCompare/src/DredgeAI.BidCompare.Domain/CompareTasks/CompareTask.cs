@@ -155,7 +155,8 @@ public class CompareTask : FullAuditedAggregateRoot<Guid>
     {
         EnsureStatus(nameof(MarkComparing),
             CompareTaskStatus.Parsed, CompareTaskStatus.Partial,
-            CompareTaskStatus.AwaitingClauses, CompareTaskStatus.Failed);
+            CompareTaskStatus.AwaitingClauses, CompareTaskStatus.Failed,
+            CompareTaskStatus.Done);
         Status = CompareTaskStatus.Comparing;
         // 重新比对将使既有报告过期（证据集变化），清空缓存防止陈旧报告被直接返回
         ClearReportCache();
@@ -163,7 +164,8 @@ public class CompareTask : FullAuditedAggregateRoot<Guid>
 
     public void MarkAnalyzing()
     {
-        EnsureStatus(nameof(MarkAnalyzing), CompareTaskStatus.Comparing);
+        EnsureStatus(nameof(MarkAnalyzing),
+            CompareTaskStatus.Comparing, CompareTaskStatus.Done, CompareTaskStatus.Partial);
         Status = CompareTaskStatus.Analyzing;
     }
 

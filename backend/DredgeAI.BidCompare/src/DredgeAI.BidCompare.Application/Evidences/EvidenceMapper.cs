@@ -76,6 +76,16 @@ public static class EvidenceMapper
         return metrics?.Similarity;
     }
 
+    public static bool ReadMatrixOnly(string? metricsJson)
+    {
+        if (metricsJson == null)
+        {
+            return false;
+        }
+        var metrics = JsonSerializer.Deserialize<EvidenceMetricsDto>(metricsJson, JsonOptions);
+        return metrics?.MatrixOnly == true;
+    }
+
     private static TEnum ParseEnum<TEnum>(string value, TEnum fallback, string field, ILogger? logger) where TEnum : struct
     {
         if (Enum.TryParse<TEnum>(value, ignoreCase: true, out var parsed))

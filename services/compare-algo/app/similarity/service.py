@@ -70,6 +70,31 @@ def _pair_evidence(
     )
 
 
+def _matrix_only_evidence(
+    task_id: str,
+    r: PairSimilarityResult,
+    names: dict[str, str],
+) -> Evidence:
+    """低于雷同证据阈值的两两相似度：仅用于热力矩阵，不进入证据清单（metrics.matrixOnly）。"""
+    return build_evidence(
+        task_id=task_id,
+        type="similarity",
+        severity="low",
+        doc_ids=[r.doc_id_a, r.doc_id_b],
+        locations=[
+            EvidenceLocation(docId=r.doc_id_a, blockIds=[]),
+            EvidenceLocation(docId=r.doc_id_b, blockIds=[]),
+        ],
+        metrics={
+            "similarity": r.similarity,
+            "matrixOnly": True,
+            "matchedBlockCount": len(r.matches),
+        },
+        title=f"{names[r.doc_id_a]} 与 {names[r.doc_id_b]} 文本相似度 {r.similarity:.1%}",
+        description="低于雷同证据阈值的两两相似度，用于相似度热力图展示。",
+    )
+
+
 def analyze_similarity(task_id: str, documents: list[IrDocument]) -> list[Evidence]:
     settings = get_settings()
     index = build_block_index(documents)
@@ -86,11 +111,23 @@ def analyze_similarity(task_id: str, documents: list[IrDocument]) -> list[Eviden
     for (a, b), group in sorted(by_doc_pair.items()):
         results.append(align_document_pair(doc_map[a], doc_map[b], group))
 
+    # 全量两两结果：无候选块的对补 0，保证热力矩阵恒有值（含低于证据阈值的低相似度）。
+    result_by_pair = {
+        tuple(sorted((r.doc_id_a, r.doc_id_b))): r for r in results
+    }
+    all_results: list[PairSimilarityResult] = []
+    for i in range(len(documents)):
+        for j in range(i + 1, len(documents)):
+            a, b = documents[i].docId, documents[j].docId
+            key = tuple(sorted((a, b)))
+            all_results.append(result_by_pair.get(key, PairSimilarityResult(a, b, 0.0, [])))
+
     evidences: list[Evidence] = []
-    for r in results:
-        if r.similarity < settings.evidence_min_similarity or not r.matches:
-            continue
-        evidences.append(_pair_evidence(task_id, r, _is_ocr_suspect(r, ocr_ids), names))
+    for r in all_results:
+        if r.similarity >= settings.evidence_min_similarity and r.matches:
+            evidences.append(_pair_evidence(task_id, r, _is_ocr_suspect(r, ocr_ids), names))
+        else:
+            evidences.append(_matrix_only_evidence(task_id, r, names))
 
     for members in find_similarity_clusters(results, settings.cluster_min_similarity):
         # 只统计构成归并的边（≥簇阈值）：弱边/非证据对不稀释均值、不进入定位

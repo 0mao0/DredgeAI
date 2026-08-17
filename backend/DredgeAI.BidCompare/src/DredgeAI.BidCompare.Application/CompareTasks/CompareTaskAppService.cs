@@ -148,7 +148,7 @@ public class CompareTaskAppService : ApplicationService, ICompareTaskAppService
             .WhereIf(!input.Name.IsNullOrWhiteSpace(), x => x.Name.Contains(input.Name!))
             .WhereIf(input.Status.HasValue, x => x.Status == input.Status!.Value);
 
-        var totalCount = await AsyncExecuter.CountAsync(queryable);
+        var totalCount = await AsyncExecuter.CountAsync(queryable); // test
         var tasks = await AsyncExecuter.ToListAsync(queryable
             .OrderByDescending(x => x.CreationTime)
             .PageBy(input.SkipCount, input.MaxResultCount));
@@ -284,6 +284,34 @@ public class CompareTaskAppService : ApplicationService, ICompareTaskAppService
             PairIds = input?.PairIds
         });
 
+        return MapToDto(task, documents);
+    }
+
+    /// <summary>重新抽取 AI 分析（关键指标 + 条款响应矩阵），不重跑两两对比。</summary>
+    public async Task<CompareTaskDto> RetryAiAnalysisAsync(Guid id)
+    {
+        var task = await _taskRepository.GetAsync(id);
+        if (task.Status is CompareTaskStatus.Comparing or CompareTaskStatus.Analyzing)
+        {
+            throw new BusinessException(BidCompareErrorCodes.InvalidTaskState)
+                .WithData("action", "RetryAiAnalysis")
+                .WithData("status", task.Status.ToString())
+                .WithData("reason", "任务正在分析中，请等待完成后再试");
+        }
+        if (task.Status is not (CompareTaskStatus.Done or CompareTaskStatus.Partial))
+        {
+            throw new BusinessException(BidCompareErrorCodes.InvalidTaskState)
+                .WithData("action", "RetryAiAnalysis")
+                .WithData("status", task.Status.ToString())
+                .WithData("reason", "任务尚未进入 AI 分析阶段");
+        }
+
+        task.MarkAnalyzing();
+        task.UpdateProgress("analyzing", 80, "AI 分析中");
+        await _taskRepository.UpdateAsync(task, autoSave: true);
+        await _backgroundJobManager.EnqueueAsync(new AiAnalysisArgs { TaskId = id });
+
+        var documents = await GetTaskDocumentsAsync(id);
         return MapToDto(task, documents);
     }
 
@@ -431,28 +459,23 @@ public class CompareTaskAppService : ApplicationService, ICompareTaskAppService
             .WhereIf(input.Type.HasValue, e => e.Type == input.Type!.Value)
             .WhereIf(input.Severity.HasValue, e => e.Severity == input.Severity!.Value);
 
-        if (input.DocIdA.HasValue && input.DocIdB.HasValue)
-        {
-            // 文档对过滤涉及 JSON 负载，原型规模（单任务证据量有限）在内存过滤后再分页
-            var all = await AsyncExecuter.ToListAsync(queryable.OrderBy(e => e.Severity).ThenBy(e => e.CreationTime));
-            var dtos = all.Select(EvidenceMapper.ToDto)
-                .Where(e => e.DocIds.Contains(input.DocIdA.Value) && e.DocIds.Contains(input.DocIdB.Value))
-                .ToList();
-            return new PagedResultDto<EvidenceDto>(
-                dtos.Count,
-                dtos.Skip(input.SkipCount).Take(input.MaxResultCount).ToList());
-        }
-
         // 常规路径：分页与计数下沉 DB
-        var totalCount = await AsyncExecuter.CountAsync(queryable);
-        var entities = await AsyncExecuter.ToListAsync(queryable
-            .OrderBy(e => e.Severity)
-            .ThenBy(e => e.CreationTime)
-            .PageBy(input.SkipCount, input.MaxResultCount));
+        // 矩阵专用相似度（matrixOnly）不进入证据清单；JSON 字段无法下推 SQL，原型规模在内存过滤
+        var all = await AsyncExecuter.ToListAsync(
+            queryable.OrderBy(e => e.Severity).ThenBy(e => e.CreationTime));
+        var dtos = all
+            .Where(e => !IsMatrixOnlyEvidence(e))
+            .Select(EvidenceMapper.ToDto)
+            .Where(e => !input.DocIdA.HasValue || !input.DocIdB.HasValue
+                || (e.DocIds.Contains(input.DocIdA.Value) && e.DocIds.Contains(input.DocIdB.Value)))
+            .ToList();
         return new PagedResultDto<EvidenceDto>(
-            totalCount,
-            entities.Select(EvidenceMapper.ToDto).ToList());
+            dtos.Count,
+            dtos.Skip(input.SkipCount).Take(input.MaxResultCount).ToList());
     }
+
+    private static bool IsMatrixOnlyEvidence(EvidenceItem e)
+        => e.Type == EvidenceType.Similarity && EvidenceMapper.ReadMatrixOnly(e.MetricsJson);
 
     public async Task<SimilarityMatrixDto> GetMatrixAsync(Guid id)
     {

@@ -116,6 +116,41 @@ public class CompareTaskStateMachineTests
     }
 
     [Fact]
+    public void Done_Should_Allow_Recompare()
+    {
+        var task = new CompareTask(Guid.NewGuid(), "t");
+        task.MarkParsed();
+        task.MarkComparing();
+        task.MarkAnalyzing();
+        task.MarkDone();
+
+        task.MarkComparing();
+
+        task.Status.ShouldBe(CompareTaskStatus.Comparing);
+    }
+
+    [Fact]
+    public void Done_And_Partial_Should_Allow_Ai_Retry()
+    {
+        var done = new CompareTask(Guid.NewGuid(), "t");
+        done.MarkParsed();
+        done.MarkComparing();
+        done.MarkAnalyzing();
+        done.MarkDone();
+
+        done.MarkAnalyzing();
+
+        done.Status.ShouldBe(CompareTaskStatus.Analyzing);
+
+        var partial = new CompareTask(Guid.NewGuid(), "t");
+        partial.MarkPartial("标书C.pdf: OCR 失败");
+
+        partial.MarkAnalyzing();
+
+        partial.Status.ShouldBe(CompareTaskStatus.Analyzing);
+    }
+
+    [Fact]
     public void SetTenderDocument_Should_Only_Be_Set_During_Early_Stages()
     {
         var task = new CompareTask(Guid.NewGuid(), "t");

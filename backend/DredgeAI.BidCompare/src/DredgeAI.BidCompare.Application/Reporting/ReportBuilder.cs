@@ -36,10 +36,13 @@ public class ReportBuilder : ITransientDependency
 
     public async Task<CompareReportDto> BuildAsync(Guid taskId, CancellationToken cancellationToken = default)
     {
-        var evidences = (await _evidenceRepository.GetListAsync(e => e.TaskId == taskId))
+        var allEvidences = (await _evidenceRepository.GetListAsync(e => e.TaskId == taskId))
             .Select(EvidenceMapper.ToDto)
             .OrderBy(e => e.Severity)
             .ThenBy(e => e.Title)
+            .ToList();
+        var evidences = allEvidences
+            .Where(e => !(e.Type == EvidenceType.Similarity && e.Metrics?.MatrixOnly == true))
             .ToList();
 
         var docCount = await _documentRepository.CountAsync(d =>
@@ -57,7 +60,7 @@ public class ReportBuilder : ITransientDependency
                 LowRiskCount = evidences.Count(e => e.Severity == EvidenceSeverity.Low),
                 TopFindings = evidences.Take(5).Select(e => e.Title).ToList()
             },
-            Matrix = await BuildMatrixAsync(taskId, evidences),
+            Matrix = await BuildMatrixAsync(taskId, allEvidences),
             Sections = new List<ReportSectionDto>
             {
                 new()

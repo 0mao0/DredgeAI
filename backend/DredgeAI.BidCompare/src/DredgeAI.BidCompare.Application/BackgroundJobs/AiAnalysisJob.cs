@@ -27,15 +27,25 @@ namespace DredgeAI.BidCompare.BackgroundJobs;
 public class AiAnalysisJob : AsyncBackgroundJob<AiAnalysisArgs>, ITransientDependency
 {
     private const int DocMdMaxChars = 20000;      // 条款判定单份截断
-    private const int IndicatorDocMaxChars = 8000; // 指标抽取单份截断
+    private const int IndicatorDocMaxChars = 8000; // 指标抽取单份 prompt 预算
+    private const int IndicatorWindowBefore = 300;  // 关键词前取多少字
+    private const int IndicatorWindowAfter = 700;   // 关键词后取多少字
+    private const int IndicatorMaxWindowsPerKeyword = 3;
+
+    private static readonly string[] IndicatorKeywords =
+    {
+        "投标总价", "报价", "工期", "资质", "质量目标",
+        "技术方案", "施工方案", "售后服务", "项目业绩", "项目经理",
+    };
 
     private const string ClauseJudgementSystemPrompt =
         "你是招投标评审助手。给定一条强制性条款与一份标书全文，判断该标书是否实质响应此条款。" +
         "只返回 JSON 数组，不要输出任何其他文字。";
 
     private const string IndicatorSystemPrompt =
-        "你是招投标评审助手。从多份标书中抽取关键指标（报价、工期、资质、技术方案要点等）用于比选。" +
-        "只返回 JSON 数组，不要输出任何其他文字。";
+        "你是招投标评审助手。请严格按固定指标清单从多份标书中抽取关键指标用于比选，清单如下：报价、工期、资质等级、质量目标、技术方案要点、售后服务、项目业绩、项目经理。" +
+        "标书中没有的指标，summary 必须写“未提供/未明确”；禁止用文档章节标题代替指标，禁止输出清单之外的指标。" +
+        "只返回 JSON 数组，每项字段：indicator（指标名）、summaries（数组，每项含 docId、summary）。不要输出任何其他文字。";
 
     private readonly IRepository<CompareTask, Guid> _taskRepository;
     private readonly IRepository<CompareDocument, Guid> _documentRepository;
@@ -85,9 +95,8 @@ public class AiAnalysisJob : AsyncBackgroundJob<AiAnalysisArgs>, ITransientDepen
             foreach (var doc in bidDocs.Where(d => d.DocMdStorageKey != null))
             {
                 // 流式限量读取：LLM prompt 只需前缀，整份 content.md 不再全量驻留后再截断
-                var maxChars = Math.Max(DocMdMaxChars, IndicatorDocMaxChars);
                 await using var stream = await _fileStorage.GetAsync(doc.DocMdStorageKey!, cancellationToken);
-                docMds[doc] = await ReadLimitedAsync(stream, maxChars, cancellationToken);
+                docMds[doc] = await ReadAllAsync(stream, cancellationToken);
             }
 
             var snapshot = task.ClauseSnapshotJson == null
@@ -198,11 +207,13 @@ public class AiAnalysisJob : AsyncBackgroundJob<AiAnalysisArgs>, ITransientDepen
         CancellationToken cancellationToken)
     {
         var docsSection = string.Join("\n\n", docMds.Select(kv =>
-            $"=== 标书 docId={kv.Key.Id}（{kv.Key.FileName}）===\n{Truncate(kv.Value, IndicatorDocMaxChars)}"));
+            $"=== 标书 docId={kv.Key.Id}（{kv.Key.FileName}）===\n{SampleIndicatorText(kv.Value)}"));
 
         var userPrompt =
             docsSection +
-            "\n\n请抽取关键指标，以 JSON 数组返回，每项字段：indicator（指标名）、summaries（数组，每项含 docId、summary）。只返回 JSON。";
+            "\n\n请按固定指标清单抽取：报价、工期、资质等级、质量目标、技术方案要点、售后服务、项目业绩、项目经理；" +
+            "缺失的指标 summary 填“未提供/未明确”，禁止用章节标题代替。以 JSON 数组返回，每项字段：indicator（指标名）、" +
+            "summaries（数组，每项含 docId、summary）。只返回 JSON。";
 
         var response = await _llmGateway.CompleteAsync(IndicatorSystemPrompt, userPrompt, cancellationToken);
 
@@ -235,6 +246,102 @@ public class AiAnalysisJob : AsyncBackgroundJob<AiAnalysisArgs>, ITransientDepen
         => text.Length <= maxChars ? text : text[..maxChars] + "\n（截断）";
 
     /// <summary>限量读取文本流：最多 maxChars 字符即停，超长内容不再全量驻留内存。</summary>
+    /// <summary>指标抽取长文档采样：按关键指标关键词定位并抽取上下文，避免遗漏中间章节。</summary>
+    private static string SampleIndicatorText(string text)
+    {
+        if (text.Length <= IndicatorDocMaxChars)
+        {
+            return text;
+        }
+
+        var windows = new List<(int Start, int End, int Priority)>();
+        for (var ki = 0; ki < IndicatorKeywords.Length; ki++)
+        {
+            var keyword = IndicatorKeywords[ki];
+            var idx = text.IndexOf(keyword, StringComparison.Ordinal);
+            var count = 0;
+            while (idx >= 0 && count < IndicatorMaxWindowsPerKeyword)
+            {
+                windows.Add((
+                    Math.Max(0, idx - IndicatorWindowBefore),
+                    Math.Min(text.Length, idx + keyword.Length + IndicatorWindowAfter),
+                    ki));
+                count++;
+                idx = text.IndexOf(keyword, idx + keyword.Length, StringComparison.Ordinal);
+            }
+        }
+
+        if (windows.Count == 0)
+        {
+            return HeadTailSample(text);
+        }
+
+        var budget = IndicatorDocMaxChars;
+        var selected = new List<(int Start, int End)>();
+        foreach (var w in windows.OrderBy(w => w.Priority).ThenBy(w => w.Start))
+        {
+            if (budget <= 0)
+            {
+                break;
+            }
+            var length = w.End - w.Start;
+            if (length > budget)
+            {
+                selected.Add((w.Start, w.Start + budget));
+                budget = 0;
+            }
+            else
+            {
+                selected.Add((w.Start, w.End));
+                budget -= length;
+            }
+        }
+
+        var ordered = selected.OrderBy(w => w.Start).ToList();
+        var merged = new List<(int Start, int End)>();
+        foreach (var w in ordered)
+        {
+            if (merged.Count == 0 || w.Start > merged[^1].End)
+            {
+                merged.Add(w);
+            }
+            else
+            {
+                merged[^1] = (merged[^1].Start, Math.Max(merged[^1].End, w.End));
+            }
+        }
+
+        var builder = new System.Text.StringBuilder();
+        foreach (var (start, end) in merged)
+        {
+            if (builder.Length >= IndicatorDocMaxChars)
+            {
+                break;
+            }
+            if (builder.Length > 0)
+            {
+                builder.Append("\n……\n");
+            }
+            var take = Math.Min(end - start, IndicatorDocMaxChars - builder.Length);
+            builder.Append(text.Substring(start, take));
+        }
+        return builder.ToString();
+    }
+
+    private static string HeadTailSample(string text)
+    {
+        var half = IndicatorDocMaxChars / 2;
+        var head = text[..Math.Min(half, text.Length)];
+        var tailStart = Math.Max(half, text.Length - half);
+        return $"{head}\n\n……（中间省略）……\n\n{text[tailStart..]}";
+    }
+
+    private static async Task<string> ReadAllAsync(Stream stream, CancellationToken cancellationToken)
+    {
+        using var reader = new StreamReader(stream);
+        return await reader.ReadToEndAsync(cancellationToken);
+    }
+
     private static async Task<string> ReadLimitedAsync(Stream stream, int maxChars, CancellationToken cancellationToken)
     {
         using var reader = new StreamReader(stream);

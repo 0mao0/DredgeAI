@@ -31,6 +31,8 @@ public interface ICompareTaskAppService : IApplicationService
 
     Task<CompareTaskDto> RetryCompareAsync(Guid id, RetryCompareInput? input);
 
+    Task<CompareTaskDto> RetryAiAnalysisAsync(Guid id);
+
     Task<CompareTaskDto> UpdateNameAsync(Guid id, UpdateCompareTaskNameInput input);
 
     [DisableValidation] // Stream 参数无法被验证拦截器递归校验（ReadTimeout 等属性不可读）

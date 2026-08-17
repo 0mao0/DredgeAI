@@ -12,8 +12,12 @@ def _adapt_all(raw_docs):
 def test_fixture_pair_evidence(ir_docs):
     evidences = analyze_similarity("task-001", ir_docs)
     # fixture 中仅 doc-a/doc-b 雷同，doc-c 独立；不足 3 份，无簇证据
-    assert len(evidences) == 1
-    e = evidences[0]
+    visible = [e for e in evidences if not e.metrics.get("matrixOnly")]
+    matrix_only = [e for e in evidences if e.metrics.get("matrixOnly")]
+    assert len(visible) == 1
+    assert len(matrix_only) == 2
+    assert all(m.metrics["similarity"] == 0.0 for m in matrix_only)
+    e = visible[0]
     assert e.type == "similarity"
     assert e.taskId == "task-001"
     assert e.docIds == ["doc-a", "doc-b"]
@@ -32,7 +36,8 @@ def test_fixture_pair_evidence(ir_docs):
 
 
 def test_evidence_locations_cover_matched_blocks(ir_docs):
-    e = analyze_similarity("task-001", ir_docs)[0]
+    evidences = analyze_similarity("task-001", ir_docs)
+    e = next(e for e in evidences if not e.metrics.get("matrixOnly"))
     loc_a = next(l for l in e.locations if l.docId == "doc-a")
     loc_b = next(l for l in e.locations if l.docId == "doc-b")
     assert "b003" in loc_a.blockIds
@@ -40,8 +45,11 @@ def test_evidence_locations_cover_matched_blocks(ir_docs):
     assert "b005" in loc_b.blockIds  # OCR 块也定位出来
 
 
-def test_no_evidence_for_independent_docs(ir_doc_a, ir_doc_c):
-    assert analyze_similarity("task-001", [ir_doc_a, ir_doc_c]) == []
+def test_independent_docs_only_matrix_metric(ir_doc_a, ir_doc_c):
+    evidences = analyze_similarity("task-001", [ir_doc_a, ir_doc_c])
+    assert len(evidences) == 1
+    assert evidences[0].metrics["matrixOnly"] is True
+    assert evidences[0].metrics["similarity"] == 0.0
 
 
 def test_cluster_evidence_for_3_similar_docs(ir_doc_a):
@@ -85,13 +93,19 @@ def test_similarity_thresholds(monkeypatch, ir_docs):
         return _fake
 
     monkeypatch.setattr(service, "align_document_pair", fake_align(0.29))
-    assert analyze_similarity("task-threshold", ir_docs) == []  # <0.3 不出证据
+    below = analyze_similarity("task-threshold", ir_docs)  # <0.3 不出雷同证据，仅矩阵数值
+    assert len(below) == 3
+    assert all(e.metrics["matrixOnly"] is True for e in below)
+    assert all(e.metrics["similarity"] in (0.0, 0.29) for e in below)
 
     monkeypatch.setattr(service, "align_document_pair", fake_align(0.31))
     evidences = analyze_similarity("task-threshold", ir_docs)
-    assert len(evidences) == 1  # ≥0.3 出证据
-    assert evidences[0].metrics["similarity"] == 0.31
-    assert evidences[0].severity == "low"
+    visible = [e for e in evidences if not e.metrics.get("matrixOnly")]
+    matrix_only = [e for e in evidences if e.metrics.get("matrixOnly")]
+    assert len(visible) == 1  # ≥0.3 出证据
+    assert len(matrix_only) == 2
+    assert visible[0].metrics["similarity"] == 0.31
+    assert visible[0].severity == "low"
 
 
 def test_real_haigang_pair_low_evidence(raw_haigang_pair):
@@ -197,10 +211,16 @@ def test_cluster_avg_and_locations_over_union_edges_only():
         adapt(_make_doc("doc-c", "C.pdf", _T + [_W_CHAIN] + _UC)),
     ]
     evidences = analyze_similarity("task-chain", docs)
-    pair_evidences = [e for e in evidences if not e.metrics.get("cluster")]
+    pair_evidences = [
+        e for e in evidences
+        if not e.metrics.get("cluster") and not e.metrics.get("matrixOnly")
+    ]
+    matrix_only = [e for e in evidences if e.metrics.get("matrixOnly")]
     cluster_evidences = [e for e in evidences if e.metrics.get("cluster")]
-    # A-C 弱边（<0.3）不出对证据
+    # A-C 弱边（<0.3）不出对证据，仅保留矩阵数值
     assert sorted(e.docIds for e in pair_evidences) == [["doc-a", "doc-b"], ["doc-b", "doc-c"]]
+    assert len(matrix_only) == 1
+    assert tuple(matrix_only[0].docIds) == ("doc-a", "doc-c")
     assert len(cluster_evidences) == 1
     ce = cluster_evidences[0]
     assert ce.docIds == ["doc-a", "doc-b", "doc-c"]
