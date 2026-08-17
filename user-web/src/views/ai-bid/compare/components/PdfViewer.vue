@@ -226,4 +226,11 @@ const highlights = computed<ViewerHighlight[]>(() =>
 .pane-title-prefix {
   display: none !important;
 }
+
+/* 修复 docs-ui 虚拟滚动 bug：.pdf-virtual-spacer 是 flex 容器子项，默认 flex-shrink
+   会把内联 height（全文档高度）压缩到视口高度，导致大 PDF 只能滚到已渲染页、
+   定位跳页失败。强制不收缩后 scrollHeight 恢复为全文高度，scrollToPdfPage 才能到达目标页。 */
+.pdf-scroll-container .pdf-virtual-spacer {
+  flex-shrink: 0 !important;
+}
 </style>
