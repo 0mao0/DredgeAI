@@ -20,7 +20,11 @@ public record AnGineerJobStatus(
     int Progress = 0,
     string? Stage = null,
     string? StageMessage = null,
-    string? Error = null);
+    string? Error = null)
+{
+    /// <summary>失败/中断时的可读原因（优先 stage_message，其次 error）。</summary>
+    public string? FailureReason => StageMessage ?? Error;
+}
 
 /// <summary>AnGIneer 产物清单项（name + 下载 url）。</summary>
 public record AnGineerArtifact(string Name, string Url);

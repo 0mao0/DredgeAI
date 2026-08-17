@@ -132,6 +132,7 @@ public class DocumentParsePipeline : ITransientDependency
     {
         var deadline = DateTime.UtcNow + _pollOptions.Timeout;
         var staleResumeAttempted = false;
+        var interruptedResumeAttempted = false;
         while (DateTime.UtcNow < deadline)
         {
             AnGineerJobStatus status;
@@ -155,6 +156,21 @@ public class DocumentParsePipeline : ITransientDependency
                     anGineerJobId);
                 await _anGineerClient.ResumeAsync(anGineerJobId, cancellationToken);
                 staleResumeAttempted = true;
+                continue;
+            }
+
+            // docs-api 重启/崩溃会把解析中断的任务标记为 failed（唯一设置点 startup_recovery
+            // 的“服务重启导致解析中断，可调用 .../resume 恢复”）；有界自动 resume 一次后继续轮询，
+            // 避免把“服务重启中断”误判成真正的解析失败。
+            if (status.State == AnGineerJobState.Failed
+                && !interruptedResumeAttempted
+                && IsInterruptionError(status))
+            {
+                _logger.LogWarning(
+                    "AnGIneer 文档 {JobId} 解析中断（{Message}），尝试 resume 恢复",
+                    anGineerJobId, status.FailureReason);
+                interruptedResumeAttempted = true;
+                await _anGineerClient.ResumeAsync(anGineerJobId, cancellationToken);
                 continue;
             }
 
@@ -311,6 +327,20 @@ public class DocumentParsePipeline : ITransientDependency
            && status.Progress == 0
            && status.Stage is "pending" or "processing"
            && string.IsNullOrWhiteSpace(status.StageMessage);
+
+    /// <summary>docs-api 重启/崩溃导致解析中断时，/status 返回 failed 且错误提示可 resume；识别后自动恢复一次。</summary>
+    private static bool IsInterruptionError(AnGineerJobStatus status)
+    {
+        var message = status.FailureReason;
+        if (string.IsNullOrWhiteSpace(message))
+        {
+            return false;
+        }
+        return message.Contains("中断", StringComparison.Ordinal)
+               || message.Contains("/resume", StringComparison.OrdinalIgnoreCase)
+               || message.Contains("interrupt", StringComparison.OrdinalIgnoreCase)
+               || message.Contains("restart", StringComparison.OrdinalIgnoreCase);
+    }
 
     private static bool IsTransientHttpError(HttpRequestException ex)
     {

@@ -87,7 +87,8 @@ public class ParseDocumentsJob : AsyncBackgroundJob<ParseDocumentsArgs>, ITransi
                     if (status.State == AnGineerJobState.Failed)
                     {
                         throw new BusinessException(BidCompareErrorCodes.AnGineerParseFailed)
-                            .WithData("fileName", document.FileName);
+                            .WithData("fileName", document.FileName)
+                            .WithData("reason", status.FailureReason ?? "解析失败");
                     }
                     if (status.State == AnGineerJobState.Partial)
                     {

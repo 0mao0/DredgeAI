@@ -364,4 +364,39 @@ public class ParseDocumentJobTests : BidCompareApplicationTestBase<BidCompareApp
             () => _appService.GetDocumentIrAsync(task.Id, doc.Id));
         ex.Code.ShouldBe(BidCompareErrorCodes.IrNotReady);
     }
+
+    [Fact]
+    public async Task Interrupted_Failure_Should_Auto_Resume_And_Recover()
+    {
+        // docs-api 重启会把解析中断任务标记 failed（提示可 resume）；轮询中应自动恢复一次，不应直接判失败。
+        _anGineerClient.StateSequence = new ConcurrentQueue<AnGineerJobStatus>(new[]
+        {
+            new AnGineerJobStatus(AnGineerJobState.Failed, 100, "failed",
+                "服务重启导致解析中断，可调用 /api/v1/documents/fake-job/resume 恢复"),
+            new AnGineerJobStatus(AnGineerJobState.Succeeded, 100, "completed", "解析结束: completed")
+        });
+        var (task, doc) = await CreateTaskWithBidDocAsync();
+
+        await RunParseJobAsync(task.Id, doc.Id);
+
+        var detail = await _appService.GetAsync(task.Id);
+        detail.Status.ShouldBe(CompareTaskStatus.Parsed);
+        _anGineerClient.ResumeCount.ShouldBeGreaterThanOrEqualTo(1);
+        _fileStorage.Objects.Keys.ShouldContain($"compare/{task.Id}/{doc.Id}/ir.json");
+    }
+
+    [Fact]
+    public async Task AnGIneer_Failure_Should_Carry_Real_Reason_In_ParseError()
+    {
+        // 失败信息应透传 docs-api 的真实原因（如服务重启中断），而不是只剩文件名。
+        _anGineerClient.FailWith = "服务重启导致解析中断，可调用 /api/v1/documents/fake-job/resume 恢复";
+        var (task, doc) = await CreateTaskWithBidDocAsync();
+
+        await RunParseJobAsync(task.Id, doc.Id);
+
+        var docRepo = GetRequiredService<Volo.Abp.Domain.Repositories.IRepository<CompareDocument, Guid>>();
+        var failed = await docRepo.GetAsync(doc.Id);
+        failed.ParseStatus.ShouldBe(DocumentParseStatus.Failed);
+        failed.ParseError.ShouldContain("服务重启导致解析中断");
+    }
 }

@@ -106,11 +106,15 @@ public class AiAnalysisJob : AsyncBackgroundJob<AiAnalysisArgs>, ITransientDepen
 
             if (snapshot.Count > 0)
             {
+                task.UpdateProgress("analyzing", 80, "条款响应判定中");
+                await _taskRepository.UpdateAsync(task, autoSave: true, cancellationToken: cancellationToken);
                 await RunClauseJudgementAsync(args.TaskId, snapshot, docMds, cancellationToken);
             }
 
             if (docMds.Count > 0)
             {
+                task.UpdateProgress("analyzing", 88, "关键指标抽取中");
+                await _taskRepository.UpdateAsync(task, autoSave: true, cancellationToken: cancellationToken);
                 await RunIndicatorExtractionAsync(args.TaskId, docMds, cancellationToken);
             }
 
