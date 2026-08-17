@@ -1,5 +1,5 @@
 <template>
-  <SectionCard flush>
+  <SectionCard nopad>
     <div class="heatmap">
       <ChartContainer :option="option" height="220px" @chart-click="onCellClick" />
       <div class="heatmap__title">相似度热力图</div>
@@ -91,11 +91,12 @@ function cellColor(v: number): string {
 const option = computed(() => {
   const t = chartTheme()
   const data: { value: [number, number, number], itemStyle: { color: string } }[] = []
-  const diagonalData: [number, number, number][] = []
   props.matrix.forEach((row, y) => {
     row.forEach((v, x) => {
-      if (x === y) diagonalData.push([x, y, v])
-      else data.push({ value: [x, y, v], itemStyle: { color: cellColor(v) } })
+      data.push({
+        value: [x, y, v],
+        itemStyle: { color: x === y ? 'transparent' : cellColor(v) },
+      })
     })
   })
   return {
@@ -104,6 +105,7 @@ const option = computed(() => {
       show: false,
       min: 0,
       max: 1,
+      seriesIndex: 0,
       inRange: { color: ['#10B981', '#F59E0B', '#EF4444'] },
     },
     xAxis: {
@@ -164,14 +166,6 @@ const option = computed(() => {
         animationDuration: 600,
         animationEasing: 'easeOutQuad',
       },
-      {
-        type: 'heatmap',
-        data: diagonalData,
-        itemStyle: { color: borderColor.value },
-        label: { show: false },
-        tooltip: { show: false },
-        emphasis: { disabled: true },
-      },
     ],
   }
 })
@@ -187,7 +181,7 @@ function onCellClick(params: unknown): void {
 @import '@shared/web/styles/variables.less';
 
 .heatmap {
-  padding: @spacing-xs @spacing-lg 0;
+  padding: @spacing-xs @spacing-lg @spacing-sm;
 
   &__title {
     margin-top: 0;

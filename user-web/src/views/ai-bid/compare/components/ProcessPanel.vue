@@ -1,16 +1,6 @@
 <template>
   <div class="process-panel">
     <div class="process-panel__scroll">
-      <div v-if="failedDocs.length" class="process-panel__partial">
-        <ExclamationCircleOutlined class="process-panel__partial-icon" />
-        <span class="process-panel__partial-text">
-          已跳过 {{ failedDocs.length }} 份失败文档，其余结果不受影响
-        </span>
-        <AppButton size="sm" :loading="reparseAllLoading" @click="emit('reparseAll')">
-          重新解析失败文档
-        </AppButton>
-      </div>
-
       <section
         v-for="(stage, index) in visibleStages"
         :key="stage.key"
@@ -40,6 +30,16 @@
               @click.stop="emit('retryCompare')"
             >
               重新对比
+            </AppButton>
+            <AppButton
+              v-if="(stage.key === 'ai-clause' || stage.key === 'ai-indicator') && canRetryAi"
+              size="sm"
+              variant="secondary"
+              class="trace-stage__retry"
+              :loading="retryingAi"
+              @click.stop="emit('retryAi')"
+            >
+              重新抽取
             </AppButton>
             <a-tag :color="metaOf(stage.key).color" class="trace-stage__tag">{{ metaOf(stage.key).text }}</a-tag>
             <DownOutlined
@@ -100,6 +100,17 @@
               </div>
               <a-empty v-if="!task.documents.length" description="暂无文档" />
             </div>
+            <div v-if="failedDocs.length" class="process-panel__parse-conclusion">
+              <ExclamationCircleOutlined class="process-panel__parse-conclusion-icon" />
+              <span class="process-panel__parse-conclusion-text">{{ parseConclusionText }}</span>
+              <AppButton
+                size="sm"
+                :loading="reparseAllLoading"
+                @click="emit('reparseAll')"
+              >
+                重新解析失败文档
+              </AppButton>
+            </div>
           </template>
 
           <template v-else-if="stage.key === 'clause'">
@@ -143,49 +154,80 @@
           </template>
 
           <template v-else-if="stage.key === 'compare'">
-            <SimilarityHeatmap
-              v-if="overview && overview.docLabels.length"
-              :labels="overview.docLabels"
-              :matrix="overview.simMatrix"
-              @cell-click="onHeatmapCell"
-            />
-
-            <div class="process-list">
-              <div v-for="p in failedPairs" :key="p.pairId" class="process-row">
-                <span class="process-row__label process-row__label--pair">
-                  <DocBadge :label="docLabel(task.documents, p.docAId)" />
-                  <span class="process-row__arrow">↔</span>
-                  <DocBadge :label="docLabel(task.documents, p.docBId)" />
-                </span>
-                <a-tag :color="PAIR_META[p.status].color" class="process-row__status">{{ PAIR_META[p.status].text }}</a-tag>
-                <span v-if="p.similarity != null" class="process-row__sim">
-                  相似度 {{ Math.round(p.similarity * 100) }}%
-                </span>
-                <span v-if="p.failReason" class="process-row__error" :title="p.failReason">{{ p.failReason }}</span>
-                <AppButton
-                  v-if="p.status === 'failed'"
-                  variant="link"
-                  size="sm"
-                  :loading="retryingPairIds.includes(p.pairId)"
-                  @click="emit('retryPair', p.pairId)"
-                >
-                  重试该对
-                </AppButton>
+            <template v-if="comparing">
+              <div class="process-list">
+                <div v-for="p in pairs" :key="p.pairId" class="process-row">
+                  <span class="process-row__label process-row__label--pair">
+                    <DocBadge :label="docLabel(task.documents, p.docAId)" />
+                    <span class="process-row__arrow">→</span>
+                    <DocBadge :label="docLabel(task.documents, p.docBId)" />
+                  </span>
+                  <template v-if="p.status === 'done' || p.status === 'failed'">
+                    <a-tag :color="PAIR_META[p.status].color" class="process-row__status">{{ PAIR_META[p.status].text }}</a-tag>
+                    <span v-if="p.similarity != null" class="process-row__sim">
+                      相似度 {{ Math.round(p.similarity * 100) }}%
+                    </span>
+                    <span v-if="p.failReason" class="process-row__error" :title="p.failReason">{{ p.failReason }}</span>
+                    <AppButton
+                      v-if="p.status === 'failed'"
+                      variant="link"
+                      size="sm"
+                      :loading="retryingPairIds.includes(p.pairId)"
+                      @click="emit('retryPair', p.pairId)"
+                    >
+                      重试该对
+                    </AppButton>
+                  </template>
+                  <template v-else>
+                    <a-spin size="small" />
+                    <span class="process-row__step">比对中…</span>
+                    <span class="process-row__elapsed">已用 {{ pairElapsedText(p) }}</span>
+                  </template>
+                </div>
+                <a-empty v-if="!pairs.length" description="比对对将在解析完成后生成" />
               </div>
-              <a-empty v-if="!pairs.length" description="比对对将在解析完成后生成" />
-            </div>
+            </template>
+            <template v-else>
+              <SimilarityHeatmap
+                v-if="overview && overview.docLabels.length"
+                :labels="overview.docLabels"
+                :matrix="overview.simMatrix"
+                @cell-click="onHeatmapCell"
+              />
 
-            <template v-if="compareEvidence.length">
-              <div class="trace-stage__subtitle">串标查重发现</div>
-              <div class="process-feed">
-                <EvidenceCard
-                  v-for="ev in compareEvidence"
-                  :key="ev.id"
-                  :evidence="ev"
-                  :documents="task.documents"
-                  @trace="(e) => emit('locate', e)"
-                  @trace-ref="(refs) => emit('locateRefs', refs)"
-                />
+              <UnifyCompareTable
+                v-if="passageEvidences.length || compareEvidence.length"
+                :passage-evidence="passageEvidences"
+                :compare-evidence="compareEvidence"
+                :documents="task.documents"
+                :task-id="task.id"
+                @locate="(e) => emit('locate', e)"
+                @locate-refs="(refs) => emit('locateRefs', refs)"
+              />
+
+              <div v-if="failedPairs.length || !pairs.length" class="process-list">
+                <div v-for="p in failedPairs" :key="p.pairId" class="process-row">
+                  <span class="process-row__label process-row__label--pair">
+                    <DocBadge :label="docLabel(task.documents, p.docAId)" />
+                    <span class="process-row__arrow">↔</span>
+                    <DocBadge :label="docLabel(task.documents, p.docBId)" />
+                  </span>
+                  <a-tag :color="PAIR_META[p.status].color" class="process-row__status">{{ PAIR_META[p.status].text }}</a-tag>
+                  <span v-if="p.similarity != null" class="process-row__sim">
+                    相似度 {{ Math.round(p.similarity * 100) }}%
+                  </span>
+                  <span v-if="p.failReason" class="process-row__error" :title="p.failReason">{{ p.failReason }}</span>
+                  <AppButton
+                    v-if="p.status === 'failed'"
+                    variant="link"
+                    size="sm"
+                    :loading="retryingPairIds.includes(p.pairId)"
+                    @click="emit('retryPair', p.pairId)"
+                  >
+                    重试该对
+                  </AppButton>
+                </div>
+                <a-empty v-if="!pairs.length" description="比对对将在解析完成后生成" />
               </div>
             </template>
           </template>
@@ -200,23 +242,15 @@
               />
             </div>
             <div v-else-if="!aiDone" class="process-list">
-              <div class="process-row">
-                <a-spin size="small" />
-                <span class="process-row__name">条款响应判定（{{ bidCount }} 份标书）</span>
-              </div>
-              <div class="process-row">
-                <a-spin size="small" />
-                <span class="process-row__name">关键指标抽取</span>
-              </div>
-              <div class="process-row">
-                <a-spin size="small" />
-                <span class="process-row__name">AI 综合结论生成</span>
+              <div v-for="(phase, i) in aiPhases" :key="phase.key" class="process-row">
+                <CheckCircleFilled v-if="aiActivePhase !== -1 && i < aiActivePhase" class="process-row__ok" />
+                <a-spin v-else-if="aiActivePhase === -1 || i === aiActivePhase" size="small" />
+                <span
+                  class="process-row__name"
+                  :class="{ 'process-row__name--pending': aiActivePhase !== -1 && i > aiActivePhase }"
+                >{{ phase.label }}</span>
               </div>
             </div>
-            <div v-if="canRetryAi" class="process-panel__ai-retry">
-              <AppButton size="sm" :loading="retryingAi" @click="emit('retryAi')">重新抽取</AppButton>
-            </div>
-
             <template v-if="aiDone">
               <ResponseMatrix
                 :documents="task.documents"
@@ -249,42 +283,21 @@
               />
             </div>
             <div v-else-if="!aiDone" class="process-list">
-              <div class="process-row">
-                <a-spin size="small" />
-                <span class="process-row__name">条款响应判定（{{ bidCount }} 份标书）</span>
-              </div>
-              <div class="process-row">
-                <a-spin size="small" />
-                <span class="process-row__name">关键指标抽取</span>
-              </div>
-              <div class="process-row">
-                <a-spin size="small" />
-                <span class="process-row__name">AI 综合结论生成</span>
+              <div v-for="(phase, i) in aiPhases" :key="phase.key" class="process-row">
+                <CheckCircleFilled v-if="aiActivePhase !== -1 && i < aiActivePhase" class="process-row__ok" />
+                <a-spin v-else-if="aiActivePhase === -1 || i === aiActivePhase" size="small" />
+                <span
+                  class="process-row__name"
+                  :class="{ 'process-row__name--pending': aiActivePhase !== -1 && i > aiActivePhase }"
+                >{{ phase.label }}</span>
               </div>
             </div>
-            <div v-if="canRetryAi" class="process-panel__ai-retry">
-              <AppButton size="sm" :loading="retryingAi" @click="emit('retryAi')">重新抽取</AppButton>
-            </div>
-
             <template v-if="aiDone">
               <IndicatorTable
                 :evidence="evidence"
                 :documents="task.documents"
                 @trace="(e) => emit('locate', e)"
               />
-              <template v-if="indicatorEvidence.length">
-                <div class="trace-stage__subtitle">指标比选证据</div>
-                <div class="process-feed">
-                  <EvidenceCard
-                    v-for="ev in indicatorEvidence"
-                    :key="ev.id"
-                    :evidence="ev"
-                    :documents="task.documents"
-                    @trace="(e) => emit('locate', e)"
-                    @trace-ref="(refs) => emit('locateRefs', refs)"
-                  />
-                </div>
-              </template>
             </template>
           </template>
         </div>
@@ -307,6 +320,7 @@ import {
 } from '@ant-design/icons-vue'
 import EvidenceCard from './EvidenceCard.vue'
 import SimilarityHeatmap from './SimilarityHeatmap.vue'
+import UnifyCompareTable from './UnifyCompareTable.vue'
 import ResponseMatrix from './ResponseMatrix.vue'
 import IndicatorTable from './IndicatorTable.vue'
 import { anGineerStepInfo, docLabel } from '../constants'
@@ -359,9 +373,9 @@ function startParseTimer(): void {
   }, 1000)
 }
 
-watch(() => props.task.documents, (docs) => {
+watch(() => [props.task.documents, props.task.status] as const, ([docs, status]) => {
   const parsing = docs.some((d) => d.parseStatus === 'parsing')
-  if (parsing) {
+  if (parsing || status === 'comparing') {
     startParseTimer()
   } else {
     stopParseTimer()
@@ -401,6 +415,12 @@ function parseDurationText(d: CompareDocMeta): string {
   return formatSeconds((end - start) / 1000)
 }
 
+function pairElapsedText(p: ComparePair): string {
+  const start = parseServerTime(p.startedAt)
+  if (!start) return '0 秒'
+  return formatSeconds((nowTick.value - start) / 1000)
+}
+
 function stepText(d: CompareDocMeta): string {
   const info = anGineerStepInfo(d.parseStage)
   const step = info ? `步骤 ${info.step}/${info.total}` : ''
@@ -428,14 +448,46 @@ const parseDocuments = computed(() =>
   ),
 )
 const failedDocs = computed(() => props.task.documents.filter((d) => d.parseStatus === 'failed'))
+const allDocsFailed = computed(() =>
+  props.task.documents.length > 0 && props.task.documents.every((d) => d.parseStatus === 'failed'),
+)
+const parsedBidCount = computed(() =>
+  props.task.documents.filter((d) => d.role !== 'tender' && d.parseStatus === 'done').length,
+)
+const parseConclusionText = computed(() => {
+  if (parsedBidCount.value < 2) {
+    return '文档解析失败：可用标书不足 2 份，请先重新解析失败文档后再重新对比'
+  }
+  return `已跳过 ${failedDocs.value.length} 份失败文档，其余结果不受影响`
+})
 const pairs = computed(() => props.task.pairs ?? [])
 const failedPairs = computed(() => pairs.value.filter((p) => p.status === 'failed'))
+const comparing = computed(() => props.task.status === 'comparing')
 const bidCount = computed(() => props.task.documents.filter((d) => d.role !== 'tender').length)
 const compareEvidence = computed(() =>
-  props.evidence.filter((e) => e.type === 'similarity' || e.type === 'price' || e.type === 'metadata'))
+  props.evidence.filter((e) =>
+    (e.type === 'similarity' || e.type === 'price' || e.type === 'metadata')
+    && e.metrics?.kind !== 'passage'))
+const passageEvidences = computed(() =>
+  props.evidence.filter((e) => e.type === 'similarity' && e.metrics?.kind === 'passage'))
 const clauseEvidence = computed(() => props.evidence.filter((e) => e.type === 'clause'))
 const indicatorEvidence = computed(() => props.evidence.filter((e) => e.type === 'indicator'))
 const aiUnavailable = computed(() => (props.task.progress.message ?? '').includes('AI 分析暂不可用'))
+
+/** AI 分析子步骤：后端按序上报进度消息，前端据此高亮当前步骤（无招标文件时跳过条款判定）。 */
+interface AiPhase { key: string, label: string }
+
+const aiPhases = computed<AiPhase[]>(() => {
+  const list: AiPhase[] = [{ key: '关键指标抽取', label: '关键指标抽取' }]
+  if (props.task.tenderDocId) {
+    list.unshift({ key: '条款响应判定', label: `条款响应判定（${bidCount.value} 份标书）` })
+  }
+  return list
+})
+const aiActivePhase = computed(() => {
+  const msg = props.task.progress.message ?? ''
+  return aiPhases.value.findIndex((p) => msg.includes(p.key))
+})
 
 function isTerminalish(t: CompareTask): boolean {
   return t.status === 'completed' || t.status === 'failed' || t.status === 'partial'
@@ -466,6 +518,7 @@ const compareDone = computed(() => {
 })
 const aiVisible = computed(() =>
   compareDone.value
+  && props.task.status !== 'failed'
   && (props.task.progress.stage === 'analyzing'
     || props.task.progress.stage === 'done'
     || isTerminalish(props.task)),
@@ -502,6 +555,7 @@ const expandedStages = ref<Set<StageKey>>(new Set())
 
 function isCollapsed(key: StageKey): boolean {
   if (!isStageDone(key)) return false
+  if (key === 'parse' && allDocsFailed.value) return false
   return !expandedStages.value.has(key)
 }
 
@@ -535,6 +589,9 @@ const parseSummary = computed(() => {
     const base = total ? `已解析 ${done}/${total} · ${parsePercent.value}%` : '等待解析'
     return parsing ? `${base} · 解析中 ${parsing}` : base
   }
+  if (allDocsFailed.value) {
+    return `文档解析失败 · ${failedDocs.value.length} 份`
+  }
   const pages = props.task.documents.reduce((acc, d) => acc + (d.pages || 0), 0)
   const failed = failedDocs.value.length
   return `文档解析完成 · ${props.task.documents.length} 份 · ${pages} 页${failed ? ` · ${failed} 份失败` : ''}`
@@ -545,6 +602,9 @@ const clauseSummary = computed(() =>
   clauseDone.value ? `条款确认完成 · ${clauseCount.value} 条` : '等待确认')
 
 const compareSummary = computed(() => {
+  if (comparing.value) {
+    return `比对中 · ${pairs.value.length} 对`
+  }
   if (!compareDone.value) {
     const processing = pairs.value.find((p) => p.status === 'processing')
     if (processing) {
@@ -605,7 +665,11 @@ const aiStageMeta = computed<StageMeta>(() => {
 
 const stageMeta = computed<Record<StageKey, StageMeta>>(() => ({
   'parse': parseDone.value
-    ? { color: failedDocs.value.length ? 'orange' : 'green', text: failedDocs.value.length ? '部分完成' : '完成' }
+    ? failedDocs.value.length
+      ? (allDocsFailed.value
+          ? { color: 'red', text: '失败' }
+          : { color: 'orange', text: '部分完成' })
+      : { color: 'green', text: '完成' }
     : {
         color: props.task.documents.some((d) => d.parseStatus === 'parsing') ? 'blue' : 'default',
         text: props.task.documents.some((d) => d.parseStatus === 'parsing') ? '解析中' : '等待',
@@ -614,8 +678,8 @@ const stageMeta = computed<Record<StageKey, StageMeta>>(() => ({
   'compare': compareDone.value
     ? { color: failedPairs.value.length ? 'orange' : 'green', text: failedPairs.value.length ? '部分完成' : '完成' }
     : {
-        color: pairs.value.some((p) => p.status === 'processing') ? 'blue' : 'default',
-        text: pairs.value.some((p) => p.status === 'processing') ? '比对中' : '等待',
+        color: comparing.value || pairs.value.some((p) => p.status === 'processing') ? 'blue' : 'default',
+        text: comparing.value || pairs.value.some((p) => p.status === 'processing') ? '比对中' : '等待',
       },
   'ai-clause': aiStageMeta.value,
   'ai-indicator': aiStageMeta.value,
@@ -694,16 +758,17 @@ function onHeatmapCell(pair: { docA: string, docB: string }): void {
   padding: @spacing-md @spacing-base @spacing-xl;
 }
 
-.process-panel__partial {
+.process-panel__parse-conclusion {
   display: flex;
   align-items: center;
   gap: @spacing-sm;
+  margin: 0 @spacing-xl @spacing-xl;
   padding: @spacing-sm @spacing-md;
-  border: 1px solid @warning;
+  border: 1px solid @danger;
   border-radius: @radius-base;
-  background: color-mix(in srgb, @warning 8%, @card-bg);
+  background: color-mix(in srgb, @danger 8%, @card-bg);
 
-  &-icon { color: @warning; }
+  &-icon { color: @danger; flex-shrink: 0; }
   &-text { flex: 1; min-width: 0; font-size: @font-size-xs; color: @text-secondary; }
 }
 
@@ -809,7 +874,7 @@ function onHeatmapCell(pair: { docA: string, docB: string }): void {
   }
 
   &__subtitle {
-    padding: @spacing-sm @spacing-xl 0;
+    padding: 10px @spacing-xl 0;
     font-size: @font-size-base;
     font-weight: @font-weight-semibold;
     color: @text-primary;
@@ -848,13 +913,17 @@ function onHeatmapCell(pair: { docA: string, docB: string }): void {
   &__arrow { color: @text-tertiary; }
   &__tender { flex-shrink: 0; }
   &__name {
-    flex: 1;
-    min-width: 80px;
+    flex: 0 1 auto;
+    min-width: 0;
     max-width: 240px;
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
     color: @text-primary;
+
+    &--pending {
+      color: @text-tertiary;
+    }
   }
   &__wait { font-size: @font-size-xs; color: @text-tertiary; }
   &__spacer { flex: 1; }
@@ -864,8 +933,9 @@ function onHeatmapCell(pair: { docA: string, docB: string }): void {
     margin-inline-end: 0;
   }
   &__step {
-    flex: 1;
+    flex: 0 1 auto;
     min-width: 0;
+    max-width: 220px;
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
@@ -949,10 +1019,6 @@ function onHeatmapCell(pair: { docA: string, docB: string }): void {
 
 .process-panel__ai-alert {
   margin: @spacing-base @spacing-xl 0;
-}
-
-.process-panel__ai-retry {
-  padding: @spacing-sm @spacing-xl @spacing-xl;
 }
 
 @media (prefers-reduced-motion: reduce) {

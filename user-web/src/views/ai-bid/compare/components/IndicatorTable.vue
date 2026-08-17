@@ -1,5 +1,5 @@
 <template>
-  <SectionCard title="关键指标比选" flush>
+  <SectionCard nopad>
     <div class="indicator-table__wrap">
       <a-table
         :columns="columns"
@@ -17,7 +17,10 @@
         </template>
         <template #bodyCell="{ column, record }">
           <template v-if="column.dataIndex === 'indicator'">
-            <span class="indicator-table__name">{{ record.name }}</span>
+            <div class="indicator-table__cell">
+              <span class="indicator-table__name">{{ record.name }}</span>
+              <span v-if="record.summary" class="indicator-table__summary">{{ record.summary }}</span>
+            </div>
           </template>
           <template v-else-if="column.dataIndex === 'action'">
             <AppButton variant="link" size="sm" @click="emit('trace', record.evidence)">溯源</AppButton>
@@ -61,6 +64,7 @@ const columns = computed(() => [
 interface IndicatorRow {
   id: string
   name: string
+  summary: string
   cells: Record<string, string>
   evidence: EvidenceItem
 }
@@ -68,6 +72,7 @@ interface IndicatorRow {
 const rows = computed<IndicatorRow[]>(() => indicatorEvidence.value.map((ev) => ({
   id: ev.id,
   name: ev.title.replace(/^指标比选：/, ''),
+  summary: replaceDocIds(ev.summary, props.documents),
   cells: summariesOf(ev).reduce<Record<string, string>>((acc, s) => {
     acc[s.docId] = replaceDocIds(s.summary, props.documents)
     return acc
@@ -109,5 +114,22 @@ function replaceDocIds(text: string, documents: CompareDocMeta[]): string {
   font-weight: @font-weight-medium;
   color: @text-primary;
   white-space: nowrap;
+}
+
+.indicator-table__cell {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.indicator-table__summary {
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  overflow: hidden;
+  font-size: @font-size-xs;
+  color: @text-tertiary;
+  line-height: 1.5;
 }
 </style>

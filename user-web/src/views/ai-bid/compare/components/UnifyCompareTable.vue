@@ -63,7 +63,7 @@
             :loading="locatingKeys.has(record.__key)"
             @click.stop="locate(record)"
           >
-            定位
+            <EyeOutlined />查看
           </AppButton>
         </template>
       </template>
@@ -75,6 +75,7 @@
 import { computed, ref } from 'vue'
 import { message } from 'ant-design-vue'
 import { AppButton } from '@shared/web'
+import { EyeOutlined } from '@ant-design/icons-vue'
 import { getBlockRefs } from '@/api/modules/compare'
 import { evidenceMetricLines } from '../evidenceMetrics'
 import DocBadge from './DocBadge.vue'
@@ -135,7 +136,7 @@ const columns = [
   { title: '字数/指标', key: 'metric', width: 100 },
   { title: '位置', key: 'location', width: 210 },
   { title: '判定/严重度', key: 'tag', width: 120 },
-  { title: '操作', key: 'action', width: 80 },
+  { title: '操作', key: 'action', width: 96 },
 ]
 
 const locatingKeys = ref<Set<string>>(new Set())

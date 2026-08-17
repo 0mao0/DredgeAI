@@ -80,22 +80,6 @@
         </div>
 
         <!--
-          <AppButton size="sm">
-            <HistoryOutlined />历史任务
-          </AppButton>
-          <template #overlay>
-            <a-menu class="compare-workspace__history" @click="onHistoryClick">
-              <a-menu-item v-for="t in historyTasks" :key="t.id">
-                <span class="compare-workspace__history-name" :title="t.name">{{ t.name }}</span>
-                <a-tag :color="COMPARE_STATUS_MAP[t.status].color">{{ COMPARE_STATUS_MAP[t.status].text }}</a-tag>
-              </a-menu-item>
-              <a-menu-item v-if="!historyTasks.length" key="empty" disabled>暂无历史任务</a-menu-item>
-            </a-menu>
-          </template>
-        </a-dropdown>
-        -->
-
-        <!--
           trigger="click"
           placement="bottomRight"
           :open="exportMenuVisible"
@@ -119,16 +103,11 @@
         </a-dropdown>
         -->
 
-        <a-tooltip :title="workspaceCollapsed ? '展开左侧面板' : '收起左侧面板'">
-          <AppButton size="sm" variant="text" @click="workspaceCollapsed = !workspaceCollapsed">
-            <ExpandOutlined v-if="workspaceCollapsed" />
-            <CompressOutlined v-else />
-          </AppButton>
-        </a-tooltip>
-
-        <AppButton size="sm" @click="resetToUpload()">
-          <PlusOutlined />新建任务
+        <AppButton size="sm" variant="text" @click="openDrawer()">
+          <EyeOutlined />文档预览
         </AppButton>
+
+        <span class="compare-workspace__new-task" @click="resetToUpload()">新建任务</span>
       </div>
 
       <div v-if="connectionLost" class="compare-workspace__banner">
@@ -136,30 +115,8 @@
       </div>
 
       <div class="compare-workspace__split">
-        <div
-          v-if="!workspaceCollapsed"
-          class="compare-workspace__left"
-          :style="{ width: `${splitRatio * 100}%` }"
-        >
-          <PdfWorkspace
-            ref="workspaceRef"
-            :documents="workspaceDocs"
-            :pair-active="pairActive"
-            :scanning-doc-id="scanningDocId"
-            @tab-manual="lastManualTabAt = Date.now()"
-          />
-        </div>
-
-        <div
-          v-if="!workspaceCollapsed"
-          class="compare-workspace__divider"
-          :class="{ 'compare-workspace__divider--dragging': draggingSplit }"
-          @pointerdown="onDividerDown"
-        />
-
         <div class="compare-workspace__right">
           <ProcessPanel
-            v-if="panel === 'process'"
             :task="task"
             :overview="overview"
             :evidence="evidence"
@@ -180,17 +137,6 @@
             @confirm-clauses="onConfirmClauses"
             @locate="onLocateEvidence"
             @locate-refs="onLocateRefs"
-          />
-
-          <FailurePanel
-            v-else
-            :task="task"
-            :reparse-all-loading="reparseAllLoading"
-            :retrying-compare="retryingCompare"
-            @reparse-doc="onReparseDoc"
-            @reparse-all="onReparseAll"
-            @retry-compare="onRetryCompare"
-            @back="resetToUpload()"
           />
 
           <div class="compare-workspace__export-footer">
@@ -221,6 +167,24 @@
           </div>
         </div>
       </div>
+
+      <a-drawer
+        v-model:open="drawerOpen"
+        title="PDF 溯源"
+        placement="right"
+        width="78vw"
+        :body-style="{ padding: 0, height: '100%' }"
+        :closable="true"
+      >
+        <div v-if="drawerMounted" class="compare-drawer-host">
+          <PdfWorkspace
+            ref="workspaceRef"
+            :documents="workspaceDocs"
+            :pair-active="pairActive"
+            :scanning-doc-id="scanningDocId"
+          />
+        </div>
+      </a-drawer>
     </div>
   </div>
 </template>
@@ -231,12 +195,9 @@ import { AppButton } from '@shared/web'
 import { useRoute } from 'vue-router'
 import { message } from 'ant-design-vue'
 import {
-  CompressOutlined,
   DownloadOutlined,
-  ExpandOutlined,
-
+  EyeOutlined,
   LoadingOutlined,
-  PlusOutlined,
   UploadOutlined,
   WifiOutlined,
 } from '@ant-design/icons-vue'
@@ -245,7 +206,6 @@ import type { UploadFileItem } from './components/UploadPage.vue'
 import UploadFileRow from './components/UploadFileRow.vue'
 import PdfWorkspace from './components/PdfWorkspace.vue'
 import ProcessPanel from './components/ProcessPanel.vue'
-import FailurePanel from './components/FailurePanel.vue'
 import { MAX_BID_DOCUMENTS, formatProjectName, isTerminalStatus } from './constants'
 import {
   confirmClauses,
@@ -254,10 +214,12 @@ import {
   deleteDraftDocument,
   exportReport,
   extractClauses,
+  assembleOverview,
+  getDocuments,
   getEvidence,
   getDocumentFileUrl,
   getExportStatus,
-  getOverview,
+  getMatrix,
   getTask,
   getTasks,
   reparseTask,
@@ -303,9 +265,8 @@ const exporting = ref(false)
 const exportError = ref('')
 
 /* —— 工作区 UI —— */
-const workspaceCollapsed = ref(false)
-const splitRatio = ref(0.55)
-const draggingSplit = ref(false)
+const drawerOpen = ref(false)
+const drawerMounted = ref(false)
 const pairActive = ref<{ docAId: string, docBId: string } | null>(null)
 const scanningDocId = ref<string | null>(null)
 const connectionLost = ref(false)
@@ -316,15 +277,7 @@ const editingName = ref(false)
 const nameSaving = ref(false)
 const nameError = ref('')
 const suggestedApplied = ref(false)
-const lastManualTabAt = ref(0)
-const autoFocusedDocIds = ref(new Set<string>())
 const exportMenuVisible = ref(false)
-
-const panel = computed<'process' | 'failed'>(() => {
-  if (!task.value) return 'process'
-  if (task.value.status === 'failed') return 'failed'
-  return 'process'
-})
 
 const uploadedCount = computed(() => uploadItems.value.filter((i) => i.status === 'done').length)
 const allUploadsSettled = computed(() =>
@@ -437,7 +390,6 @@ async function runPoll(): Promise<void> {
     if (t.status === 'parsing' || t.status === 'comparing' || t.status === 'ai_analyzing') {
       void loadEvidence(true)
       trackPairState(t)
-      trackParseFocus(t)
     }
 
     if (isTerminalStatus(t.status)) {
@@ -486,16 +438,6 @@ function trackPairState(t: CompareTask): void {
     : null
 }
 
-function trackParseFocus(t: CompareTask): void {
-  // 解析完成自动切 Tab；用户最近 10 秒手动切换过则不抢焦点
-  const done = t.documents.find((d) => d.parseStatus === 'done' && !autoFocusedDocIds.value.has(d.id))
-  if (!done) return
-  if (Date.now() - lastManualTabAt.value > 10_000) {
-    workspaceRef.value?.focusDoc(done.id)
-  }
-  autoFocusedDocIds.value.add(done.id)
-}
-
 /* —— 证据 / 矩阵 / 结果 —— */
 async function loadEvidence(silent = false): Promise<void> {
   if (!task.value) return
@@ -513,8 +455,10 @@ async function loadResults(): Promise<void> {
   if (!task.value || resultsLoading.value) return
   resultsLoading.value = true
   try {
-    const [ov, evs] = await Promise.all([getOverview(task.value.id), getEvidence(task.value.id)])
-    overview.value = ov
+    const id = task.value.id
+    // 一次并行拉取矩阵/证据/文档并组装，避免 getOverview + getEvidence 双重请求同一批证据
+    const [matrix, evs, docs] = await Promise.all([getMatrix(id), getEvidence(id), getDocuments(id)])
+    overview.value = assembleOverview(matrix, evs, docs)
     const map = new Map<string, EvidenceItem>()
     for (const ev of evs) map.set(ev.id, ev)
     evidenceMap.value = map
@@ -533,7 +477,9 @@ function resetWorkspace(): void {
   pairActive.value = null
   scanningDocId.value = null
   suggestedApplied.value = false
-  autoFocusedDocIds.value = new Set()
+  drawerOpen.value = false
+  // 任务加载即挂载抽屉内容：PDF 后台预加载，点击“查看”时直接定位，避免首次点击才加载导致跳页丢失
+  drawerMounted.value = true
   resultsLoading.value = false
   nameDraft.value = ''
   nameDraftTouched.value = false
@@ -566,7 +512,6 @@ async function openTask(id: string): Promise<void> {
           ? formatProjectName(t.suggestedName, t.documents.filter((d) => d.role === 'bid').length)
           : '')
     view.value = 'workspace'
-    workspaceCollapsed.value = false
     void loadHistory()
     if (isTerminalStatus(t.status)) {
       if (t.status !== 'failed') await loadResults()
@@ -578,11 +523,6 @@ async function openTask(id: string): Promise<void> {
   }
 }
 
-/* function onHistoryClick({ key }: { key: string }): void {
-  if (key !== 'empty') void openTask(key)
-}
-
-*/
 function resetToUpload(reason = ''): void {
   stopPoll()
   if (draftId.value) void deleteDraft(draftId.value).catch(() => {})
@@ -783,6 +723,9 @@ async function onRetryPair(pairId: string): Promise<void> {
 async function onRetryCompare(): Promise<void> {
   if (!task.value || retryingCompare.value) return
   retryingCompare.value = true
+  // 重新对比会重跑算法并重写证据：先清空旧结果，避免比对过程中还挂着上一轮的图/证据
+  overview.value = null
+  evidenceMap.value = new Map()
   try {
     task.value = await retryCompare(task.value.id)
     startPoll()
@@ -796,6 +739,8 @@ async function onRetryCompare(): Promise<void> {
 async function onRetryAi(): Promise<void> {
   if (!task.value || retryingAi.value) return
   retryingAi.value = true
+  // 重新抽取会删除并重建 AI 证据：先清空旧证据，避免分析过程中残留上一轮内容
+  evidenceMap.value = new Map()
   try {
     task.value = await retryAiAnalysis(task.value.id)
     startPoll()
@@ -879,13 +824,47 @@ async function saveName(): Promise<void> {
   }
 }
 
-/* —— 溯源 / 导出 —— */
+/* —— 溯源：打开抽屉并定位（抽屉内容首次打开后常驻，PDF 只加载一次） —— */
+type PendingLocate
+  = | { kind: 'evidence', ev: EvidenceItem }
+    | { kind: 'refs', refs: BlockRange[] }
+
+const pendingLocate = ref<PendingLocate | null>(null)
+
+function openDrawer(): void {
+  drawerMounted.value = true
+  drawerOpen.value = true
+}
+
+function applyPendingLocate(): void {
+  const p = pendingLocate.value
+  if (!p || !workspaceRef.value) return
+  pendingLocate.value = null
+  if (p.kind === 'evidence') {
+    workspaceRef.value.locate(p.ev)
+  } else {
+    workspaceRef.value.locateRefs(p.refs)
+  }
+}
+
+function locateInDrawer(p: PendingLocate): void {
+  pendingLocate.value = p
+  const wasMounted = drawerMounted.value
+  drawerMounted.value = true
+  drawerOpen.value = true
+  if (workspaceRef.value) {
+    applyPendingLocate()
+  } else if (!wasMounted) {
+    nextTick(applyPendingLocate)
+  }
+}
+
 function onLocateEvidence(ev: EvidenceItem): void {
-  workspaceRef.value?.locate(ev)
+  locateInDrawer({ kind: 'evidence', ev })
 }
 
 function onLocateRefs(refs: BlockRange[]): void {
-  workspaceRef.value?.locateRefs(refs)
+  locateInDrawer({ kind: 'refs', refs })
 }
 
 async function handleExport(format: 'docx' | 'pdf'): Promise<void> {
@@ -930,25 +909,6 @@ function pollExport(taskId: string, exportId: string): void {
       message.error({ content: '导出状态查询失败', key: 'compare-export' })
     }
   }, 1500)
-}
-
-/* —— 分栏拖拽 —— */
-function onDividerDown(e: PointerEvent): void {
-  e.preventDefault()
-  draggingSplit.value = true
-  const onMove = (ev: PointerEvent): void => {
-    const rect = (e.currentTarget as HTMLElement).parentElement?.getBoundingClientRect()
-    if (!rect) return
-    const ratio = (ev.clientX - rect.left) / rect.width
-    splitRatio.value = Math.min(0.75, Math.max(0.28, ratio))
-  }
-  const onUp = (): void => {
-    draggingSplit.value = false
-    window.removeEventListener('pointermove', onMove)
-    window.removeEventListener('pointerup', onUp)
-  }
-  window.addEventListener('pointermove', onMove)
-  window.addEventListener('pointerup', onUp)
 }
 </script>
 
@@ -1059,19 +1019,19 @@ function onDividerDown(e: PointerEvent): void {
   white-space: nowrap;
 }
 
-/* .compare-workspace__history {
-  max-width: 320px;
+.compare-workspace__new-task {
+  flex-shrink: 0;
+  font-size: @font-size-sm;
+  color: @text-secondary;
+  cursor: pointer;
+  user-select: none;
+  transition: color @transition-fast;
 
-  &-name {
-    display: inline-block;
-    max-width: 180px;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    vertical-align: middle;
+  &:hover {
+    color: @brand-primary;
   }
 }
 
-*/
 .compare-workspace__export-error {
   font-size: @font-size-xs;
   color: @danger;
@@ -1096,73 +1056,39 @@ function onDividerDown(e: PointerEvent): void {
   flex: 1;
   min-height: 0;
   display: flex;
+  flex-direction: column;
   background: @card-bg;
   border: 1px solid @border-color;
   border-radius: @radius-lg;
   overflow: hidden;
 }
 
-.compare-workspace__left {
-  flex-shrink: 0;
-  min-width: 0;
-  padding: @spacing-md;
-  display: flex;
-  flex-direction: column;
-}
-
-.compare-workspace__divider {
-  flex-shrink: 0;
-  width: 3px;
-  cursor: col-resize;
-  position: relative;
-
-  &::before {
-    content: '';
-    position: absolute;
-    top: 0;
-    bottom: 0;
-    left: -4px;
-    right: -4px;
-  }
-
-  &::after {
-    content: '';
-    position: absolute;
-    top: 0;
-    bottom: 0;
-    left: 1px;
-    width: 1px;
-    background: @border-color;
-    transition: background @transition-fast;
-  }
-
-  &:hover::after,
-  &--dragging::after {
-    background: @brand-primary;
-  }
-}
-
 .compare-workspace__right {
   flex: 1;
   min-width: 0;
+  min-height: 0;
   display: flex;
   flex-direction: column;
 }
 
-  .compare-workspace__right > .process-panel,
-  .compare-workspace__right > .failure-panel {
-    flex: 1;
-    min-height: 0;
-    height: auto;
-  }
+.compare-workspace__right > .process-panel {
+  flex: 1;
+  min-height: 0;
+  height: auto;
+}
 
-  .compare-workspace__export-footer {
-    flex-shrink: 0;
-    display: flex;
-    align-items: center;
-    justify-content: flex-end;
-    gap: @spacing-sm;
-    padding: @spacing-md @spacing-base @spacing-base;
-    border-top: 1px solid @border-color;
-  }
+.compare-workspace__export-footer {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: @spacing-sm;
+  padding: @spacing-md @spacing-base @spacing-base;
+  border-top: 1px solid @border-color;
+}
+
+.compare-drawer-host {
+  height: 100%;
+  min-height: 0;
+}
 </style>

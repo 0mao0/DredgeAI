@@ -19,9 +19,7 @@
         </div>
       </div>
       <div class="bid-header-right">
-        <AppButton size="sm" @click="sessionDrawer = true">
-          <HistoryOutlined /> 历史记录
-        </AppButton>
+        <span class="bid-history-trigger" @click="sessionDrawer = true">历史记录</span>
       </div>
     </div>
 
@@ -35,57 +33,36 @@
 
     <a-drawer
       v-model:open="sessionDrawer"
-      :title="isCompare ? '比标历史' : '历史会话'"
+      title="历史记录"
       placement="right"
       width="400"
       destroy-on-close
     >
-      <!-- 比标任务历史 -->
-      <div v-if="isCompare" class="session-list">
-        <a-skeleton v-if="compareLoading" active :paragraph="{ rows: 4 }" />
-        <a-empty v-else-if="!compareTasks.length" description="暂无比标任务" />
-        <template v-else>
-          <div
-            v-for="task in compareTasks"
-            :key="task.id"
-            class="session-item"
-            @click="openCompareTask(task.id)"
-          >
-            <div class="session-name">
-              {{ task.name }}
-              <a-tag :color="compareStatusMap[task.status]?.color" class="session-status">
-                {{ compareStatusMap[task.status]?.text }}
-              </a-tag>
-            </div>
-            <div class="session-meta">
-              <span>{{ task.documents.length }} 份标书 · {{ formatDate(task.createdAt) }}</span>
-              <span v-if="task.riskSummary" class="session-badge session-badge--warn">
-                高 {{ task.riskSummary.high }} / 中 {{ task.riskSummary.mid }} / 低 {{ task.riskSummary.low }}
-              </span>
-              <span v-else class="session-badge session-badge--ok">—</span>
-            </div>
-          </div>
-        </template>
+      <div class="session-filter">
+        <a-segmented
+          v-model:value="historyTypeFilter"
+          :options="historyFilterOptions"
+          size="small"
+        />
       </div>
-
-      <!-- 读标会话历史 -->
+      <a-skeleton v-if="historyLoading" active :paragraph="{ rows: 5 }" />
+      <a-empty v-else-if="!filteredHistoryItems.length" :description="historyEmptyText" />
       <div v-else class="session-list">
         <div
-          v-for="session in sessions"
-          :key="session.id"
+          v-for="item in filteredHistoryItems"
+          :key="item.id"
           class="session-item"
-          :class="{ active: session.id === activeSessionId }"
-          @click="selectSession(session.id)"
+          @click="openHistory(item)"
         >
-          <div class="session-name">{{ session.document }}</div>
+          <div class="session-head">
+            <span class="session-type" :class="`session-type--${item.kind}`">{{ item.type }}</span>
+            <span class="session-name" :title="item.name">{{ item.name }}</span>
+            <span class="session-spacer" />
+            <span class="session-status" :class="item.statusTone">{{ item.statusText }}</span>
+          </div>
           <div class="session-meta">
-            <span>{{ session.date }}</span>
-            <span
-              class="session-badge"
-              :class="session.riskCount > 0 ? 'session-badge--warn' : 'session-badge--ok'"
-            >
-              {{ session.riskCount }} 风险
-            </span>
+            <span>{{ item.time }}</span>
+            <span v-if="item.detail" class="session-badge" :class="item.detailTone">{{ item.detail }}</span>
           </div>
         </div>
       </div>
@@ -94,15 +71,13 @@
 </template>
 
 <script setup lang="ts">
-import { AppButton } from '@shared/web'
-import { ref, computed, watch } from 'vue'
-import { useRoute, useRouter } from 'vue-router'
+import { computed, ref, watch } from 'vue'
+import { useRouter } from 'vue-router'
 import {
   FileSearchOutlined,
   EditOutlined,
   SwapOutlined,
   ClearOutlined,
-  HistoryOutlined,
 } from '@ant-design/icons-vue'
 import { getBidSessions } from '@/api/modules/bid'
 import { getTasks } from '@/api/modules/compare'
@@ -110,38 +85,107 @@ import { useSidebarStore } from '@shared/web/stores'
 import { COMPARE_STATUS_MAP } from './compare/constants'
 import type { BidReviewSession, CompareTask } from '@/types'
 
-const route = useRoute()
 const router = useRouter()
 const sidebarStore = useSidebarStore()
 const sessionDrawer = ref(false)
-const sessions = ref<BidReviewSession[]>([])
-const activeSessionId = ref('')
-
-const isCompare = computed(() => route.path.startsWith('/ai-bid/compare'))
-const compareTasks = ref<CompareTask[]>([])
-const compareLoading = ref(false)
+const historyItems = ref<HistoryItem[]>([])
+const historyLoading = ref(false)
+const historyTypeFilter = ref<'all' | 'compare' | 'read'>('all')
+const historyFilterOptions = [
+  { label: '全部', value: 'all' },
+  { label: '比标', value: 'compare' },
+  { label: '读标', value: 'read' },
+]
+const filteredHistoryItems = computed(() =>
+  historyTypeFilter.value === 'all'
+    ? historyItems.value
+    : historyItems.value.filter((i) => i.kind === historyTypeFilter.value),
+)
+const historyEmptyText = computed(() => {
+  const label = historyFilterOptions.find((o) => o.value === historyTypeFilter.value)?.label
+  return historyTypeFilter.value === 'all' ? '暂无历史记录' : `暂无${label}记录`
+})
 
 const compareStatusMap = COMPARE_STATUS_MAP
 
-function formatDate(s: string): string {
-  return s ? s.slice(0, 10) : '—'
+interface HistoryItem {
+  id: string
+  kind: 'compare' | 'read'
+  type: string
+  name: string
+  statusText: string
+  statusTone: string
+  time: string
+  sortTime: number
+  detail?: string
+  detailTone?: string
+  raw: CompareTask | BidReviewSession
+}
+
+function formatDateTime(value: string): string {
+  if (!value) return '—'
+  const date = new Date(value)
+  if (Number.isNaN(date.getTime())) return value
+  const pad = (n: number): string => String(n).padStart(2, '0')
+  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())} ${pad(date.getHours())}:${pad(date.getMinutes())}`
+}
+
+function compareStatusTone(status: CompareTask['status']): string {
+  if (status === 'completed') return 'session-status--ok'
+  if (status === 'partial') return 'session-status--warn'
+  if (status === 'failed') return 'session-status--bad'
+  return 'session-status--run'
 }
 
 watch(sessionDrawer, async (open) => {
-  if (!open || !isCompare.value) return
-  compareLoading.value = true
+  if (!open) return
+  historyLoading.value = true
   try {
-    compareTasks.value = await getTasks()
+    const [compareTasks, sessions] = await Promise.all([getTasks(), getBidSessions()])
+    const items: HistoryItem[] = [
+      ...compareTasks.map((t) => ({
+        id: `compare-${t.id}`,
+        kind: 'compare' as const,
+        type: '比标',
+        name: t.name,
+        statusText: compareStatusMap[t.status]?.text ?? t.status,
+        statusTone: compareStatusTone(t.status),
+        time: formatDateTime(t.createdAt),
+        sortTime: Date.parse(t.createdAt) || 0,
+        detail: `${t.documents.length} 份标书`,
+        detailTone: 'session-badge--ok',
+        raw: t,
+      })),
+      ...sessions.map((s) => ({
+        id: `read-${s.id}`,
+        kind: 'read' as const,
+        type: '读标',
+        name: s.document,
+        statusText: s.status,
+        statusTone: s.status === '已完成' ? 'session-status--ok' : 'session-status--run',
+        time: formatDateTime(s.date),
+        sortTime: Date.parse(s.date.replace(' ', 'T')) || 0,
+        detail: `${s.riskCount} 项风险`,
+        detailTone: s.riskCount > 0 ? 'session-badge--warn' : 'session-badge--ok',
+        raw: s,
+      })),
+    ].sort((a, b) => b.sortTime - a.sortTime)
+    historyItems.value = items
   } catch {
-    compareTasks.value = []
+    historyItems.value = []
   } finally {
-    compareLoading.value = false
+    historyLoading.value = false
   }
 })
 
-function openCompareTask(id: string): void {
+function openHistory(item: HistoryItem): void {
   sessionDrawer.value = false
-  router.push({ path: '/ai-bid/compare', query: { task: id } })
+  if (item.kind === 'compare') {
+    const task = item.raw as CompareTask
+    router.push({ path: '/ai-bid/compare', query: { task: task.id } })
+  } else {
+    router.push('/ai-bid/read')
+  }
 }
 
 const features = [
@@ -155,14 +199,6 @@ function goFeature(routePath: string): void {
   sidebarStore.setCollapsed(true)
   router.push(routePath)
 }
-
-function selectSession(id: string): void {
-  activeSessionId.value = id
-  router.push('/ai-bid/read')
-  sessionDrawer.value = false
-}
-
-getBidSessions().then((s) => { sessions.value = s; if (s.length > 0) activeSessionId.value = s[0].id })
 </script>
 
 <style scoped lang="less">
@@ -238,7 +274,22 @@ getBidSessions().then((s) => { sessions.value = s; if (s.length > 0) activeSessi
   gap: @spacing-sm;
 }
 
+.bid-history-trigger {
+  font-size: @font-size-sm;
+  color: @text-secondary;
+  cursor: pointer;
+  user-select: none;
+  transition: color @transition-fast;
+
+  &:hover {
+    color: @brand-primary;
+  }
+}
+
 /* —— 历史记录抽屉 —— */
+.session-filter {
+  margin-bottom: @spacing-sm;
+}
 .session-list { display: flex; flex-direction: column; }
 .session-item {
   padding: @spacing-md @spacing-lg;
@@ -247,10 +298,41 @@ getBidSessions().then((s) => { sessions.value = s; if (s.length > 0) activeSessi
   transition: all @transition-base;
   border-radius: @radius-base;
   &:hover { background: @content-bg; }
-  &.active { background: color-mix(in srgb, @brand-primary 6%, transparent); }
 }
-.session-name { font-size: @font-size-sm; font-weight: @font-weight-medium; color: @text-primary; margin-bottom: 4px; }
-.session-status { margin-left: @spacing-sm; }
+.session-head {
+  display: flex;
+  align-items: center;
+  gap: @spacing-sm;
+  margin-bottom: 4px;
+}
+.session-type {
+  flex-shrink: 0;
+  padding: 1px 8px;
+  border-radius: @radius-sm;
+  font-size: 11px;
+  line-height: 18px;
+  &--compare { background: color-mix(in srgb, @warning 12%, transparent); color: @warning; }
+  &--read { background: color-mix(in srgb, @info 12%, transparent); color: @info; }
+}
+.session-name {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: @font-size-sm;
+  font-weight: @font-weight-medium;
+  color: @text-primary;
+}
+.session-spacer { flex: 1; }
+.session-status {
+  flex-shrink: 0;
+  font-size: @font-size-xs;
+  &--ok { color: @success; }
+  &--warn { color: @warning; }
+  &--bad { color: @danger; }
+  &--run { color: @brand-primary; }
+}
 .session-meta {
   display: flex; align-items: center; justify-content: space-between;
   font-size: @font-size-xs; color: @text-tertiary;
