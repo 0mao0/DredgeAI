@@ -75,11 +75,12 @@ def find_common_passages(
     offsets_a,
     offsets_b,
     min_len: int = MIN_PASSAGE_LEN,
-) -> list[tuple[int, int]]:
+) -> list[tuple[int, int, int]]:
     """规范化全文 A/B 上找 ≥min_len 的连续公共片段。
 
-    返回 [(a_start, length), ...]（按 A 侧阅读顺序；同一区域已扩展为最长并跳过，
-    不会对同一片段重复产出）。offsets 参数保留用于调用方定位，本函数不消费。
+    返回 [(a_start, b_start, length), ...]（按 A 侧阅读顺序；同一区域已扩展为最长并跳过，
+    不会对同一片段重复产出）。a_start/b_start 分别是片段在 A/B 全文中的起始偏移，
+    调用方必须用各自侧偏移定位——混用会导致高亮错位（如 B 侧误落到投标人名称块）。
     """
     n = INDEX_NGRAM
     if len(text_a) < min_len or len(text_b) < min_len:
@@ -90,7 +91,7 @@ def find_common_passages(
     for i in range(len(text_b) - n + 1):
         index.setdefault(text_b[i : i + n], []).append(i)
 
-    passages: list[tuple[int, int]] = []
+    passages: list[tuple[int, int, int]] = []
     i = 0
     while i <= len(text_a) - min_len:
         hits = index.get(text_a[i : i + n])
@@ -100,6 +101,7 @@ def find_common_passages(
 
         best_len = 0
         best_start = i
+        best_b_start = -1
         for pos in hits:
             # 双向扩展：先向左、再向右，取该命中点能覆盖的最长连续公共段
             left = 0
@@ -119,9 +121,10 @@ def find_common_passages(
                 total += 1
             if total > best_len:
                 best_len, best_start = total, si
+                best_b_start = sj
 
         if best_len >= min_len:
-            passages.append((best_start, best_len))
+            passages.append((best_start, best_b_start, best_len))
             i = best_start + best_len  # 跳过已覆盖区域，避免重复产出
         else:
             i += 1
@@ -186,10 +189,10 @@ def local_similarity_evidences(task_id: str, documents: list[IrDocument]) -> lis
             items: list[dict] = []
             all_blocks_a: list[str] = []
             all_blocks_b: list[str] = []
-            for start, length in passages:
-                text = ta[start : start + length]
-                blocks_a, pages_a = _covering_blocks(offsets_a, start, start + length)
-                blocks_b, pages_b = _covering_blocks(offsets_b, start, start + length)
+            for a_start, b_start, length in passages:
+                text = ta[a_start : a_start + length]
+                blocks_a, pages_a = _covering_blocks(offsets_a, a_start, a_start + length)
+                blocks_b, pages_b = _covering_blocks(offsets_b, b_start, b_start + length)
                 tender_response: Optional[bool] = None
                 ratio: Optional[float] = None
                 if tender_text is not None:

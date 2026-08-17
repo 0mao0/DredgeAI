@@ -87,9 +87,9 @@ def test_common_passage_found_across_different_block_split():
     ta, tb = full_text(docs[0]), full_text(docs[1])
     passages = find_common_passages(ta, tb, block_offsets(docs[0]), block_offsets(docs[1]))
     assert passages, "应检出至少一个公共片段"
-    longest = max(passages, key=lambda p: p[1])
-    assert longest[1] >= len(SHARED_PROMISE) - 2, "最长片段应覆盖完整承诺句"
-    assert SHARED_PROMISE[:20] in ta[longest[0]:longest[0] + longest[1]]
+    longest = max(passages, key=lambda p: p[2])
+    assert longest[2] >= len(SHARED_PROMISE) - 2, "最长片段应覆盖完整承诺句"
+    assert SHARED_PROMISE[:20] in ta[longest[0]:longest[0] + longest[2]]
 
 
 def test_short_passages_filtered():
@@ -97,7 +97,7 @@ def test_short_passages_filtered():
     docs = _promise_docs()
     ta, tb = full_text(docs[0]), full_text(docs[1])
     passages = find_common_passages(ta, tb, block_offsets(docs[0]), block_offsets(docs[1]))
-    for _, length in passages:
+    for _, _, length in passages:
         assert length >= MIN_PASSAGE_LEN
 
 
@@ -107,12 +107,13 @@ def test_passage_block_locations_cover_both_sides():
     ta, tb = full_text(docs[0]), full_text(docs[1])
     offsets_a, offsets_b = block_offsets(docs[0]), block_offsets(docs[1])
     passages = find_common_passages(ta, tb, offsets_a, offsets_b)
-    start, length = max(passages, key=lambda p: p[1])
+    a_start, b_start, length = max(passages, key=lambda p: p[2])
 
-    a_blocks = {bid for bid, _, bs, be in offsets_a if be > start and bs < start + length}
-    b_blocks = {bid for bid, _, bs, be in offsets_b if True}
-    # B 侧承诺在单一 block b2：片段必然覆盖
-    assert any(bid == "b2" for bid, _, bs, be in offsets_b if be > 0)
+    a_blocks = {bid for bid, _, bs, be in offsets_a if be > a_start and bs < a_start + length}
+    b_blocks = {bid for bid, _, bs, be in offsets_b if be > b_start and bs < b_start + length}
+    # A 侧承诺拆两段（a2/a3）、B 侧单块（b2）：各自偏移定位应覆盖对应块
+    assert "a2" in a_blocks and "a3" in a_blocks
+    assert "b2" in b_blocks
 
 
 def test_local_similarity_evidence_with_tender_marking():
