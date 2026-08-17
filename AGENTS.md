@@ -236,6 +236,7 @@ const columns = [
 | `SectionCard` | 带标题的卡片容器 | `title`, `flush`(去除 body 顶部默认 24px), `nopad`(完全去除 body padding), `#extra` slot |
 | `MetricCard` | KPI 指标卡（网格排列） | `title`, `value`, `suffix`, `icon`(字符串，如 `"SoundOutlined"`), `color`(CSS 色值), `loading` |
 | `ChartContainer` | ECharts 容器 + loading 态 | `option`, `height`(默认 300px), `loading` |
+| `AppButton` | 统一按钮（语义化 variant + 尺寸） | `variant`(primary/secondary/danger/text/link/dashed), `size`(sm/md/lg), `danger`, `block`, `loading`, `disabled`, `htmlType` |
 | `DataSkeleton` | 加载骨架屏 | 包裹内容区域，显示 loading 效果 |
 | `ErrorBoundary` | 全局错误兜底 | 包裹 `<router-view>`，已在 App.vue 中使用 |
 | `Logo` | 品牌 Logo + 标题 | 已在 Layout 中使用，一般无需手动引用 |
@@ -332,12 +333,16 @@ defineEmits<{ 'update:modelValue': [value: string], 'select': [id: string] }>()
 
 | 场景 | 用法 | 示例 |
 |------|------|------|
-| 表格行操作按钮 | `<a-button type="link" size="small">` | 编辑、删除、查看 |
-| PageHeader `#extra` 次要操作 | `<a-button size="small">` | 历史记录、刷新 |
-| PageHeader `#extra` 主要操作 | `<a-button type="primary">`（默认 middle） | 创建、新增 |
-| 卡片 `#extra` 操作 | `<a-button size="small">` 或 `type="link" size="small"` | 制音、下载 |
-| 弹框 footer 操作 | `<a-button>` / `<a-button type="primary">`（默认 middle） | 取消、确认 |
-| 主交互按钮 | `<a-button type="primary" size="large">` | 开始生成 |
+| 表格行操作按钮 | `<AppButton variant="link" size="sm">` | 编辑、删除、查看 |
+| PageHeader `#extra` 次要操作 | `<AppButton size="sm">` | 历史记录、刷新 |
+| PageHeader `#extra` 主要操作 | `<AppButton variant="primary">`（默认 md） | 创建、新增 |
+| 卡片 `#extra` 操作 | `<AppButton size="sm">` 或 `variant="link" size="sm"` | 制音、下载 |
+| 弹框 footer 操作 | `<AppButton>` / `<AppButton variant="primary">`（默认 md） | 取消、确认 |
+| 主交互按钮 | `<AppButton variant="primary" size="lg">` | 开始生成 |
+
+- 按钮统一使用共享 `AppButton`（`@shared/web`），禁止直接使用 `a-button`（`AppButton` 内部封装除外）。
+- 语义：`primary` 主操作 / `secondary` 次要操作（品牌色描边）/ `danger` 危险 / `text` 文字 / `link` 链接 / `dashed` 虚线。
+- 尺寸：`sm`（表格、PageHeader / 卡片 extra）/ `md`（默认，弹框 footer）/ `lg`（主 CTA）。
 
 #### 表格
 
