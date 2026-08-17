@@ -148,11 +148,17 @@ def detect_shared_typos(
     强证据）；仅 1 处 → mid（套话/正式用语巧合可能，文案降为疑似）。
     samples/items 每处取中间窗口为代表，统一按 typo_samples_max 截断防膨胀；
     样本为规范化文本（标点/空白已剥离），前端高亮需先做同样规范化再定位。
+
+    招标文件（role="tender"，可选）存在时，候选串与招标文件全文比对：
+    命中 → 视为「招标响应/模板」（投标函格式、合同条款等），排除，不计入处数；
+    未命中 → 保留为「雷同候选」（item.tenderResponse=false）。全部命中则不出证据。
     """
     if n is None:
         n = get_settings().typo_ngram
     samples_max = get_settings().typo_samples_max
     names = display_names(documents)
+    tender = next((d for d in documents if d.role == "tender"), None)
+    tender_text = _native_full_text(tender) if tender is not None else None
     full_texts = {d.docId: _native_full_text(d) for d in documents}
     gram_index: dict[str, dict[str, tuple[str, int]]] = {}  # gram -> {docId: (blockId, start)}
     for d in documents:
@@ -185,7 +191,6 @@ def detect_shared_typos(
                 runs.append([g])
                 run_block = block_id
                 run_end = start + n
-        site_count = len(runs)
         locations = [
             EvidenceLocation(
                 docId=doc_id,
@@ -195,15 +200,27 @@ def detect_shared_typos(
         ]
         hit_map = {g: m for g, m in hits}
         items = []
+        tender_response_count = 0
         for i, run in enumerate(runs[:samples_max], start=1):
             rep = run[len(run) // 2]
             rep_map = hit_map[rep]
+            tender_response = None
+            if tender_text is not None:
+                tender_response = rep in tender_text
+            if tender_response is True:
+                tender_response_count += 1
+                continue
             items.append({
                 "index": i,
                 "text": rep,
                 "blockIds": {doc_id: rep_map[doc_id][0] for doc_id in doc_ids},
                 "starts": {doc_id: rep_map[doc_id][1] for doc_id in doc_ids},
+                **({"tenderResponse": tender_response} if tender_text is not None else {}),
             })
+        if not items:
+            # 全部候选命中招标文件（模板/招标响应）→ 不出错别字证据，避免误报
+            continue
+        site_count = len(items)
         samples = [item["text"] for item in items]
         if site_count >= 2:
             severity: Severity = "high"
@@ -213,18 +230,25 @@ def detect_shared_typos(
             severity = "mid"
             title = f"{len(doc_ids)} 份标书疑似相同错别字/低频用字（{site_count} 处）"
             description = "多份标书出现逐字相同的低频异常字串；仅单处命中，可能为行业套话或正式用语巧合，建议人工复核。"
+        if tender_text is not None and tender_response_count > 0:
+            description += (
+                f"其中 {tender_response_count} 处与招标文件一致（招标响应/模板），已排除。"
+            )
+        metrics: dict = {
+            "pattern": "shared-typo",
+            "sharedNgramCount": site_count,
+            "samples": samples,
+            "items": items,
+        }
+        if tender_text is not None:
+            metrics["tenderResponseCount"] = tender_response_count
         evidences.append(build_evidence(
             task_id=task_id,
             type="metadata",
             severity=severity,
             doc_ids=list(doc_ids),
             locations=locations,
-            metrics={
-                "pattern": "shared-typo",
-                "sharedNgramCount": site_count,
-                "samples": samples,
-                "items": items,
-            },
+            metrics=metrics,
             title=title,
             description=f"{description}涉及文件：{'、'.join(names[doc_id] for doc_id in doc_ids)}。",
         ))
