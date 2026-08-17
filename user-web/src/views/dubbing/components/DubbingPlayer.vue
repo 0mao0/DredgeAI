@@ -14,10 +14,10 @@
     </div>
 
     <div class="player__controls">
-      <a-button
+      <AppButton
         shape="circle"
         :icon="playIcon"
-        size="large"
+        size="lg"
         class="player__play"
         @click="togglePlay"
       />
@@ -39,20 +39,21 @@
       </div>
 
       <a-tooltip title="下载音频">
-        <a-button
+        <AppButton
           v-if="task.status === '已完成' && task.audioUrl"
           :href="task.audioUrl"
           download="dubbing-audio.mp3"
           class="player__download"
         >
           <DownloadOutlined /> 下载
-        </a-button>
+        </AppButton>
       </a-tooltip>
     </div>
   </div>
 </template>
 
 <script setup lang="ts">
+import { AppButton } from '@shared/web'
 import { ref, computed, onBeforeUnmount, h } from 'vue'
 import { PlayCircleFilled, PauseCircleFilled, DownloadOutlined } from '@ant-design/icons-vue'
 import type { DubbingTask } from '@/types'

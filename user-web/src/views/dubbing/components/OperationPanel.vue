@@ -5,10 +5,10 @@
       <SectionCard class="op-panel__left-card" :flush="true">
         <template #title>选择音色（{{ voices.length }}）</template>
         <template #extra>
-          <a-button size="small" type="dashed" @click="emit('openRegister')">
+          <AppButton size="sm" variant="dashed" @click="emit('openRegister')">
             <template #icon><PlusOutlined /></template>
             制音
-          </a-button>
+          </AppButton>
         </template>
         <div class="op-panel__left-body">
           <VoicePicker
@@ -85,7 +85,7 @@
             <!-- 失败 -->
             <div v-else-if="currentTask && currentTask.status === '已失败'" key="failed" class="result-area">
               <a-result status="error" title="生成失败" sub-title="请检查文本内容后重试">
-                <template #extra><a-button type="primary" @click="emit('reset')">重新生成</a-button></template>
+                <template #extra><AppButton variant="primary" @click="emit('reset')">重新生成</AppButton></template>
               </a-result>
             </div>
 
@@ -103,6 +103,7 @@
 </template>
 
 <script setup lang="ts">
+import { AppButton } from '@shared/web'
 import { computed } from 'vue'
 import {
   CheckOutlined,

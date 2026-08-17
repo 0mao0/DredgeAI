@@ -2,7 +2,7 @@
   <div class="standard-page">
     <PageHeader title="标准查询">
       <template #extra>
-        <a-button size="small" @click="historyDrawer = true">历史记录</a-button>
+        <AppButton size="sm" @click="historyDrawer = true">历史记录</AppButton>
       </template>
     </PageHeader>
 
@@ -11,7 +11,7 @@
       <aside class="standard-body__left">
         <SectionCard title="标准库" flush>
           <template #extra>
-            <a-button type="primary" size="small" @click="handleAdd">新增</a-button>
+            <AppButton variant="primary" size="sm" @click="handleAdd">新增</AppButton>
           </template>
           <a-input-search v-model:value="treeSearch" placeholder="搜索标准名称" allow-clear class="tree-search" />
           <a-tree
@@ -54,11 +54,12 @@
 </template>
 
 <script setup lang="ts">
+import { AppButton, DocViewer } from '@shared/web'
 import { ref, computed, onMounted } from 'vue'
 import { message } from 'ant-design-vue'
 import PageHeader from '@shared/web/components/PageHeader.vue'
 import SectionCard from '@shared/web/components/SectionCard.vue'
-import { DocViewer } from '@shared/web'
+
 import StandardPropertyPanel from './components/StandardProperty.vue'
 import { getStandardList, getStandardProperty, getStandardDocument, updateStandardProperty, getStandardHistory } from '@/api/modules/standard'
 import type { StandardListItem, StandardProperty, StandardDocument, StandardSearchHistory } from '@/types'

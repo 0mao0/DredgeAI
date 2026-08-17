@@ -35,33 +35,33 @@
     <a-table-column title="操作" width="230" fixed="right">
       <template #default="{ record }">
         <div class="history-actions">
-          <a-button
+          <AppButton
             v-if="record.status === '已完成' && record.audioUrl"
-            type="link"
-            size="small"
+            variant="link"
+            size="sm"
             class="history-actions__btn"
             @click="emit('play', record)"
           >
             播放
-          </a-button>
+          </AppButton>
           <a-tooltip v-else-if="record.status === '已完成'" title="刷新后音频已失效，重新生成">
-            <a-button
-              type="link"
-              size="small"
+            <AppButton
+              variant="link"
+              size="sm"
               class="history-actions__btn"
               :loading="regeneratingId === record.id"
               @click="emit('regenerate', record)"
             >
               重新生成
-            </a-button>
+            </AppButton>
           </a-tooltip>
           <a-tooltip title="载入文本与音色，重新编辑">
-            <a-button type="link" size="small" class="history-actions__btn" @click="emit('reEdit', record)">
+            <AppButton variant="link" size="sm" class="history-actions__btn" @click="emit('reEdit', record)">
               编辑
-            </a-button>
+            </AppButton>
           </a-tooltip>
           <a-popconfirm title="确定删除此任务？" @confirm="emit('delete', record.id)">
-            <a-button type="link" danger size="small" class="history-actions__btn">删除</a-button>
+            <AppButton variant="link" danger size="sm" class="history-actions__btn">删除</AppButton>
           </a-popconfirm>
         </div>
       </template>
@@ -76,6 +76,7 @@
 </template>
 
 <script setup lang="ts">
+import { AppButton } from '@shared/web'
 import { computed } from 'vue'
 import { CustomerServiceOutlined } from '@ant-design/icons-vue'
 import type { DubbingTask } from '@/types'

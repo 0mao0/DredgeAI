@@ -5,10 +5,10 @@
       description="聚焦疏浚行业的科技与工程情报，由后台采集并结构化后发布"
     >
       <template #extra>
-        <a-button size="small" @click="openInNewTab">
+        <AppButton size="sm" @click="openInNewTab">
           <template #icon><ExportOutlined /></template>
           在新标签页打开
-        </a-button>
+        </AppButton>
       </template>
     </PageHeader>
 
@@ -36,6 +36,7 @@
 </template>
 
 <script setup lang="ts">
+import { AppButton } from '@shared/web'
 import { ref, onMounted, onBeforeUnmount } from 'vue'
 import { ExportOutlined } from '@ant-design/icons-vue'
 import PageHeader from '@shared/web/components/PageHeader.vue'

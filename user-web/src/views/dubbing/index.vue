@@ -66,10 +66,10 @@
         </div>
       </div>
       <template #footer>
-        <a-button @click="handleDeleteFailedVoice">删除音色</a-button>
-        <a-button @click="failDetailVisible = false">取消</a-button>
-        <a-button @click="handleRetry('upload')">重新上传</a-button>
-        <a-button type="primary" @click="handleRetry('record')">重新录制</a-button>
+        <AppButton @click="handleDeleteFailedVoice">删除音色</AppButton>
+        <AppButton @click="failDetailVisible = false">取消</AppButton>
+        <AppButton @click="handleRetry('upload')">重新上传</AppButton>
+        <AppButton variant="primary" @click="handleRetry('record')">重新录制</AppButton>
       </template>
     </a-modal>
 
@@ -82,14 +82,14 @@
       class="player-modal"
     >
       <div class="modal-player-text">
-        <a-button
-          type="link"
-          size="small"
+        <AppButton
+          variant="link"
+          size="sm"
           class="modal-player-text__toggle"
           @click="textExpanded = !textExpanded"
         >
           {{ textExpanded ? '收起配音文本' : '查看配音文本' }}
-        </a-button>
+        </AppButton>
         <p
           v-if="textExpanded"
           class="modal-player-text__content"
@@ -103,6 +103,7 @@
 </template>
 
 <script setup lang="ts">
+import { AppButton, VoiceRegisterModal } from '@shared/web'
 import { ref, computed, onBeforeUnmount } from 'vue'
 import { message, notification } from 'ant-design-vue'
 import { CloseCircleFilled } from '@ant-design/icons-vue'
@@ -110,7 +111,7 @@ import PageHeader from '@shared/web/components/PageHeader.vue'
 import OperationPanel from './components/OperationPanel.vue'
 import HistoryPanel from './components/HistoryPanel.vue'
 import DubbingPlayer from './components/DubbingPlayer.vue'
-import { VoiceRegisterModal } from '@shared/web'
+
 import { getVoices, generateDubbing, registerVoice } from '@/api/modules/dubbing'
 import { estimateDubbingTokenCost } from '@shared/core/utils'
 import type { VoiceItem, DubbingTask } from '@/types'

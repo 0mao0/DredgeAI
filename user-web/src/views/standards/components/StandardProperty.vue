@@ -18,7 +18,7 @@
               <a-form-item label="发布时间(年)"><a-input-number v-model:value="form.publishYear" :min="1900" :max="2030" style="width:100%" /></a-form-item>
               <a-form-item label="上级目录"><a-select v-model:value="form.parentId" :options="parentOptions" /></a-form-item>
               <a-form-item label="简介"><a-textarea v-model:value="form.description" :rows="3" /></a-form-item>
-              <a-form-item><a-button type="primary" :loading="submitting" @click="handleSubmit">提交</a-button></a-form-item>
+              <a-form-item><AppButton variant="primary" :loading="submitting" @click="handleSubmit">提交</AppButton></a-form-item>
             </a-form>
           </div>
         </a-tab-pane>
@@ -32,10 +32,10 @@
 </template>
 
 <script setup lang="ts">
+import { AppButton, EmptyState, AIChat } from '@shared/web'
 import { ref, watch, computed } from 'vue'
 import { message } from 'ant-design-vue'
 import DataSkeleton from '@shared/web/components/DataSkeleton.vue'
-import { EmptyState, AIChat } from '@shared/web'
 
 import type { ChatMessage } from '@shared/core/types/chat'
 import type { StandardProperty } from '@/types'

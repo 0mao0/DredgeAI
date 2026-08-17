@@ -12,9 +12,9 @@
     <div class="input-panel__footer-row">
       <span class="input-panel__eta">{{ estimatedDuration }}</span>
 
-      <a-button
-        type="primary"
-        size="large"
+      <AppButton
+        variant="primary"
+        size="lg"
         class="input-panel__submit"
         :class="{ 'is-generating': generating }"
         :loading="generating"
@@ -23,12 +23,13 @@
       >
         <template #icon><SoundOutlined v-if="!generating" /></template>
         {{ generating ? '生成中…' : '开始' }}
-      </a-button>
+      </AppButton>
     </div>
   </div>
 </template>
 
 <script setup lang="ts">
+import { AppButton } from '@shared/web'
 import { computed } from 'vue'
 import { SoundOutlined } from '@ant-design/icons-vue'
 

@@ -77,17 +77,18 @@
           <UserOutlined />
           <span>个人中心</span>
           <a-tooltip v-if="!collapsed" :title="isDark ? '切换亮色模式' : '切换暗色模式'" placement="top">
-            <a-button
+            <AppButton
               class="profile-theme-btn"
+              variant="text"
               shape="circle"
-              size="small"
+              size="sm"
               @click.stop="toggleTheme"
             >
               <template #icon>
                 <BulbFilled v-if="isDark" />
                 <BulbOutlined v-else />
               </template>
-            </a-button>
+            </AppButton>
           </a-tooltip>
         </a-menu-item>
       </a-menu>
@@ -106,6 +107,7 @@
 </template>
 
 <script setup lang="ts">
+import { AppButton } from '@shared/web'
 import { ref, computed, watch, onMounted } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import {

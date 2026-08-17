@@ -19,9 +19,9 @@
         </div>
       </div>
       <div class="bid-header-right">
-        <a-button size="small" @click="sessionDrawer = true">
+        <AppButton size="sm" @click="sessionDrawer = true">
           <HistoryOutlined /> 历史记录
-        </a-button>
+        </AppButton>
       </div>
     </div>
 
@@ -94,6 +94,7 @@
 </template>
 
 <script setup lang="ts">
+import { AppButton } from '@shared/web'
 import { ref, computed, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import {

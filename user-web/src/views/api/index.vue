@@ -6,10 +6,10 @@
       <a-tab-pane key="keys" tab="API 管理">
         <SectionCard nopad class="mb-24">
           <template #extra>
-            <a-button type="primary" size="small" @click="showCreateModal = true">
+            <AppButton variant="primary" size="sm" @click="showCreateModal = true">
               <PlusOutlined />
               创建 Key
-            </a-button>
+            </AppButton>
           </template>
           <a-table
             size="small"
@@ -23,14 +23,14 @@
                 <code class="key-text">{{ record.key }}</code>
               </template>
               <template v-else-if="column.key === 'doc'">
-                <a-button type="link" size="small" @click="openDoc(record.docUrl)">
+                <AppButton variant="link" size="sm" @click="openDoc(record.docUrl)">
                   <FileTextOutlined /> 文档
-                </a-button>
+                </AppButton>
               </template>
               <template v-else-if="column.key === 'action'">
-                <a-button type="link" size="small" @click="handleEdit(record)">编辑</a-button>
+                <AppButton variant="link" size="sm" @click="handleEdit(record)">编辑</AppButton>
                 <a-popconfirm title="确认删除？" @confirm="handleDelete(record.id)">
-                  <a-button type="link" size="small" danger>删除</a-button>
+                  <AppButton variant="link" size="sm" danger>删除</AppButton>
                 </a-popconfirm>
               </template>
             </template>
@@ -178,9 +178,9 @@
         <div class="key-box">
           <code>{{ createdKey }}</code>
         </div>
-        <a-button type="primary" block @click="copyCreatedKey">
+        <AppButton variant="primary" block @click="copyCreatedKey">
           <CopyOutlined /> 复制 Key
-        </a-button>
+        </AppButton>
       </div>
     </a-modal>
 
@@ -195,6 +195,7 @@
 </template>
 
 <script setup lang="ts">
+import { AppButton } from '@shared/web'
 import { ref, computed, onMounted, watch } from 'vue'
 import { message } from 'ant-design-vue'
 import { PlusOutlined, CopyOutlined, FileTextOutlined } from '@ant-design/icons-vue'
