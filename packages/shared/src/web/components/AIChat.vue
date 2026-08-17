@@ -14,7 +14,14 @@
         <div class="chat-avatar">{{ msg.role === 'user' ? '我' : 'AI' }}</div>
         <div class="chat-bubble">{{ msg.content }}</div>
       </div>
+      <div v-if="loading || streamingText" class="chat-msg chat-msg--assistant">
+        <div class="chat-avatar">AI</div>
+        <div class="chat-bubble">
+          {{ streamingText }}<span v-if="loading" class="chat-cursor">▍</span>
+        </div>
+      </div>
     </div>
+    <div v-if="error" class="chat-error">{{ error }}</div>
     <div class="chat-input">
       <a-input
         v-model:value="input"
@@ -45,9 +52,13 @@ const props = withDefaults(defineProps<{
   loading?: boolean
   disabled?: boolean
   emptyText?: string
+  streamingText?: string
+  error?: string | null
 }>(), {
   placeholder: '输入内容...',
   emptyText: '暂无消息',
+  streamingText: '',
+  error: null,
 })
 
 const emit = defineEmits<{ send: [text: string] }>()
@@ -150,5 +161,23 @@ defineExpose({ scrollToBottom })
   font-size: 16px;
   transition: color @transition-base;
   &--active { color: @brand-primary; }
+}
+
+.chat-cursor {
+  animation: chat-blink 1s step-end infinite;
+}
+
+@keyframes chat-blink {
+  50% { opacity: 0; }
+}
+
+.chat-error {
+  padding: 0 @spacing-md @spacing-sm;
+  color: @danger;
+  font-size: @font-size-sm;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .chat-cursor { animation: none; }
 }
 </style>

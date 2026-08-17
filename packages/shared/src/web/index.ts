@@ -20,6 +20,11 @@ export { default as VoiceRegisterModal } from './components/VoiceRegisterModal.v
 // 共享 composables
 export { useCssVar } from './composables/useCssVar'
 export { useTheme } from './composables/useTheme'
+export { useAIChat } from './composables/useAIChat'
+
+// 共享 AI 对话传输
+export { createChatTransport } from './chat/transport'
+export type { ChatStreamHandlers, ChatTransport } from './chat/transport'
 
 // 共享 stores
 export * from './stores'
