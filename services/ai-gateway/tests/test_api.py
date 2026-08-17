@@ -91,3 +91,57 @@ def test_chat_reports_usage(fake_client, monkeypatch):
     assert reported[0]["usedConfig"] == "fake"
     assert reported[0]["totalTokens"] == 15
     assert reported[0]["success"] is True
+
+
+def test_stream_delta_and_done(fake_client):
+    fake_client.stream_events = [
+        {"type": "delta", "text": "你"},
+        {"type": "delta", "text": "好"},
+        {
+            "type": "done",
+            "finish_reason": "stop",
+            "usage": {"prompt_tokens": 10, "completion_tokens": 5, "total_tokens": 15},
+            "used_config": "fake",
+            "used_model": "fake-model",
+            "attempts": 1,
+            "latency_seconds": 0.01,
+            "circuit_breaker_state": "closed",
+        },
+    ]
+    r = client.post("/v1/chat/stream", json={"messages": [{"role": "user", "content": "hi"}]})
+    assert r.status_code == 200
+    assert r.headers["content-type"].startswith("text/event-stream")
+    lines = [ln for ln in r.text.splitlines() if ln.startswith("data: ")]
+    payloads = [line[6:] for line in lines]
+    assert '"type": "delta"' in payloads[0] and '"text": "你"' in payloads[0]
+    assert '"type": "done"' in payloads[-1] and '"finishReason": "stop"' in payloads[-1]
+
+
+def test_stream_error_before_first_delta(fake_client):
+    fake_client.error = ProviderAuthError("bad key")
+    r = client.post("/v1/chat/stream", json={"messages": [{"role": "user", "content": "hi"}]})
+    assert r.status_code == 200
+    assert r.headers["content-type"].startswith("text/event-stream")
+    assert '"type": "error"' in r.text
+    assert '"PROVIDER_AUTH"' in r.text
+
+
+def test_stream_failed_after_partial(fake_client):
+    fake_client.stream_events = [
+        {"type": "delta", "text": "部分"},
+        {
+            "type": "stream_failed",
+            "text": "部分",
+            "finish_reason": None,
+            "error": {"type": "LLMStreamError", "message": "中断"},
+            "used_config": "fake",
+            "used_model": "fake-model",
+            "attempts": 2,
+            "latency_seconds": 1.2,
+            "circuit_breaker_state": "closed",
+        },
+    ]
+    r = client.post("/v1/chat/stream", json={"messages": [{"role": "user", "content": "hi"}]})
+    assert r.status_code == 200
+    assert '"type": "stream_failed"' in r.text
+    assert '"text": "部分"' in r.text

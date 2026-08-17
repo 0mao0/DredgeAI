@@ -1,4 +1,5 @@
 """ai-gateway FastAPI 入口：healthz / models / chat / chat/stream + 统一错误处理。"""
+import json
 import logging
 import threading
 
@@ -6,7 +7,7 @@ from ai_inference import LLMClient, achat_result_guarded, load_llm_config_from_e
 from ai_inference.errors import LLMError
 from fastapi import Depends, FastAPI, Request
 from fastapi.exceptions import RequestValidationError
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, StreamingResponse
 
 from app.errors import LlmHttpError, error_status
 from app.schemas import ChatRequest, ChatResponse, ErrorResponse
@@ -142,4 +143,62 @@ async def post_chat(req: ChatRequest) -> ChatResponse:
         attempts=result.attempts or 1,
         latency_seconds=result.latency_seconds,
         circuit_breaker_state=result.circuit_breaker_state,
+    )
+
+
+_EVENT_KEY_MAP = {
+    "finish_reason": "finishReason",
+    "used_config": "usedConfig",
+    "used_model": "usedModel",
+    "latency_seconds": "latencySeconds",
+    "circuit_breaker_state": "circuitBreakerState",
+    "error_type": "errorType",
+}
+
+
+def _to_contract_event(event: dict) -> dict:
+    """把库原生 snake_case 事件字段转换为对外契约 camelCase（type/text/usage/attempts 不变）。"""
+    return {_EVENT_KEY_MAP.get(key, key): value for key, value in event.items()}
+
+
+def _sse(event: dict) -> str:
+    return f"data: {json.dumps(_to_contract_event(event), ensure_ascii=False)}\n\n"
+
+
+@app.post("/v1/chat/stream", dependencies=[Depends(require_api_token)])
+async def post_chat_stream(req: ChatRequest) -> StreamingResponse:
+    _require_models()
+    messages = [m.model_dump() for m in req.messages]
+
+    async def generate():
+        try:
+            async for event in llm_client().achat_stream_events(
+                messages,
+                mode=req.mode or "instruct",
+                config_name=req.config_name,
+                temperature=req.temperature,
+                max_tokens=req.max_tokens,
+            ):
+                if event["type"] == "done":
+                    enqueue_usage(usage_payload(
+                        business=req.business,
+                        text="",
+                        finish_reason=event.get("finish_reason"),
+                        usage=event.get("usage"),
+                        used_config=event.get("used_config"),
+                        used_model=event.get("used_model"),
+                        attempts=event.get("attempts") or 1,
+                        latency_seconds=event.get("latency_seconds"),
+                        circuit_breaker_state=event.get("circuit_breaker_state"),
+                        success=True,
+                    ))
+                yield _sse(event)
+        except LLMError as exc:
+            status, code = error_status(exc)
+            yield _sse({"type": "error", "error": {"type": code, "message": str(exc)}})
+
+    return StreamingResponse(
+        generate(),
+        media_type="text/event-stream",
+        headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
     )
