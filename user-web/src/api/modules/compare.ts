@@ -433,15 +433,34 @@ export async function deleteDraft(draftId: string): Promise<void> {
 
 /* —— 证据 / 矩阵 —— */
 
-async function getIr(taskId: string, docId: string): Promise<DocumentIrDto | null> {
+async function getIr(
+  taskId: string,
+  docId: string,
+  cache?: Map<string, DocumentIrDto | null>,
+): Promise<DocumentIrDto | null> {
+  const key = `${taskId}:${docId}`
+  const hit = cache?.get(key)
+  if (hit !== undefined) return hit
   try {
-    return await request.get<DocumentIrDto>(fillUrl(urls.compareTaskIr, { id: taskId, docId }), silentConfig(true))
+    const ir = await request.get<DocumentIrDto>(fillUrl(urls.compareTaskIr, { id: taskId, docId }), silentConfig(true))
+    cache?.set(key, ir)
+    return ir
   } catch {
+    cache?.set(key, null)
     return null
   }
 }
 
-async function buildRefs(taskId: string, ev: EvidenceDto): Promise<EvidenceItem['refs']> {
+/** IR block 需要 4 元 bbox 才能定位；超大文档中表格/图片等块 bbox 可能为 null，必须容错。 */
+function hasValidBbox(block: { bbox?: number[] | null }): block is { bbox: number[] } & typeof block {
+  return Array.isArray(block.bbox) && block.bbox.length === 4
+}
+
+async function buildRefs(
+  taskId: string,
+  ev: EvidenceDto,
+  irCache: Map<string, DocumentIrDto | null>,
+): Promise<EvidenceItem['refs']> {
   const refs: EvidenceItem['refs'] = []
 
   const items = ev.metrics?.items
@@ -450,10 +469,10 @@ async function buildRefs(taskId: string, ev: EvidenceDto): Promise<EvidenceItem[
       const blockIds = (item as { blockIds?: Record<string, string> }).blockIds
       if (!blockIds) continue
       for (const [docId, blockId] of Object.entries(blockIds)) {
-        const ir = await getIr(taskId, docId)
+        const ir = await getIr(taskId, docId, irCache)
         if (!ir) continue
         const block = ir.blocks.find((b) => b.blockId === blockId)
-        if (block && block.bbox.length === 4) {
+        if (block && hasValidBbox(block)) {
           refs.push({
             docId,
             page: block.pageIdx + 1,
@@ -470,11 +489,11 @@ async function buildRefs(taskId: string, ev: EvidenceDto): Promise<EvidenceItem[
   }
 
   for (const loc of ev.locations) {
-    const ir = await getIr(taskId, loc.docId)
+    const ir = await getIr(taskId, loc.docId, irCache)
     if (!ir) continue
     for (const blockId of loc.blockIds) {
       const block = ir.blocks.find((b) => b.blockId === blockId)
-      if (block && block.bbox.length === 4) {
+      if (block && hasValidBbox(block)) {
         refs.push({
           docId: loc.docId,
           page: block.pageIdx + 1,
@@ -493,9 +512,11 @@ export async function getEvidence(id: string, silent = false): Promise<EvidenceI
     ...silentConfig(silent),
     params: { MaxResultCount: 100 },
   })
+  // 同一次加载内同一文档 IR 只请求一次（大文件 IR 可达数千 block，串行重复拉取会明显拖慢/触发断连）
+  const irCache = new Map<string, DocumentIrDto | null>()
   const items: EvidenceItem[] = []
   for (const ev of res.items) {
-    items.push({
+    const item: EvidenceItem = {
       id: ev.id,
       taskId: ev.taskId,
       type: EVIDENCE_TYPE_MAP[ev.type],
@@ -505,10 +526,16 @@ export async function getEvidence(id: string, silent = false): Promise<EvidenceI
       summary: ev.description,
       detail: ev.description,
       metrics: ev.metrics ?? undefined,
-      refs: await buildRefs(id, ev),
+      refs: [],
       source: ev.aiGenerated ? 'ai' : 'algo',
       status: 'final',
-    })
+    }
+    try {
+      item.refs = await buildRefs(id, ev, irCache)
+    } catch {
+      /* 单条证据定位失败不回退整个列表，标题/摘要仍可展示 */
+    }
+    items.push(item)
   }
   return items
 }
@@ -517,8 +544,11 @@ export async function getMatrix(id: string, silent = false): Promise<SimilarityM
   return request.get<SimilarityMatrix>(fillUrl(urls.compareTaskMatrix, { id }), silentConfig(silent))
 }
 
-export async function getOverview(id: string): Promise<TaskOverview> {
-  const [matrix, evidence, documents] = await Promise.all([getMatrix(id), getEvidence(id), getDocuments(id)])
+export function assembleOverview(
+  matrix: SimilarityMatrix,
+  evidence: EvidenceItem[],
+  documents: CompareDocMeta[],
+): TaskOverview {
   const docLabels = overviewDocLabels(matrix.docIds, documents)
   const simMatrix = matrix.docIds.map((a) =>
     matrix.docIds.map((b) => matrix.cells.find((c) => c.docAId === a && c.docBId === b)?.similarity ?? 0))
@@ -533,6 +563,11 @@ export async function getOverview(id: string): Promise<TaskOverview> {
       priceSim: c.similarity,
     }))
   return { docLabels, simMatrix, simMatrixSelf: simMatrix, pairs, evidence }
+}
+
+export async function getOverview(id: string): Promise<TaskOverview> {
+  const [matrix, evidence, documents] = await Promise.all([getMatrix(id), getEvidence(id), getDocuments(id)])
+  return assembleOverview(matrix, evidence, documents)
 }
 
 /* —— 条款 —— */
