@@ -131,7 +131,9 @@ interface ViewerHighlight {
 const themeStore = useThemeStore()
 const theme = computed(() => themeStore.effectiveTheme)
 
-const canPreviewPdf = computed(() => isPdfFileName(props.title))
+/** Word 文档同样允许在线预览：后端文件接口会对 doc/docx 返回转换后的 PDF（首次转换失败则回退原文）。 */
+const canPreviewPdf = computed(() =>
+  isPdfFileName(props.title) || /\.(?:doc|docx)$/i.test(props.title ?? ''))
 
 /** 定位证据时整组高亮同属一个 pairId，未显式指定则取第一组作为激活态。 */
 const activeHighlightId = computed(() =>

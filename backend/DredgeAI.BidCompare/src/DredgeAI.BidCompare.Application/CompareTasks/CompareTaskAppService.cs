@@ -1,8 +1,10 @@
 using System;
+using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Text.Json;
+using System.Threading;
 using System.Threading.Tasks;
 using DredgeAI.BidCompare.AI;
 using DredgeAI.BidCompare.Analysis;
@@ -16,6 +18,7 @@ using DredgeAI.BidCompare.Ir;
 using DredgeAI.BidCompare.Reports;
 using DredgeAI.BidCompare.Reporting;
 using DredgeAI.BidCompare.Storage;
+using Microsoft.Extensions.Logging;
 using Volo.Abp;
 using Volo.Abp.Application.Dtos;
 using Volo.Abp.Application.Services;
@@ -30,6 +33,7 @@ public class CompareTaskAppService : ApplicationService, ICompareTaskAppService
 {
     private static readonly string[] AllowedExtensions = { ".pdf", ".doc", ".docx" };
     private const int MaxBidDocuments = 8;
+    private static readonly ConcurrentDictionary<string, SemaphoreSlim> PreviewConvertLocks = new();
     private const string ClauseExtractionSystemPrompt =
         "你是招投标文件分析助手。从用户提供的招标文件全文中提取所有强制性条款" +
         "（包含「须/应当/必须/不得/否则视为无效投标/废标」等强制措辞的条款）。" +
@@ -49,6 +53,7 @@ public class CompareTaskAppService : ApplicationService, ICompareTaskAppService
     private readonly IFileStorage _fileStorage;
     private readonly IBackgroundJobManager _backgroundJobManager;
     private readonly ILlmGateway _llmGateway;
+    private readonly IPdfConverter _pdfConverter;
     private readonly ReportBuilder _reportBuilder;
 
     public CompareTaskAppService(
@@ -60,6 +65,7 @@ public class CompareTaskAppService : ApplicationService, ICompareTaskAppService
         IFileStorage fileStorage,
         IBackgroundJobManager backgroundJobManager,
         ILlmGateway llmGateway,
+        IPdfConverter pdfConverter,
         ReportBuilder reportBuilder)
     {
         _taskRepository = taskRepository;
@@ -70,6 +76,7 @@ public class CompareTaskAppService : ApplicationService, ICompareTaskAppService
         _fileStorage = fileStorage;
         _backgroundJobManager = backgroundJobManager;
         _llmGateway = llmGateway;
+        _pdfConverter = pdfConverter;
         _reportBuilder = reportBuilder;
     }
 
@@ -421,8 +428,59 @@ public class CompareTaskAppService : ApplicationService, ICompareTaskAppService
             throw new BusinessException(BidCompareErrorCodes.DocumentNotFound).WithData("docId", docId);
         }
 
-        var content = await _fileStorage.GetAsync(document.OriginStorageKey);
         var extension = Path.GetExtension(document.FileName).ToLowerInvariant();
+        // Word 文档在线预览：首次请求用 LibreOffice 转 PDF 并缓存（约定 key preview.pdf），
+        // 之后直接返回缓存 PDF；转换失败回退返回原始文件（前端按文件类型降级为「暂不支持在线预览」）。
+        if (extension is ".doc" or ".docx")
+        {
+            var previewKey = $"compare/{document.TaskId}/{document.Id}/preview.pdf";
+            var convertLock = PreviewConvertLocks.GetOrAdd(previewKey, _ => new SemaphoreSlim(1, 1));
+            await convertLock.WaitAsync();
+            try
+            {
+                if (await _fileStorage.ExistsAsync(previewKey))
+                {
+                    return new CompareDocumentFileResult
+                    {
+                        Content = await _fileStorage.GetAsync(previewKey),
+                        ContentType = "application/pdf",
+                        FileName = Path.GetFileNameWithoutExtension(document.FileName) + ".pdf",
+                    };
+                }
+
+                try
+                {
+                    await using var origin = await _fileStorage.GetAsync(document.OriginStorageKey);
+                    using var originBuffer = new MemoryStream();
+                    await origin.CopyToAsync(originBuffer);
+                    var pdfBytes = await _pdfConverter.ConvertToPdfAsync(originBuffer.ToArray());
+                    await using var pdfStream = new MemoryStream(pdfBytes);
+                    await _fileStorage.UploadAsync(previewKey, pdfStream, "application/pdf");
+                    return new CompareDocumentFileResult
+                    {
+                        Content = new MemoryStream(pdfBytes),
+                        ContentType = "application/pdf",
+                        FileName = Path.GetFileNameWithoutExtension(document.FileName) + ".pdf",
+                    };
+                }
+                catch (Exception ex)
+                {
+                    Logger.LogWarning(ex, "Word 文档转 PDF 预览失败，回退返回原始文件：{Key}", document.OriginStorageKey);
+                    return new CompareDocumentFileResult
+                    {
+                        Content = await _fileStorage.GetAsync(document.OriginStorageKey),
+                        ContentType = ContentTypeOf(extension),
+                        FileName = document.FileName,
+                    };
+                }
+            }
+            finally
+            {
+                convertLock.Release();
+            }
+        }
+
+        var content = await _fileStorage.GetAsync(document.OriginStorageKey);
         return new CompareDocumentFileResult
         {
             Content = content,
