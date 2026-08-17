@@ -134,13 +134,15 @@ public class CompareDocumentsJob : AsyncBackgroundJob<CompareDocumentsArgs>, ITr
         {
             var allDocs = rawByDocId.Values.ToList();
             // 三端点并行：算法服务契约保留 similarity/pricing/metadata 拆分（不合并），
-            // 单次最长 600s 串行总计 1800s → 并行后 wall-clock ≈ 单端点耗时
+            // 单次最长 600s 串行总计 1800s → 并行后 wall-clock ≈ 单端点耗时。
+            // similarity/metadata 携带招标文件（可选）用于「招标响应」标记与错别字降权；
+            // pricing 只针对投标文件（招标文件参与定价规律分析无意义）。
             var similarityDocs = tenderRaw != null
                 ? allDocs.Concat(new[] { tenderRaw }).ToList()
                 : allDocs;
             var similarityTask = _algoClient.AnalyzeSimilarityAsync(task.Id.ToString(), similarityDocs, cancellationToken);
             var pricingTask = _algoClient.AnalyzePricingAsync(task.Id.ToString(), allDocs, cancellationToken);
-            var metadataTask = _algoClient.AnalyzeMetadataAsync(task.Id.ToString(), allDocs, cancellationToken);
+            var metadataTask = _algoClient.AnalyzeMetadataAsync(task.Id.ToString(), similarityDocs, cancellationToken);
             await Task.WhenAll(similarityTask, pricingTask, metadataTask);
             algoEvidences = similarityTask.Result
                 .Concat(pricingTask.Result)
