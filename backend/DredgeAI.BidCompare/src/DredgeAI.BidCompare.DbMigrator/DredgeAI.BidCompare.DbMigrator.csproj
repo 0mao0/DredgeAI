@@ -31,6 +31,10 @@
 
   <ItemGroup>
     <PackageReference Include="Volo.Abp.Autofac" Version="8.3.0" />
+    <PackageReference Include="Microsoft.EntityFrameworkCore.Design" Version="8.0.4">
+      <PrivateAssets>all</PrivateAssets>
+      <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
+    </PackageReference>
     <ProjectReference Include="..\DredgeAI.BidCompare.Application.Contracts\DredgeAI.BidCompare.Application.Contracts.csproj" />
     <ProjectReference Include="..\DredgeAI.BidCompare.EntityFrameworkCore\DredgeAI.BidCompare.EntityFrameworkCore.csproj" />
   </ItemGroup>

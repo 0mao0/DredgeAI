@@ -7,6 +7,7 @@ using DredgeAI.BidCompare.Documents;
 using DredgeAI.BidCompare.Drafts;
 using DredgeAI.BidCompare.Evidences;
 using DredgeAI.BidCompare.Exports;
+using DredgeAI.BidCompare.AI;
 using Volo.Abp.Data;
 using Volo.Abp.DependencyInjection;
 using Volo.Abp.EntityFrameworkCore;
@@ -66,6 +67,7 @@ public class BidCompareDbContext :
     public DbSet<EvidenceItem> EvidenceItems { get; set; }
     public DbSet<ClauseTemplate> ClauseTemplates { get; set; }
     public DbSet<ExportJob> ExportJobs { get; set; }
+    public DbSet<AiUsageRecord> AiUsageRecords { get; set; }
 
     public BidCompareDbContext(DbContextOptions<BidCompareDbContext> options)
         : base(options)
@@ -162,6 +164,21 @@ public class BidCompareDbContext :
             b.Property(x => x.FileStorageKey).HasMaxLength(512);
             b.Property(x => x.Error).HasMaxLength(2048);
             b.HasIndex(x => x.TaskId);
+        });
+
+        builder.Entity<AiUsageRecord>(b =>
+        {
+            b.ToTable("BcAiUsageRecords");
+            b.ConfigureByConvention();
+            b.Property(x => x.Business).IsRequired().HasMaxLength(64);
+            b.Property(x => x.UsedConfig).IsRequired().HasMaxLength(128);
+            b.Property(x => x.UsedModel).IsRequired().HasMaxLength(128);
+            b.Property(x => x.ErrorMessage).HasMaxLength(2048);
+            b.Property(x => x.TextPreview).HasMaxLength(512);
+            b.HasIndex(x => x.CreationTime);
+            b.HasIndex(x => x.UsedConfig);
+            b.HasIndex(x => x.Business);
+            b.HasIndex(x => new { x.Success, x.CreationTime });
         });
     }
 }
