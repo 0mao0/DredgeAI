@@ -2,6 +2,7 @@
 // 仅在 web 端（user-web / admin-web）使用，app 端不应依赖此模块
 
 // 共享组件
+export { default as AppButton } from './components/AppButton.vue'
 export { default as AIChat } from './components/AIChat.vue'
 export { default as ChartContainer } from './components/ChartContainer.vue'
 export { default as DataSkeleton } from './components/DataSkeleton.vue'

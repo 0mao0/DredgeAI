@@ -55,9 +55,20 @@ body {
 .ant-btn-primary {
   background: @brand-primary !important;
   border-color: @brand-primary !important;
+  color: #fff !important;
+
   &:hover {
     background: @brand-primary-hover !important;
     border-color: @brand-primary-hover !important;
+    color: #fff !important;
+  }
+
+  &:disabled,
+  &.ant-btn-disabled {
+    background: @surface-hover !important;
+    border-color: @border-color !important;
+    color: @text-tertiary !important;
+    box-shadow: none !important;
   }
 }
 

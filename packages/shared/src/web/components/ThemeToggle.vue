@@ -3,24 +3,25 @@
     :title="isDark ? '切换亮色模式' : '切换暗色模式'"
     placement="bottomRight"
   >
-    <a-button
+    <AppButton
       class="theme-toggle"
       shape="circle"
-      size="small"
-      type="text"
+      size="sm"
+      variant="text"
       @click="toggleTheme"
     >
       <template #icon>
         <BulbFilled v-if="isDark" />
         <BulbOutlined v-else />
       </template>
-    </a-button>
+    </AppButton>
   </a-tooltip>
 </template>
 
 <script setup lang="ts">
 import { computed } from 'vue'
 import { BulbFilled, BulbOutlined } from '@ant-design/icons-vue'
+import AppButton from './AppButton.vue'
 import { useTheme } from '../composables/useTheme'
 
 const { currentTheme, toggleTheme } = useTheme()

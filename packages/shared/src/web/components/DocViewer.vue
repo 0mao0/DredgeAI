@@ -40,9 +40,9 @@
       <div v-if="renderMode === 'md'" class="doc-viewer__md">
         <div v-if="pagedMode" class="md-toolbar">
           <a-dropdown v-if="outline.length" trigger="click">
-            <a-button type="text" size="small" title="目录">
+            <AppButton variant="text" size="sm" title="目录">
               <UnorderedListOutlined />
-            </a-button>
+            </AppButton>
             <template #overlay>
               <div class="outline-panel">
                 <div
@@ -59,23 +59,23 @@
           </a-dropdown>
 
           <div class="md-toolbar__group">
-            <a-button type="text" size="small" :disabled="scale <= 0.5" @click="zoomOut">
+            <AppButton variant="text" size="sm" :disabled="scale <= 0.5" @click="zoomOut">
               <MinusOutlined />
-            </a-button>
+            </AppButton>
             <span class="md-toolbar__zoom" title="重置缩放" @click="scale = 1">{{ Math.round(scale * 100) }}%</span>
-            <a-button type="text" size="small" :disabled="scale >= 2" @click="zoomIn">
+            <AppButton variant="text" size="sm" :disabled="scale >= 2" @click="zoomIn">
               <PlusOutlined />
-            </a-button>
+            </AppButton>
           </div>
 
           <div class="md-toolbar__group">
-            <a-button type="text" size="small" :disabled="currentPage <= 1" @click="jumpToPage(currentPage - 1)">
+            <AppButton variant="text" size="sm" :disabled="currentPage <= 1" @click="jumpToPage(currentPage - 1)">
               <LeftOutlined />
-            </a-button>
+            </AppButton>
             <span class="md-toolbar__page">{{ currentPage }} / {{ pageCount }}</span>
-            <a-button type="text" size="small" :disabled="currentPage >= pageCount" @click="jumpToPage(currentPage + 1)">
+            <AppButton variant="text" size="sm" :disabled="currentPage >= pageCount" @click="jumpToPage(currentPage + 1)">
               <RightOutlined />
-            </a-button>
+            </AppButton>
           </div>
 
           <div class="md-toolbar__group md-toolbar__search">
@@ -89,12 +89,12 @@
             />
             <template v-if="searchText">
               <span class="md-toolbar__matches">{{ matchCount ? currentMatch + 1 : 0 }}/{{ matchCount }}</span>
-              <a-button type="text" size="small" :disabled="!matchCount" @click="prevMatch">
+              <AppButton variant="text" size="sm" :disabled="!matchCount" @click="prevMatch">
                 <ArrowUpOutlined />
-              </a-button>
-              <a-button type="text" size="small" :disabled="!matchCount" @click="nextMatch">
+              </AppButton>
+              <AppButton variant="text" size="sm" :disabled="!matchCount" @click="nextMatch">
                 <ArrowDownOutlined />
-              </a-button>
+              </AppButton>
             </template>
           </div>
         </div>
@@ -139,6 +139,7 @@
 </template>
 
 <script setup lang="ts">
+import AppButton from './AppButton.vue'
 import { ref, computed, watch, nextTick } from 'vue'
 import {
   FileTextOutlined,

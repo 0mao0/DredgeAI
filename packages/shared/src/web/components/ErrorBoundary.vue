@@ -6,8 +6,8 @@
       :sub-title="errorMessage"
     >
       <template #extra>
-        <a-button type="primary" @click="handleReload">{{ reloadLabel }}</a-button>
-        <a-button @click="handleReset">{{ retryLabel }}</a-button>
+        <AppButton variant="primary" @click="handleReload">{{ reloadLabel }}</AppButton>
+        <AppButton @click="handleReset">{{ retryLabel }}</AppButton>
       </template>
     </a-result>
   </template>
@@ -17,6 +17,7 @@
 <script setup lang="ts">
 import { ref, onErrorCaptured } from 'vue'
 import { t } from '@shared/core/i18n'
+import AppButton from './AppButton.vue'
 
 interface Props {
   title?: string
