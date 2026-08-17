@@ -11,5 +11,6 @@ public class BidCompareApplicationAutoMapperProfile : Profile
          * into multiple profile classes for a better organization. */
 
         CreateMap<Clauses.ClauseTemplate, ClauseTemplates.ClauseTemplateDto>();
+        CreateMap<AI.AiUsageRecord, AI.AiUsageRecordDto>();
     }
 }
