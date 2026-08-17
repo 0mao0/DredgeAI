@@ -24,7 +24,16 @@
         </a-tab-pane>
 
         <a-tab-pane key="ai" tab="AI对话" force-render>
-          <AIChat :messages="chatMessagesAIChat" empty-text="你好！可以针对所选标准向我提问。" @send="handleChat" />
+          <AIChat
+            v-if="chatEnabled"
+            :messages="chat.messages.value"
+            :loading="chat.loading.value"
+            :streaming-text="chat.streamingText.value"
+            :error="chat.error.value"
+            empty-text="你好！可以针对所选标准向我提问。"
+            @send="(text: string) => chat.send(text)"
+          />
+          <AIChat v-else :messages="chatMessagesAIChat" empty-text="你好！可以针对所选标准向我提问。" @send="handleChat" />
         </a-tab-pane>
       </a-tabs>
     </template>
@@ -32,7 +41,7 @@
 </template>
 
 <script setup lang="ts">
-import { AppButton, EmptyState, AIChat } from '@shared/web'
+import { AppButton, EmptyState, AIChat, createChatTransport, useAIChat } from '@shared/web'
 import { ref, watch, computed } from 'vue'
 import { message } from 'ant-design-vue'
 import DataSkeleton from '@shared/web/components/DataSkeleton.vue'
@@ -64,6 +73,9 @@ function handleSubmit(): void {
 const chatMessages = ref<InternalMessage[]>([
   { role: 'ai', content: '你好！可以针对所选标准向我提问。' },
 ])
+
+const chatEnabled = import.meta.env.VITE_AI_CHAT_ENABLED === 'true'
+const chat = useAIChat(createChatTransport(), [{ role: 'assistant', content: '你好！可以针对所选标准向我提问。' }])
 
 const chatMessagesAIChat = computed<ChatMessage[]>(() =>
   chatMessages.value.map((m) => ({
