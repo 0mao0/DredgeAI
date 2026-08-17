@@ -5,8 +5,12 @@ using System.Threading.Tasks;
 
 namespace DredgeAI.BidCompare.Analysis;
 
-/// <summary>发送给算法服务的单份 AnGIneer 原始产物（docId 为本系统文档 Guid 字符串；GraphJsonl 为 doc_blocks_graph.jsonl 原文；MetaJson 为 doc_blocks_graph_meta.json 原文）。</summary>
-public record AlgoRawDocument(string DocId, string GraphJsonl, string MetaJson);
+/// <summary>
+/// 发送给算法服务的单份 AnGIneer 原始产物（docId 为本系统文档 Guid 字符串；GraphJsonl 为
+/// doc_blocks_graph.jsonl 原文；MetaJson 为 doc_blocks_graph_meta.json 原文；
+/// Role 为 bid/tender，供 compare-algo 区分招标文件做「招标响应」标记）。
+/// </summary>
+public record AlgoRawDocument(string DocId, string GraphJsonl, string MetaJson, string Role = "bid");
 
 /// <summary>
 /// 算法服务返回的证据项（spec §6.1 Evidence 子集，aiGenerated 恒为 false 由本服务补充）。

@@ -122,6 +122,7 @@ public class HttpCompareAlgoClient : ICompareAlgoClient, ITransientDependency
             array.Add(new JsonObject
             {
                 ["docId"] = doc.DocId,
+                ["role"] = doc.Role,
                 ["blocks"] = blocks,
                 ["meta"] = JsonNode.Parse(doc.MetaJson) ?? new JsonObject()
             });

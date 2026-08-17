@@ -80,24 +80,22 @@ public class CompareDocumentsJob : AsyncBackgroundJob<CompareDocumentsArgs>, ITr
         var rawByDocId = new Dictionary<Guid, AlgoRawDocument>();
         foreach (var doc in bidDocs)
         {
-            var rawGraphKey = doc.IrStorageKey!.Replace("/ir.json", "/raw/doc_blocks_graph.jsonl", System.StringComparison.Ordinal);
-            var rawMetaKey = doc.IrStorageKey.Replace("/ir.json", "/raw/doc_blocks_graph_meta.json", System.StringComparison.Ordinal);
+            rawByDocId[doc.Id] = await ReadRawDocumentAsync(doc, "bid", cancellationToken);
+        }
 
-            // 逐份读取构建请求，单份读完即释放（算法契约需全文，无法流式，但不做全量驻留之外的重复缓冲）
-            string graphJsonl;
-            await using (var stream = await _fileStorage.GetAsync(rawGraphKey, cancellationToken))
-            using (var reader = new StreamReader(stream))
+        // 招标文件（可选）：解析成功才传给 similarity，用于局部雷同的「招标响应」标记；
+        // pricing/metadata 仍只针对投标文件（招标文件参与定价/元数据比对无意义）。
+        AlgoRawDocument? tenderRaw = null;
+        if (task.TenderDocumentId.HasValue)
+        {
+            var tenderDoc = await _documentRepository.FirstOrDefaultAsync(
+                d => d.Id == task.TenderDocumentId.Value
+                     && d.ParseStatus == DocumentParseStatus.Parsed,
+                cancellationToken: cancellationToken);
+            if (tenderDoc != null)
             {
-                graphJsonl = await reader.ReadToEndAsync(cancellationToken);
+                tenderRaw = await ReadRawDocumentAsync(tenderDoc, "tender", cancellationToken);
             }
-            string metaJson;
-            await using (var stream = await _fileStorage.GetAsync(rawMetaKey, cancellationToken))
-            using (var reader = new StreamReader(stream))
-            {
-                metaJson = await reader.ReadToEndAsync(cancellationToken);
-            }
-
-            rawByDocId[doc.Id] = new AlgoRawDocument(doc.Id.ToString(), graphJsonl, metaJson);
         }
 
         List<ComparePairItem> pairs;
@@ -137,7 +135,10 @@ public class CompareDocumentsJob : AsyncBackgroundJob<CompareDocumentsArgs>, ITr
             var allDocs = rawByDocId.Values.ToList();
             // 三端点并行：算法服务契约保留 similarity/pricing/metadata 拆分（不合并），
             // 单次最长 600s 串行总计 1800s → 并行后 wall-clock ≈ 单端点耗时
-            var similarityTask = _algoClient.AnalyzeSimilarityAsync(task.Id.ToString(), allDocs, cancellationToken);
+            var similarityDocs = tenderRaw != null
+                ? allDocs.Concat(new[] { tenderRaw }).ToList()
+                : allDocs;
+            var similarityTask = _algoClient.AnalyzeSimilarityAsync(task.Id.ToString(), similarityDocs, cancellationToken);
             var pricingTask = _algoClient.AnalyzePricingAsync(task.Id.ToString(), allDocs, cancellationToken);
             var metadataTask = _algoClient.AnalyzeMetadataAsync(task.Id.ToString(), allDocs, cancellationToken);
             await Task.WhenAll(similarityTask, pricingTask, metadataTask);
@@ -222,6 +223,33 @@ public class CompareDocumentsJob : AsyncBackgroundJob<CompareDocumentsArgs>, ITr
         task.UpdateProgress("analyzing", 80, "AI 分析中");
         await _taskRepository.UpdateAsync(task, autoSave: true, cancellationToken: cancellationToken);
         await _backgroundJobManager.EnqueueAsync(new AiAnalysisArgs { TaskId = args.TaskId });
+    }
+
+    private async Task<AlgoRawDocument> ReadRawDocumentAsync(
+        CompareDocument doc,
+        string role,
+        CancellationToken cancellationToken)
+    {
+        var rawGraphKey = doc.IrStorageKey!.Replace(
+            "/ir.json", "/raw/doc_blocks_graph.jsonl", System.StringComparison.Ordinal);
+        var rawMetaKey = doc.IrStorageKey.Replace(
+            "/ir.json", "/raw/doc_blocks_graph_meta.json", System.StringComparison.Ordinal);
+
+        // 逐份读取构建请求，单份读完即释放（算法契约需全文，无法流式，但不做全量驻留之外的重复缓冲）
+        string graphJsonl;
+        await using (var stream = await _fileStorage.GetAsync(rawGraphKey, cancellationToken))
+        using (var reader = new StreamReader(stream))
+        {
+            graphJsonl = await reader.ReadToEndAsync(cancellationToken);
+        }
+        string metaJson;
+        await using (var stream = await _fileStorage.GetAsync(rawMetaKey, cancellationToken))
+        using (var reader = new StreamReader(stream))
+        {
+            metaJson = await reader.ReadToEndAsync(cancellationToken);
+        }
+
+        return new AlgoRawDocument(doc.Id.ToString(), graphJsonl, metaJson, role);
     }
 
     private static double? ReadPairSimilarity(IReadOnlyList<AlgoEvidence> evidences, Guid docA, Guid docB)
