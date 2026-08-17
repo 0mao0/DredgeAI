@@ -72,7 +72,9 @@ AI_GATEWAY_INGEST_TOKEN=
 `LLM_CONFIGS`（JSON 数组）提供给 ai-gateway，网关负责多模型优先级路由、指数退避重试、
 熔断、截断守卫与 SSE 流式；ABP 仅经 `AI_GATEWAY_BASE_URL` 调用网关，不再直连模型。
 `AI_GATEWAY_API_TOKEN` / `AI_GATEWAY_INGEST_TOKEN` 为空表示开发环境关闭令牌校验；
-生产/共享环境必须配置并轮换（见 [docs/security/key-rotation.md](docs/security/key-rotation.md)）。
+生产/共享环境必须配置并轮换，上线前逐项核对
+[生产 .env 检查清单](docs/security/production-env-checklist.md) 与
+[密钥轮换手册](docs/security/key-rotation.md)。
 
 开发模式存储为本地文件（仓库根 `data/storage`），无需 MinIO；生产默认 S3/MinIO。
 运行时数据统一放在仓库根 `data/`（基础数据 / 业务文件 / PostgreSQL / 日志 / 备份），
