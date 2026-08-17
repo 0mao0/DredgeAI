@@ -3,6 +3,7 @@ import { overviewDocLabels } from '@shared/core/utils/compare'
 import request from '@/api/request'
 import { API_BASE_URL } from '@/utils/constants'
 import type {
+  BlockRange,
   ClauseItem,
   CompareDocMeta,
   CompareDraftDocument,
@@ -502,6 +503,31 @@ async function buildRefs(
           excerpt: block.text,
         })
       }
+    }
+  }
+  return refs
+}
+
+/** 按 blockId 列表取定位坐标（局部雷同片段高亮用）；bbox 缺失的块跳过。 */
+export async function getBlockRefs(
+  taskId: string,
+  docId: string,
+  blockIds: string[],
+): Promise<BlockRange[]> {
+  if (!blockIds.length) return []
+  const ir = await getIr(taskId, docId)
+  if (!ir) return []
+  const refs: BlockRange[] = []
+  for (const blockId of blockIds) {
+    const block = ir.blocks.find((b) => b.blockId === blockId)
+    if (block && hasValidBbox(block)) {
+      refs.push({
+        docId,
+        page: block.pageIdx + 1,
+        bbox: [block.bbox[0], block.bbox[1], block.bbox[2], block.bbox[3]],
+        pairId: `${docId}-${blockId}`,
+        excerpt: block.text,
+      })
     }
   }
   return refs
