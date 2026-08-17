@@ -13,10 +13,12 @@ $postgresDataDir = Join-Path $dataDir "postgres"
 $storageDir = Join-Path $dataDir "storage"
 $backupDir = Join-Path $dataDir "backup"
 $compareAlgoLogPath = Join-Path $logsDir "compare-algo.log"
+$aiGatewayLogPath = Join-Path $logsDir "ai-gateway.log"
 $backendLogPath = Join-Path $logsDir "backend.log"
 $frontendLogPath = Join-Path $logsDir "frontend.log"
 $adminLogPath = Join-Path $logsDir "admin-web.log"
 $compareAlgoPidPath = Join-Path $logsDir "compare-algo.pid"
+$aiGatewayPidPath = Join-Path $logsDir "ai-gateway.pid"
 $backendPidPath = Join-Path $logsDir "backend.pid"
 $frontendPidPath = Join-Path $logsDir "frontend.pid"
 $adminPidPath = Join-Path $logsDir "admin-web.pid"
@@ -30,6 +32,7 @@ if (Test-Path (Join-Path $localDotnetDir "dotnet.exe")) {
 # 端口约定
 $postgresPort = 5432
 $compareAlgoPort = 8100
+$aiGatewayPort = 8200
 $backendPort = 44361
 $frontendPort = 5373
 $adminPort = 5374
@@ -37,6 +40,7 @@ $angineerPort = 8790
 
 $backendUrl = "https://localhost:$backendPort"
 $compareAlgoUrl = "http://localhost:$compareAlgoPort"
+$aiGatewayUrl = "http://localhost:$aiGatewayPort"
 $frontendUrl = "http://localhost:$frontendPort"
 $adminUrl = "http://localhost:$adminPort"
 $angineerUrl = "http://localhost:$angineerPort"
@@ -44,6 +48,8 @@ $angineerUrl = "http://localhost:$angineerPort"
 # 关键路径
 $compareAlgoDir = Join-Path $rootDir "services\compare-algo"
 $compareAlgoPython = Join-Path $compareAlgoDir ".venv\Scripts\python.exe"
+$aiGatewayDir = Join-Path $rootDir "services\ai-gateway"
+$aiGatewayPython = Join-Path $aiGatewayDir ".venv\Scripts\python.exe"
 $backendProject = Join-Path $rootDir "backend\DredgeAI.BidCompare\src\DredgeAI.BidCompare.HttpApi.Host"
 $frontendDir = Join-Path $rootDir "user-web"
 $adminDir = Join-Path $rootDir "admin-web"
@@ -296,6 +302,11 @@ if (-not (Test-Path $compareAlgoPython)) {
 }
 Write-Host "  compare-algo venv OK" -ForegroundColor DarkGray
 
+if (-not (Test-Path $aiGatewayPython)) {
+    Write-Error "ai-gateway venv not found: $aiGatewayPython"; exit 1
+}
+Write-Host "  ai-gateway venv OK" -ForegroundColor DarkGray
+
 if (-not (Test-Path (Join-Path $frontendDir "package.json"))) {
     Write-Error "user-web not found: $frontendDir"; exit 1
 }
@@ -311,13 +322,14 @@ if (-not (Test-Path $logsDir)) {
 }
 
 if ($TailLogs) {
-    Watch-ServiceLogs -LogPaths @($backendLogPath, $compareAlgoLogPath, $frontendLogPath, $adminLogPath)
+    Watch-ServiceLogs -LogPaths @($backendLogPath, $compareAlgoLogPath, $aiGatewayLogPath, $frontendLogPath, $adminLogPath)
     exit 0
 }
 
 # 2. 清理旧进程（幂等重启）
 Write-Host "[2/5] Cleaning up stale processes..." -ForegroundColor Yellow
 Stop-PortProcess -Label "compare-algo" -Port $compareAlgoPort
+Stop-PortProcess -Label "ai-gateway" -Port $aiGatewayPort
 Stop-PortProcess -Label "Backend" -Port $backendPort
 Stop-PortProcess -Label "Frontend" -Port $frontendPort
 Stop-PortProcess -Label "Admin Web" -Port $adminPort
@@ -355,6 +367,7 @@ if (-not $postgresReady) {
 # 4. 启动服务
 Write-Host "[4/5] Starting services..." -ForegroundColor Yellow
 Write-Host "      compare-algo: $compareAlgoUrl" -ForegroundColor Green
+Write-Host "      ai-gateway:  $aiGatewayUrl" -ForegroundColor Green
 Write-Host "      Backend:      $backendUrl" -ForegroundColor Green
 Write-Host "      Frontend:     $frontendUrl" -ForegroundColor Green
 Write-Host "      Admin Web:    $adminUrl" -ForegroundColor Green
@@ -363,6 +376,11 @@ $escapedAlgoDir = $compareAlgoDir.Replace("'", "''")
 $escapedPython = $compareAlgoPython.Replace("'", "''")
 $compareAlgoCommand = "Set-Location '$escapedAlgoDir'; & '$escapedPython' -m uvicorn app.main:app --host 127.0.0.1 --port $compareAlgoPort"
 $compareAlgoProcess = Start-ServiceProcess -ServiceName "compare-algo" -ServiceCommand $compareAlgoCommand -LogPath $compareAlgoLogPath -PidPath $compareAlgoPidPath
+
+$escapedAiGatewayDir = $aiGatewayDir.Replace("'", "''")
+$escapedAiGatewayPython = $aiGatewayPython.Replace("'", "''")
+$aiGatewayCommand = "Set-Location '$escapedAiGatewayDir'; & '$escapedAiGatewayPython' -m uvicorn app.main:app --host 127.0.0.1 --port $aiGatewayPort"
+$aiGatewayProcess = Start-ServiceProcess -ServiceName "ai-gateway" -ServiceCommand $aiGatewayCommand -LogPath $aiGatewayLogPath -PidPath $aiGatewayPidPath
 
 $escapedProject = $backendProject.Replace("'", "''")
 $backendCommand = "`$env:PATH=`"`$env:LOCALAPPDATA\Microsoft\dotnet;`$env:PATH`"; dotnet run --project '$escapedProject' --launch-profile 'DredgeAI.BidCompare.HttpApi.Host'"
@@ -377,11 +395,12 @@ $adminCommand = "Set-Location '$escapedAdminDir'; pnpm dev"
 $adminProcess = Start-ServiceProcess -ServiceName "Admin Web" -ServiceCommand $adminCommand -LogPath $adminLogPath -PidPath $adminPidPath
 
 Write-Host "      Logs: $logsDir" -ForegroundColor DarkGray
-Write-Host "      Backend PID: $($backendProcess.Id), compare-algo PID: $($compareAlgoProcess.Id), frontend PID: $($frontendProcess.Id), admin-web PID: $($adminProcess.Id)" -ForegroundColor DarkGray
+Write-Host "      Backend PID: $($backendProcess.Id), compare-algo PID: $($compareAlgoProcess.Id), ai-gateway PID: $($aiGatewayProcess.Id), frontend PID: $($frontendProcess.Id), admin-web PID: $($adminProcess.Id)" -ForegroundColor DarkGray
 
 # 5. 健康检查
 Write-Host "[5/5] Waiting for services..." -ForegroundColor Yellow
 $compareAlgoHealthy = Test-HttpHealth -Label "compare-algo" -Url "$compareAlgoUrl/healthz" -TimeoutSeconds 60
+$aiGatewayHealthy = Test-HttpHealth -Label "ai-gateway" -Url "$aiGatewayUrl/healthz" -TimeoutSeconds 60
 $backendHealthy = Test-HttpHealth -Label "Backend" -Url "$backendUrl/swagger/v1/swagger.json" -TimeoutSeconds 180
 $frontendHealthy = Test-HttpHealth -Label "Frontend" -Url $frontendUrl -TimeoutSeconds 60
 $adminHealthy = Test-HttpHealth -Label "Admin Web" -Url $adminUrl -TimeoutSeconds 60
@@ -399,6 +418,7 @@ Write-Host "========================================" -ForegroundColor Cyan
 Write-Host "   Startup Summary" -ForegroundColor Cyan
 Write-Host "========================================" -ForegroundColor Cyan
 Write-Host ("  compare-algo {0}" -f $(if ($compareAlgoHealthy) { "OK" } else { "FAILED" })) -ForegroundColor $(if ($compareAlgoHealthy) { "Green" } else { "Red" })
+Write-Host ("  ai-gateway   {0}" -f $(if ($aiGatewayHealthy) { "OK" } else { "FAILED" })) -ForegroundColor $(if ($aiGatewayHealthy) { "Green" } else { "Red" })
 Write-Host ("  Backend      {0}" -f $(if ($backendHealthy) { "OK" } else { "FAILED" })) -ForegroundColor $(if ($backendHealthy) { "Green" } else { "Red" })
 Write-Host ("  Frontend     {0}" -f $(if ($frontendHealthy) { "OK" } else { "FAILED" })) -ForegroundColor $(if ($frontendHealthy) { "Green" } else { "Red" })
 Write-Host ("  Admin Web    {0}" -f $(if ($adminHealthy) { "OK" } else { "FAILED" })) -ForegroundColor $(if ($adminHealthy) { "Green" } else { "Red" })
