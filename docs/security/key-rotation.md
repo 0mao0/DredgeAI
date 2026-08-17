@@ -11,6 +11,7 @@
 | StringEncryption passphrase | `jyl2qtyBwbuwi7VE` | 已轮换为 .env 中新随机值（见下） | 已处理（本地） |
 | Storage 签名密钥 | `dev-only-signing-secret-change-me` | 已轮换为 .env 中新随机值 | 已处理（本地） |
 | AnGIneer / LLM API Key | 从未入库 | .env 提供 | 无风险 |
+| AI_GATEWAY_API_TOKEN / AI_GATEWAY_INGEST_TOKEN | 从未入库 | 仅 .env，网关与后端进程各持一份 | 见 3.6 |
 
 ## 2. 本地（开发机）已完成
 
@@ -48,6 +49,16 @@
 ### 3.5 AnGIneer / LLM API Key
 - 通过 `ANGINEER_API_KEY`、`LLM_API_KEY`、`LLM_ENDPOINT`、`LLM_MODEL` 注入，从未入库。
 - 如怀疑泄露，直接在供应商控制台吊销重建。
+
+> 说明：`LLM_API_KEY` / `LLM_ENDPOINT` / `LLM_MODEL` 已废弃，模型配置统一改为 ai-gateway 的
+> `LLM_CONFIGS`（JSON 数组）；`ANGINEER_API_KEY` 继续用于 AnGIneer 文档解析。
+
+### 3.6 网关与服务间令牌（`AI_GATEWAY_API_TOKEN` / `AI_GATEWAY_INGEST_TOKEN`）
+1. 生成随机值：`openssl rand -hex 32`。
+2. 写入 `.env`（或部署环境变量）：`AI_GATEWAY_API_TOKEN`（ABP→网关出站，`X-API-Key`）与
+   `AI_GATEWAY_INGEST_TOKEN`（网关→ABP 用量上报，`X-Gateway-Token`）各一份。
+3. 修改后重启 ai-gateway 与后端。
+4. 网关与后端之间的令牌不属于用户数据：禁止入库、禁止进日志（日志仅打印「已配置」）。
 
 ## 4. （可选）清除 git 历史中的旧凭据
 

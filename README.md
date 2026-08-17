@@ -33,7 +33,7 @@
 ## 快速启动
 
 前置依赖：Docker（PostgreSQL）、.NET 8 SDK、Node.js + pnpm、Python 3.11+（compare-algo
-虚拟环境）、本机 AnGIneer docs-api 服务（端口 8790，仅检测不托管）。
+与 ai-gateway 虚拟环境）、本机 AnGIneer docs-api 服务（端口 8790，仅检测不托管）。
 
 一键启动（幂等，重复运行等于重启）：
 
@@ -41,8 +41,8 @@
 .\start.ps1
 ```
 
-脚本会依次：清理 8100/44361/5373 残留进程 → 拉起 PostgreSQL Docker 容器 → 启动
-compare-algo、比标后端、用户端前端 → 健康检查。日志在 `logs/`，实时跟随用
+脚本会依次：清理 8100/8200/44361/5373 残留进程 → 拉起 PostgreSQL Docker 容器 → 启动
+compare-algo、ai-gateway、比标后端、用户端/管理端前端 → 健康检查。日志在 `logs/`，实时跟随用
 `.\start.ps1 -TailLogs`。
 
 | 服务 | 地址 | 说明 |
@@ -50,6 +50,7 @@ compare-algo、比标后端、用户端前端 → 健康检查。日志在 `logs
 | 用户端前端 | http://localhost:5373 | user-web |
 | 比标后端 | https://localhost:44361 | ABP 主服务，Swagger `/swagger` |
 | compare-algo | http://localhost:8100 | 比标算法服务 |
+| ai-gateway | http://localhost:8200 | AI 推理网关（多模型路由/重试/熔断/SSE） |
 | PostgreSQL | localhost:5432 | Docker 容器 `bidcompare-postgres` |
 | AnGIneer | http://localhost:8790 | 外部依赖（docs-api），脚本仅检测 |
 
@@ -59,15 +60,19 @@ compare-algo、比标后端、用户端前端 → 健康检查。日志在 `logs
 
 ```dotenv
 ANGINEER_API_KEY=xxx
-LLM_API_KEY=xxx
-# 可选覆盖：
-# LLM_ENDPOINT=https://ai.bim-ace.com/chat/v1
-# LLM_MODEL=Qwen3.6-35B-A3B-FP8
+# AI 推理网关（services/ai-gateway 消费 angineer-ai-inference@v0.1.0）
+LLM_CONFIGS='[{"name":"Qwen3.6-A3B","model":"Qwen3.6-35B-A3B-FP8","api_key":"xxx","base_url":"https://ai.bim-ace.com/chat/v1","enabled":true,"priority":1}]'
+AI_GATEWAY_BASE_URL=http://localhost:8200
+AI_GATEWAY_API_TOKEN=
+AI_GATEWAY_INGEST_TOKEN=
+# 可选：ANGINEER_* 超时/重试/熔断参数（见 angineer-ai-inference 文档）
 ```
 
-后端启动时自动读取 `.env` 并映射到 `AnGIneer:ApiKey` / `Llm:ApiKey`；LLM 的 Endpoint 与
-Model 默认在 `backend/DredgeAI.BidCompare/src/DredgeAI.BidCompare.HttpApi.Host/appsettings.json`
-的 `Llm` 节（当前为 Qwen3.6，OpenAI 兼容协议）。
+后端启动时自动读取 `.env` 并映射到 `AnGIneer:ApiKey` / `AiGateway:*`。LLM 模型配置统一由
+`LLM_CONFIGS`（JSON 数组）提供给 ai-gateway，网关负责多模型优先级路由、指数退避重试、
+熔断、截断守卫与 SSE 流式；ABP 仅经 `AI_GATEWAY_BASE_URL` 调用网关，不再直连模型。
+`AI_GATEWAY_API_TOKEN` / `AI_GATEWAY_INGEST_TOKEN` 为空表示开发环境关闭令牌校验；
+生产/共享环境必须配置并轮换（见 [docs/security/key-rotation.md](docs/security/key-rotation.md)）。
 
 开发模式存储为本地文件（仓库根 `data/storage`），无需 MinIO；生产默认 S3/MinIO。
 运行时数据统一放在仓库根 `data/`（基础数据 / 业务文件 / PostgreSQL / 日志 / 备份），
@@ -89,6 +94,10 @@ pnpm dev
 # compare-algo
 cd services\compare-algo
 uv run uvicorn app.main:app --host 127.0.0.1 --port 8100
+
+# ai-gateway
+cd services\ai-gateway
+uv run uvicorn app.main:app --host 127.0.0.1 --port 8200
 ```
 
 ## 测试
@@ -111,14 +120,15 @@ pnpm run typecheck
 
 创建比标任务 → 上传标书（role=0）与招标文件（role=1）→ AnGIneer 解析为
 `doc_blocks_graph.jsonl` + meta → 映射/校验内部 IR → compare-algo 产出相似度、报价规律、
-元数据一致性证据 →（可选）条款提取/确认 + LLM 条款响应判定与关键指标比选 →
+元数据一致性证据 →（可选）条款提取/确认 + 经 ai-gateway 的 LLM 条款响应判定与关键指标比选 →
 结果工作台（证据、相似度热力图、PDF 对照）→ 导出 docx/pdf。
 
 ### 比标模块已知限制
 
 - AnGIneer v1 产物接口目前只开放 graph/meta，`content.md` 与图片待其开放后自动随包下载。
 - 前端「招标条款提取/确认」UI 尚未接真实接口（后端 API 已就绪）。
-- LLM 未配置时 AI 分析自动降级为「暂不可用」，算法证据不受影响。
+- LLM 未配置（`LLM_CONFIGS` 为空）时 AI 分析自动降级为「暂不可用」，算法证据不受影响；
+  ai-gateway 未启动时 ABP 的 LLM 调用返回 `AiGatewayFailed`，AI 分析同样降级为暂不可用。
 
 ## 相关文档
 
