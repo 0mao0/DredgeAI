@@ -1,5 +1,7 @@
 # ai-gateway DredgeAI AI 推理网关
 
+**服务定位**：平台唯一 AI 推理网关（涉及 LLM 的必选基础套件）。ABP 的 `ILlmGateway` 与前端对话均经此转发，不直连模型。
+
 消费 `angineer-ai-inference@v0.1.0`，对外提供 OpenAI 兼容 chat 与 SSE 流式；多模型路由、重试、熔断由库负责。
 网关不持久化用量，经 `AI_GATEWAY_USAGE_REPORT_URL` 回传 ABP。
 

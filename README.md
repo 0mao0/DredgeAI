@@ -25,10 +25,41 @@
 |---|---|
 | `backend/DredgeAI.BidCompare` | ABP（.NET 8）主服务：比标任务状态机、AnGIneer 解析、算法调用、AI 分析、报告导出（含 ABP 身份/组织基础模块） |
 | `services/compare-algo` | 比标算法服务（Python）：similarity / pricing / metadata，无状态确定性计算 |
+| `services/ai-gateway` | AI 推理网关（Python）：唯一 LLM 入口，消费 angineer-ai-inference，提供 OpenAI 兼容 chat / SSE 流式 |
 | `user-web` | 用户端前端（Vue 3 + Vite + ant-design-vue） |
 | `admin-web` | 管理端前端 |
 | `packages/shared` | 跨端共享类型 / 组件 / 样式 |
 | `docs/superpowers/plans` | 需求与实现计划文档 |
+
+## AnGIneer 生态
+
+「AnGIneer」在仓库中对应三个不同形态，注意区分：
+
+| 名称 | 形态 | 位置 | 用途 |
+|---|---|---|---|
+| AnGIneer docs-api | 外部解析服务（:8790） | 仓库外 | PDF 解析为 `doc_blocks_graph.jsonl` + meta，ABP 经 `HttpAnGineerClient` 调用 |
+| angineer-docs-ui | git submodule | `vendor/angineer-docs-ui` | 前端文档展示组件库（`@angineer/docs-ui`），user-web 的 DocViewer / PDF_Viewer 消费 |
+| angineer-ai-inference | Python 库（v0.1.0） | ai-gateway 依赖 | LLM 推理库：多模型路由 / 重试 / 熔断 / SSE，ai-gateway 包装为 OpenAI 兼容接口 |
+
+```mermaid
+graph LR
+    subgraph 仓库外
+        API[AnGIneer docs-api<br/>PDF 解析服务 :8790]
+        LIB[angineer-ai-inference<br/>LLM 推理库]
+    end
+    subgraph 仓库内
+        UI[vendor/angineer-docs-ui<br/>文档展示组件库]
+        GW[services/ai-gateway<br/>唯一 LLM 入口]
+        BE[backend ABP 主服务]
+        FE[user-web / admin-web]
+    end
+    BE -->|解析 PDF → doc_blocks_graph.jsonl| API
+    FE -->|DocViewer / PDF_Viewer| UI
+    GW -->|多模型路由/重试/熔断/SSE| LIB
+    BE -->|ILlmGateway → HTTP| GW
+```
+
+> ai-gateway 是平台唯一 LLM 入口：ABP 的 `ILlmGateway` 与前端对话均经它转发，不直连模型。
 
 ## 快速启动
 
@@ -81,6 +112,9 @@ AI_GATEWAY_INGEST_TOKEN=
 目录约定见 [docs/data-architecture.md](docs/data-architecture.md)。
 
 ## 开发命令
+
+> 全链路一键启动的唯一入口是 `.\start.ps1`（PostgreSQL、compare-algo、ai-gateway、后端与双前端）；
+> 以下命令仅用于单服务调试，不作为平台启动入口。
 
 ```powershell
 # 比标后端（需先将 dotnet SDK 加入 PATH，或直接跑 start.ps1）

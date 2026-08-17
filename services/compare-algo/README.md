@@ -1,5 +1,7 @@
 # compare-algo 比标算法服务
 
+**服务定位**：平台「确定性算法」基础设施，不涉及 LLM；所有大模型推理统一走 ai-gateway。
+
 无状态确定性计算服务：消费 ABP 主服务转发的 AnGIneer 解析产物原文
 （`doc_blocks_graph.jsonl` 节点 + `doc_blocks_graph_meta.json` 的 `{docMeta, outlines, pages}`，
 本服务不直接对接 AnGIneer/MinerU），产出 `aiGenerated=false` 的 Evidence（similarity / pricing / metadata）。
