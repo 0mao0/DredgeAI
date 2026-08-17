@@ -17,9 +17,19 @@
         </template>
 
         <template v-else-if="column.key === 'content'">
-          <a-tooltip v-if="record.kind === 'passage'" :title="record.content" placement="topLeft">
-            <span class="unify-compare__text">{{ record.content }}</span>
-          </a-tooltip>
+          <div v-if="record.kind === 'passage'" class="unify-compare__passage-cell">
+            <span v-if="!expandedKeys.has(record.__key)" class="unify-compare__text">{{ record.content }}</span>
+            <span v-else class="unify-compare__full">{{ record.content }}</span>
+            <AppButton
+              v-if="record.content.length > 40"
+              variant="link"
+              size="sm"
+              class="unify-compare__toggle"
+              @click.stop="toggleExpand(record.__key)"
+            >
+              {{ expandedKeys.has(record.__key) ? '收起' : '展开' }}
+            </AppButton>
+          </div>
           <div v-else class="unify-compare__evidence">
             <div class="unify-compare__title">{{ record.content }}</div>
             <div class="unify-compare__summary">{{ record.detail }}</div>
@@ -128,7 +138,15 @@ const columns = [
 ]
 
 const locatingKeys = ref<Set<string>>(new Set())
+const expandedKeys = ref<Set<string>>(new Set())
 const refsCache = new Map<string, Promise<BlockRange[]>>()
+
+function toggleExpand(key: string): void {
+  const next = new Set(expandedKeys.value)
+  if (next.has(key)) next.delete(key)
+  else next.add(key)
+  expandedKeys.value = next
+}
 
 function cached(key: string, load: () => Promise<BlockRange[]>): Promise<BlockRange[]> {
   const hit = refsCache.get(key)
@@ -327,6 +345,23 @@ function typeText(t: EvidenceType): string {
     white-space: nowrap;
     font-size: @font-size-xs;
     color: @text-primary;
+  }
+
+  &__full {
+    display: block;
+    min-width: 280px;
+    max-width: 420px;
+    white-space: normal;
+    word-break: break-all;
+    font-size: @font-size-xs;
+    color: @text-primary;
+    line-height: 1.6;
+  }
+
+  &__toggle {
+    padding: 0;
+    height: auto;
+    font-size: @font-size-xs;
   }
 
   &__title {
