@@ -8,6 +8,7 @@ dependencies = [
     "uvicorn>=0.30",
     "pydantic>=2.7",
     "pydantic-settings>=2.0",
+    "python-dotenv>=1.0",
     "angineer-ai-inference @ git+https://github.com/0mao0/angineer-ai-inference.git@v0.1.0",
 ]
 
