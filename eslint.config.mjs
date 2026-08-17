@@ -51,7 +51,6 @@ export default antfu(
       '**/.venv/**',
       'docs/**',
       '**/*.log',
-      'dev.mjs',
       'pnpm-lock.yaml',
     ],
   },
