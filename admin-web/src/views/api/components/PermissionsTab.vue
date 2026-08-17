@@ -38,7 +38,7 @@
           {{ formatLimit(record, 'tokens') }}
         </template>
         <template v-else-if="column.key === 'action'">
-          <a-button type="link" size="small" @click="emit('editLimits', record)">编辑</a-button>
+          <AppButton variant="link" size="sm" @click="emit('editLimits', record)">编辑</AppButton>
         </template>
       </template>
     </a-table>
@@ -82,6 +82,7 @@
 </template>
 
 <script setup lang="ts">
+import { AppButton } from '@shared/web'
 import SectionCard from '@shared/web/components/SectionCard.vue'
 import { formatLimit } from '../utils'
 import type { MergedUserRecord, ModelLimitEntry } from '../types'

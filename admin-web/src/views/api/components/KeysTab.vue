@@ -1,10 +1,10 @@
 <template>
   <SectionCard nopad>
     <template #extra>
-      <a-button type="primary" size="small" @click="emit('openCreate')">
+      <AppButton variant="primary" size="sm" @click="emit('openCreate')">
         <PlusOutlined />
         添加模型
-      </a-button>
+      </AppButton>
     </template>
     <a-table
       size="small"
@@ -25,14 +25,14 @@
           {{ formatConsumption(record.consumption) }}
         </template>
         <template v-else-if="column.key === 'doc'">
-          <a-button type="link" size="small" @click="openDoc(record.docUrl)">
+          <AppButton variant="link" size="sm" @click="openDoc(record.docUrl)">
             <FileTextOutlined /> 文档
-          </a-button>
+          </AppButton>
         </template>
         <template v-else-if="column.key === 'action'">
-          <a-button type="link" size="small" @click="emit('edit', record)">编辑</a-button>
+          <AppButton variant="link" size="sm" @click="emit('edit', record)">编辑</AppButton>
           <a-popconfirm title="确认删除？" @confirm="emit('delete', record.id)">
-            <a-button type="link" size="small" danger>删除</a-button>
+            <AppButton variant="link" size="sm" danger>删除</AppButton>
           </a-popconfirm>
         </template>
       </template>
@@ -92,6 +92,7 @@
 </template>
 
 <script setup lang="ts">
+import { AppButton } from '@shared/web'
 import { PlusOutlined, FileTextOutlined } from '@ant-design/icons-vue'
 import SectionCard from '@shared/web/components/SectionCard.vue'
 import { formatConsumption } from '../utils'

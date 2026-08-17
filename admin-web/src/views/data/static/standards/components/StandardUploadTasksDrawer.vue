@@ -12,14 +12,14 @@
           <FilePdfOutlined class="task-drawer__icon" />
           <span class="task-drawer__name" :title="task.fileName">{{ task.fileName }}</span>
           <a-tag :color="taskTagColor(task.status)">{{ taskTagText(task.status) }}</a-tag>
-          <a-button
+          <AppButton
             v-if="task.status === 'preview_failed' || task.status === 'upload_failed'"
-            type="link"
-            size="small"
+            variant="link"
+            size="sm"
             @click="emit('retryTask', task.id)"
           >
             重试
-          </a-button>
+          </AppButton>
         </div>
         <a-progress
           v-if="task.status === 'previewing' || task.status === 'uploading'"
@@ -33,6 +33,7 @@
 </template>
 
 <script setup lang="ts">
+import { AppButton } from '@shared/web'
 import { FilePdfOutlined } from '@ant-design/icons-vue'
 import type { StandardUploadTask, UploadTaskStatus } from '../composables/useStandardUpload'
 

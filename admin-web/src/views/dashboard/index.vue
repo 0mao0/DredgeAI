@@ -2,7 +2,7 @@
   <div class="page-container">
     <PageHeader title="仪表盘" description="系统运营概览">
       <template #extra>
-        <a-button size="small" @click="refresh">刷新数据</a-button>
+        <AppButton size="sm" @click="refresh">刷新数据</AppButton>
       </template>
     </PageHeader>
 
@@ -13,7 +13,7 @@
       :sub-title="error.message"
     >
       <template #extra>
-        <a-button type="primary" @click="refresh">重新加载</a-button>
+        <AppButton variant="primary" @click="refresh">重新加载</AppButton>
       </template>
     </a-result>
 
@@ -60,6 +60,7 @@
 </template>
 
 <script setup lang="ts">
+import { AppButton } from '@shared/web'
 import { ref, computed } from 'vue'
 import PageHeader from '@shared/web/components/PageHeader.vue'
 import SectionCard from '@shared/web/components/SectionCard.vue'

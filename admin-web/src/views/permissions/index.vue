@@ -4,7 +4,7 @@
 
     <SectionCard title="角色列表" flush>
       <template #extra>
-        <a-button type="primary" size="small" @click="openCreateModal">新增角色</a-button>
+        <AppButton variant="primary" size="sm" @click="openCreateModal">新增角色</AppButton>
       </template>
       <a-table
         :data-source="roles"
@@ -23,16 +23,16 @@
             <span v-else>{{ record.appIds.length }} 项</span>
           </template>
           <template v-else-if="column.key === 'users'">
-            <a-button type="link" size="small" @click="openDrawer(record)">{{ record.userCount }} 人</a-button>
+            <AppButton variant="link" size="sm" @click="openDrawer(record)">{{ record.userCount }} 人</AppButton>
           </template>
           <template v-else-if="column.key === 'action'">
-            <a-button type="link" size="small" @click="openDrawer(record)">编辑</a-button>
+            <AppButton variant="link" size="sm" @click="openDrawer(record)">编辑</AppButton>
             <a-popconfirm
               title="确认删除该角色？"
               placement="left"
               @confirm="handleDelete(record.id)"
             >
-              <a-button type="link" size="small" danger>删除</a-button>
+              <AppButton variant="link" size="sm" danger>删除</AppButton>
             </a-popconfirm>
           </template>
         </template>
@@ -59,7 +59,7 @@
       @close="drawerVisible = false"
     >
       <template #extra>
-        <a-button type="primary" size="small" :loading="savingAll" @click="handleSaveAll">保存</a-button>
+        <AppButton variant="primary" size="sm" :loading="savingAll" @click="handleSaveAll">保存</AppButton>
       </template>
       <template v-if="drawerRole">
         <div class="drawer-name-row">
@@ -98,6 +98,7 @@
 </template>
 
 <script setup lang="ts">
+import { AppButton } from '@shared/web'
 import { ref, computed, onMounted, h } from 'vue'
 import { message } from 'ant-design-vue'
 import PageHeader from '@shared/web/components/PageHeader.vue'

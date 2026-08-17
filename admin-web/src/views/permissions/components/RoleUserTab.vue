@@ -7,7 +7,7 @@
         style="width: 200px"
         allow-clear
       />
-      <a-button type="primary" size="small" @click="showAddModal = true">新增人员</a-button>
+      <AppButton variant="primary" size="sm" @click="showAddModal = true">新增人员</AppButton>
     </div>
 
     <a-table
@@ -28,7 +28,7 @@
             placement="left"
             @confirm="emit('remove', record.id)"
           >
-            <a-button type="link" size="small" danger>移除</a-button>
+            <AppButton variant="link" size="sm" danger>移除</AppButton>
           </a-popconfirm>
         </template>
       </template>
@@ -51,6 +51,7 @@
 </template>
 
 <script setup lang="ts">
+import { AppButton } from '@shared/web'
 import { ref, computed } from 'vue'
 import { message } from 'ant-design-vue'
 import type { OrgUser, Role } from '@/types'

@@ -16,11 +16,11 @@
         </template>
         <template v-else-if="item.status === 'success'">
           <a-tag color="green">成功</a-tag>
-          <a-button type="link" size="small" @click="emit('view', item.id)">查看</a-button>
+          <AppButton variant="link" size="sm" @click="emit('view', item.id)">查看</AppButton>
         </template>
         <template v-else>
           <a-tag color="red">失败</a-tag>
-          <a-button type="link" size="small" @click="emit('retry', item.id)">重试</a-button>
+          <AppButton variant="link" size="sm" @click="emit('retry', item.id)">重试</AppButton>
           <span class="batch-parse__error" :title="item.error">{{ item.error }}</span>
         </template>
       </div>
@@ -29,6 +29,7 @@
 </template>
 
 <script setup lang="ts">
+import { AppButton } from '@shared/web'
 import type { StandardParseBatchItem } from '../types'
 
 defineProps<{

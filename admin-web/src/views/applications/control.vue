@@ -51,7 +51,7 @@
           </div>
         </template>
         <template v-else-if="column.key === 'setting'">
-          <a-button type="link" size="small" @click="openSetting(record)">设置</a-button>
+          <AppButton variant="link" size="sm" @click="openSetting(record)">设置</AppButton>
         </template>
       </template>
     </a-table>
@@ -86,6 +86,7 @@
 </template>
 
 <script setup lang="ts">
+import { AppButton } from '@shared/web'
 import { ref, computed, onMounted } from 'vue'
 import { message } from 'ant-design-vue'
 import PageHeader from '@shared/web/components/PageHeader.vue'

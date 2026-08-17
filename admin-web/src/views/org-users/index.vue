@@ -11,10 +11,10 @@
           allow-clear
           @search="handleSearch"
         />
-        <a-button size="small" :loading="refreshing" @click="handleRefresh">
+        <AppButton size="sm" :loading="refreshing" @click="handleRefresh">
           <ReloadOutlined />
           刷新
-        </a-button>
+        </AppButton>
       </div>
       <a-table
         :data-source="users"
@@ -36,7 +36,7 @@
                 </template>
                 <span v-else class="no-role-label">未分配</span>
               </span>
-              <a-button type="link" size="small" class="role-set-btn" @click="openRoleModal(record)"><SettingOutlined /></a-button>
+              <AppButton variant="link" size="sm" class="role-set-btn" @click="openRoleModal(record)"><SettingOutlined /></AppButton>
             </div>
           </template>
           <template v-else-if="column.key === 'action'">
@@ -72,6 +72,7 @@
 </template>
 
 <script setup lang="ts">
+import { AppButton } from '@shared/web'
 import { ref, onMounted } from 'vue'
 import { message } from 'ant-design-vue'
 import { ReloadOutlined, SettingOutlined } from '@ant-design/icons-vue'

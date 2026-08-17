@@ -1,8 +1,8 @@
 <template>
   <div class="page-container">
-    <a-button class="back-btn" type="link" size="small" @click="router.back()">
+    <AppButton class="back-btn" variant="link" size="sm" @click="router.back()">
       <ArrowLeftOutlined /> 返回
-    </a-button>
+    </AppButton>
     <PageHeader :title="appName" description="应用详情与配置" />
     <SectionCard title="基本信息">
       <EmptyState title="暂无信息" />
@@ -11,12 +11,13 @@
 </template>
 
 <script setup lang="ts">
+import { AppButton, EmptyState } from '@shared/web'
 import { ref, onMounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ArrowLeftOutlined } from '@ant-design/icons-vue'
 import PageHeader from '@shared/web/components/PageHeader.vue'
 import SectionCard from '@shared/web/components/SectionCard.vue'
-import { EmptyState } from '@shared/web'
+
 import type { ApplicationItem } from '@/types'
 import { getApplications } from '@/api/modules/applications'
 

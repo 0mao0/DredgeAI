@@ -2,10 +2,10 @@
   <div class="page-container" :class="{ 'api-page--keys': activeTab === 'keys', 'api-page--alerts': activeTab === 'alerts', 'api-page--permissions': activeTab === 'permissions', 'api-page--calls': activeTab === 'calls' }">
     <PageHeader title="API 管理" description="管理接入的模型、统计平台用量与配置用户限制">
       <template #extra>
-        <a-button v-if="activeTab === 'keys'" type="primary" size="small" @click="showCreateModal = true">
+        <AppButton v-if="activeTab === 'keys'" variant="primary" size="sm" @click="showCreateModal = true">
           <PlusOutlined />
           添加模型
-        </a-button>
+        </AppButton>
         <a-radio-group v-if="activeTab === 'alerts'" v-model:value="alertFilter" size="small" button-style="solid">
           <a-radio-button value="all">全部</a-radio-button>
           <a-radio-button value="calls">调用超限</a-radio-button>
@@ -17,10 +17,10 @@
     <a-tabs v-model:active-key="activeTab" class="api-tabs" :class="{ 'api-tabs--keys': activeTab === 'keys', 'api-tabs--alerts': activeTab === 'alerts', 'api-tabs--permissions': activeTab === 'permissions', 'api-tabs--calls': activeTab === 'calls', 'api-tabs--usage': activeTab === 'usage' }">
       <template #tabBarExtraContent>
         <a-space v-if="activeTab === 'keys'" :size="8">
-          <a-button type="primary" size="small" @click="showCreateModal = true">
+          <AppButton variant="primary" size="sm" @click="showCreateModal = true">
             <PlusOutlined />
             添加模型
-          </a-button>
+          </AppButton>
         </a-space>
         <a-space v-else-if="activeTab === 'calls'" :size="8">
           <a-input-search v-model:value="callUserKeyword" placeholder="搜索用户" allow-clear size="small" style="width:180px" />
@@ -132,6 +132,7 @@
 </template>
 
 <script setup lang="ts">
+import { AppButton } from '@shared/web'
 import { ref, computed, onMounted, watch } from 'vue'
 import { message } from 'ant-design-vue'
 import { PlusOutlined } from '@ant-design/icons-vue'

@@ -1,10 +1,10 @@
 <template>
   <div class="admin-voice-manager">
     <div class="admin-voice-manager__toolbar">
-      <a-button type="primary" @click="showAddModal = true">
+      <AppButton variant="primary" @click="showAddModal = true">
         <template #icon><PlusOutlined /></template>
         添加公有音色
-      </a-button>
+      </AppButton>
       <a-input-search
         v-model:value="query"
         placeholder="搜索音色名称 / 用户"
@@ -63,10 +63,10 @@
         </template>
         <template v-if="column.key === 'action'">
           <a-tooltip :title="record.sampleUrl ? '试听' : '暂无样本'">
-            <a-button type="link" size="small" :disabled="!record.sampleUrl" @click="playSample(record)">
+            <AppButton variant="link" size="sm" :disabled="!record.sampleUrl" @click="playSample(record)">
               <CustomerServiceOutlined v-if="playingId !== record.id" />
               <LoadingOutlined v-else spin />
-            </a-button>
+            </AppButton>
           </a-tooltip>
           <a-divider type="vertical" />
           <a-popconfirm
@@ -74,13 +74,13 @@
             title="确定删除此公有音色？"
             @confirm="handleDelete(record.id)"
           >
-            <a-button type="link" danger size="small">删除</a-button>
+            <AppButton variant="link" danger size="sm">删除</AppButton>
           </a-popconfirm>
           <a-tooltip v-else-if="!record.deletedByUser" title="用户未删除，受隐私限制不可彻底删除">
-            <a-button type="link" danger size="small" disabled>删除</a-button>
+            <AppButton variant="link" danger size="sm" disabled>删除</AppButton>
           </a-tooltip>
           <a-popconfirm v-else title="用户已删除，确定彻底移除此音色？" @confirm="handleDelete(record.id)">
-            <a-button type="link" danger size="small">删除</a-button>
+            <AppButton variant="link" danger size="sm">删除</AppButton>
           </a-popconfirm>
         </template>
       </template>
@@ -98,6 +98,7 @@
 </template>
 
 <script setup lang="ts">
+import { AppButton, VoiceRegisterModal } from '@shared/web'
 import { ref } from 'vue'
 import {
   PlusOutlined,
@@ -109,7 +110,6 @@ import {
 } from '@ant-design/icons-vue'
 import { message } from 'ant-design-vue'
 import type { VoiceItem } from '@/types'
-import { VoiceRegisterModal } from '@shared/web'
 
 defineProps<{ voices: VoiceItem[], loading?: boolean }>()
 

@@ -27,23 +27,23 @@
               <FilePdfOutlined class="upload-modal__icon" />
               <span class="upload-modal__name" :title="task.fileName">{{ task.fileName }}</span>
               <a-tag :color="taskTagColor(task.status)">{{ taskTagText(task.status) }}</a-tag>
-              <a-button
+              <AppButton
                 v-if="task.status === 'preview_failed'"
-                type="link"
-                size="small"
+                variant="link"
+                size="sm"
                 @click.stop="emit('retryTask', task.id)"
               >
                 重试
-              </a-button>
-              <a-button
-                type="text"
-                size="small"
+              </AppButton>
+              <AppButton
+                variant="text"
+                size="sm"
                 class="upload-modal__remove"
                 :disabled="task.status === 'uploading'"
                 @click.stop="emit('removeTask', task.id)"
               >
                 <DeleteOutlined />
-              </a-button>
+              </AppButton>
             </div>
           </template>
           <a-progress v-if="task.status === 'previewing'" :percent="task.progress" size="small" />
@@ -67,16 +67,17 @@
     <div class="upload-modal__footer">
       <span class="upload-modal__tip">AI 预读后请核对元数据，名称和编号必填</span>
       <a-space :size="8">
-        <a-button @click="emit('update:open', false)">取消</a-button>
-        <a-button type="primary" :disabled="readyCount === 0" @click="emit('submit')">
+        <AppButton @click="emit('update:open', false)">取消</AppButton>
+        <AppButton variant="primary" :disabled="readyCount === 0" @click="emit('submit')">
           上传（{{ readyCount }}）
-        </a-button>
+        </AppButton>
       </a-space>
     </div>
   </a-modal>
 </template>
 
 <script setup lang="ts">
+import { AppButton } from '@shared/web'
 import { computed, ref } from 'vue'
 import { DeleteOutlined, FilePdfOutlined, InboxOutlined } from '@ant-design/icons-vue'
 import StandardMetadataForm from './StandardMetadataForm.vue'

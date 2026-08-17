@@ -3,26 +3,26 @@
     <PageHeader title="标准规范" description="知识库标准规范的查询、解析与维护">
       <template #extra>
         <a-space :size="8">
-          <a-button v-if="uploadHasTasks" size="small" @click="uploadDrawerVisible = true">
+          <AppButton v-if="uploadHasTasks" size="sm" @click="uploadDrawerVisible = true">
             <CloudUploadOutlined />
             上传任务
             <a-badge :count="uploadRunningCount" :offset="[4, -2]" />
-          </a-button>
-          <a-button size="small" class="standards-header-refresh" :loading="refreshing" @click="handleRefresh">
+          </AppButton>
+          <AppButton size="sm" class="standards-header-refresh" :loading="refreshing" @click="handleRefresh">
             <ReloadOutlined />
             刷新
-          </a-button>
-          <a-button type="primary" @click="uploadModalVisible = true">
+          </AppButton>
+          <AppButton variant="primary" @click="uploadModalVisible = true">
             <UploadOutlined />
             上传文档
-          </a-button>
+          </AppButton>
         </a-space>
       </template>
     </PageHeader>
 
     <a-result v-if="error" status="error" title="加载失败" :sub-title="error">
       <template #extra>
-        <a-button type="primary" @click="fetchStandards">重试</a-button>
+        <AppButton variant="primary" @click="fetchStandards">重试</AppButton>
       </template>
     </a-result>
 
@@ -49,24 +49,24 @@
         <a-select v-model:value="query.publishYear" allow-clear placeholder="发布年份" style="width: 120px">
           <a-select-option v-for="year in yearOptions" :key="year" :value="year">{{ year }}</a-select-option>
         </a-select>
-        <a-button size="small" class="standards-filter-bar__reset" @click="handleReset">重置</a-button>
-        <a-button size="small" class="standards-filter-bar__refresh" style="display:none" :loading="refreshing" @click="handleRefresh">
+        <AppButton size="sm" class="standards-filter-bar__reset" @click="handleReset">重置</AppButton>
+        <AppButton size="sm" class="standards-filter-bar__refresh" style="display:none" :loading="refreshing" @click="handleRefresh">
           <ReloadOutlined />
           刷新
-        </a-button>
+        </AppButton>
       </div>
 
       <SectionCard nopad class="standards-table-card">
         <div v-if="selectedRowKeys.length" class="standards-batch-bar">
           <span class="standards-batch-bar__count">已选 {{ selectedRowKeys.length }} 条</span>
           <a-space :size="8">
-            <a-button size="small" @click="openBatchParse">批量解析</a-button>
+            <AppButton size="sm" @click="openBatchParse">批量解析</AppButton>
             <a-popconfirm
               title="确定删除选中的标准？"
               description="删除后不可恢复"
               @confirm="handleBatchDelete"
             >
-              <a-button size="small" danger>批量删除</a-button>
+              <AppButton size="sm" danger>批量删除</AppButton>
             </a-popconfirm>
           </a-space>
         </div>
@@ -99,10 +99,10 @@
             </template>
             <template v-else-if="column.key === 'action'">
               <div class="action-cell">
-                <a-button type="link" size="small" @click="openViewer(record)">查看</a-button>
-                <a-button type="link" size="small" @click="openParse(record)">解析</a-button>
+                <AppButton variant="link" size="sm" @click="openViewer(record)">查看</AppButton>
+                <AppButton variant="link" size="sm" @click="openParse(record)">解析</AppButton>
                 <a-popconfirm title="确认删除该标准？" placement="left" @confirm="handleDelete(record)">
-                  <a-button type="link" size="small" danger>删除</a-button>
+                  <AppButton variant="link" size="sm" danger>删除</AppButton>
                 </a-popconfirm>
               </div>
             </template>
@@ -119,10 +119,10 @@
       @close="resetViewer"
     >
       <template #extra>
-        <a-button size="small" @click="openEdit(viewerTarget)">
+        <AppButton size="sm" @click="openEdit(viewerTarget)">
           <InfoCircleOutlined />
           详情 / 编辑
-        </a-button>
+        </AppButton>
       </template>
       <div class="viewer-body">
         <StandardPdfViewer
@@ -253,6 +253,7 @@
 </template>
 
 <script setup lang="ts">
+import { AppButton } from '@shared/web'
 import { computed, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue'
 import { message } from 'ant-design-vue'
 import {

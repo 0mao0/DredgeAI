@@ -2,7 +2,7 @@
   <div class="page-container">
     <PageHeader title="应用管理" description="管理所有 AI 应用">
       <template #extra>
-        <a-button type="primary">新增应用</a-button>
+        <AppButton variant="primary">新增应用</AppButton>
       </template>
     </PageHeader>
     <SectionCard title="应用列表">
@@ -19,6 +19,7 @@
 </template>
 
 <script setup lang="ts">
+import { AppButton } from '@shared/web'
 import { ref, onMounted } from 'vue'
 import PageHeader from '@shared/web/components/PageHeader.vue'
 import SectionCard from '@shared/web/components/SectionCard.vue'

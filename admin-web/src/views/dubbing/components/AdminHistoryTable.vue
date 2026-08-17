@@ -31,13 +31,13 @@
         {{ formatTime(record.createdAt) }}
       </template>
       <template v-if="column.key === 'actions'">
-        <a-button type="link" size="small" :disabled="!(record.status === '已完成' && record.audioUrl)" @click="emit('play', record)">
+        <AppButton variant="link" size="sm" :disabled="!(record.status === '已完成' && record.audioUrl)" @click="emit('play', record)">
           <PlayCircleOutlined /> 播放
-        </a-button>
+        </AppButton>
         <a-tooltip :title="!record.deletedByUser ? '用户未删除，受隐私限制不可彻底删除' : ''">
-          <a-button type="link" size="small" danger :disabled="!record.deletedByUser" @click="emit('delete', record.id)">
+          <AppButton variant="link" size="sm" danger :disabled="!record.deletedByUser" @click="emit('delete', record.id)">
             <DeleteOutlined /> 删除
-          </a-button>
+          </AppButton>
         </a-tooltip>
       </template>
     </template>
@@ -45,6 +45,7 @@
 </template>
 
 <script setup lang="ts">
+import { AppButton } from '@shared/web'
 import { computed } from 'vue'
 import { PlayCircleOutlined, DeleteOutlined } from '@ant-design/icons-vue'
 import type { DubbingTask } from '@/types'
