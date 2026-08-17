@@ -17,4 +17,5 @@ public static class BidCompareErrorCodes
     public const string ExportJobNotFound = Namespace + "ExportJobNotFound";
     public const string ExportFailed = Namespace + "ExportFailed";
     public const string AlgoServiceFailed = Namespace + "AlgoServiceFailed";
+    public const string AiGatewayFailed = Namespace + "AiGatewayFailed";
 }

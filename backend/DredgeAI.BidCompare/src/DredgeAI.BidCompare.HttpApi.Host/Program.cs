@@ -49,9 +49,9 @@ public class Program
             var app = builder.Build();
 
 #if DEBUG
-            var llmOptions = app.Services.GetRequiredService<IOptions<LlmOptions>>().Value;
-            Log.Information("LLM config: endpoint={Endpoint}, model={Model}, apiKeySet={ApiKeySet}",
-                llmOptions.Endpoint, llmOptions.Model, !string.IsNullOrWhiteSpace(llmOptions.ApiKey));
+            var aiGatewayOptions = app.Services.GetRequiredService<IOptions<AiGatewayOptions>>().Value;
+            Log.Information("AI Gateway config: baseUrl={BaseUrl}, apiTokenSet={ApiTokenSet}",
+                aiGatewayOptions.BaseUrl, !string.IsNullOrWhiteSpace(aiGatewayOptions.ApiToken));
             var anGineerOptions = app.Services.GetRequiredService<IOptions<AnGineerOptions>>().Value;
             Log.Information("AnGIneer config: baseUrl={BaseUrl}, apiKeySet={ApiKeySet}",
                 anGineerOptions.BaseUrl, !string.IsNullOrWhiteSpace(anGineerOptions.ApiKey));
@@ -126,9 +126,9 @@ public class Program
     {
         var overrides = new Dictionary<string, string?>();
         MapEnv(overrides, "ANGINEER_API_KEY", "AnGIneer:ApiKey");
-        MapEnv(overrides, "LLM_API_KEY", "Llm:ApiKey");
-        MapEnv(overrides, "LLM_ENDPOINT", "Llm:Endpoint");
-        MapEnv(overrides, "LLM_MODEL", "Llm:Model");
+        MapEnv(overrides, "AI_GATEWAY_BASE_URL", "AiGateway:BaseUrl");
+        MapEnv(overrides, "AI_GATEWAY_API_TOKEN", "AiGateway:ApiToken");
+        MapEnv(overrides, "AI_GATEWAY_INGEST_TOKEN", "AiGateway:IngestToken");
         MapEnv(overrides, "BIDCOMPARE_DB_CONNECTION", "ConnectionStrings:Default");
         MapEnv(overrides, "STORAGE_S3_ACCESSKEY", "Storage:S3:AccessKey");
         MapEnv(overrides, "STORAGE_S3_SECRETKEY", "Storage:S3:SecretKey");

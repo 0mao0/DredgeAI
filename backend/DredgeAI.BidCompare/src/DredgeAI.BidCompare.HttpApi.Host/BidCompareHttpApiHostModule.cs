@@ -126,7 +126,7 @@ public class BidCompareHttpApiHostModule : AbpModule
         Configure<AnGineerPollOptions>(configuration.GetSection("AnGIneer"));
         Configure<AnGineerOptions>(configuration.GetSection("AnGIneer"));
         Configure<AlgoServiceOptions>(configuration.GetSection("AlgoService"));
-        Configure<LlmOptions>(configuration.GetSection("Llm"));
+        Configure<AiGatewayOptions>(configuration.GetSection("AiGateway"));
         Configure<ReportExportOptions>(configuration.GetSection("Export"));
         Configure<LibreOfficeOptions>(configuration.GetSection("LibreOffice"));
         Configure<WatchdogOptions>(configuration.GetSection("Watchdog"));
