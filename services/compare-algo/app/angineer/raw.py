@@ -144,13 +144,14 @@ class RawMeta(BaseModel):
 
 
 class RawDocumentEnvelope(BaseModel):
-    """请求体 documents 元素：{docId, blocks, meta}。"""
+    """请求体 documents 元素：{docId, blocks, meta, role?}。role 用于区分招标文件（tender）。"""
 
     model_config = ConfigDict(extra="ignore")
 
     docId: str = Field(min_length=1)  # opaque：ABP 文档 id
     blocks: list[RawBlock] = Field(min_length=1)
     meta: RawMeta
+    role: Literal["bid", "tender"] = "bid"
 
     @model_validator(mode="after")
     def _check_block_uid_unique(self) -> "RawDocumentEnvelope":

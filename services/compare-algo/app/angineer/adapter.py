@@ -132,6 +132,7 @@ def adapt_document(raw: RawDocumentEnvelope) -> IrDocument:
     meta = raw.meta.docMeta
     return IrDocument(
         docId=raw.docId,
+        role=raw.role,
         meta=IrMeta(
             fileName=meta.fileName,
             pageCount=meta.pageCount,

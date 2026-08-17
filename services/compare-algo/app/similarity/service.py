@@ -7,6 +7,7 @@ from app.settings import get_settings
 from app.similarity.align import PairSimilarityResult, align_document_pair
 from app.similarity.cluster import find_similarity_clusters
 from app.similarity.minhash import CandidatePair, build_block_index, find_candidate_pairs
+from app.similarity.passages import local_similarity_evidences
 
 EVIDENCE_MIN_SIMILARITY = 0.3   # 默认值文档；运行期以 settings 为准（低于该值不出证据）
 SEVERITY_HIGH = 0.8             # 默认值文档
@@ -96,16 +97,34 @@ def _matrix_only_evidence(
 
 
 def analyze_similarity(task_id: str, documents: list[IrDocument]) -> list[Evidence]:
+    covered_pairs: set[tuple[str, str]] = set()
+    evidences = _block_level_evidences(task_id, documents, covered_pairs)
+    # 局部雷同是块级查重的补充：块级已报告雷同的对（≥ evidence_min_similarity）
+    # 不再重复产出 passage 明细，避免双报；只补块级漏检的局部雷同（如 7% 场景）。
+    local_evidences = [
+        e for e in local_similarity_evidences(task_id, documents)
+        if tuple(sorted(e.docIds)) not in covered_pairs
+    ]
+    return local_evidences + evidences
+
+
+def _block_level_evidences(
+    task_id: str,
+    documents: list[IrDocument],
+    covered_pairs: set[tuple[str, str]],
+) -> list[Evidence]:
+    """块级查重（minhash/LSH + 对齐）与雷同簇；局部雷同由 passages 域单独产出。"""
     settings = get_settings()
-    index = build_block_index(documents)
+    bids = [d for d in documents if d.role != "tender"]
+    index = build_block_index(bids)
     pairs = find_candidate_pairs(index)
     by_doc_pair: dict[tuple[str, str], list[CandidatePair]] = {}
     for p in pairs:
         by_doc_pair.setdefault((p.doc_id_a, p.doc_id_b), []).append(p)
 
-    doc_map = {d.docId: d for d in documents}
-    ocr_ids = {d.docId: low_confidence_ocr_block_ids(d) for d in documents}
-    names = display_names(documents)
+    doc_map = {d.docId: d for d in bids}
+    ocr_ids = {d.docId: low_confidence_ocr_block_ids(d) for d in bids}
+    names = display_names(bids)
 
     results: list[PairSimilarityResult] = []
     for (a, b), group in sorted(by_doc_pair.items()):
@@ -116,15 +135,16 @@ def analyze_similarity(task_id: str, documents: list[IrDocument]) -> list[Eviden
         tuple(sorted((r.doc_id_a, r.doc_id_b))): r for r in results
     }
     all_results: list[PairSimilarityResult] = []
-    for i in range(len(documents)):
-        for j in range(i + 1, len(documents)):
-            a, b = documents[i].docId, documents[j].docId
+    for i in range(len(bids)):
+        for j in range(i + 1, len(bids)):
+            a, b = bids[i].docId, bids[j].docId
             key = tuple(sorted((a, b)))
             all_results.append(result_by_pair.get(key, PairSimilarityResult(a, b, 0.0, [])))
 
     evidences: list[Evidence] = []
     for r in all_results:
         if r.similarity >= settings.evidence_min_similarity and r.matches:
+            covered_pairs.add(tuple(sorted((r.doc_id_a, r.doc_id_b))))
             evidences.append(_pair_evidence(task_id, r, _is_ocr_suspect(r, ocr_ids), names))
         else:
             evidences.append(_matrix_only_evidence(task_id, r, names))

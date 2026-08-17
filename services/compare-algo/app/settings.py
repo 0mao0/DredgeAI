@@ -43,6 +43,9 @@ class Settings(BaseSettings):
     typo_ngram: int = 6            # 可疑异常 n-gram 长度
     typo_samples_max: int = 10     # 证据 samples/items 截断上限
 
+    # 局部雷同（跨块长公共子串）检测参数
+    passage_min_len: int = 20       # 最短公共片段（规范化字符数），低于该值不产出
+
 
 @lru_cache
 def get_settings() -> Settings:

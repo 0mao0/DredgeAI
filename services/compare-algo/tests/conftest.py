@@ -96,9 +96,11 @@ def make_raw_doc(
     author: str | None,
     created_at: str | None,
     blocks: list[dict],
+    role: str = "bid",
 ) -> dict:
     return {
         "docId": doc_id,
+        "role": role,
         "blocks": blocks,
         "meta": {
             "docMeta": {

@@ -93,10 +93,14 @@ def test_similarity_thresholds(monkeypatch, ir_docs):
         return _fake
 
     monkeypatch.setattr(service, "align_document_pair", fake_align(0.29))
-    below = analyze_similarity("task-threshold", ir_docs)  # <0.3 不出雷同证据，仅矩阵数值
-    assert len(below) == 3
-    assert all(e.metrics["matrixOnly"] is True for e in below)
-    assert all(e.metrics["similarity"] in (0.0, 0.29) for e in below)
+    below = analyze_similarity("task-threshold", ir_docs)  # <0.3 不出块级雷同证据，但局部雷同照常
+    matrix_only = [e for e in below if e.metrics.get("matrixOnly")]
+    passage = [e for e in below if e.metrics.get("kind") == "passage"]
+    assert len(matrix_only) == 3
+    assert all(e.metrics["similarity"] in (0.0, 0.29) for e in matrix_only)
+    # doc-a/doc-b 共享承诺段（≥20 字）→ 局部雷同补充检出，不受 0.3 块级阈值影响
+    assert len(passage) == 1
+    assert passage[0].docIds == ["doc-a", "doc-b"]
 
     monkeypatch.setattr(service, "align_document_pair", fake_align(0.31))
     evidences = analyze_similarity("task-threshold", ir_docs)

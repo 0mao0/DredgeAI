@@ -99,6 +99,7 @@ class IrDocument(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     docId: str = Field(min_length=1)  # opaque：ABP 文档 id
+    role: Literal["bid", "tender"] = "bid"
     meta: IrMeta
     pages: list[IrPage] = Field(min_length=1)
     outline: list[IrOutlineNode] = Field(default_factory=list)
