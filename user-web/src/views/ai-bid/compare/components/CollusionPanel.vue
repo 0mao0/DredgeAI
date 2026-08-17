@@ -7,7 +7,9 @@
             <tr>
               <th class="meta-table__head">字段</th>
               <th class="meta-table__head">一致值</th>
-              <th v-for="d in documents" :key="d.id" class="meta-table__head">{{ docLabel(documents, d.id) }}</th>
+              <th v-for="d in documents" :key="d.id" class="meta-table__head">
+                <DocBadge :label="docLabel(documents, d.id)" />
+              </th>
             </tr>
           </thead>
           <tbody>
@@ -39,6 +41,7 @@
 import { computed } from 'vue'
 import SectionCard from '@shared/web/components/SectionCard.vue'
 import EvidenceTable from './EvidenceTable.vue'
+import DocBadge from './DocBadge.vue'
 import { docLabel } from '../constants'
 import type { CompareDocMeta, EvidenceItem } from '@/types'
 

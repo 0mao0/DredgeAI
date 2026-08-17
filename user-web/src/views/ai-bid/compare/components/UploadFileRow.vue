@@ -20,29 +20,30 @@
     <span v-else class="upload-row__pending">等待上传</span>
 
     <span v-if="item.error" class="upload-row__error" :title="item.error">{{ item.error }}</span>
-    <a-button
+    <AppButton
       v-if="item.status === 'error'"
-      type="link"
-      size="small"
+      variant="link"
+      size="sm"
       class="upload-row__retry"
       :disabled="disabled"
       @click="emit('retry')"
     >
       重试
-    </a-button>
-    <a-button
-      type="text"
-      size="small"
+    </AppButton>
+    <AppButton
+      variant="text"
+      size="sm"
       class="upload-row__remove"
       :disabled="disabled || item.status === 'uploading'"
       @click="emit('remove')"
     >
       <DeleteOutlined />
-    </a-button>
+    </AppButton>
   </div>
 </template>
 
 <script setup lang="ts">
+import { AppButton } from '@shared/web'
 import {
   CheckCircleFilled,
   CloseCircleFilled,

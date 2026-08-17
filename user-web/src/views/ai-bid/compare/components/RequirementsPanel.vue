@@ -4,9 +4,9 @@
       <span>招标要求 <span class="req-panel__count">{{ local.length }}</span></span>
     </template>
     <template #extra>
-      <a-button size="small" @click="addRow">
+      <AppButton size="sm" @click="addRow">
         <PlusOutlined />添加要求
-      </a-button>
+      </AppButton>
     </template>
 
     <div class="req-panel__list">
@@ -17,24 +17,25 @@
           <a-textarea v-model:value="c.content" :rows="2" placeholder="要求内容" />
         </div>
         <a-tag class="req-row__cat">{{ c.category }}</a-tag>
-        <a-button type="text" size="small" danger @click="local.splice(i, 1)">
+        <AppButton variant="text" size="sm" danger @click="local.splice(i, 1)">
           <DeleteOutlined />
-        </a-button>
+        </AppButton>
       </div>
       <a-empty v-if="!local.length" description="未提取到要求，可手动添加" />
     </div>
 
     <div class="req-panel__footer">
       <span class="req-panel__hint">提取自招标文件，修改后保存生效</span>
-      <a-button type="primary" size="small" :loading="saving" :disabled="!local.length" @click="emit('save', local)">
+      <AppButton variant="primary" size="sm" :loading="saving" :disabled="!local.length" @click="emit('save', local)">
         保存要求
-      </a-button>
+      </AppButton>
     </div>
   </SectionCard>
 </template>
 
 <script setup lang="ts">
 import { ref, watch } from 'vue'
+import { AppButton } from '@shared/web'
 import { DeleteOutlined, PlusOutlined } from '@ant-design/icons-vue'
 import SectionCard from '@shared/web/components/SectionCard.vue'
 import type { ClauseItem } from '@/types'

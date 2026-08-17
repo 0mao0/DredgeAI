@@ -54,6 +54,7 @@ export const urls = {
   compareTaskDocumentFile: '/compare/tasks/:id/documents/:docId/file',
   compareTaskReparse: '/compare/tasks/:id/documents/reparse',
   compareTaskCompareRetry: '/compare/tasks/:id/compare/retry',
+  compareTaskAiRetry: '/compare/tasks/:id/ai/retry',
   compareTaskName: '/compare/tasks/:id/name',
   compareTaskIr: '/compare/tasks/:id/ir/:docId',
   compareTaskEvidences: '/compare/tasks/:id/evidences',

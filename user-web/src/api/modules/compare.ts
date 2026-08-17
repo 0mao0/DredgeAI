@@ -341,6 +341,16 @@ export async function retryCompare(id: string, pairIds?: string[], silent = fals
   return mapTask(dto, documents)
 }
 
+export async function retryAiAnalysis(id: string, silent = false): Promise<CompareTask> {
+  const dto = await request.post<CompareTaskDto>(
+    fillUrl(urls.compareTaskAiRetry, { id }),
+    undefined,
+    silentConfig(silent),
+  )
+  const documents = await getDocuments(id, silent)
+  return mapTask(dto, documents)
+}
+
 export async function updateTaskName(id: string, name: string, silent = false): Promise<CompareTask> {
   const dto = await request.put<CompareTaskDto>(
     fillUrl(urls.compareTaskName, { id }),

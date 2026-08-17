@@ -9,11 +9,14 @@
     <div class="evidence-card__head">
       <a-tag :color="SEVERITY_META[evidence.severity].color">{{ SEVERITY_META[evidence.severity].label }}</a-tag>
       <a-tag :color="EVIDENCE_TYPE_META[evidence.type].color">{{ EVIDENCE_TYPE_META[evidence.type].label }}</a-tag>
-      <span class="evidence-card__docs">{{ docLabels }}</span>
       <span class="evidence-card__spacer" />
-      <a-tooltip title="点击卡片溯源">
-        <SearchOutlined class="evidence-card__trace-icon" />
-      </a-tooltip>
+      <span class="evidence-card__docs">
+        <DocBadge
+          v-for="id in evidence.docIds"
+          :key="id"
+          :label="docLabel(documents ?? [], id)"
+        />
+      </span>
     </div>
     <div class="evidence-card__title">{{ displayTitle }}</div>
     <div class="evidence-card__desc">{{ displaySummary }}</div>
@@ -47,7 +50,10 @@
             <span class="evidence-card__ref-index">#{{ group.index }}</span>
             <div class="evidence-card__ref-group-body">
               <div v-for="refItem in group.refs" :key="refItem.docId" class="evidence-card__ref-item">
-                <span class="evidence-card__ref-meta">{{ docLabel(documents ?? [], refItem.docId) }} · 第 {{ refItem.page }} 页</span>
+                <span class="evidence-card__ref-meta">
+                  <DocBadge :label="docLabel(documents ?? [], refItem.docId)" />
+                  第 {{ refItem.page }} 页
+                </span>
                 <span class="evidence-card__ref-excerpt" :title="refItem.excerpt">{{ refItem.excerpt || '（无原文片段）' }}</span>
               </div>
               <div v-if="!group.refs.length" class="evidence-card__ref-empty">{{ group.text || '该处暂无原文片段与定位坐标' }}</div>
@@ -62,8 +68,8 @@
 
 <script setup lang="ts">
 import { computed, ref } from 'vue'
-import { SearchOutlined } from '@ant-design/icons-vue'
 import { EVIDENCE_TYPE_META, SEVERITY_META, evidenceMetricLines } from '../evidenceMetrics'
+import DocBadge from './DocBadge.vue'
 import { docLabel } from '../constants'
 import type { BlockRange, CompareDocMeta, EvidenceItem } from '@/types'
 
@@ -133,10 +139,6 @@ const displayGroups = computed(() => {
   }
   return groups
 })
-
-const docLabels = computed(() =>
-  props.evidence.docIds.map((id) => docLabel(props.documents ?? [], id)).join(' / '),
-)
 </script>
 
 <style scoped lang="less">
@@ -167,17 +169,13 @@ const docLabels = computed(() =>
   }
 
   &__docs {
-    font-size: @font-size-xs;
-    color: @text-tertiary;
+    display: inline-flex;
+    align-items: center;
+    gap: @spacing-xs;
   }
 
   &__spacer {
     flex: 1;
-  }
-
-  &__trace-icon {
-    color: @text-tertiary;
-    font-size: @font-size-sm;
   }
 
   &__title {
@@ -236,6 +234,9 @@ const docLabels = computed(() =>
     }
 
     &__ref-meta {
+      display: inline-flex;
+      align-items: center;
+      gap: @spacing-xs;
       flex-shrink: 0;
       color: @text-tertiary;
       white-space: nowrap;

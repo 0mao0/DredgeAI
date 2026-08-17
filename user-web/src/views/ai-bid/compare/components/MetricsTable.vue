@@ -5,7 +5,9 @@
         <thead>
           <tr>
             <th class="metrics-table__head">指标</th>
-            <th v-for="d in documents" :key="d.id" class="metrics-table__head">{{ docLabel(documents, d.id) }}</th>
+            <th v-for="d in documents" :key="d.id" class="metrics-table__head">
+              <DocBadge :label="docLabel(documents, d.id)" />
+            </th>
           </tr>
         </thead>
         <tbody>
@@ -23,6 +25,7 @@
 
 <script setup lang="ts">
 import SectionCard from '@shared/web/components/SectionCard.vue'
+import DocBadge from './DocBadge.vue'
 import { docLabel } from '../constants'
 import type { CompareDocMeta } from '@/types'
 

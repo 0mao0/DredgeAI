@@ -81,15 +81,16 @@
         </span>
         <span v-else class="upload-page__hint">上传失败可在行内重试，全部失败不会进入工作区</span>
 
-        <a-button type="primary" size="large" :loading="creating" :disabled="bidCount < 2" @click="emit('start')">
+        <AppButton variant="primary" size="lg" :loading="creating" :disabled="bidCount < 2" @click="emit('start')">
           开始分析
-        </a-button>
+        </AppButton>
       </div>
     </div>
   </div>
 </template>
 
 <script setup lang="ts">
+import { AppButton } from '@shared/web'
 import {
   ExclamationCircleOutlined,
   DownOutlined,

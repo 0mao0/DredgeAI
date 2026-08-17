@@ -25,7 +25,13 @@
           <a-tag :color="typeColor(record.type)">{{ typeText(record.type) }}</a-tag>
         </template>
         <template v-else-if="column.dataIndex === 'docIds'">
-          {{ (record.docIds as string[]).map((id) => docLabel(documents ?? [], id)).join(' / ') }}
+          <span class="evidence-table__docs">
+            <DocBadge
+              v-for="id in record.docIds as string[]"
+              :key="id"
+              :label="docLabel(documents ?? [], id)"
+            />
+          </span>
         </template>
         <template v-else-if="column.dataIndex === 'title'">
           <div class="evidence-table__title">{{ record.title }}</div>
@@ -41,8 +47,8 @@
           </a-tag>
         </template>
         <template v-else-if="column.dataIndex === 'action'">
-          <a-button type="link" size="small" @click.stop="emit('jump', record)">查看</a-button>
-          <a-button type="link" size="small" @click.stop="emit('trace', record)">溯源</a-button>
+          <AppButton variant="link" size="sm" @click.stop="emit('jump', record)">查看</AppButton>
+          <AppButton variant="link" size="sm" @click.stop="emit('trace', record)">溯源</AppButton>
         </template>
       </template>
     </a-table>
@@ -51,8 +57,10 @@
 
 <script setup lang="ts">
 import { ref, computed } from 'vue'
+import { AppButton } from '@shared/web'
 import SectionCard from '@shared/web/components/SectionCard.vue'
 import { evidenceMetricLines } from '../evidenceMetrics'
+import DocBadge from './DocBadge.vue'
 import { docLabel } from '../constants'
 import type { CompareDocMeta, EvidenceItem, EvidenceType, RiskLevel } from '@/types'
 
@@ -91,7 +99,7 @@ const typeOptions = [
 const columns = computed(() => [
   ...(props.hideTypeFilter ? [] : [{ title: '类型', dataIndex: 'type', width: 90 }]),
   { title: '严重度', dataIndex: 'severity', width: 90 },
-  { title: '涉及文档', dataIndex: 'docIds', width: 110 },
+  { title: '涉及文档', dataIndex: 'docIds', width: 150 },
   { title: '证据', dataIndex: 'title' },
   { title: '置信度', dataIndex: 'confidence', width: 90 },
   { title: '来源', dataIndex: 'source', width: 90 },
@@ -180,6 +188,12 @@ function metricHint(record: EvidenceItem): string {
   font-size: @font-size-xs;
   color: @brand-primary;
   text-align: left;
+}
+
+.evidence-table__docs {
+  display: inline-flex;
+  align-items: center;
+  gap: @spacing-xs;
 }
 
 :deep(.evidence-table__row--clickable) {

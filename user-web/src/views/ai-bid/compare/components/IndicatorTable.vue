@@ -10,12 +10,17 @@
         :locale="{ emptyText: '暂无指标数据（AI 指标抽取未完成或不可用）' }"
         :scroll="{ x: 900 }"
       >
+        <template #headerCell="{ column }">
+          <template v-if="column.dataIndex !== 'indicator' && column.dataIndex !== 'action'">
+            <DocBadge :label="String(column.title)" />
+          </template>
+        </template>
         <template #bodyCell="{ column, record }">
           <template v-if="column.dataIndex === 'indicator'">
             <span class="indicator-table__name">{{ record.name }}</span>
           </template>
           <template v-else-if="column.dataIndex === 'action'">
-            <a-button type="link" size="small" @click="emit('trace', record.evidence)">溯源</a-button>
+            <AppButton variant="link" size="sm" @click="emit('trace', record.evidence)">溯源</AppButton>
           </template>
           <template v-else>
             {{ record.cells[column.dataIndex] ?? '—' }}
@@ -28,7 +33,9 @@
 
 <script setup lang="ts">
 import { computed } from 'vue'
+import { AppButton } from '@shared/web'
 import SectionCard from '@shared/web/components/SectionCard.vue'
+import DocBadge from './DocBadge.vue'
 import { docLabel } from '../constants'
 import type { CompareDocMeta, EvidenceItem } from '@/types'
 

@@ -11,6 +11,24 @@ export const COMPARE_STATUS_MAP: Record<CompareTaskStatus, { color: string, text
   failed: { color: 'red', text: '失败' },
 }
 
+/** 比标文档别名（A~H）标签色板，与现有风险/状态色系保持一致。 */
+const DOC_BADGE_COLORS: Record<string, string> = {
+  A: '#2563EB',
+  B: '#0EA5E9',
+  C: '#F59E0B',
+  D: '#8B5CF6',
+  E: '#10B981',
+  F: '#EF4444',
+  G: '#D97706',
+  H: '#3B82F6',
+}
+
+/** 取别名标签底色：A~H 取专属色，其余（招标/未知）回落品牌色。 */
+export function docBadgeColor(label: string): string {
+  const key = (label || '').trim().charAt(0).toUpperCase()
+  return DOC_BADGE_COLORS[key] ?? '#0EA5E9'
+}
+
 export function isTerminalStatus(status: CompareTaskStatus): boolean {
   return status === 'completed' || status === 'partial' || status === 'failed'
 }

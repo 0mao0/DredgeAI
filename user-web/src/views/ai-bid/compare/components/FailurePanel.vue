@@ -6,10 +6,10 @@
       <SectionCard title="失败文档" flush>
         <div v-if="failedDocs.length" class="failure-list">
           <div v-for="d in failedDocs" :key="d.id" class="failure-list__row">
-            <span class="failure-list__label">{{ docLabel(task.documents, d.id) }}</span>
+            <DocBadge :label="docLabel(task.documents, d.id)" />
             <span class="failure-list__name" :title="d.fileName">{{ d.fileName }}</span>
             <span class="failure-list__error" :title="d.failReason">{{ d.failReason }}</span>
-            <a-button type="link" size="small" @click="emit('reparseDoc', d.id)">重新解析</a-button>
+            <AppButton variant="link" size="sm" @click="emit('reparseDoc', d.id)">重新解析</AppButton>
           </div>
         </div>
         <a-empty v-else description="无失败文档（算法服务失败）" />
@@ -20,24 +20,24 @@
       </div>
 
       <div class="failure-panel__actions">
-        <a-button
+        <AppButton
           v-if="failedDocs.length"
-          size="large"
+          size="lg"
           :loading="reparseAllLoading"
           @click="emit('reparseAll')"
         >
           重新解析失败文档
-        </a-button>
-        <a-button
-          type="primary"
-          size="large"
+        </AppButton>
+        <AppButton
+          variant="primary"
+          size="lg"
           :disabled="parsedBidCount < 2"
           :loading="retryingCompare"
           @click="emit('retryCompare')"
         >
           重新对比
-        </a-button>
-        <a-button size="large" @click="emit('back')">返回上传</a-button>
+        </AppButton>
+        <AppButton size="lg" @click="emit('back')">返回上传</AppButton>
       </div>
     </div>
   </div>
@@ -45,8 +45,10 @@
 
 <script setup lang="ts">
 import { computed } from 'vue'
+import { AppButton } from '@shared/web'
 import { ExclamationCircleOutlined } from '@ant-design/icons-vue'
 import SectionCard from '@shared/web/components/SectionCard.vue'
+import DocBadge from './DocBadge.vue'
 import { docLabel } from '../constants'
 import type { CompareTask } from '@/types'
 
@@ -104,12 +106,6 @@ const reason = computed(() =>
     align-items: center;
     gap: @spacing-sm;
     font-size: @font-size-sm;
-  }
-
-  &__label {
-    flex-shrink: 0;
-    font-weight: @font-weight-semibold;
-    color: @text-primary;
   }
 
   &__name {

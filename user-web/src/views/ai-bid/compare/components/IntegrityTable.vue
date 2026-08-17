@@ -21,14 +21,14 @@
           <span v-else class="doc-table__ok">正常</span>
         </template>
         <template v-else-if="column.dataIndex === 'action'">
-          <a-button
-            type="link"
-            size="small"
+          <AppButton
+            variant="link"
+            size="sm"
             :disabled="record.parseStatus !== 'done'"
             @click="emit('jump', record.id, 1)"
           >
             定位
-          </a-button>
+          </AppButton>
         </template>
       </template>
     </a-table>
@@ -40,6 +40,7 @@
 
 <script setup lang="ts">
 import { computed } from 'vue'
+import { AppButton } from '@shared/web'
 import SectionCard from '@shared/web/components/SectionCard.vue'
 import type { CompareDocMeta } from '@/types'
 

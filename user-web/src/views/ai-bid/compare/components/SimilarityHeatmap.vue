@@ -11,6 +11,7 @@
 import { computed } from 'vue'
 import { use } from 'echarts/core'
 import { HeatmapChart } from 'echarts/charts'
+import { VisualMapComponent } from 'echarts/components'
 import SectionCard from '@shared/web/components/SectionCard.vue'
 import ChartContainer from '@shared/web/components/ChartContainer.vue'
 import { useChartTheme } from '@shared/web/composables/useChartTheme'
@@ -25,13 +26,55 @@ const emit = defineEmits<{
   cellClick: [pair: { docA: string, docB: string }]
 }>()
 
-use([HeatmapChart])
+use([HeatmapChart, VisualMapComponent])
 
 const { chartTheme } = useChartTheme()
 const successColor = useCssVar('--color-success')
 const warningColor = useCssVar('--color-warning')
 const dangerColor = useCssVar('--color-danger')
 const borderColor = useCssVar('--color-border')
+const textColor = useCssVar('--color-text-secondary')
+
+const BADGE_LETTERS = ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H'] as const
+
+function badgeToken(label: string): string {
+  const letter = (label || '').trim().charAt(0).toUpperCase()
+  return (BADGE_LETTERS as readonly string[]).includes(letter) ? letter : 'A'
+}
+
+function badgeFormatter(value: string): string {
+  const token = badgeToken(value)
+  return `{spine${token}| }{cover${token}|${value}}`
+}
+
+function badgeRich(): Record<string, unknown> {
+  const border = borderColor.value || '#A8A29E'
+  const text = textColor.value || '#78716C'
+  return Object.fromEntries(BADGE_LETTERS.flatMap((l) => [
+    [`spine${l}`, {
+      backgroundColor: 'transparent',
+      borderColor: border,
+      borderWidth: 1,
+      width: 3,
+      height: 20,
+      borderRadius: [2, 0, 0, 2],
+    }],
+    [`cover${l}`, {
+      backgroundColor: 'transparent',
+      borderColor: border,
+      borderWidth: 1,
+      color: text,
+      padding: [2, 5],
+      fontSize: 12,
+      fontWeight: 600,
+      align: 'center',
+      verticalAlign: 'middle',
+      height: 20,
+      lineHeight: 16,
+      borderRadius: [0, 4, 4, 0],
+    }],
+  ]))
+}
 
 function heatmapValue(p: unknown): [number, number, number] | null {
   const raw = (p as { data?: unknown }).data
@@ -39,24 +82,40 @@ function heatmapValue(p: unknown): [number, number, number] | null {
   return Array.isArray(d) && d.length >= 3 ? (d as [number, number, number]) : null
 }
 
+function cellColor(v: number): string {
+  if (v >= 0.5) return dangerColor.value || '#EF4444'
+  if (v >= 0.2) return warningColor.value || '#F59E0B'
+  return successColor.value || '#10B981'
+}
+
 const option = computed(() => {
   const t = chartTheme()
-  const data: [number, number, number][] = []
+  const data: { value: [number, number, number], itemStyle: { color: string } }[] = []
   const diagonalData: [number, number, number][] = []
   props.matrix.forEach((row, y) => {
     row.forEach((v, x) => {
       if (x === y) diagonalData.push([x, y, v])
-      else data.push([x, y, v])
+      else data.push({ value: [x, y, v], itemStyle: { color: cellColor(v) } })
     })
   })
   return {
     grid: { left: 40, right: 16, bottom: 8, top: 8 },
+    visualMap: {
+      show: false,
+      min: 0,
+      max: 1,
+      inRange: { color: ['#10B981', '#F59E0B', '#EF4444'] },
+    },
     xAxis: {
       type: 'category',
       data: props.labels,
       axisLine: { show: false },
       axisTick: { show: false },
-      axisLabel: { color: t.axisColor },
+      axisLabel: {
+        color: t.axisColor,
+        formatter: badgeFormatter,
+        rich: badgeRich(),
+      },
       splitArea: { show: true },
     },
     yAxis: {
@@ -65,7 +124,11 @@ const option = computed(() => {
       inverse: true,
       axisLine: { show: false },
       axisTick: { show: false },
-      axisLabel: { color: t.axisColor },
+      axisLabel: {
+        color: t.axisColor,
+        formatter: badgeFormatter,
+        rich: badgeRich(),
+      },
       splitArea: { show: true },
     },
     tooltip: {
@@ -83,23 +146,13 @@ const option = computed(() => {
       {
         type: 'heatmap',
         data,
-        itemStyle: {
-          color: (p: unknown) => {
-            const d = heatmapValue(p)
-            if (!d || d[0] === d[1]) return 'transparent'
-            const v = d[2]
-            if (v >= 0.5) return dangerColor.value
-            if (v >= 0.2) return warningColor.value
-            return successColor.value
-          },
-        },
         label: {
           show: true,
           formatter: (p: unknown) => {
             const d = heatmapValue(p)
             if (!d || d[0] === d[1]) return ''
             const pct = Math.round(d[2] * 100)
-            if (pct === 0) return '不相似'
+            if (pct === 0) return '不相似 0%'
             if (pct <= 20) return `低度相似 ${pct}%`
             if (pct <= 40) return `中度相似 ${pct}%`
             return `高度相似 ${pct}%`

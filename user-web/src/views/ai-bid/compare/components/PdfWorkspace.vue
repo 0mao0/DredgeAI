@@ -12,7 +12,7 @@
             <template #tab>
               <span class="pdf-workspace__tab" @click="onManualTab">
                 <a-tag v-if="d.role === 'tender'" class="pdf-workspace__tender">招标</a-tag>
-                <template v-else>{{ docLabel(documents, d.id) }}</template>
+                <DocBadge v-else :label="docLabel(documents, d.id)" />
               </span>
             </template>
           </a-tab-pane>
@@ -26,7 +26,20 @@
             class="pdf-workspace__select"
             :options="docOptions"
             @change="onManualTab"
-          />
+          >
+            <template #optionLabel="opt">
+              <span class="pdf-workspace__option">
+                <DocBadge :label="docLabel(documents, String(opt.value))" />
+                <span class="pdf-workspace__option-name" :title="String(opt.label)">{{ opt.label }}</span>
+              </span>
+            </template>
+            <template #option="{ value }">
+              <span class="pdf-workspace__option">
+                <DocBadge :label="docLabel(documents, value)" />
+                <span class="pdf-workspace__option-name" :title="docName(value)">{{ docName(value) }}</span>
+              </span>
+            </template>
+          </a-select>
         </div>
         <div class="pdf-workspace__select-col">
           <a-select
@@ -35,15 +48,28 @@
             class="pdf-workspace__select"
             :options="docOptions"
             @change="onManualTab"
-          />
+          >
+            <template #optionLabel="opt">
+              <span class="pdf-workspace__option">
+                <DocBadge :label="docLabel(documents, String(opt.value))" />
+                <span class="pdf-workspace__option-name" :title="String(opt.label)">{{ opt.label }}</span>
+              </span>
+            </template>
+            <template #option="{ value }">
+              <span class="pdf-workspace__option">
+                <DocBadge :label="docLabel(documents, value)" />
+                <span class="pdf-workspace__option-name" :title="docName(value)">{{ docName(value) }}</span>
+              </span>
+            </template>
+          </a-select>
         </div>
       </div>
 
       <a-tooltip :title="singlePane ? '展开双栏对比' : '收起为单栏'">
-        <a-button size="small" type="text" class="pdf-workspace__toggle" :class="{ 'pdf-workspace__toggle--center': !singlePane }" @click="singlePane = !singlePane">
+        <AppButton size="sm" variant="text" class="pdf-workspace__toggle" :class="{ 'pdf-workspace__toggle--center': !singlePane }" @click="singlePane = !singlePane">
           <ExpandOutlined v-if="singlePane" />
           <CompressOutlined v-else />
-        </a-button>
+        </AppButton>
       </a-tooltip>
     </div>
 
@@ -75,8 +101,10 @@
 
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue'
+import { AppButton } from '@shared/web'
 import { CompressOutlined, ExpandOutlined } from '@ant-design/icons-vue'
 import PdfViewer from './PdfViewer.vue'
+import DocBadge from './DocBadge.vue'
 import { docLabel } from '../constants'
 import type { BlockRange, CompareDocMeta, EvidenceItem } from '@/types'
 
@@ -99,7 +127,7 @@ const leftHigh = ref<BlockRange[]>([])
 const rightHigh = ref<BlockRange[]>([])
 
 const docOptions = computed(() =>
-  props.documents.map((d) => ({ value: d.id, label: `${docLabel(props.documents, d.id)} · ${d.fileName}` })),
+  props.documents.map((d) => ({ value: d.id, label: d.fileName })),
 )
 
 watch(() => props.documents, (docs) => {
@@ -270,6 +298,21 @@ defineExpose({ locate, locateRefs, locateDoc, focusDoc })
     min-width: 0;
 
   flex-shrink: 0;
+}
+
+.pdf-workspace__option {
+  display: inline-flex;
+  align-items: center;
+  gap: @spacing-sm;
+  min-width: 0;
+  max-width: 100%;
+}
+
+.pdf-workspace__option-name {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .pdf-workspace__toggle {

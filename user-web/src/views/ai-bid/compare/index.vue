@@ -21,12 +21,12 @@
           <UploadOutlined v-else />
           <span>{{ creating ? '上传完成，正在创建任务并开始解析…' : `正在上传文件 ${uploadedCount}/${uploadItems.length}` }}</span>
         </div>
-        <a-button size="small" :disabled="creating" @click="backToUpload()">返回上传页</a-button>
+        <AppButton size="sm" :disabled="creating" @click="backToUpload()">返回上传页</AppButton>
       </div>
 
       <div v-if="finalizeError" class="compare-uploading__error">
         <a-alert type="error" :message="finalizeError" show-icon />
-        <a-button size="small" type="primary" @click="finalizeTask()">重试</a-button>
+        <AppButton size="sm" variant="primary" @click="finalizeTask()">重试</AppButton>
       </div>
 
       <div class="compare-uploading__list">
@@ -46,7 +46,6 @@
       <div class="compare-workspace__bar">
         <div
           class="compare-workspace__name"
-          @mouseenter="startEditName"
           @mouseleave="cancelEditName"
         >
           <template v-if="projectNameVisible">
@@ -54,6 +53,7 @@
               v-if="!editingName"
               class="compare-workspace__name-title"
               title="悬停编辑项目名"
+              @mouseenter="startEditName"
             >{{ task.name }}</span>
             <template v-else>
               <a-input
@@ -64,25 +64,25 @@
                 @input="nameDraftTouched = true"
                 @press-enter="saveName"
               />
-              <a-button
-                size="small"
-                type="primary"
+              <AppButton
+                size="sm"
+                variant="primary"
                 :loading="nameSaving"
                 :disabled="!canConfirmName"
                 @click="saveName"
               >
                 保存
-              </a-button>
-              <a-button size="small" :disabled="nameSaving" @click="cancelEditName">取消</a-button>
+              </AppButton>
+              <AppButton size="sm" :disabled="nameSaving" @click="cancelEditName">取消</AppButton>
               <span v-if="nameError" class="compare-workspace__name-error">{{ nameError }}</span>
             </template>
           </template>
         </div>
 
         <!--
-          <a-button size="small">
+          <AppButton size="sm">
             <HistoryOutlined />历史任务
-          </a-button>
+          </AppButton>
           <template #overlay>
             <a-menu class="compare-workspace__history" @click="onHistoryClick">
               <a-menu-item v-for="t in historyTasks" :key="t.id">
@@ -101,15 +101,15 @@
           :open="exportMenuVisible"
           @open-change="exportMenuVisible = $event"
         >
-          <a-button
-            size="small"
-            type="primary"
+          <AppButton
+            size="sm"
+            variant="primary"
             :disabled="!canExport"
             :loading="exporting"
             @click.prevent
           >
             <DownloadOutlined />导出
-          </a-button>
+          </AppButton>
           <template #overlay>
             <a-menu @click="onExportMenuClick">
               <a-menu-item key="docx">Word 报告（.docx）</a-menu-item>
@@ -120,15 +120,15 @@
         -->
 
         <a-tooltip :title="workspaceCollapsed ? '展开左侧面板' : '收起左侧面板'">
-          <a-button size="small" @click="workspaceCollapsed = !workspaceCollapsed">
+          <AppButton size="sm" variant="text" @click="workspaceCollapsed = !workspaceCollapsed">
             <ExpandOutlined v-if="workspaceCollapsed" />
             <CompressOutlined v-else />
-          </a-button>
+          </AppButton>
         </a-tooltip>
 
-        <a-button size="small" @click="resetToUpload()">
+        <AppButton size="sm" @click="resetToUpload()">
           <PlusOutlined />新建任务
-        </a-button>
+        </AppButton>
       </div>
 
       <div v-if="connectionLost" class="compare-workspace__banner">
@@ -170,10 +170,12 @@
             :reparse-all-loading="reparseAllLoading"
             :retrying-pair-ids="retryingPairIds"
             :retrying-compare="retryingCompare"
+            :retrying-ai="retryingAi"
             @reparse-doc="onReparseDoc"
             @reparse-all="onReparseAll"
             @retry-pair="onRetryPair"
             @retry-compare="onRetryCompare"
+            @retry-ai="onRetryAi"
             @extract-clauses="onExtractClauses"
             @confirm-clauses="onConfirmClauses"
             @locate="onLocateEvidence"
@@ -198,15 +200,15 @@
               :open="exportMenuVisible"
               @open-change="exportMenuVisible = $event"
             >
-              <a-button
-                size="small"
-                type="primary"
+              <AppButton
+                size="sm"
+                variant="primary"
                 :disabled="!canExport"
                 :loading="exporting"
                 @click.prevent
               >
                 <DownloadOutlined />导出报告
-              </a-button>
+              </AppButton>
               <template #overlay>
                 <a-menu @click="onExportMenuClick">
                   <a-menu-item key="docx">Word 报告（.docx）</a-menu-item>
@@ -225,6 +227,7 @@
 
 <script setup lang="ts">
 import { computed, nextTick, onMounted, onUnmounted, ref, watch } from 'vue'
+import { AppButton } from '@shared/web'
 import { useRoute } from 'vue-router'
 import { message } from 'ant-design-vue'
 import {
@@ -259,6 +262,7 @@ import {
   getTasks,
   reparseTask,
   retryCompare,
+  retryAiAnalysis,
   startParse,
   uploadDraftDocument,
   updateTaskName,
@@ -293,6 +297,7 @@ const reparseDocIds = ref<string[]>([])
 const reparseAllLoading = ref(false)
 const retryingPairIds = ref<string[]>([])
 const retryingCompare = ref(false)
+const retryingAi = ref(false)
 const resultsLoading = ref(false)
 const exporting = ref(false)
 const exportError = ref('')
@@ -785,6 +790,19 @@ async function onRetryCompare(): Promise<void> {
     message.error('重新对比提交失败，请稍后再试')
   } finally {
     retryingCompare.value = false
+  }
+}
+
+async function onRetryAi(): Promise<void> {
+  if (!task.value || retryingAi.value) return
+  retryingAi.value = true
+  try {
+    task.value = await retryAiAnalysis(task.value.id)
+    startPoll()
+  } catch {
+    message.error('重新抽取提交失败，请稍后再试')
+  } finally {
+    retryingAi.value = false
   }
 }
 

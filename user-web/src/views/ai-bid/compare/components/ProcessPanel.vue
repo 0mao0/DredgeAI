@@ -6,9 +6,9 @@
         <span class="process-panel__partial-text">
           已跳过 {{ failedDocs.length }} 份失败文档，其余结果不受影响
         </span>
-        <a-button size="small" :loading="reparseAllLoading" @click="emit('reparseAll')">
+        <AppButton size="sm" :loading="reparseAllLoading" @click="emit('reparseAll')">
           重新解析失败文档
-        </a-button>
+        </AppButton>
       </div>
 
       <section
@@ -17,68 +17,85 @@
         class="trace-stage"
         :class="{ 'trace-stage--collapsed': isCollapsed(stage.key) }"
       >
-        <button
-          type="button"
-          class="trace-stage__head"
-          :class="{ 'trace-stage__head--active': !isStageDone(stage.key) }"
-          @click="toggleStage(stage.key)"
-        >
-          <span class="trace-stage__index">{{ index + 1 }}</span>
-          <span class="trace-stage__title">{{ stage.title }}</span>
-          <span class="trace-stage__summary">{{ summaryOf(stage.key) }}</span>
-          <span class="trace-stage__spacer" />
-          <a-tag :color="metaOf(stage.key).color" class="trace-stage__tag">{{ metaOf(stage.key).text }}</a-tag>
-          <DownOutlined
-            v-if="isStageDone(stage.key)"
-            class="trace-stage__chevron"
-            :class="{ 'trace-stage__chevron--collapsed': isCollapsed(stage.key) }"
-          />
-        </button>
+        <div class="trace-stage__head-wrap">
+          <div
+            role="button"
+            tabindex="0"
+            class="trace-stage__head"
+            :class="{ 'trace-stage__head--active': !isStageDone(stage.key) }"
+            @click="toggleStage(stage.key)"
+            @keydown.enter="toggleStage(stage.key)"
+            @keydown.space.prevent="toggleStage(stage.key)"
+          >
+            <span class="trace-stage__index">{{ index + 1 }}</span>
+            <span class="trace-stage__title">{{ stage.title }}</span>
+            <span class="trace-stage__summary">{{ summaryOf(stage.key) }}</span>
+            <span class="trace-stage__spacer" />
+            <AppButton
+              v-if="stage.key === 'compare' && canRetryCompare"
+              size="sm"
+              variant="secondary"
+              class="trace-stage__retry"
+              :loading="retryingCompare"
+              @click.stop="emit('retryCompare')"
+            >
+              重新对比
+            </AppButton>
+            <a-tag :color="metaOf(stage.key).color" class="trace-stage__tag">{{ metaOf(stage.key).text }}</a-tag>
+            <DownOutlined
+              v-if="isStageDone(stage.key)"
+              class="trace-stage__chevron"
+              :class="{ 'trace-stage__chevron--collapsed': isCollapsed(stage.key) }"
+            />
+          </div>
+        </div>
 
         <div v-show="!isCollapsed(stage.key)" class="trace-stage__body">
           <template v-if="stage.key === 'parse'">
             <div class="process-list">
-              <div v-for="d in task.documents" :key="d.id" class="process-row">
-                <span class="process-row__label">{{ docLabel(task.documents, d.id) }}</span>
+              <div
+                v-for="d in parseDocuments"
+                :key="d.id"
+                class="process-row"
+              >
+                <DocBadge
+                  v-if="d.role !== 'tender'"
+                  :label="docLabel(task.documents, d.id)"
+                />
                 <a-tag v-if="d.role === 'tender'" class="process-row__tender">招标</a-tag>
                 <template v-if="d.parseStatus === 'parsing'">
-                  <div class="process-row__parse">
-                    <div class="process-row__parse-head">
-                      <a-spin size="small" />
-                      <span class="process-row__name" :title="d.fileName">{{ d.fileName }}</span>
-                      <span class="process-row__elapsed">解析中 · {{ elapsedText(d) }}</span>
-                    </div>
-                    <div class="process-row__parse-meta">
-                      <a-progress
-                        class="process-row__parse-bar"
-                        :percent="docParsePercent(d)"
-                        :show-info="false"
-                        size="small"
-                      />
-                      <span class="process-row__step" :title="stepText(d)">{{ stepText(d) }}</span>
-                      <span class="process-row__percent">{{ docParsePercent(d) }}%</span>
-                    </div>
-                  </div>
+                  <span class="process-row__name" :title="d.fileName">{{ d.fileName }}</span>
+                  <a-progress
+                    class="process-row__parse-bar"
+                    :percent="docParsePercent(d)"
+                    :show-info="false"
+                    size="small"
+                  />
+                  <span class="process-row__step" :title="stepText(d)">{{ stepText(d) }}</span>
+                  <span class="process-row__percent">{{ docParsePercent(d) }}%</span>
+                  <span class="process-row__elapsed">已用 {{ elapsedText(d) }}</span>
+                  <a-spin size="small" />
                 </template>
                 <template v-else>
-                  <CheckCircleFilled v-if="d.parseStatus === 'done'" class="process-row__ok" />
-                  <CloseCircleFilled v-else-if="d.parseStatus === 'failed'" class="process-row__bad" />
-                  <span v-else class="process-row__wait">等待</span>
                   <span class="process-row__name" :title="d.fileName">{{ d.fileName }}</span>
+                  <span class="process-row__spacer" />
                   <span v-if="d.pages" class="process-row__pages">{{ d.pages }} 页</span>
                   <span v-if="parseDurationText(d)" class="process-row__done-time">
                     解析耗时 {{ parseDurationText(d) }}
                   </span>
                   <span v-if="d.failReason" class="process-row__error" :title="d.failReason">{{ d.failReason }}</span>
-                  <a-button
+                  <AppButton
                     v-if="d.parseStatus === 'failed'"
-                    type="link"
-                    size="small"
+                    variant="link"
+                    size="sm"
                     :loading="reparseDocIds.includes(d.id)"
                     @click="emit('reparseDoc', d.id)"
                   >
                     重新解析
-                  </a-button>
+                  </AppButton>
+                  <CheckCircleFilled v-if="d.parseStatus === 'done'" class="process-row__ok" />
+                  <CloseCircleFilled v-else-if="d.parseStatus === 'failed'" class="process-row__bad" />
+                  <span v-else class="process-row__wait">等待</span>
                 </template>
               </div>
               <a-empty v-if="!task.documents.length" description="暂无文档" />
@@ -90,7 +107,7 @@
               <a-skeleton active :paragraph="{ rows: 3 }" />
             </div>
             <a-empty v-else-if="!editableDrafts.length" description="尚未提取条款">
-              <a-button type="primary" size="small" @click="emit('extractClauses')">提取条款</a-button>
+              <AppButton variant="primary" size="sm" @click="emit('extractClauses')">提取条款</AppButton>
             </a-empty>
             <div v-else class="clause-edit">
               <div v-for="(c, i) in editableDrafts" :key="c.id" class="clause-edit__row">
@@ -104,23 +121,23 @@
                   :placeholder="c.title"
                   class="clause-edit__input"
                 />
-                <a-button type="text" size="small" @click="removeClause(i)">
+                <AppButton variant="text" size="sm" @click="removeClause(i)">
                   <DeleteOutlined />
-                </a-button>
+                </AppButton>
               </div>
-              <a-button size="small" type="dashed" block @click="addClause">
+              <AppButton size="sm" variant="dashed" block @click="addClause">
                 <PlusOutlined />添加条款
-              </a-button>
+              </AppButton>
               <div class="clause-edit__footer">
                 <span class="clause-edit__hint">确认后锁定任务快照，进入两两对比</span>
-                <a-button
-                  type="primary"
+                <AppButton
+                  variant="primary"
                   :loading="confirmingClauses"
                   :disabled="!editableDrafts.length"
                   @click="emit('confirmClauses', editableDrafts.map(toPayload))"
                 >
                   确认并继续
-                </a-button>
+                </AppButton>
               </div>
             </div>
           </template>
@@ -135,36 +152,27 @@
 
             <div class="process-list">
               <div v-for="p in failedPairs" :key="p.pairId" class="process-row">
-                <span class="process-row__label">
-                  {{ docLabel(task.documents, p.docAId) }} ↔ {{ docLabel(task.documents, p.docBId) }}
+                <span class="process-row__label process-row__label--pair">
+                  <DocBadge :label="docLabel(task.documents, p.docAId)" />
+                  <span class="process-row__arrow">↔</span>
+                  <DocBadge :label="docLabel(task.documents, p.docBId)" />
                 </span>
                 <a-tag :color="PAIR_META[p.status].color" class="process-row__status">{{ PAIR_META[p.status].text }}</a-tag>
                 <span v-if="p.similarity != null" class="process-row__sim">
                   相似度 {{ Math.round(p.similarity * 100) }}%
                 </span>
                 <span v-if="p.failReason" class="process-row__error" :title="p.failReason">{{ p.failReason }}</span>
-                <a-button
+                <AppButton
                   v-if="p.status === 'failed'"
-                  type="link"
-                  size="small"
+                  variant="link"
+                  size="sm"
                   :loading="retryingPairIds.includes(p.pairId)"
                   @click="emit('retryPair', p.pairId)"
                 >
                   重试该对
-                </a-button>
+                </AppButton>
               </div>
               <a-empty v-if="!pairs.length" description="比对对将在解析完成后生成" />
-              <div v-if="canRetryCompare" class="process-row process-row--action">
-                <a-button
-                  size="small"
-                  type="primary"
-                  ghost
-                  :loading="retryingCompare"
-                  @click="emit('retryCompare')"
-                >
-                  重新对比
-                </a-button>
-              </div>
             </div>
 
             <template v-if="compareEvidence.length">
@@ -205,8 +213,8 @@
                 <span class="process-row__name">AI 综合结论生成</span>
               </div>
             </div>
-            <div v-if="aiUnavailable" class="process-panel__ai-retry">
-              <a-button size="small" :loading="retryingCompare" @click="emit('retryCompare')">重试 AI</a-button>
+            <div v-if="canRetryAi" class="process-panel__ai-retry">
+              <AppButton size="sm" :loading="retryingAi" @click="emit('retryAi')">重新抽取</AppButton>
             </div>
 
             <template v-if="aiDone">
@@ -254,8 +262,8 @@
                 <span class="process-row__name">AI 综合结论生成</span>
               </div>
             </div>
-            <div v-if="aiUnavailable" class="process-panel__ai-retry">
-              <a-button size="small" :loading="retryingCompare" @click="emit('retryCompare')">重试 AI</a-button>
+            <div v-if="canRetryAi" class="process-panel__ai-retry">
+              <AppButton size="sm" :loading="retryingAi" @click="emit('retryAi')">重新抽取</AppButton>
             </div>
 
             <template v-if="aiDone">
@@ -287,6 +295,7 @@
 
 <script setup lang="ts">
 import { computed, onBeforeUnmount, ref, watch } from 'vue'
+import { AppButton } from '@shared/web'
 import { message } from 'ant-design-vue'
 import {
   CheckCircleFilled,
@@ -301,6 +310,7 @@ import SimilarityHeatmap from './SimilarityHeatmap.vue'
 import ResponseMatrix from './ResponseMatrix.vue'
 import IndicatorTable from './IndicatorTable.vue'
 import { anGineerStepInfo, docLabel } from '../constants'
+import DocBadge from './DocBadge.vue'
 import type { BlockRange, ClauseItem, CompareDocMeta, ComparePair, CompareTask, EvidenceItem, TaskOverview } from '@/types'
 
 type StageKey = 'parse' | 'clause' | 'compare' | 'ai-clause' | 'ai-indicator'
@@ -316,6 +326,7 @@ const props = defineProps<{
   reparseAllLoading: boolean
   retryingPairIds: string[]
   retryingCompare: boolean
+  retryingAi: boolean
 }>()
 
 const emit = defineEmits<{
@@ -323,6 +334,7 @@ const emit = defineEmits<{
   reparseAll: []
   retryPair: [pairId: string]
   retryCompare: []
+  retryAi: []
   extractClauses: []
   confirmClauses: [clauses: ClauseItem[]]
   locate: [item: EvidenceItem]
@@ -409,6 +421,12 @@ const PAIR_META: Record<ComparePair['status'], { color: string, text: string }> 
   failed: { color: 'red', text: '失败' },
 }
 
+/** 解析列表：已完成置顶，其余保持上传顺序（Array.sort 稳定）。 */
+const parseDocuments = computed(() =>
+  [...props.task.documents].sort(
+    (a, b) => (a.parseStatus === 'done' ? 0 : 1) - (b.parseStatus === 'done' ? 0 : 1),
+  ),
+)
 const failedDocs = computed(() => props.task.documents.filter((d) => d.parseStatus === 'failed'))
 const pairs = computed(() => props.task.pairs ?? [])
 const failedPairs = computed(() => pairs.value.filter((p) => p.status === 'failed'))
@@ -453,14 +471,17 @@ const aiVisible = computed(() =>
     || isTerminalish(props.task)),
 )
 const aiDone = computed(() => isTerminalish(props.task) || props.task.progress.stage === 'done')
+const canRetryAi = computed(() => aiVisible.value && (aiDone.value || aiUnavailable.value))
 
 const visibleStages = computed<{ key: StageKey, title: string }[]>(() => {
   const list: { key: StageKey, title: string }[] = [{ key: 'parse', title: '文档解析' }]
   if (clauseVisible.value) list.push({ key: 'clause', title: '条款确认' })
   if (compareVisible.value) list.push({ key: 'compare', title: '两两对比' })
   if (aiVisible.value) {
-    list.push({ key: 'ai-clause', title: '强制性条款响应矩阵（AI）' })
     list.push({ key: 'ai-indicator', title: '关键指标抽取（AI）' })
+    if (props.task.tenderDocId) {
+      list.push({ key: 'ai-clause', title: '强制性条款响应矩阵（AI）' })
+    }
   }
   return list
 })
@@ -693,8 +714,14 @@ function onHeatmapCell(pair: { docA: string, docB: string }): void {
   overflow: hidden;
   flex-shrink: 0;
 
+  &__head-wrap {
+    display: flex;
+    align-items: stretch;
+  }
+
   &__head {
-    width: 100%;
+    flex: 1;
+    min-width: 0;
     display: flex;
     align-items: center;
     gap: @spacing-sm;
@@ -707,6 +734,28 @@ function onHeatmapCell(pair: { docA: string, docB: string }): void {
 
     &:hover:not(.trace-stage__head--active) {
       background: color-mix(in srgb, @brand-primary 4%, @card-bg);
+    }
+
+    &:focus-visible {
+      outline: 2px solid @brand-primary;
+      outline-offset: -2px;
+    }
+  }
+
+  &__retry {
+    flex-shrink: 0;
+    align-self: center;
+    margin: 0 @spacing-md;
+    background: @theme-dot-dark;
+    border-color: @theme-dot-dark;
+    color: #fff;
+    font-size: @font-size-xs;
+
+    &:hover,
+    &:focus {
+      background: @text-secondary;
+      border-color: @text-secondary;
+      color: #fff;
     }
   }
 
@@ -787,38 +836,28 @@ function onHeatmapCell(pair: { docA: string, docB: string }): void {
     font-weight: @font-weight-semibold;
     color: @text-primary;
     min-width: 34px;
+
+    &--pair {
+      display: inline-flex;
+      align-items: center;
+      gap: @spacing-xs;
+      min-width: 0;
+    }
   }
 
+  &__arrow { color: @text-tertiary; }
   &__tender { flex-shrink: 0; }
   &__name {
     flex: 1;
-    min-width: 0;
+    min-width: 80px;
+    max-width: 240px;
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
     color: @text-primary;
   }
   &__wait { font-size: @font-size-xs; color: @text-tertiary; }
-  &__parse {
-    flex: 1;
-    min-width: 0;
-    display: flex;
-    flex-direction: column;
-    gap: 3px;
-  }
-  &__parse-head {
-    display: flex;
-    align-items: center;
-    gap: @spacing-sm;
-    min-width: 0;
-  }
-  &__parse-meta {
-    display: flex;
-    align-items: center;
-    gap: @spacing-sm;
-    padding-left: 22px;
-    min-width: 0;
-  }
+  &__spacer { flex: 1; }
   &__parse-bar {
     width: 72px;
     flex-shrink: 0;

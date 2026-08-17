@@ -5,23 +5,25 @@
         <thead>
           <tr>
             <th class="matrix-table__head">条款</th>
-            <th v-for="d in bidDocs" :key="d.id" class="matrix-table__head">{{ docLabel(bidDocs, d.id) }}</th>
+            <th v-for="d in bidDocs" :key="d.id" class="matrix-table__head">
+              <DocBadge :label="docLabel(bidDocs, d.id)" />
+            </th>
           </tr>
         </thead>
         <tbody>
           <tr v-for="row in rows" :key="row.clauseId">
             <td class="matrix-table__clause">{{ row.text }}</td>
             <td v-for="d in bidDocs" :key="d.id" class="matrix-table__cell">
-              <a-button
+              <AppButton
                 v-if="cellOf(row, d.id)"
-                type="link"
-                size="small"
+                variant="link"
+                size="sm"
                 class="matrix-cell"
                 :class="cellClass(cellOf(row, d.id)!)"
                 @click="emit('trace', cellOf(row, d.id)!)"
               >
                 {{ cellText(cellOf(row, d.id)!) }}
-              </a-button>
+              </AppButton>
               <span v-else class="matrix-cell matrix-cell--ok">响应</span>
             </td>
           </tr>
@@ -34,7 +36,9 @@
 
 <script setup lang="ts">
 import { computed } from 'vue'
+import { AppButton } from '@shared/web'
 import SectionCard from '@shared/web/components/SectionCard.vue'
+import DocBadge from './DocBadge.vue'
 import { docLabel } from '../constants'
 import type { CompareDocMeta, EvidenceItem } from '@/types'
 
