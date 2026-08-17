@@ -80,6 +80,12 @@ interface PassageItem {
   tenderRatio?: number
 }
 
+interface TypoItem {
+  index?: number
+  text?: string
+  blockIds?: Record<string, string>
+}
+
 interface CompareRow {
   __key: string
   index: number
@@ -96,6 +102,7 @@ interface CompareRow {
   tagColor: string
   passage?: PassageItem
   evidence?: EvidenceItem
+  typoItem?: TypoItem
 }
 
 const props = defineProps<{
@@ -160,9 +167,35 @@ function passageRows(): CompareRow[] {
 const SEVERITY_ORDER: Record<RiskLevel, number> = { high: 0, mid: 1, low: 2 }
 
 function evidenceRows(): CompareRow[] {
-  return [...props.compareEvidence]
-    .sort((a, b) => SEVERITY_ORDER[a.severity] - SEVERITY_ORDER[b.severity])
-    .map((ev) => ({
+  const rows: CompareRow[] = []
+  for (const ev of [...props.compareEvidence]
+    .sort((a, b) => SEVERITY_ORDER[a.severity] - SEVERITY_ORDER[b.severity])) {
+    // 错别字证据按 metrics.items 拆行：每条错别字/异常串单独一行，可独立定位
+    const typoItems = ev.metrics?.pattern === 'shared-typo' && Array.isArray(ev.metrics.items)
+      ? ev.metrics.items as TypoItem[]
+      : []
+    if (typoItems.length) {
+      for (const item of typoItems) {
+        rows.push({
+          __key: `t-${ev.id}-${item.index ?? rows.length}`,
+          index: 0,
+          kind: 'evidence',
+          content: item.text ?? '',
+          detail: `第 ${item.index ?? rows.length} 处相同错别字/异常串`,
+          metric: '错别字',
+          docAId: ev.docIds[0],
+          docBId: ev.docIds[1] ?? ev.docIds[0],
+          pagesA: [],
+          pagesB: [],
+          tagText: severityText(ev.severity),
+          tagColor: severityColor(ev.severity),
+          evidence: ev,
+          typoItem: item,
+        })
+      }
+      continue
+    }
+    rows.push({
       __key: `e-${ev.id}`,
       index: 0,
       kind: 'evidence' as const,
@@ -176,7 +209,9 @@ function evidenceRows(): CompareRow[] {
       tagText: severityText(ev.severity),
       tagColor: severityColor(ev.severity),
       evidence: ev,
-    }))
+    })
+  }
+  return rows
 }
 
 function pagesOfRefs(ev: EvidenceItem, docId: string): number[] {
@@ -196,6 +231,25 @@ function customRow(record: CompareRow) {
 }
 
 async function locate(row: CompareRow): Promise<void> {
+  if (row.typoItem?.blockIds) {
+    const entries = Object.entries(row.typoItem.blockIds)
+    locatingKeys.value = new Set([...locatingKeys.value, row.__key])
+    try {
+      const tasks = entries.map(([docId, blockId]) =>
+        cached(`${docId}:${blockId}`, () => getBlockRefs(props.taskId, docId, [blockId])))
+      const refs = (await Promise.all(tasks)).flat()
+      if (refs.length) {
+        emit('locateRefs', refs)
+      } else {
+        message.info('该处缺少可定位坐标')
+      }
+    } finally {
+      const next = new Set(locatingKeys.value)
+      next.delete(row.__key)
+      locatingKeys.value = next
+    }
+    return
+  }
   if (row.kind === 'evidence' && row.evidence) {
     emit('locate', row.evidence)
     return
