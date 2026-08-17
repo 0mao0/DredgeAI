@@ -83,6 +83,7 @@
         :scanning="scanningDocId === leftDocId"
         hide-original-label
         @update:page="leftPage = $event"
+        @loaded="(url) => onViewerLoaded(leftDocId, url)"
       />
       <PdfViewer
         v-if="!singlePane"
@@ -94,13 +95,15 @@
         :scanning="scanningDocId === rightDocId"
         hide-original-label
         @update:page="rightPage = $event"
+        @loaded="(url) => onViewerLoaded(rightDocId, url)"
       />
     </div>
   </div>
 </template>
 
 <script setup lang="ts">
-import { computed, ref, watch } from 'vue'
+import { computed, nextTick, ref, watch } from 'vue'
+import type { Ref } from 'vue'
 import { AppButton } from '@shared/web'
 import { CompressOutlined, ExpandOutlined } from '@ant-design/icons-vue'
 import PdfViewer from './PdfViewer.vue'
@@ -168,38 +171,106 @@ function onManualTab(): void {
   emit('tabManual')
 }
 
+/** 定位任务：证据整体定位或 refs 多块定位，二者择一 */
+type LocateTask
+  = | { kind: 'evidence', ev: EvidenceItem }
+    | { kind: 'refs', refs: BlockRange[] }
+
+/** 最近一次定位请求；PDF 未加载完成时暂存，加载完成后重放，保证首次点击也能跳页高亮 */
+let pendingLocate: LocateTask | null = null
+const loadedDocIds = ref(new Set<string>())
+
 /** 证据溯源：单份文档单栏定位，两份及以上自动展开双栏并分别定位高亮；无可用 refs 时不画误导性整页高亮。 */
 function locate(ev: EvidenceItem): void {
-  const [a, b] = ev.docIds
-  if (b && singlePane.value) singlePane.value = false
-  if (a) {
-    leftDocId.value = a
-    const refs = refsOf(ev, a)
-    leftPage.value = refs[0]?.page ?? 1
-    leftHigh.value = refs
+  pendingLocate = { kind: 'evidence', ev }
+  void applyLocate(pendingLocate, false)
+}
+
+/** 多文档定位：按 docId 分组，左栏展示第一组全部 refs、右栏展示第二组全部 refs
+ *  （片段定位传入的是 [A 多块..., B 多块...]，不能简单取前两个——那会是同一文档的两块）。 */
+function locateRefs(refs: BlockRange[]): void {
+  if (!refs.length) return
+  pendingLocate = { kind: 'refs', refs }
+  void applyLocate(pendingLocate, false)
+}
+
+async function applyLocate(task: LocateTask, force: boolean): Promise<void> {
+  if (task.kind === 'evidence') {
+    const ev = task.ev
+    const [a, b] = ev.docIds
+    if (b && singlePane.value) singlePane.value = false
+    if (a) {
+      leftDocId.value = a
+      const refs = refsOf(ev, a)
+      leftPage.value = refs[0]?.page ?? 1
+      leftHigh.value = refs
+    }
+    if (b) {
+      rightDocId.value = b
+      const refs = refsOf(ev, b)
+      rightPage.value = refs[0]?.page ?? 1
+      rightHigh.value = refs
+    }
+  } else {
+    const refs = task.refs
+    const byDoc = new Map<string, BlockRange[]>()
+    for (const r of refs) {
+      const list = byDoc.get(r.docId) ?? []
+      list.push(r)
+      byDoc.set(r.docId, list)
+    }
+    const groups = [...byDoc.values()]
+    const [aRefs, bRefs] = [groups[0] ?? [], groups[1] ?? []]
+    if (aRefs.length && bRefs.length && singlePane.value) singlePane.value = false
+    if (aRefs.length) {
+      leftDocId.value = aRefs[0].docId
+      leftPage.value = aRefs[0].page
+      leftHigh.value = aRefs
+    }
+    if (bRefs.length) {
+      rightDocId.value = bRefs[0].docId
+      rightPage.value = bRefs[0].page
+      rightHigh.value = bRefs
+    }
   }
-  if (b) {
-    rightDocId.value = b
-    const refs = refsOf(ev, b)
-    rightPage.value = refs[0]?.page ?? 1
-    rightHigh.value = refs
+  // 强制重放：文档加载完成后页号可能已是目标页，docs-ui 的 currentPdfPage 监听
+  // 只在值变化时触发，先把页号归零再设回，确保重新执行 scrollToPdfPage。
+  if (force) await forceRefire()
+}
+
+async function forceRefire(): Promise<void> {
+  await nextTick()
+  const targets: Array<[Ref<number>, number]> = [
+    [leftPage, leftPage.value],
+    [rightPage, rightPage.value],
+  ]
+  for (const [pageRef, target] of targets) {
+    if (target <= 0) continue
+    pageRef.value = 0
+    await nextTick()
+    pageRef.value = target
   }
 }
 
-function locateRefs(refs: BlockRange[]): void {
-  if (!refs.length) return
-  const [a, b] = refs
-  if (b && singlePane.value) singlePane.value = false
-  if (a) {
-    leftDocId.value = a.docId
-    leftPage.value = a.page
-    leftHigh.value = [a]
-  }
-  if (b) {
-    rightDocId.value = b.docId
-    rightPage.value = b.page
-    rightHigh.value = [b]
-  }
+function locateDocIds(task: LocateTask): string[] {
+  if (task.kind === 'evidence') return task.ev.docIds.filter((id): id is string => !!id)
+  return [...new Set(task.refs.map((r) => r.docId))]
+}
+
+/** PDF 文档加载完成：若仍有未重放的定位请求且涉及文档均已就绪，稍后强制重放跳页 */
+function onViewerLoaded(docId: string, url: string): void {
+  const doc = props.documents.find((d) => d.id === docId)
+  if (!doc || doc.fileUrl !== url) return
+  loadedDocIds.value = new Set([...loadedDocIds.value, docId])
+  const task = pendingLocate
+  if (!task) return
+  const ids = locateDocIds(task)
+  if (!ids.length || !ids.every((id) => loadedDocIds.value.has(id))) return
+  window.setTimeout(() => {
+    if (pendingLocate !== task) return
+    pendingLocate = null
+    void applyLocate(task, true)
+  }, 300)
 }
 
 function refsOf(ev: EvidenceItem, docId: string): BlockRange[] {
