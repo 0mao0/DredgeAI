@@ -23,7 +23,6 @@
         :pdf-viewer-url="fileUrl"
         text-content=""
         :current-pdf-page="page"
-        :pdf-page-count="totalPages && totalPages > 0 ? totalPages : undefined"
         :pdf-page-range="pageRange?.length ? pageRange : undefined"
         :highlights="highlights"
         :active-highlight-id="activeHighlightId"
@@ -50,7 +49,6 @@ const props = withDefaults(defineProps<{
   fileUrl: string
   title?: string
   page?: number
-  totalPages?: number
   high?: BlockRange[]
   scanning?: boolean
   activeHighlightId?: string | null

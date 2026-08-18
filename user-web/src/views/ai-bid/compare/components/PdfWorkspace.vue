@@ -88,7 +88,6 @@
           :file-url="docFileUrl(leftDocId)"
           :title="docName(leftDocId)"
           :page="leftPage"
-          :total-pages="docPages(leftDocId)"
           :high="leftHigh"
           :page-range="leftRange"
           :scanning="scanningDocId === leftDocId"
@@ -101,7 +100,6 @@
           :file-url="docFileUrl(rightDocId)"
           :title="docName(rightDocId)"
           :page="rightPage"
-          :total-pages="docPages(rightDocId)"
           :high="rightHigh"
           :page-range="rightRange"
           :scanning="scanningDocId === rightDocId"
@@ -115,7 +113,6 @@
           :file-url="docFileUrl(leftDocId)"
           :title="docName(leftDocId)"
           :page="leftPage"
-          :total-pages="docPages(leftDocId)"
           :high="leftHigh"
           :scanning="scanningDocId === leftDocId"
           hide-original-label
@@ -127,7 +124,6 @@
           :file-url="docFileUrl(rightDocId)"
           :title="docName(rightDocId)"
           :page="rightPage"
-          :total-pages="docPages(rightDocId)"
           :high="rightHigh"
           :scanning="scanningDocId === rightDocId"
           hide-original-label
@@ -216,10 +212,6 @@ function docName(id: string): string {
 
 function docFileUrl(id: string): string {
   return props.documents.find((d) => d.id === id)?.fileUrl ?? ''
-}
-
-function docPages(id: string): number {
-  return props.documents.find((d) => d.id === id)?.pages ?? 0
 }
 
 function onManualTab(): void {
