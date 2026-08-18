@@ -2,9 +2,9 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** 让 AnGIneer 解析停滞的文档在 3 分钟内自动 resume 一次、仍无进展即 fail-fast 落为失败，并把卡死看门狗真正启用、启动恢复不再无限复活停滞文档，避免单个卡死任务独占唯一后台 worker 阻塞整个队列。
+**Goal:** 让 AnGIneer 解析停滞的文档在 `StallTimeout`（默认 20 分钟）后自动 resume 一次、仍无进展即 fail-fast 落为失败，并把卡死看门狗真正启用、启动恢复不再无限复活停滞文档，避免单个卡死任务独占唯一后台 worker 阻塞整个队列。
 
-**Architecture:** 在 `DocumentParsePipeline.PollUntilFinishedAsync` 中增加“停滞指纹”（progress|stage|stageMessage）检测：连续 `StallTimeout`（默认 3 分钟）无变化先 resume 一次，再等一个窗口仍无变化直接抛 `AnGineerParseFailed` 判失败；`ParseRecoveryService` 按 `ParseStartedAt` 年龄区分“近期可续跑”与“长期停滞直接标失败”；`StuckTaskWatchdogWorker` 补齐 DI 注册并在宿主启动时加入后台 worker 管理器。TDD：先写失败测试（用 `FakeAnGineerClient.RepeatingState` 模拟永远不推进的状态），再实现。
+**Architecture:** 在 `DocumentParsePipeline.PollUntilFinishedAsync` 中增加“停滞指纹”（progress|stage|stageMessage）检测：连续 `StallTimeout`（默认 20 分钟，覆盖 MinerU/PoPo 单步 15 分钟的实测场景）无变化先 resume 一次，再等一个窗口仍无变化直接抛 `AnGineerParseFailed` 判失败；`ParseRecoveryService` 按 `ParseStartedAt` 年龄区分“近期可续跑”与“长期停滞直接标失败”；`StuckTaskWatchdogWorker` 补齐 DI 注册并在宿主启动时加入后台 worker 管理器。TDD：先写失败测试（用 `FakeAnGineerClient.RepeatingState` 模拟永远不推进的状态），再实现。
 
 **Tech Stack:** .NET 8 / ABP 8.3 BackgroundJobs（单 worker 串行执行）/ xUnit + Shouldly / EF Core InMemory SQLite 测试库。
 
@@ -21,7 +21,7 @@
 | 文件 | 职责 |
 |---|---|
 | `backend/DredgeAI.BidCompare/src/DredgeAI.BidCompare.Application/BackgroundJobs/AnGineerPollOptions.cs` | 新增 `StallTimeout` 停滞判定阈值 |
-| `backend/DredgeAI.BidCompare/src/DredgeAI.BidCompare.HttpApi.Host/appsettings.json` | AnGIneer 配置节新增 `StallTimeout: 00:03:00` |
+| `backend/DredgeAI.BidCompare/src/DredgeAI.BidCompare.HttpApi.Host/appsettings.json` | AnGIneer 配置节新增 `StallTimeout: 00:20:00`、`Timeout: 01:00:00` |
 | `backend/DredgeAI.BidCompare/test/DredgeAI.BidCompare.TestBase/Fakes/FakeAnGineerClient.cs` | 新增 `RepeatingState` 支持模拟永远不推进的轮询状态 |
 | `backend/DredgeAI.BidCompare/src/DredgeAI.BidCompare.Application/BackgroundJobs/DocumentParsePipeline.cs` | 停滞指纹检测：resume 一次 → fail-fast |
 | `backend/DredgeAI.BidCompare/test/DredgeAI.BidCompare.Application.Tests/BackgroundJobs/ParseDocumentJobTests.cs` | 停滞 fail-fast 与计时重置测试 |
@@ -51,13 +51,14 @@ public class AnGineerPollOptions
 {
     public TimeSpan PollInterval { get; set; } = TimeSpan.FromSeconds(5);
 
-    public TimeSpan Timeout { get; set; } = TimeSpan.FromMinutes(30);
+    /// <summary>单次解析轮询总上限（MinerU/PoPo 等单步可达 15 分钟，整篇大标书可超 30 分钟）。</summary>
+    public TimeSpan Timeout { get; set; } = TimeSpan.FromMinutes(60);
 
     /// <summary>
     /// 停滞判定：processing 状态下 progress/stage/stageMessage 连续无变化的时长上限。
-    /// 超时先 resume 一次，仍无进展则 fail-fast（默认 3 分钟，远小于轮询总超时 30 分钟）。
+    /// 超时先 resume 一次，仍无进展则 fail-fast（默认 20 分钟，覆盖 MinerU/PoPo 单步 15 分钟的实测场景）。
     /// </summary>
-    public TimeSpan StallTimeout { get; set; } = TimeSpan.FromMinutes(3);
+    public TimeSpan StallTimeout { get; set; } = TimeSpan.FromMinutes(20);
 }
 ```
 
@@ -70,8 +71,8 @@ public class AnGineerPollOptions
     "BaseUrl": "http://localhost:8790",
     "ApiKey": null,
     "PollInterval": "00:00:05",
-    "Timeout": "00:30:00",
-    "StallTimeout": "00:03:00"
+    "Timeout": "01:00:00",
+    "StallTimeout": "00:20:00"
   },
 ```
 
