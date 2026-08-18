@@ -463,14 +463,14 @@ interface IrBlockLike {
   text?: string | null
 }
 
-/** 由 IR block 生成定位 ref；bbox 缺失时退化为“仅跳页”ref（hasRect: false）。 */
+/** 由 IR block 生成定位 ref；bbox 缺失时退化为整页高亮框（无法精确定位，但可跳页并显示范围）。 */
 function blockRef(docId: string, block: IrBlockLike, pairId: string, excerptOverride?: string | null): BlockRange {
   const valid = hasValidBbox(block)
   return {
     docId,
     page: block.pageIdx + 1,
-    bbox: valid ? [block.bbox![0], block.bbox![1], block.bbox![2], block.bbox![3]] : [0, 0, 0, 0],
-    hasRect: valid,
+    bbox: valid ? [block.bbox![0], block.bbox![1], block.bbox![2], block.bbox![3]] : [0, 0, 1, 1],
+    hasRect: true,
     pairId,
     excerpt: (excerptOverride ?? block.text) ?? undefined,
   }
