@@ -12,7 +12,6 @@
       :is-text="false"
       :file-url="fileUrl"
       :pdf-viewer-url="fileUrl"
-      office-preview-url=""
       text-content=""
       :current-pdf-page="page"
       :highlights="viewerHighlights"
