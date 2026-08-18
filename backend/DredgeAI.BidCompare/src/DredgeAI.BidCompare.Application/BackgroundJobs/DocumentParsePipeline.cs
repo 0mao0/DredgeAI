@@ -133,6 +133,9 @@ public class DocumentParsePipeline : ITransientDependency
         var deadline = DateTime.UtcNow + _pollOptions.Timeout;
         var staleResumeAttempted = false;
         var interruptedResumeAttempted = false;
+        var stallResumeAttempted = false;
+        string? lastSignature = null;
+        DateTime? lastSignatureChangeAt = null;
         while (DateTime.UtcNow < deadline)
         {
             AnGineerJobStatus status;
@@ -156,6 +159,8 @@ public class DocumentParsePipeline : ITransientDependency
                     anGineerJobId);
                 await _anGineerClient.ResumeAsync(anGineerJobId, cancellationToken);
                 staleResumeAttempted = true;
+                stallResumeAttempted = true;
+                ResetStallTracking(status, ref lastSignature, ref lastSignatureChangeAt);
                 continue;
             }
 
@@ -170,8 +175,40 @@ public class DocumentParsePipeline : ITransientDependency
                     "AnGIneer 文档 {JobId} 解析中断（{Message}），尝试 resume 恢复",
                     anGineerJobId, status.FailureReason);
                 interruptedResumeAttempted = true;
+                stallResumeAttempted = true;
                 await _anGineerClient.ResumeAsync(anGineerJobId, cancellationToken);
+                ResetStallTracking(status, ref lastSignature, ref lastSignatureChangeAt);
                 continue;
+            }
+
+            // 停滞检测：processing 状态连续 StallTimeout 无任何变化 → resume 一次 → 仍无变化直接 fail-fast，
+            // 避免长时间占用唯一后台 worker 阻塞整条队列（2026-08-18 线上事故根因）。
+            if (status.State == AnGineerJobState.Processing)
+            {
+                var signature = BuildProgressSignature(status);
+                if (signature != lastSignature)
+                {
+                    lastSignature = signature;
+                    lastSignatureChangeAt = DateTime.UtcNow;
+                    stallResumeAttempted = false;
+                }
+                else if (lastSignatureChangeAt != null
+                         && DateTime.UtcNow - lastSignatureChangeAt.Value >= _pollOptions.StallTimeout)
+                {
+                    if (!stallResumeAttempted)
+                    {
+                        _logger.LogWarning(
+                            "AnGIneer 文档 {JobId} 解析停滞（{Signature} 在 {Minutes} 分钟内无变化），尝试 resume 恢复",
+                            anGineerJobId, signature, _pollOptions.StallTimeout.TotalMinutes);
+                        await _anGineerClient.ResumeAsync(anGineerJobId, cancellationToken);
+                        stallResumeAttempted = true;
+                        lastSignatureChangeAt = DateTime.UtcNow;
+                        continue;
+                    }
+                    throw new BusinessException(BidCompareErrorCodes.AnGineerParseFailed)
+                        .WithData("reason",
+                            $"AnGIneer 解析停滞（{signature} 在 {_pollOptions.StallTimeout.TotalMinutes:0.#} 分钟内无变化，resume 后仍无进展）");
+                }
             }
 
             await PersistProgressAsync(document, status, writeGate, cancellationToken);
@@ -183,6 +220,20 @@ public class DocumentParsePipeline : ITransientDependency
         }
         throw new BusinessException(BidCompareErrorCodes.AnGineerParseFailed)
             .WithData("reason", "轮询超时");
+    }
+
+    /// <summary>以 progress|stage|stageMessage 作为停滞指纹。</summary>
+    private static string BuildProgressSignature(AnGineerJobStatus status)
+        => $"{status.Progress}|{status.Stage}|{status.StageMessage}";
+
+    /// <summary>resume 后重置停滞计时，并把当前状态作为新的停滞起点。</summary>
+    private static void ResetStallTracking(
+        AnGineerJobStatus status,
+        ref string? lastSignature,
+        ref DateTime? lastSignatureChangeAt)
+    {
+        lastSignature = BuildProgressSignature(status);
+        lastSignatureChangeAt = DateTime.UtcNow;
     }
 
     /// <summary>把 AnGIneer 进度快照同步到 CompareDocument（批量解析时写库统一串行）。</summary>

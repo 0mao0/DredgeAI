@@ -8,6 +8,7 @@ using DredgeAI.BidCompare.CompareTasks;
 using DredgeAI.BidCompare.Documents;
 using DredgeAI.BidCompare.AnGineer;
 using DredgeAI.BidCompare.Storage;
+using Microsoft.Extensions.Options;
 using Shouldly;
 using Volo.Abp.BackgroundJobs;
 using Xunit;
@@ -398,5 +399,55 @@ public class ParseDocumentJobTests : BidCompareApplicationTestBase<BidCompareApp
         var failed = await docRepo.GetAsync(doc.Id);
         failed.ParseStatus.ShouldBe(DocumentParseStatus.Failed);
         failed.ParseError.ShouldContain("服务重启导致解析中断");
+    }
+
+    [Fact]
+    public async Task Stalled_Progress_Should_Resume_Once_Then_Fail_Fast()
+    {
+        // 复现线上卡死：raw_parse + 0% + 非空消息，progress/stage/message 长时间无变化。
+        // 修复前会一直轮询到 30 分钟超时独占后台 worker；修复后 resume 一次仍无进展即 fail-fast。
+        var pollOptions = GetRequiredService<IOptions<AnGineerPollOptions>>().Value;
+        pollOptions.PollInterval = TimeSpan.FromMilliseconds(10);
+        pollOptions.StallTimeout = TimeSpan.FromMilliseconds(100);
+        pollOptions.Timeout = TimeSpan.FromSeconds(2); // 未实现时也能快速以“轮询超时”失败，避免等 30 分钟
+
+        _anGineerClient.RepeatingState = new AnGineerJobStatus(
+            AnGineerJobState.Processing, 0, "raw_parse", "label 归一化");
+        var (task, doc) = await CreateTaskWithBidDocAsync();
+
+        await RunParseJobAsync(task.Id, doc.Id);
+
+        var docRepo = GetRequiredService<Volo.Abp.Domain.Repositories.IRepository<CompareDocument, Guid>>();
+        var failed = await docRepo.GetAsync(doc.Id);
+        failed.ParseStatus.ShouldBe(DocumentParseStatus.Failed);
+        failed.ParseError.ShouldContain("停滞");
+        _anGineerClient.ResumeCount.ShouldBe(1); // 每个停滞期最多 resume 一次
+
+        var detail = await _appService.GetAsync(task.Id);
+        detail.Status.ShouldBe(CompareTaskStatus.Failed);
+    }
+
+    [Fact]
+    public async Task Progress_Change_Should_Reset_Stall_Timer()
+    {
+        // 总耗时超过 StallTimeout，但每次轮询 signature 都推进 → 不应被判停滞
+        var pollOptions = GetRequiredService<IOptions<AnGineerPollOptions>>().Value;
+        pollOptions.PollInterval = TimeSpan.FromMilliseconds(50);
+        pollOptions.StallTimeout = TimeSpan.FromMilliseconds(100);
+
+        _anGineerClient.StateSequence = new ConcurrentQueue<AnGineerJobStatus>(new[]
+        {
+            new AnGineerJobStatus(AnGineerJobState.Processing, 0, "raw_parse", "label 归一化"),
+            new AnGineerJobStatus(AnGineerJobState.Processing, 0, "raw_parse", "label 归一化"),
+            new AnGineerJobStatus(AnGineerJobState.Processing, 10, "raw_parse", "label 归一化"),
+            new AnGineerJobStatus(AnGineerJobState.Processing, 20, "raw_parse", "label 归一化"),
+            new AnGineerJobStatus(AnGineerJobState.Succeeded, 100, "completed", "解析结束: completed")
+        });
+        var (task, doc) = await CreateTaskWithBidDocAsync();
+
+        await RunParseJobAsync(task.Id, doc.Id);
+
+        var detail = await _appService.GetAsync(task.Id);
+        detail.Status.ShouldBe(CompareTaskStatus.Parsed);
     }
 }
