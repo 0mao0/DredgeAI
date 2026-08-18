@@ -8,6 +8,7 @@ using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using Volo.Abp.BackgroundJobs;
 using Volo.Abp.BackgroundWorkers;
+using Volo.Abp.DependencyInjection;
 using Volo.Abp.Domain.Repositories;
 using Volo.Abp.Threading;
 using Volo.Abp.Timing;
@@ -20,7 +21,7 @@ namespace DredgeAI.BidCompare.BackgroundJobs;
 /// 任务 Comparing/Analyzing 超时 → 标记失败（处理中的比对对一并落失败）。
 /// 阈值经 Watchdog 配置节可调。
 /// </summary>
-public class StuckTaskWatchdogWorker : AsyncPeriodicBackgroundWorkerBase
+public class StuckTaskWatchdogWorker : AsyncPeriodicBackgroundWorkerBase, ITransientDependency
 {
     private readonly WatchdogOptions _options;
     private readonly IClock _clock;

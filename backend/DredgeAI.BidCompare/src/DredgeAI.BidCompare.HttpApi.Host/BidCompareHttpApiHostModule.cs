@@ -374,7 +374,8 @@ public class BidCompareHttpApiHostModule : AbpModule
         var watchdog = context.ServiceProvider.GetRequiredService<IOptions<WatchdogOptions>>().Value;
         if (watchdog.Enabled)
         {
-        // 卡死看门狗（M9）：Parsing/Comparing/Analyzing 中间态超时巡检
+            // 卡死看门狗（M9）：Parsing/Comparing/Analyzing 中间态超时巡检
+            await context.AddBackgroundWorkerAsync<StuckTaskWatchdogWorker>();
         }
 
         // 进程重启恢复：Parsing 且已有 AnGIneer doc_id 的文档重新入队，由解析任务查状态并 resume。
