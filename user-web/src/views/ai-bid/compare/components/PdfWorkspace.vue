@@ -71,32 +71,70 @@
           <CompressOutlined v-else />
         </AppButton>
       </a-tooltip>
+      <AppButton
+        v-if="lastLocateTask"
+        size="sm"
+        variant="text"
+        class="pdf-workspace__mode-toggle"
+        @click="toggleViewMode"
+      >
+        {{ viewMode === 'pages' ? '查看整篇' : '证据页' }}
+      </AppButton>
     </div>
 
     <div class="pdf-workspace__body" :class="{ 'pdf-workspace__body--single': singlePane }">
-      <PdfViewer
-        :file-url="docFileUrl(leftDocId)"
-        :title="docName(leftDocId)"
-        :page="leftPage"
-        :total-pages="docPages(leftDocId)"
-        :high="leftHigh"
-        :scanning="scanningDocId === leftDocId"
-        hide-original-label
-        @update:page="leftPage = $event"
-        @loaded="(url) => onViewerLoaded(leftDocId, url)"
-      />
-      <PdfViewer
-        v-if="!singlePane"
-        :file-url="docFileUrl(rightDocId)"
-        :title="docName(rightDocId)"
-        :page="rightPage"
-        :total-pages="docPages(rightDocId)"
-        :high="rightHigh"
-        :scanning="scanningDocId === rightDocId"
-        hide-original-label
-        @update:page="rightPage = $event"
-        @loaded="(url) => onViewerLoaded(rightDocId, url)"
-      />
+      <template v-if="viewMode === 'pages'">
+        <PdfViewer
+          :file-url="docFileUrl(leftDocId)"
+          :title="docName(leftDocId)"
+          :page="leftPage"
+          :total-pages="docPages(leftDocId)"
+          :high="leftHigh"
+          :page-range="leftRange"
+          :scanning="scanningDocId === leftDocId"
+          hide-original-label
+          @update:page="leftPage = $event"
+          @loaded="(url) => onViewerLoaded(leftDocId, url)"
+        />
+        <PdfViewer
+          v-if="!singlePane"
+          :file-url="docFileUrl(rightDocId)"
+          :title="docName(rightDocId)"
+          :page="rightPage"
+          :total-pages="docPages(rightDocId)"
+          :high="rightHigh"
+          :page-range="rightRange"
+          :scanning="scanningDocId === rightDocId"
+          hide-original-label
+          @update:page="rightPage = $event"
+          @loaded="(url) => onViewerLoaded(rightDocId, url)"
+        />
+      </template>
+      <template v-else>
+        <PdfViewer
+          :file-url="docFileUrl(leftDocId)"
+          :title="docName(leftDocId)"
+          :page="leftPage"
+          :total-pages="docPages(leftDocId)"
+          :high="leftHigh"
+          :scanning="scanningDocId === leftDocId"
+          hide-original-label
+          @update:page="leftPage = $event"
+          @loaded="(url) => onViewerLoaded(leftDocId, url)"
+        />
+        <PdfViewer
+          v-if="!singlePane"
+          :file-url="docFileUrl(rightDocId)"
+          :title="docName(rightDocId)"
+          :page="rightPage"
+          :total-pages="docPages(rightDocId)"
+          :high="rightHigh"
+          :scanning="scanningDocId === rightDocId"
+          hide-original-label
+          @update:page="rightPage = $event"
+          @loaded="(url) => onViewerLoaded(rightDocId, url)"
+        />
+      </template>
     </div>
   </div>
 </template>
@@ -126,8 +164,20 @@ const leftDocId = ref('')
 const rightDocId = ref('')
 const leftPage = ref(1)
 const rightPage = ref(1)
-const leftHigh = ref<BlockRange[]>([])
-const rightHigh = ref<BlockRange[]>([])
+const viewMode = ref<'pages' | 'full'>('full')
+const lastLocateTask = ref<LocateTask | null>(null)
+
+/** 证据页视图只渲染 refs 覆盖的页范围；跨度超过该上限时回退整篇视图 */
+const MAX_PAGES_MODE = 24
+
+/** 最近一次定位请求；PDF 未加载完成时暂存，加载完成后重放，保证首次点击也能跳页高亮 */
+let pendingLocate: LocateTask | null = null
+const loadedDocIds = ref(new Set<string>())
+
+const leftHigh = computed<BlockRange[]>(() => refsForDoc(lastLocateTask.value, leftDocId.value))
+const rightHigh = computed<BlockRange[]>(() => refsForDoc(lastLocateTask.value, rightDocId.value))
+const leftRange = computed<number[]>(() => pageRange(leftHigh.value))
+const rightRange = computed<number[]>(() => pageRange(rightHigh.value))
 
 const docOptions = computed(() =>
   props.documents.map((d) => ({ value: d.id, label: d.fileName })),
@@ -135,6 +185,10 @@ const docOptions = computed(() =>
 
 watch(() => props.documents, (docs) => {
   if (!docs.length) return
+  // 切换任务后清空旧定位，避免上一任务 refs 错配到新文档
+  pendingLocate = null
+  lastLocateTask.value = null
+  viewMode.value = 'full'
   const bids = docs.filter((d) => d.role !== 'tender')
   if (!leftDocId.value || !docs.some((d) => d.id === leftDocId.value)) {
     leftDocId.value = bids[0]?.id ?? docs[0].id
@@ -147,12 +201,13 @@ watch(() => props.documents, (docs) => {
 watch(() => props.pairActive, (pair) => {
   if (!pair) return
   if (singlePane.value) singlePane.value = false
+  pendingLocate = null
+  lastLocateTask.value = null
+  viewMode.value = 'full'
   leftDocId.value = pair.docAId
   rightDocId.value = pair.docBId
   leftPage.value = 1
   rightPage.value = 1
-  leftHigh.value = []
-  rightHigh.value = []
 })
 
 function docName(id: string): string {
@@ -176,14 +231,10 @@ type LocateTask
   = | { kind: 'evidence', ev: EvidenceItem }
     | { kind: 'refs', refs: BlockRange[] }
 
-/** 最近一次定位请求；PDF 未加载完成时暂存，加载完成后重放，保证首次点击也能跳页高亮 */
-let pendingLocate: LocateTask | null = null
-const loadedDocIds = ref(new Set<string>())
-
 /** 证据溯源：单份文档单栏定位，两份及以上自动展开双栏并分别定位高亮；无可用 refs 时不画误导性整页高亮。 */
 function locate(ev: EvidenceItem): void {
   pendingLocate = { kind: 'evidence', ev }
-  void applyLocate(pendingLocate, false)
+  void applyLocate(pendingLocate, 'auto')
 }
 
 /** 多文档定位：按 docId 分组，左栏展示第一组全部 refs、右栏展示第二组全部 refs
@@ -191,26 +242,19 @@ function locate(ev: EvidenceItem): void {
 function locateRefs(refs: BlockRange[]): void {
   if (!refs.length) return
   pendingLocate = { kind: 'refs', refs }
-  void applyLocate(pendingLocate, false)
+  void applyLocate(pendingLocate, 'auto')
 }
 
-async function applyLocate(task: LocateTask, force: boolean): Promise<void> {
+type LocateMode = 'auto' | 'pages' | 'full'
+
+async function applyLocate(task: LocateTask, mode: LocateMode = 'auto', force = false): Promise<void> {
+  lastLocateTask.value = task
   if (task.kind === 'evidence') {
     const ev = task.ev
     const [a, b] = ev.docIds
     if (b && singlePane.value) singlePane.value = false
-    if (a) {
-      leftDocId.value = a
-      const refs = refsOf(ev, a)
-      leftPage.value = refs[0]?.page ?? 1
-      leftHigh.value = refs
-    }
-    if (b) {
-      rightDocId.value = b
-      const refs = refsOf(ev, b)
-      rightPage.value = refs[0]?.page ?? 1
-      rightHigh.value = refs
-    }
+    if (a) leftDocId.value = a
+    if (b) rightDocId.value = b
   } else {
     const refs = task.refs
     const byDoc = new Map<string, BlockRange[]>()
@@ -222,20 +266,25 @@ async function applyLocate(task: LocateTask, force: boolean): Promise<void> {
     const groups = [...byDoc.values()]
     const [aRefs, bRefs] = [groups[0] ?? [], groups[1] ?? []]
     if (aRefs.length && bRefs.length && singlePane.value) singlePane.value = false
-    if (aRefs.length) {
-      leftDocId.value = aRefs[0].docId
-      leftPage.value = aRefs[0].page
-      leftHigh.value = aRefs
-    }
-    if (bRefs.length) {
-      rightDocId.value = bRefs[0].docId
-      rightPage.value = bRefs[0].page
-      rightHigh.value = bRefs
-    }
+    if (aRefs.length) leftDocId.value = aRefs[0].docId
+    if (bRefs.length) rightDocId.value = bRefs[0].docId
+  }
+
+  leftPage.value = leftRange.value[0] ?? 1
+  rightPage.value = rightRange.value[0] ?? 1
+
+  if (mode === 'full') {
+    viewMode.value = 'full'
+  } else if (mode === 'pages') {
+    viewMode.value = 'pages'
+  } else {
+    // 证据页视图：只渲染 refs 覆盖的页范围（跨页片段完整呈现）；跨度异常大时回退整篇
+    const spans = Math.max(leftRange.value.length, rightRange.value.length)
+    viewMode.value = spans > 0 && spans <= MAX_PAGES_MODE ? 'pages' : 'full'
   }
   // 强制重放：文档加载完成后页号可能已是目标页，docs-ui 的 currentPdfPage 监听
   // 只在值变化时触发，先把页号归零再设回，确保重新执行 scrollToPdfPage。
-  if (force) await forceRefire()
+  if (force && viewMode.value === 'full') await forceRefire()
 }
 
 async function forceRefire(): Promise<void> {
@@ -269,12 +318,26 @@ function onViewerLoaded(docId: string, url: string): void {
   window.setTimeout(() => {
     if (pendingLocate !== task) return
     pendingLocate = null
-    void applyLocate(task, true)
+    void applyLocate(task, viewMode.value, true)
   }, 300)
 }
 
-function refsOf(ev: EvidenceItem, docId: string): BlockRange[] {
-  return ev.refs.filter((r) => r.docId === docId)
+/** 取定位任务中指定文档的 refs（证据按 docIds 过滤，refs 任务按 docId 过滤） */
+function refsForDoc(task: LocateTask | null, docId: string): BlockRange[] {
+  if (!task) return []
+  if (task.kind === 'evidence') return task.ev.refs.filter((r) => r.docId === docId)
+  return task.refs.filter((r) => r.docId === docId)
+}
+
+function pageRange(refs: BlockRange[]): number[] {
+  return [...new Set(refs.map((r) => r.page))].sort((a, b) => a - b)
+}
+
+/** 证据页视图 / 整篇视图切换：重新按最近一次定位应用对应模式 */
+function toggleViewMode(): void {
+  const task = lastLocateTask.value
+  if (!task) return
+  void applyLocate(task, viewMode.value === 'pages' ? 'full' : 'pages')
 }
 
 /* function fullPageRefs(ev: EvidenceItem, docId: string): BlockRange[] {
@@ -284,20 +347,24 @@ function refsOf(ev: EvidenceItem, docId: string): BlockRange[] {
 */
 /** 单文档定位（文档列表/来源 chip 跳转用）。 */
 function locateDoc(docId: string, page = 1): void {
+  pendingLocate = null
+  lastLocateTask.value = null
+  viewMode.value = 'full'
   leftDocId.value = docId
   leftPage.value = page
-  leftHigh.value = []
 }
 
 /** 解析完成自动切换 Tab（由 index 在 10 秒手动保护后调用）。 */
 function focusDoc(docId: string): void {
   if (!props.documents.some((d) => d.id === docId)) return
+  pendingLocate = null
+  lastLocateTask.value = null
+  viewMode.value = 'full'
   leftDocId.value = docId
   leftPage.value = 1
-  leftHigh.value = []
 }
 
-defineExpose({ locate, locateRefs, locateDoc, focusDoc })
+defineExpose({ locate, locateRefs, locateDoc, focusDoc, toggleViewMode })
 </script>
 
 <style scoped lang="less">
