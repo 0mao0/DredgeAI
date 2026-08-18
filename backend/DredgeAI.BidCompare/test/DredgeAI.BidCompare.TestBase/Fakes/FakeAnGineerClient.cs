@@ -25,6 +25,9 @@ public class FakeAnGineerClient : IAnGineerClient
 
     public ConcurrentQueue<AnGineerJobStatus>? StateSequence { get; set; }
 
+    /// <summary>轮询始终返回的固定状态（模拟 AnGIneer 任务停滞）；StateSequence 耗尽后生效。</summary>
+    public AnGineerJobStatus? RepeatingState { get; set; }
+
     /// <summary>resume 返回的状态序列；缺省时返回 Processing。</summary>
     public ConcurrentQueue<AnGineerJobStatus>? ResumeSequence { get; set; }
 
@@ -123,6 +126,10 @@ public class FakeAnGineerClient : IAnGineerClient
             {
                 return Task.FromResult(status);
             }
+        }
+        if (RepeatingState != null)
+        {
+            return Task.FromResult(RepeatingState);
         }
         return Task.FromResult(new AnGineerJobStatus(
             AnGineerJobState.Succeeded, 100, "completed", "解析结束: completed"));
