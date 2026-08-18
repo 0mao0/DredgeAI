@@ -1,6 +1,6 @@
 <template>
   <div class="pdf-viewer" :class="{ 'pdf-viewer-scanning': scanning }">
-    <div ref="bodyRef" class="pdf-viewer__body">
+    <div class="pdf-viewer__body">
       <EmptyState v-if="!fileUrl" type="no-data" title="请选择文档" />
 
       <EmptyState
@@ -24,17 +24,19 @@
         text-content=""
         :current-pdf-page="page"
         :pdf-page-count="totalPages && totalPages > 0 ? totalPages : undefined"
+        :pdf-page-range="pageRange?.length ? pageRange : undefined"
         :highlights="highlights"
         :active-highlight-id="activeHighlightId"
         :text-scroll-percent="0"
         @pdf-active-page="emit('update:page', $event)"
+        @pdf-loaded="(url) => emit('loaded', url)"
       />
     </div>
   </div>
 </template>
 
 <script setup lang="ts">
-import { computed, nextTick, onBeforeUnmount, ref, watch } from 'vue'
+import { computed } from 'vue'
 
 import { PDF_Viewer } from '@angineer/docs-ui'
 import '@angineer/docs-ui/style'
@@ -52,6 +54,8 @@ const props = withDefaults(defineProps<{
   high?: BlockRange[]
   scanning?: boolean
   activeHighlightId?: string | null
+  /** 只渲染指定绝对页码（docs-ui pdf-page-range），空/不传 = 整篇 */
+  pageRange?: number[]
   /** 隐藏引用库 PDF_Viewer 标题栏左侧的「原文」标签（库源码不可改，经 CSS 覆盖） */
   hideOriginalLabel?: boolean
 }>(), {
@@ -124,40 +128,6 @@ const highlights = computed<ViewerHighlight[]>(() =>
     }
   }),
 )
-
-/* —— loaded 加载信号：docs-ui v0.1.2 尚无官方事件，观察首个 canvas 出现；
-   v0.1.3 提供 pdf-loaded 事件后替换为 @pdf-loaded（见 Phase 3 Task 10）。 —— */
-const bodyRef = ref<HTMLElement | null>(null)
-let loadedObserver: MutationObserver | null = null
-let loadedUrl = ''
-
-function notifyLoaded(): void {
-  if (loadedUrl === props.fileUrl) return
-  loadedUrl = props.fileUrl
-  emit('loaded', props.fileUrl)
-}
-
-function attachLoadedSignal(): void {
-  loadedObserver?.disconnect()
-  loadedObserver = null
-  const el = bodyRef.value
-  if (!el || !props.fileUrl) return
-  loadedObserver = new MutationObserver(() => {
-    if (el.querySelector('canvas[data-page]')) notifyLoaded()
-  })
-  loadedObserver.observe(el, { childList: true, subtree: true })
-  if (el.querySelector('canvas[data-page]')) notifyLoaded()
-}
-
-watch(() => props.fileUrl, () => {
-  loadedUrl = ''
-  void nextTick(attachLoadedSignal)
-}, { immediate: true })
-
-onBeforeUnmount(() => {
-  loadedObserver?.disconnect()
-  loadedObserver = null
-})
 </script>
 
 <style scoped lang="less">
