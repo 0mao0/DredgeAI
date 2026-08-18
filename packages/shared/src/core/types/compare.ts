@@ -98,6 +98,8 @@ export interface BlockRange {
   docId: string
   page: number
   bbox: [number, number, number, number]
+  /** 是否有有效 bbox 可画高亮框；false 时仅用于跳页定位（如 IR bbox 缺失的块） */
+  hasRect?: boolean
   pairId?: string
   excerpt?: string
 }

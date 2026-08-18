@@ -114,7 +114,7 @@ const highlights = computed<ViewerHighlight[]>(() =>
       id: `${h.pairId ?? h.docId}-${i}`,
       itemId: h.pairId ?? h.docId,
       page: h.page,
-      hasRect: true,
+      hasRect: h.hasRect ?? true,
       left: x0,
       top: y0,
       width: x1 - x0,

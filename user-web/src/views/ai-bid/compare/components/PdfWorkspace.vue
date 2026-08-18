@@ -276,7 +276,9 @@ async function applyLocate(task: LocateTask, mode: LocateMode = 'auto', force = 
   }
   // 强制重放：文档加载完成后页号可能已是目标页，docs-ui 的 currentPdfPage 监听
   // 只在值变化时触发，先把页号归零再设回，确保重新执行 scrollToPdfPage。
-  if (force && viewMode.value === 'full') await forceRefire()
+  if (force) {
+    await forceRefire()
+  }
 }
 
 async function forceRefire(): Promise<void> {

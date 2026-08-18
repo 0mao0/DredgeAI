@@ -457,6 +457,25 @@ function hasValidBbox(block: { bbox?: number[] | null }): block is { bbox: numbe
   return Array.isArray(block.bbox) && block.bbox.length === 4
 }
 
+interface IrBlockLike {
+  pageIdx: number
+  bbox?: number[] | null
+  text?: string | null
+}
+
+/** 由 IR block 生成定位 ref；bbox 缺失时退化为“仅跳页”ref（hasRect: false）。 */
+function blockRef(docId: string, block: IrBlockLike, pairId: string, excerptOverride?: string | null): BlockRange {
+  const valid = hasValidBbox(block)
+  return {
+    docId,
+    page: block.pageIdx + 1,
+    bbox: valid ? [block.bbox![0], block.bbox![1], block.bbox![2], block.bbox![3]] : [0, 0, 0, 0],
+    hasRect: valid,
+    pairId,
+    excerpt: (excerptOverride ?? block.text) ?? undefined,
+  }
+}
+
 async function buildRefs(
   taskId: string,
   ev: EvidenceDto,
@@ -473,16 +492,11 @@ async function buildRefs(
         const ir = await getIr(taskId, docId, irCache)
         if (!ir) continue
         const block = ir.blocks.find((b) => b.blockId === blockId)
-        if (block && hasValidBbox(block)) {
-          refs.push({
-            docId,
-            page: block.pageIdx + 1,
-            bbox: [block.bbox[0], block.bbox[1], block.bbox[2], block.bbox[3]],
-            pairId: `${ev.id}-${(item as { index?: number }).index ?? refs.length}`,
-            excerpt: typeof (item as { text?: unknown }).text === 'string'
-              ? (item as { text: string }).text
-              : block.text,
-          })
+        if (block && Number.isInteger(block.pageIdx)) {
+          const excerpt = typeof (item as { text?: unknown }).text === 'string'
+            ? (item as { text: string }).text
+            : block.text
+          refs.push(blockRef(docId, block, `${ev.id}-${(item as { index?: number }).index ?? refs.length}`, excerpt))
         }
       }
     }
@@ -494,21 +508,15 @@ async function buildRefs(
     if (!ir) continue
     for (const blockId of loc.blockIds) {
       const block = ir.blocks.find((b) => b.blockId === blockId)
-      if (block && hasValidBbox(block)) {
-        refs.push({
-          docId: loc.docId,
-          page: block.pageIdx + 1,
-          bbox: [block.bbox[0], block.bbox[1], block.bbox[2], block.bbox[3]],
-          pairId: ev.id,
-          excerpt: block.text,
-        })
+      if (block && Number.isInteger(block.pageIdx)) {
+        refs.push(blockRef(loc.docId, block, ev.id, block.text))
       }
     }
   }
   return refs
 }
 
-/** 按 blockId 列表取定位坐标（局部雷同片段高亮用）；bbox 缺失的块跳过。 */
+/** 按 blockId 列表取定位坐标（局部雷同片段高亮用）；bbox 缺失时退化为仅跳页。 */
 export async function getBlockRefs(
   taskId: string,
   docId: string,
@@ -520,14 +528,8 @@ export async function getBlockRefs(
   const refs: BlockRange[] = []
   for (const blockId of blockIds) {
     const block = ir.blocks.find((b) => b.blockId === blockId)
-    if (block && hasValidBbox(block)) {
-      refs.push({
-        docId,
-        page: block.pageIdx + 1,
-        bbox: [block.bbox[0], block.bbox[1], block.bbox[2], block.bbox[3]],
-        pairId: `${docId}-${blockId}`,
-        excerpt: block.text,
-      })
+    if (block && Number.isInteger(block.pageIdx)) {
+      refs.push(blockRef(docId, block, `${docId}-${blockId}`, block.text))
     }
   }
   return refs
