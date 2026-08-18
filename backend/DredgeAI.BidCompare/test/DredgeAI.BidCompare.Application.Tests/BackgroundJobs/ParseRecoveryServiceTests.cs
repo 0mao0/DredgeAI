@@ -70,4 +70,33 @@ public class ParseRecoveryServiceTests : BidCompareApplicationTestBase<BidCompar
 
         _jobManager.LastEnqueued<ParseDocumentArgs>().ShouldBeNull();
     }
+
+    [Fact]
+    public async Task Recover_Should_Mark_Old_Stuck_Docs_Failed_Instead_Of_Requeue()
+    {
+        // 线上事故：11:35 卡死的文档被 20:44 重启的恢复逻辑再次入队，复活后继续卡 30 分钟。
+        // 修复后：ParseStartedAt 早于 DocumentParsingTimeout（35 分钟）的一律直接标失败，不再入队。
+        var task = await _appService.CreateAsync(new CreateCompareTaskDto { Name = "t" });
+        var doc = await _appService.UploadDocumentAsync(
+            task.Id, DocumentRole.Bid, "标书C.pdf",
+            new MemoryStream(Encoding.UTF8.GetBytes("%PDF fake")));
+        var docRepo = GetRequiredService<IRepository<CompareDocument, Guid>>();
+        await WithUnitOfWorkAsync(async () =>
+        {
+            var entity = await docRepo.GetAsync(doc.Id);
+            entity.MarkParsing();
+            entity.SetAnGineerDocId("stuck-angineer-doc");
+            await docRepo.UpdateAsync(entity, autoSave: true);
+        });
+        var startedAt = (await docRepo.GetAsync(doc.Id)).ParseStartedAt!.Value;
+        _jobManager.Clear();
+
+        var service = GetRequiredService<ParseRecoveryService>();
+        await service.RecoverAsync(startedAt.AddMinutes(40)); // 已停滞 40 分钟，超过 35 分钟阈值
+
+        _jobManager.LastEnqueued<ParseDocumentArgs>().ShouldBeNull();
+        var failed = await docRepo.GetAsync(doc.Id);
+        failed.ParseStatus.ShouldBe(DocumentParseStatus.Failed);
+        failed.ParseError.ShouldContain("停滞");
+    }
 }
