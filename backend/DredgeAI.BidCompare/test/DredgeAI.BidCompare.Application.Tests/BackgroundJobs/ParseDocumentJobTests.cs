@@ -211,8 +211,41 @@ public class ParseDocumentJobTests : BidCompareApplicationTestBase<BidCompareApp
     }
 
     [Fact]
-    public async Task Failed_Reparse_Should_Resume_Existing_Doc_Instead_Of_Reupload()
+    public async Task Failed_Reparse_Interruption_Should_Resume_Existing_Doc_Instead_Of_Reupload()
     {
+        // “服务重启中断”类失败（docs-api 重启遗留）仍应复用 AnGIneer doc_id 走 resume，避免重复上传
+        const string interruptionMessage = "服务重启导致解析中断，可调用 /api/v1/documents/fake-job/resume 恢复";
+        _anGineerClient.FailWith = interruptionMessage;
+        var (task, doc) = await CreateTaskWithBidDocAsync();
+        await RunParseJobAsync(task.Id, doc.Id);
+
+        var docRepo = GetRequiredService<Volo.Abp.Domain.Repositories.IRepository<CompareDocument, Guid>>();
+        var failed = await docRepo.GetAsync(doc.Id);
+        failed.ParseStatus.ShouldBe(DocumentParseStatus.Failed);
+        _anGineerClient.SubmitCount.ShouldBe(1);
+
+        _anGineerClient.FailWith = null;
+        _anGineerClient.StateSequence = new ConcurrentQueue<AnGineerJobStatus>(new[]
+        {
+            new AnGineerJobStatus(AnGineerJobState.Failed, 100, "failed", interruptionMessage),
+            new AnGineerJobStatus(AnGineerJobState.Succeeded, 100, "completed", "恢复后完成")
+        });
+        await _appService.ReparseAsync(task.Id, new ReparseDocumentsInput { DocIds = new() { doc.Id } });
+        await RunParseJobAsync(task.Id, doc.Id);
+
+        var parsed = await docRepo.GetAsync(doc.Id);
+        parsed.ParseStatus.ShouldBe(DocumentParseStatus.Parsed);
+        parsed.AnGineerDocId.ShouldNotBeNullOrWhiteSpace();
+        _anGineerClient.SubmitCount.ShouldBe(1); // 未重新上传
+        _anGineerClient.ResumeCount.ShouldBeGreaterThanOrEqualTo(1);
+        _fileStorage.Objects.Keys.ShouldContain($"compare/{task.Id}/{doc.Id}/ir.json");
+    }
+
+    [Fact]
+    public async Task Failed_Reparse_With_Generic_Failure_Should_Reupload()
+    {
+        // 2026-08-19 事故：AnGIneer 记录处于普通失败态（error 为空，resume 救不活），
+        // 重新解析必须真正重新上传产生新的解析请求，而不是反复 resume 同一根死线。
         _anGineerClient.FailWith = "OCR 崩溃";
         var (task, doc) = await CreateTaskWithBidDocAsync();
         await RunParseJobAsync(task.Id, doc.Id);
@@ -225,7 +258,7 @@ public class ParseDocumentJobTests : BidCompareApplicationTestBase<BidCompareApp
         _anGineerClient.FailWith = null;
         _anGineerClient.StateSequence = new ConcurrentQueue<AnGineerJobStatus>(new[]
         {
-            new AnGineerJobStatus(AnGineerJobState.Failed, 100, "failed", "服务重启遗留失败"),
+            new AnGineerJobStatus(AnGineerJobState.Failed, 100, "failed", "解析结束: failed"),
             new AnGineerJobStatus(AnGineerJobState.Succeeded, 100, "completed", "恢复后完成")
         });
         await _appService.ReparseAsync(task.Id, new ReparseDocumentsInput { DocIds = new() { doc.Id } });
@@ -234,8 +267,8 @@ public class ParseDocumentJobTests : BidCompareApplicationTestBase<BidCompareApp
         var parsed = await docRepo.GetAsync(doc.Id);
         parsed.ParseStatus.ShouldBe(DocumentParseStatus.Parsed);
         parsed.AnGineerDocId.ShouldNotBeNullOrWhiteSpace();
-        _anGineerClient.SubmitCount.ShouldBe(1); // 未重新上传
-        _anGineerClient.ResumeCount.ShouldBeGreaterThanOrEqualTo(1);
+        _anGineerClient.SubmitCount.ShouldBe(2); // 重新上传，产生新的解析请求
+        _anGineerClient.ResumeCount.ShouldBe(0); // 普通失败态不再 resume
         _fileStorage.Objects.Keys.ShouldContain($"compare/{task.Id}/{doc.Id}/ir.json");
     }
 

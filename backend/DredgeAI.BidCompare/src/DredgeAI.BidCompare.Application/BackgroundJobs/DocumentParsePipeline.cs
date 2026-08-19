@@ -62,8 +62,9 @@ public class DocumentParsePipeline : ITransientDependency
     }
 
     /// <summary>
-    /// 取回或恢复 AnGIneer 任务：已有 doc_id 时先查状态，processing/failed 调 resume；
-    /// doc_id 不存在（404）或不属于当前 API Key（403，AnGIneer 权限改造后旧记录不可复用）时退回重新上传。
+    /// 取回或恢复 AnGIneer 任务：已有 doc_id 时先查状态，processing 或“服务重启中断”类失败调 resume；
+    /// 普通失败态（resume 救不活）以及 doc_id 不存在（404）、不属于当前 API Key（403）时退回重新上传，
+    /// 确保“重新解析”真正产生新的解析请求（2026-08-19 事故：AnGIneer 记录 failed 且 error 为空）。
     /// </summary>
     public async Task<string> GetOrResumeJobAsync(
         CompareDocument document,
@@ -80,11 +81,20 @@ public class DocumentParsePipeline : ITransientDependency
                 {
                     return existing;
                 }
-                var resumed = await _anGineerClient.ResumeAsync(existing, cancellationToken);
-                _logger.LogInformation(
-                    "文档 {DocumentId} 复用 AnGIneer doc_id {DocId}，resume 后状态 {State}",
-                    document.Id, existing, resumed.State);
-                return existing;
+                if (status.State == AnGineerJobState.Failed && !IsInterruptionError(status))
+                {
+                    _logger.LogWarning(
+                        "文档 {DocumentId} 的 AnGIneer doc_id {DocId} 处于普通失败态（{Message}），resume 无法恢复，退回重新上传",
+                        document.Id, existing, status.FailureReason);
+                }
+                else
+                {
+                    var resumed = await _anGineerClient.ResumeAsync(existing, cancellationToken);
+                    _logger.LogInformation(
+                        "文档 {DocumentId} 复用 AnGIneer doc_id {DocId}，resume 后状态 {State}",
+                        document.Id, existing, resumed.State);
+                    return existing;
+                }
             }
             catch (HttpRequestException ex) when (ex.StatusCode == System.Net.HttpStatusCode.NotFound)
             {

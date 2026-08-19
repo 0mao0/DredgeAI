@@ -43,17 +43,19 @@ public class StuckTaskWatchdogWorker : AsyncPeriodicBackgroundWorkerBase, ITrans
 
     protected override async Task DoWorkAsync(PeriodicBackgroundWorkerContext workerContext)
     {
-        await SweepAsync(workerContext.ServiceProvider, _clock.Now);
+        // ParseStartedAt 由 MarkParsing 写 DateTime.UtcNow（UTC 朴素值），巡检必须用 UTC 对齐；
+        // 否则本地时间与 UTC 相差 8 小时，刚启动的解析会被误判为“已超时 35 分钟”（2026-08-19 事故）。
+        await SweepAsync(workerContext.ServiceProvider, DateTime.UtcNow);
     }
 
     /// <summary>单次巡检（internal 供测试以受控时间点直接驱动）。</summary>
-    internal async Task SweepAsync(IServiceProvider serviceProvider, DateTime now)
+    internal async Task SweepAsync(IServiceProvider serviceProvider, DateTime utcNow)
     {
         var documentRepository = serviceProvider.GetRequiredService<IRepository<CompareDocument, Guid>>();
         var taskRepository = serviceProvider.GetRequiredService<IRepository<CompareTask, Guid>>();
         var advancer = serviceProvider.GetRequiredService<ParseTaskStateAdvancer>();
 
-        var docDeadline = now - _options.DocumentParsingTimeout;
+        var docDeadline = utcNow - _options.DocumentParsingTimeout;
         var stuckDocuments = await documentRepository.GetListAsync(d =>
             d.ParseStatus == DocumentParseStatus.Parsing &&
             d.ParseStartedAt != null &&
@@ -92,7 +94,8 @@ public class StuckTaskWatchdogWorker : AsyncPeriodicBackgroundWorkerBase, ITrans
             }
         }
 
-        var taskDeadline = now - _options.TaskTimeout;
+        // LastModificationTime 由 ABP IClock 写入（本地时间），任务超时判断用 IClock.Now 对齐。
+        var taskDeadline = _clock.Now - _options.TaskTimeout;
         var stuckTasks = await taskRepository.GetListAsync(t =>
             (t.Status == CompareTaskStatus.Comparing || t.Status == CompareTaskStatus.Analyzing) &&
             t.LastModificationTime != null &&
@@ -102,7 +105,7 @@ public class StuckTaskWatchdogWorker : AsyncPeriodicBackgroundWorkerBase, ITrans
             Logger.LogWarning("任务 {TaskId} 在 {Status} 超时（>{Timeout}），看门狗标记失败", task.Id, task.Status, _options.TaskTimeout);
             foreach (var pair in task.GetPairs().Where(p => p.Status == ComparePairStatus.Processing))
             {
-                task.MarkPairFailed(pair.PairId, now, "比对超时（看门狗自动标记）");
+                task.MarkPairFailed(pair.PairId, _clock.Now, "比对超时（看门狗自动标记）");
             }
             task.MarkFailed($"比对/分析超时（看门狗自动标记，超时阈值 {_options.TaskTimeout.TotalMinutes} 分钟）");
             await taskRepository.UpdateAsync(task, autoSave: true);
