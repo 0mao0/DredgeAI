@@ -8,6 +8,8 @@
     "Permission:BidCompare": "Bid compare",
     "Permission:BidCompare.Tasks": "Compare tasks",
     "Permission:BidCompare.Drafts": "Upload drafts",
-    "Permission:BidCompare.ClauseTemplates": "Clause templates"
+    "Permission:BidCompare.ClauseTemplates": "Clause templates",
+    "BidCompare:UnsupportedFileType": "Unsupported file type",
+    "BidCompare:DocumentCountOutOfRange": "Too many bid documents"
   }
 }

@@ -207,6 +207,7 @@ import UploadFileRow from './components/UploadFileRow.vue'
 import PdfWorkspace from './components/PdfWorkspace.vue'
 import ProcessPanel from './components/ProcessPanel.vue'
 import { MAX_BID_DOCUMENTS, formatProjectName, isTerminalStatus } from './constants'
+import { describeUploadError, detectFileTypeWarning } from './uploadErrors'
 import {
   confirmClauses,
   createTask,
@@ -608,6 +609,8 @@ async function uploadItem(key: string): Promise<void> {
   const startedAt = Date.now()
   setUploadItem(key, { status: 'uploading', error: undefined, percent: 0, startedAt })
   try {
+    // 先本地识别文件头：格式与扩展名不符只提示、不拦截（解析链路按内容识别格式）
+    const localWarning = await detectFileTypeWarning(item.file)
     const doc = await uploadDraftDocument(draftId.value, item.file, item.role, (p) => {
       setUploadItem(key, { percent: Math.max(2, Math.min(95, p)) })
     })
@@ -616,9 +619,9 @@ async function uploadItem(key: string): Promise<void> {
     if (elapsed < 300) {
       await new Promise((r) => setTimeout(r, 300 - elapsed))
     }
-    setUploadItem(key, { status: 'done', docId: doc.id, percent: 100 })
-  } catch {
-    setUploadItem(key, { status: 'error', error: '上传失败，请重试', percent: undefined })
+    setUploadItem(key, { status: 'done', docId: doc.id, percent: 100, warning: localWarning ?? undefined })
+  } catch (err) {
+    setUploadItem(key, { status: 'error', error: describeUploadError(err), percent: undefined })
   }
 }
 

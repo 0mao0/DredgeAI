@@ -8,6 +8,8 @@
     "Permission:BidCompare": "标书比对",
     "Permission:BidCompare.Tasks": "比标任务",
     "Permission:BidCompare.Drafts": "上传暂存",
-    "Permission:BidCompare.ClauseTemplates": "条款库"
+    "Permission:BidCompare.ClauseTemplates": "条款库",
+    "BidCompare:UnsupportedFileType": "不支持的文件类型",
+    "BidCompare:DocumentCountOutOfRange": "投标文件数量超出上限"
   }
 }

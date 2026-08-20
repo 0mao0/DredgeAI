@@ -20,6 +20,9 @@
     <span v-else class="upload-row__pending">等待上传</span>
 
     <span v-if="item.error" class="upload-row__error" :title="item.error">{{ item.error }}</span>
+    <span v-else-if="item.warning" class="upload-row__warning" :title="item.warning">
+      <WarningOutlined class="upload-row__warn-icon" />{{ item.warning }}
+    </span>
     <AppButton
       v-if="item.status === 'error'"
       variant="link"
@@ -50,6 +53,7 @@ import {
   DeleteOutlined,
   FilePdfOutlined,
   FileWordOutlined,
+  WarningOutlined,
 } from '@ant-design/icons-vue'
 import { formatFileSize } from '../constants'
 import type { UploadFileItem } from './UploadPage.vue'
@@ -130,13 +134,30 @@ function isWord(name: string): boolean {
   &__bad { color: @danger; flex-shrink: 0; }
 
   &__error {
-    max-width: 220px;
+    max-width: 360px;
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
     overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
     font-size: @font-size-xs;
     color: @danger;
+    line-height: 1.45;
+    word-break: break-all;
   }
+
+  &__warning {
+    max-width: 360px;
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+    font-size: @font-size-xs;
+    color: @warning;
+    line-height: 1.45;
+    word-break: break-all;
+  }
+
+  &__warn-icon { margin-right: 4px; }
 
   &__retry { flex-shrink: 0; }
   &__remove { flex-shrink: 0; }

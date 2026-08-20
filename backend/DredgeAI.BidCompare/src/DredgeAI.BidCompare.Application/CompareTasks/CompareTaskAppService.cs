@@ -355,14 +355,16 @@ public class CompareTaskAppService : ApplicationService, ICompareTaskAppService
                 .WithData("max", MaxBidDocuments);
         }
 
-        // 魔数嗅探：仅校验扩展名可被改后缀绕过
+        // 魔数嗅探仅作提示：AnGIneer 侧 .doc/.docx 统一走 LibreOffice 按内容识别转换，
+        // 扩展名与内容不一致不影响解析，因此不再拦截，只记录警告（前端会上传前本地提示）。
         var header = new byte[8];
         var headerLength = await content.ReadAtLeastAsync(header, header.Length, throwOnEndOfStream: false);
         if (!UploadFileSignature.Matches(extension, header.AsSpan(0, headerLength)))
         {
-            throw new BusinessException(BidCompareErrorCodes.UnsupportedFileType)
-                .WithData("extension", extension)
-                .WithData("reason", "文件内容与扩展名不符（魔数校验失败）");
+            Logger.LogWarning(
+                "上传文件 {FileName}（扩展名 {Extension}）内容与扩展名不符（魔数校验失败），已按内容继续处理",
+                fileName,
+                extension);
         }
 
         // 流式直通存储（不整文件内存缓冲），实际上传字节数由直通流统计

@@ -110,6 +110,7 @@ export interface UploadFileItem {
   role: 'bid' | 'tender'
   status: 'pending' | 'uploading' | 'done' | 'error'
   error?: string
+  warning?: string
   docId?: string
   percent?: number
   startedAt?: number
