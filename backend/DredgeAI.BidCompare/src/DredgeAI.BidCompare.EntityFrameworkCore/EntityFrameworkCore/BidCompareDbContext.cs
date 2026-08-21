@@ -1,4 +1,4 @@
-﻿using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore;
 using Volo.Abp.AuditLogging.EntityFrameworkCore;
 using Volo.Abp.BackgroundJobs.EntityFrameworkCore;
 using DredgeAI.BidCompare.Clauses;
@@ -8,6 +8,7 @@ using DredgeAI.BidCompare.Drafts;
 using DredgeAI.BidCompare.Evidences;
 using DredgeAI.BidCompare.Exports;
 using DredgeAI.BidCompare.AI;
+using DredgeAI.BidCompare.TenderReadings;
 using Volo.Abp.Data;
 using Volo.Abp.DependencyInjection;
 using Volo.Abp.EntityFrameworkCore;
@@ -68,6 +69,10 @@ public class BidCompareDbContext :
     public DbSet<ClauseTemplate> ClauseTemplates { get; set; }
     public DbSet<ExportJob> ExportJobs { get; set; }
     public DbSet<AiUsageRecord> AiUsageRecords { get; set; }
+    public DbSet<TenderReadingTask> TenderReadingTasks { get; set; }
+    public DbSet<TenderReadingDocument> TenderReadingDocuments { get; set; }
+    public DbSet<BaselineField> BaselineFields { get; set; }
+    public DbSet<SourceMapItem> SourceMapItems { get; set; }
 
     public BidCompareDbContext(DbContextOptions<BidCompareDbContext> options)
         : base(options)
@@ -107,6 +112,8 @@ public class BidCompareDbContext :
             b.Property(x => x.NameEditedByUser).HasDefaultValue(false);
             b.Property(x => x.PairsJson).HasColumnType("text");
             b.Property(x => x.AutoCompareOnParseComplete).HasDefaultValue(true);
+            b.Property(x => x.TenderReadingTaskId);
+            b.Property(x => x.TenderReadingBaselineVersion);
             b.HasIndex(x => x.Status);
         });
 
@@ -179,6 +186,61 @@ public class BidCompareDbContext :
             b.HasIndex(x => x.UsedConfig);
             b.HasIndex(x => x.Business);
             b.HasIndex(x => new { x.Success, x.CreationTime });
+        });
+
+        builder.Entity<TenderReadingTask>(b =>
+        {
+            b.ToTable("BcTenderReadingTasks");
+            b.ConfigureByConvention();
+            b.Property(x => x.Name).IsRequired().HasMaxLength(128);
+            b.Property(x => x.ProjectCode).HasMaxLength(64);
+            b.Property(x => x.Status).IsRequired();
+            b.Property(x => x.ProgressStage).IsRequired().HasMaxLength(32);
+            b.Property(x => x.FailureReason).HasMaxLength(2048);
+            b.HasIndex(x => x.Status);
+            b.HasIndex(x => x.ProjectCode);
+        });
+
+        builder.Entity<TenderReadingDocument>(b =>
+        {
+            b.ToTable("BcTenderReadingDocuments");
+            b.ConfigureByConvention();
+            b.Property(x => x.FileName).IsRequired().HasMaxLength(256);
+            b.Property(x => x.FileExtension).IsRequired().HasMaxLength(16);
+            b.Property(x => x.OriginStorageKey).IsRequired().HasMaxLength(512);
+            b.Property(x => x.AnGineerDocId).HasMaxLength(128);
+            b.Property(x => x.IrStorageKey).HasMaxLength(512);
+            b.Property(x => x.DocMdStorageKey).HasMaxLength(512);
+            b.Property(x => x.ParseError).HasMaxLength(2048);
+            b.Property(x => x.ParseStage).HasMaxLength(64);
+            b.Property(x => x.ParseStageMessage).HasMaxLength(1024);
+            b.HasIndex(x => x.TaskId);
+        });
+
+        builder.Entity<BaselineField>(b =>
+        {
+            b.ToTable("BcBaselineFields");
+            b.ConfigureByConvention();
+            b.Property(x => x.FieldKey).IsRequired().HasMaxLength(128);
+            b.Property(x => x.ValueJson).IsRequired().HasColumnType("text");
+            b.Property(x => x.RawText).IsRequired().HasColumnType("text");
+            b.Property(x => x.Confidence).IsRequired();
+            b.Property(x => x.Status).IsRequired();
+            b.Property(x => x.Extractor).IsRequired().HasMaxLength(32);
+            b.Property(x => x.ExtractorVersion).IsRequired().HasMaxLength(32);
+            b.HasIndex(x => new { x.TaskId, x.Category });
+            b.HasIndex(x => new { x.TaskId, x.FieldKey });
+        });
+
+        builder.Entity<SourceMapItem>(b =>
+        {
+            b.ToTable("BcSourceMapItems");
+            b.ConfigureByConvention();
+            b.Property(x => x.BlockId).IsRequired().HasMaxLength(128);
+            b.Property(x => x.BboxJson).IsRequired().HasColumnType("text");
+            b.Property(x => x.Text).IsRequired().HasColumnType("text");
+            b.HasIndex(x => x.FieldId);
+            b.HasIndex(x => new { x.FieldId, x.PageIdx });
         });
     }
 }

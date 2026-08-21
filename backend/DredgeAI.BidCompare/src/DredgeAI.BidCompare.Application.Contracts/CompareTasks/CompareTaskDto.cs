@@ -23,6 +23,12 @@ public class CompareTaskDto : EntityDto<Guid>
 
     public Guid? TenderDocId { get; set; }
 
+    /// <summary>来源读标任务（P3）。</summary>
+    public Guid? TenderReadingTaskId { get; set; }
+
+    /// <summary>引用读标基准库版本（P3）。</summary>
+    public int? TenderReadingBaselineVersion { get; set; }
+
     public List<ClauseDto>? ClauseSnapshot { get; set; }
 
     public CompareProgressDto Progress { get; set; } = new();
