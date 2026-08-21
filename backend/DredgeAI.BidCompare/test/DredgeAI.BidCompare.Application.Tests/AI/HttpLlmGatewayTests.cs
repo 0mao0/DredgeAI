@@ -15,20 +15,28 @@ public class HttpLlmGatewayTests
 {
     private sealed class StubHandler : HttpMessageHandler
     {
-        private readonly HttpResponseMessage _response;
+        private readonly HttpStatusCode _statusCode;
+        private readonly string _body;
         public HttpRequestMessage? LastRequest { get; private set; }
+        public int CallCount { get; private set; }
 
-        public StubHandler(HttpResponseMessage response)
+        public StubHandler(HttpStatusCode statusCode, string body)
         {
-            _response = response;
+            _statusCode = statusCode;
+            _body = body;
         }
 
         protected override Task<HttpResponseMessage> SendAsync(
             HttpRequestMessage request,
             CancellationToken cancellationToken)
         {
+            // 瞬时错误会触发重试，每次调用必须返回全新响应实例（上一实例已被释放）
+            CallCount++;
             LastRequest = request;
-            return Task.FromResult(_response);
+            return Task.FromResult(new HttpResponseMessage(_statusCode)
+            {
+                Content = new StringContent(_body, System.Text.Encoding.UTF8, "application/json")
+            });
         }
     }
 
@@ -46,14 +54,8 @@ public class HttpLlmGatewayTests
     [Fact]
     public async Task CompleteAsync_Returns_Text_From_Gateway()
     {
-        var response = new HttpResponseMessage(HttpStatusCode.OK)
-        {
-            Content = new StringContent(
-                "{\"text\":\"条款：...\",\"finishReason\":\"stop\",\"attempts\":1,\"latencySeconds\":0.5}",
-                System.Text.Encoding.UTF8,
-                "application/json")
-        };
-        var handler = new StubHandler(response);
+        var handler = new StubHandler(HttpStatusCode.OK,
+            "{\"text\":\"条款：...\",\"finishReason\":\"stop\",\"attempts\":1,\"latencySeconds\":0.5}");
         var gateway = CreateGateway(handler);
 
         var text = await gateway.CompleteAsync("system", "user");
@@ -65,15 +67,14 @@ public class HttpLlmGatewayTests
     [Fact]
     public async Task CompleteAsync_Throws_With_Service_Code_On_502()
     {
-        var response = new HttpResponseMessage(HttpStatusCode.BadGateway)
-        {
-            Content = new StringContent("{\"code\":\"PROVIDER_UNAVAILABLE\",\"message\":\"all down\"}")
-        };
-        var gateway = CreateGateway(new StubHandler(response));
+        var handler = new StubHandler(HttpStatusCode.BadGateway, "{\"code\":\"PROVIDER_UNAVAILABLE\",\"message\":\"all down\"}");
+        var gateway = CreateGateway(handler);
 
         var ex = await Assert.ThrowsAsync<BusinessException>(
             () => gateway.CompleteAsync("system", "user"));
         Assert.Equal(BidCompareErrorCodes.AiGatewayFailed, ex.Code);
         Assert.Equal("PROVIDER_UNAVAILABLE", ex.Data["serviceCode"]);
+        // 502 为瞬时错误：先按 TransientHttpRetry 重试，最后一次尝试保留错误信封
+        Assert.Equal(3, handler.CallCount);
     }
 }

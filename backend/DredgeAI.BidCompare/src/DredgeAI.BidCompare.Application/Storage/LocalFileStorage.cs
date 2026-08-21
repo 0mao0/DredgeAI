@@ -58,6 +58,17 @@ public class LocalFileStorage : IFileStorage
         return Task.CompletedTask;
     }
 
+    public Task DeleteByPrefixAsync(string prefix, CancellationToken cancellationToken = default)
+    {
+        // key 约定为目录式前缀（compare/{taskId}/），直接按目录递归删除
+        var path = ResolvePath(prefix);
+        if (Directory.Exists(path))
+        {
+            Directory.Delete(path, recursive: true);
+        }
+        return Task.CompletedTask;
+    }
+
     public Task<bool> ExistsAsync(string key, CancellationToken cancellationToken = default)
         => Task.FromResult(File.Exists(ResolvePath(key)));
 

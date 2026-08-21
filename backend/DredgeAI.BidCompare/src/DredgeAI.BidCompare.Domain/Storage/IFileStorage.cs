@@ -22,6 +22,9 @@ public interface IFileStorage
 
     Task DeleteAsync(string key, CancellationToken cancellationToken = default);
 
+    /// <summary>按前缀删除（任务级清理：compare/{taskId}/、tender-read/{taskId}/、compare/drafts/{draftId}/）。</summary>
+    Task DeleteByPrefixAsync(string prefix, CancellationToken cancellationToken = default);
+
     Task<bool> ExistsAsync(string key, CancellationToken cancellationToken = default);
 
     /// <summary>生成限时下载链接（导出文件下载用，spec §6.2）。</summary>

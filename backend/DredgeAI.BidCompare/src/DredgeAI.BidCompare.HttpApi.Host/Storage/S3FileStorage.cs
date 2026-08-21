@@ -1,5 +1,6 @@
 using System;
 using System.IO;
+using System.Linq;
 using System.Net;
 using System.Threading;
 using System.Threading.Tasks;
@@ -15,6 +16,7 @@ public class S3FileStorage : IFileStorage
 {
     private readonly S3StorageOptions _options;
     private readonly Lazy<IAmazonS3> _client;
+    private int _bucketEnsured;
 
     public S3FileStorage(IOptions<S3StorageOptions> options)
     {
@@ -30,7 +32,7 @@ public class S3FileStorage : IFileStorage
 
     public async Task<string> UploadAsync(string key, Stream content, string contentType, CancellationToken cancellationToken = default)
     {
-        await EnsureBucketAsync(cancellationToken);
+        await EnsureBucketOnceAsync(cancellationToken);
         var request = new PutObjectRequest
         {
             BucketName = _options.Bucket,
@@ -52,6 +54,29 @@ public class S3FileStorage : IFileStorage
     public async Task DeleteAsync(string key, CancellationToken cancellationToken = default)
     {
         await _client.Value.DeleteObjectAsync(_options.Bucket, key, cancellationToken);
+    }
+
+    public async Task DeleteByPrefixAsync(string prefix, CancellationToken cancellationToken = default)
+    {
+        string? continuationToken = null;
+        do
+        {
+            var list = await _client.Value.ListObjectsV2Async(new ListObjectsV2Request
+            {
+                BucketName = _options.Bucket,
+                Prefix = prefix,
+                ContinuationToken = continuationToken
+            }, cancellationToken);
+            if (list.S3Objects.Count > 0)
+            {
+                await _client.Value.DeleteObjectsAsync(new DeleteObjectsRequest
+                {
+                    BucketName = _options.Bucket,
+                    Objects = list.S3Objects.Select(o => new KeyVersion { Key = o.Key }).ToList()
+                }, cancellationToken);
+            }
+            continuationToken = list.IsTruncated == true ? list.NextContinuationToken : null;
+        } while (continuationToken != null);
     }
 
     public async Task<bool> ExistsAsync(string key, CancellationToken cancellationToken = default)
@@ -77,6 +102,17 @@ public class S3FileStorage : IFileStorage
             Verb = HttpVerb.GET
         };
         return Task.FromResult(_client.Value.GetPreSignedURL(request));
+    }
+
+    /// <summary>桶探测只做一次：S3FileStorage 由宿主按单例注册，成功后不再重复 PutBucket。</summary>
+    private async Task EnsureBucketOnceAsync(CancellationToken cancellationToken)
+    {
+        if (Volatile.Read(ref _bucketEnsured) == 1)
+        {
+            return;
+        }
+        await EnsureBucketAsync(cancellationToken);
+        Volatile.Write(ref _bucketEnsured, 1);
     }
 
     private async Task EnsureBucketAsync(CancellationToken cancellationToken)

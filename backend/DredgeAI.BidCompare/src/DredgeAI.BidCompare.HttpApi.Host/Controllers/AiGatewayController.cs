@@ -21,12 +21,16 @@ public class AiGatewayController : AbpControllerBase
         _options = options.Value;
     }
 
-    /// <summary>POST /api/ai-gateway/usage-records 网关用量上报（X-Gateway-Token 校验）。</summary>
+    /// <summary>POST /api/ai-gateway/usage-records 网关用量上报（X-Gateway-Token 校验；未配置令牌时 fail-closed 拒绝）。</summary>
     [HttpPost("usage-records")]
     public async Task<AiUsageRecordDto> CreateUsageRecordAsync([FromBody] CreateAiUsageRecordDto input)
     {
-        if (!string.IsNullOrWhiteSpace(_options.IngestToken)
-            && Request.Headers["X-Gateway-Token"] != _options.IngestToken)
+        if (string.IsNullOrWhiteSpace(_options.IngestToken))
+        {
+            throw new BusinessException(BidCompareErrorCodes.AiGatewayFailed)
+                .WithData("reason", "服务端未配置 AI_GATEWAY_INGEST_TOKEN，用量上报端点已禁用");
+        }
+        if (Request.Headers["X-Gateway-Token"] != _options.IngestToken)
         {
             throw new BusinessException(BidCompareErrorCodes.AiGatewayFailed)
                 .WithData("reason", "无效的网关上报令牌");

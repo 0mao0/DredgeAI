@@ -130,6 +130,7 @@ public class BidCompareHttpApiHostModule : AbpModule
         Configure<ReportExportOptions>(configuration.GetSection("Export"));
         Configure<LibreOfficeOptions>(configuration.GetSection("LibreOffice"));
         Configure<WatchdogOptions>(configuration.GetSection("Watchdog"));
+        Configure<CleanupOptions>(configuration.GetSection("Cleanup"));
         // AnGIneer 轮询间隔为 5s，服务端 keep-alive 超时也是 5s 级别，
         // 缩短连接池空闲寿命，避免复用已被服务端关闭的旧连接（SocketException 10053）。
         // 显式 Timeout：默认 100s 不够 200MB 级标书上传，加长到 10 分钟（上限，状态轮询照常快速返回）。
@@ -276,16 +277,24 @@ public class BidCompareHttpApiHostModule : AbpModule
         var app = context.GetApplicationBuilder();
         var env = context.GetEnvironment();
 
-        // 启动诊断：确认实际生效的 AnGIneer API Key（只打前缀，避免泄露完整密钥）
+        // 启动诊断：确认 AnGIneer API Key 是否配置（密钥内容一律不落日志）
         var anGineerOptions = context.ServiceProvider.GetRequiredService<IOptions<AnGineerOptions>>().Value;
-        var key = anGineerOptions.ApiKey;
         app.ApplicationServices.GetRequiredService<Microsoft.Extensions.Logging.ILoggerFactory>()
             .CreateLogger("AnGineerConfig")
             .LogInformation("AnGIneer ApiKey 配置: {State}；BaseUrl: {BaseUrl}",
-                string.IsNullOrWhiteSpace(key)
-                    ? "未配置（空）"
-                    : $"已配置（前缀 {key[..Math.Min(8, key.Length)]}...，长度 {key.Length}）",
+                string.IsNullOrWhiteSpace(anGineerOptions.ApiKey) ? "未配置" : "已配置",
                 anGineerOptions.BaseUrl);
+
+        // 启动检查：用量上报端点 fail-closed，未配置令牌时必须显式告警（防止共享/生产环境静默裸奔）
+        var aiGatewayOptions = context.ServiceProvider.GetRequiredService<IOptions<AiGatewayOptions>>().Value;
+        if (string.IsNullOrWhiteSpace(aiGatewayOptions.IngestToken))
+        {
+            app.ApplicationServices.GetRequiredService<Microsoft.Extensions.Logging.ILoggerFactory>()
+                .CreateLogger("AiGatewayConfig")
+                .LogWarning(
+                    "AiGateway:IngestToken 未配置，POST /api/ai-gateway/usage-records 已 fail-closed 拒绝所有上报；" +
+                    "共享/生产环境必须配置 AI_GATEWAY_INGEST_TOKEN");
+        }
 
         if (env.IsDevelopment())
         {
@@ -376,6 +385,13 @@ public class BidCompareHttpApiHostModule : AbpModule
         {
             // 卡死看门狗（M9）：Parsing/Comparing/Analyzing 中间态超时巡检
             await context.AddBackgroundWorkerAsync<StuckTaskWatchdogWorker>();
+        }
+
+        // 孤儿数据清扫：超时草稿会话与过期导出文件
+        var cleanup = context.ServiceProvider.GetRequiredService<IOptions<CleanupOptions>>().Value;
+        if (cleanup.Enabled)
+        {
+            await context.AddBackgroundWorkerAsync<OrphanCleanupWorker>();
         }
 
         // 进程重启恢复：Parsing 且已有 AnGIneer doc_id 的文档重新入队，由解析任务查状态并 resume。

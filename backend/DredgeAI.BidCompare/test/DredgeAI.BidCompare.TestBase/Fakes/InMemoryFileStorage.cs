@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Concurrent;
 using System.IO;
+using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 
@@ -31,6 +32,15 @@ public class InMemoryFileStorage : IFileStorage
     public Task DeleteAsync(string key, CancellationToken cancellationToken = default)
     {
         Objects.TryRemove(key, out _);
+        return Task.CompletedTask;
+    }
+
+    public Task DeleteByPrefixAsync(string prefix, CancellationToken cancellationToken = default)
+    {
+        foreach (var key in Objects.Keys.Where(k => k.StartsWith(prefix, StringComparison.Ordinal)))
+        {
+            Objects.TryRemove(key, out _);
+        }
         return Task.CompletedTask;
     }
 

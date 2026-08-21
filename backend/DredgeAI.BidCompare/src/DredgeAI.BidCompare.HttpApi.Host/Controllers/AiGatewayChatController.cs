@@ -6,6 +6,7 @@ using System.Threading.Tasks;
 using DredgeAI.BidCompare.AI;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.Extensions.Options;
 using Volo.Abp.AspNetCore.Mvc;
 
 namespace DredgeAI.BidCompare.Controllers;
@@ -21,16 +22,25 @@ public class AiGatewayChatController : AbpControllerBase
     };
 
     private readonly IHttpClientFactory _httpClientFactory;
+    private readonly AiGatewayOptions _options;
 
-    public AiGatewayChatController(IHttpClientFactory httpClientFactory)
+    public AiGatewayChatController(
+        IHttpClientFactory httpClientFactory,
+        IOptions<AiGatewayOptions> options)
     {
         _httpClientFactory = httpClientFactory;
+        _options = options.Value;
     }
 
     [HttpPost("chat/stream")]
     public async Task<System.IO.Stream> ChatStreamAsync([FromBody] ChatStreamRequest input)
     {
         var client = _httpClientFactory.CreateClient(nameof(HttpLlmGateway));
+        if (!string.IsNullOrWhiteSpace(_options.ApiToken))
+        {
+            // 网关契约：X-API-Key 头（AI_GATEWAY_API_TOKEN），与 HttpLlmGateway 一致
+            client.DefaultRequestHeaders.TryAddWithoutValidation("X-API-Key", _options.ApiToken);
+        }
         var upstream = await client.PostAsJsonAsync(
             "v1/chat/stream",
             input,

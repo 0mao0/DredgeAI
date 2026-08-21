@@ -61,7 +61,14 @@ public class HttpCompareAlgoClient : ICompareAlgoClient, ITransientDependency
         };
 
         using var response = await TransientHttpRetry.ExecuteAsync(
-            async ct => await client.PostAsJsonAsync(path.TrimStart('/'), body, JsonOptions, ct),
+            async (attempt, ct) =>
+            {
+                var resp = await client.PostAsJsonAsync(path.TrimStart('/'), body, JsonOptions, ct);
+                // 最后一次尝试不抛瞬时异常：保留响应给上层解析算法服务错误信封
+                return attempt < MaxAttempts
+                    ? await TransientHttpRetry.ThrowIfTransientAsync(resp, $"算法服务 {path}", ct)
+                    : resp;
+            },
             _logger, $"算法服务 {path}", MaxAttempts, cancellationToken);
 
         if (!response.IsSuccessStatusCode)

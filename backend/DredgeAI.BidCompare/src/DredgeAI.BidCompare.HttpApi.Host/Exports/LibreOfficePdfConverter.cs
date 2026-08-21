@@ -28,10 +28,12 @@ public class LibreOfficePdfConverter : IPdfConverter, ITransientDependency
             var docxPath = Path.Combine(workDir, "report.docx");
             await File.WriteAllBytesAsync(docxPath, docxContent, cancellationToken);
 
+            // 每次转换使用独立 UserInstallation：共享 profile 会导致并发转换互锁/偶发失败
+            var profileUri = new Uri(Path.Combine(workDir, "lo-profile")).AbsoluteUri;
             var startInfo = new ProcessStartInfo
             {
                 FileName = _options.SofficePath,
-                Arguments = $"--headless --convert-to pdf --outdir \"{workDir}\" \"{docxPath}\"",
+                Arguments = $"--headless -env:UserInstallation={profileUri} --convert-to pdf --outdir \"{workDir}\" \"{docxPath}\"",
                 RedirectStandardOutput = true,
                 RedirectStandardError = true,
                 UseShellExecute = false,

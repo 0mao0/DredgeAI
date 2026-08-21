@@ -48,7 +48,8 @@ public class HttpLlmGateway : ILlmGateway, ITransientDependency
         var client = _httpClientFactory.CreateClient(nameof(HttpLlmGateway));
         if (!string.IsNullOrWhiteSpace(_options.ApiToken))
         {
-            client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", _options.ApiToken);
+            // 网关契约：X-API-Key 头（AI_GATEWAY_API_TOKEN），不是 Authorization Bearer
+            client.DefaultRequestHeaders.TryAddWithoutValidation("X-API-Key", _options.ApiToken);
         }
 
         var request = new
@@ -63,7 +64,14 @@ public class HttpLlmGateway : ILlmGateway, ITransientDependency
         };
 
         using var response = await TransientHttpRetry.ExecuteAsync(
-            async ct => await client.PostAsJsonAsync("v1/chat", request, JsonOptions, ct),
+            async (attempt, ct) =>
+            {
+                var resp = await client.PostAsJsonAsync("v1/chat", request, JsonOptions, ct);
+                // 最后一次尝试不抛瞬时异常：保留响应给上层解析网关错误信封（serviceCode 等诊断信息）
+                return attempt < MaxAttempts
+                    ? await TransientHttpRetry.ThrowIfTransientAsync(resp, "AI Gateway /v1/chat", ct)
+                    : resp;
+            },
             _logger,
             "AI Gateway /v1/chat",
             MaxAttempts,
