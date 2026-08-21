@@ -1,5 +1,5 @@
 <template>
-  <div class="pdf-viewer" :class="{ 'pdf-viewer-scanning': scanning }">
+  <div class="pdf-viewer" :class="{ 'pdf-viewer-scanning': scanning, 'pdf-viewer--hide-original': hideOriginalLabel }">
     <div class="pdf-viewer__body">
       <EmptyState v-if="!fileUrl" type="no-data" title="请选择文档" />
 
@@ -29,6 +29,7 @@
         :text-scroll-percent="0"
         @pdf-active-page="emit('update:page', $event)"
         @pdf-loaded="(url) => emit('loaded', url)"
+        @select-highlight="(item) => emit('selectHighlight', item)"
       />
     </div>
   </div>
@@ -67,7 +68,13 @@ const props = withDefaults(defineProps<{
 const emit = defineEmits<{
   'update:page': [value: number]
   'loaded': [url: string]
+  'selectHighlight': [highlight: SelectHighlightEvent]
 }>()
+
+interface SelectHighlightEvent {
+  itemId?: string
+  id?: string
+}
 
 interface ViewerNode {
   status: string
@@ -181,19 +188,20 @@ const highlights = computed<ViewerHighlight[]>(() =>
   flex: 1;
   min-height: 0;
 }
-</style>
-
-<style lang="less">
-/* 非 scoped：第三方 PDF_Viewer 内部元素 scoped 穿透不可靠，
-   直接全局隐藏「原文」标签（.pane-title-prefix 仅该库使用，无副作用） */
-.pane-title-prefix {
-  display: none !important;
-}
 
 /* 修复 docs-ui 虚拟滚动 bug：.pdf-virtual-spacer 是 flex 容器子项，默认 flex-shrink
    会把内联 height（全文档高度）压缩到视口高度，导致大 PDF 只能滚到已渲染页、
    定位跳页失败。强制不收缩后 scrollHeight 恢复为全文高度，scrollToPdfPage 才能到达目标页。 */
-.pdf-scroll-container .pdf-virtual-spacer {
-  flex-shrink: 0 !important;
+.pdf-viewer {
+  :deep(.pdf-scroll-container .pdf-virtual-spacer) {
+    flex-shrink: 0 !important;
+  }
+}
+
+/* 按 prop 隐藏第三方 PDF_Viewer 标题栏左侧的「原文」标签（库源码不可改，经 :deep 覆盖） */
+.pdf-viewer--hide-original {
+  :deep(.pane-title-prefix) {
+    display: none !important;
+  }
 }
 </style>

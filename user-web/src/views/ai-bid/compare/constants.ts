@@ -11,24 +11,6 @@ export const COMPARE_STATUS_MAP: Record<CompareTaskStatus, { color: string, text
   failed: { color: 'red', text: '失败' },
 }
 
-/** 比标文档别名（A~H）标签色板，与现有风险/状态色系保持一致。 */
-const DOC_BADGE_COLORS: Record<string, string> = {
-  A: '#2563EB',
-  B: '#0EA5E9',
-  C: '#F59E0B',
-  D: '#8B5CF6',
-  E: '#10B981',
-  F: '#EF4444',
-  G: '#D97706',
-  H: '#3B82F6',
-}
-
-/** 取别名标签底色：A~H 取专属色，其余（招标/未知）回落品牌色。 */
-export function docBadgeColor(label: string): string {
-  const key = (label || '').trim().charAt(0).toUpperCase()
-  return DOC_BADGE_COLORS[key] ?? '#0EA5E9'
-}
-
 export function isTerminalStatus(status: CompareTaskStatus): boolean {
   return status === 'completed' || status === 'partial' || status === 'failed'
 }
@@ -67,19 +49,6 @@ export function formatFileSize(size: number): string {
   if (size >= 1024 * 1024) return `${(size / 1024 / 1024).toFixed(1)} MB`
   if (size >= 1024) return `${(size / 1024).toFixed(0)} KB`
   return `${size} B`
-}
-
-/** 客户端候选名：取文件名公共前缀，去除「投标文件 / 报价文件 / 标书」后缀，不超过 20 字。 */
-export function deriveProjectName(fileNames: string[]): string {
-  const stems = fileNames.map((n) => n.replace(/\.[^.]+$/, ''))
-  if (!stems.length) return ''
-  let prefix = stems[0]
-  for (const s of stems.slice(1)) {
-    while (prefix && !s.startsWith(prefix)) prefix = prefix.slice(0, -1)
-  }
-  const cleaned = prefix.replace(/(投标文件|报价文件|标书)+[\s_（(]?[A-E甲丁乙丙]?[)）]?$/g, '').trim()
-  const base = cleaned.length >= 2 ? cleaned : stems[0]
-  return base.slice(0, 20)
 }
 
 /** 解析完成后生成项目名：xxx项目-比标-N本（N = 投标文件份数）。 */

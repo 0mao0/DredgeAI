@@ -1,4 +1,5 @@
 import { AbpError } from '@shared/core/http'
+import { MAX_BID_DOCUMENTS } from './constants'
 
 /** 与后端 UploadFileSignature 一致的魔数（防止改扩展名绕过白名单） */
 const PDF_MAGIC = [0x25, 0x50, 0x44, 0x46] // %PDF
@@ -58,7 +59,7 @@ export function describeUploadError(err: unknown): string {
       return '不支持的文件类型，仅支持 PDF / Word（.doc / .docx）'
     }
     if (err.code === 'BidCompare:DocumentCountOutOfRange') {
-      return `投标文件数量超出上限（最多 ${String(err.data?.max ?? 5)} 份）`
+      return `投标文件数量超出上限（最多 ${String(err.data?.max ?? MAX_BID_DOCUMENTS)} 份）`
     }
     return err.message || '上传失败，请重试'
   }

@@ -201,6 +201,7 @@
                 :compare-evidence="compareEvidence"
                 :documents="task.documents"
                 :task-id="task.id"
+                :ir-epoch="irEpoch"
                 @locate="(e) => emit('locate', e)"
                 @locate-refs="(refs) => emit('locateRefs', refs)"
               />
@@ -341,6 +342,8 @@ const props = defineProps<{
   retryingPairIds: string[]
   retryingCompare: boolean
   retryingAi: boolean
+  /** IR 代际：重解析/重新比对后自增，透传给依赖 IR 坐标的子组件用于失效缓存 */
+  irEpoch?: number
 }>()
 
 const emit = defineEmits<{
@@ -727,9 +730,10 @@ function toPayload(c: ClauseItem): ClauseItem {
 
 function onHeatmapCell(pair: { docA: string, docB: string }): void {
   const labels = props.overview?.docLabels ?? []
-  const bids = props.task.documents.filter((d) => d.role !== 'tender')
-  const docAId = bids[labels.indexOf(pair.docA)]?.id
-  const docBId = bids[labels.indexOf(pair.docB)]?.id
+  // docLabels 与矩阵 docIds 同序生成，按下标反解 docId（不能用 documents 数组顺序，两者不保证一致）
+  const docIds = props.overview?.docIds ?? []
+  const docAId = docIds[labels.indexOf(pair.docA)]
+  const docBId = docIds[labels.indexOf(pair.docB)]
   const ev = props.evidence.find((e) =>
     docAId && docBId && e.docIds.includes(docAId) && e.docIds.includes(docBId))
   if (ev) {

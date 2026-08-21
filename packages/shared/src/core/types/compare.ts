@@ -46,9 +46,10 @@ export interface CompareTask {
   clauseSnapshot?: ClauseItem[] | null
   /** 招标文件文档 id（可选，未上传为 null） */
   tenderDocId?: string | null
-  riskSummary?: { high: number, mid: number, low: number, clauseMissing: number }
-  matrixClauses?: string[]
-  responseMatrix?: string[][]
+  /** 来源读标任务（P3） */
+  tenderReadingTaskId?: string | null
+  /** 引用的读标基准库版本（P3） */
+  tenderReadingBaselineVersion?: number | null
   createdAt: string
   finishedAt?: string
   failReason?: string
@@ -156,6 +157,8 @@ export interface SimilarityMatrix {
 }
 
 export interface TaskOverview {
+  /** 与 docLabels / simMatrix 同序的文档 id（矩阵行列顺序以 docIds 为准） */
+  docIds: string[]
   docLabels: string[]
   simMatrix: number[][]
   simMatrixSelf: number[][]
@@ -211,16 +214,4 @@ export function normalizeRect(bbox: [number, number, number, number]): [number, 
     Math.max(x0, x1),
     Math.max(y0, y1),
   ]
-}
-
-export function mapIrBlocksToHighlights(
-  blocks: IrBlock[],
-  predicate: (b: IrBlock) => string | null,
-): BlockRange[] {
-  return blocks.flatMap((b) => {
-    const pairId = predicate(b)
-    return pairId
-      ? [{ docId: '', page: b.page, bbox: normalizeRect(b.bbox), pairId, excerpt: b.text }]
-      : []
-  })
 }

@@ -42,6 +42,8 @@ interface CompareTaskDto {
   failureReason?: string | null
   docIds: string[]
   tenderDocId?: string | null
+  tenderReadingTaskId?: string | null
+  tenderReadingBaselineVersion?: number | null
   clauseSnapshot?: ClauseDto[] | null
   progress: {
     stage: string
@@ -113,13 +115,6 @@ interface EvidenceDto {
 interface ClauseDto {
   clauseId: string
   source: BackendClauseSource
-  text: string
-  mandatory: boolean
-  category?: string | null
-}
-
-interface ClauseTemplateDto {
-  id: string
   text: string
   mandatory: boolean
   category?: string | null
@@ -203,6 +198,8 @@ function mapTask(dto: CompareTaskDto, documents: CompareDocMeta[]): CompareTask 
     failReason: dto.failureReason ?? undefined,
     documents,
     tenderDocId: dto.tenderDocId ?? null,
+    tenderReadingTaskId: dto.tenderReadingTaskId ?? null,
+    tenderReadingBaselineVersion: dto.tenderReadingBaselineVersion ?? null,
     progress: {
       stage,
       ...progress,
@@ -276,17 +273,6 @@ function mapClause(dto: ClauseDto, source: ClauseItem['source']): ClauseItem {
   }
 }
 
-function mapTemplate(dto: ClauseTemplateDto): ClauseItem {
-  return {
-    id: dto.id,
-    title: dto.text,
-    content: dto.text,
-    category: dto.category ?? '',
-    mandatory: dto.mandatory,
-    source: 'library',
-  }
-}
-
 function mapExportJob(dto: ExportJobDto): { exportId: string, status: 'processing' | 'done' | 'failed', downloadUrl?: string } {
   return {
     exportId: dto.jobId,
@@ -304,10 +290,14 @@ export async function getTasks(): Promise<CompareTask[]> {
   return Promise.all(res.items.map(async (t) => mapTask(t, await getDocuments(t.id))))
 }
 
-export async function createTask(name: string, draftId?: string): Promise<CompareTask> {
+export async function createTask(
+  name: string,
+  draftId?: string,
+  tenderReadingTaskId?: string,
+): Promise<CompareTask> {
   const dto = await request.post<CompareTaskDto>(
     urls.compareTasks,
-    draftId ? { name, draftId } : { name },
+    { name, ...(draftId ? { draftId } : {}), ...(tenderReadingTaskId ? { tenderReadingTaskId } : {}) },
   )
   return mapTask(dto, [])
 }
@@ -375,25 +365,6 @@ export async function getDocuments(id: string, silent = false): Promise<CompareD
   return res.map(mapDocument)
 }
 
-export async function uploadDocument(
-  taskId: string,
-  file: File,
-  role: 'bid' | 'tender',
-  onProgress?: (percent: number) => void,
-): Promise<CompareDocMeta> {
-  const formData = new FormData()
-  formData.append('file', file)
-  formData.append('role', role)
-  const dto = await request.post<CompareDocumentDto>(fillUrl(urls.compareTaskDocuments, { id: taskId }), formData, {
-    headers: { 'Content-Type': 'multipart/form-data' },
-    timeout: 120000,
-    onUploadProgress: (e) => {
-      if (onProgress && e.total) onProgress(Math.round((e.loaded / e.total) * 100))
-    },
-  })
-  return mapDocument(dto)
-}
-
 /* —— 上传会话（选中即上传，仅暂存文件，不建任务） —— */
 
 export async function uploadDraftDocument(
@@ -417,11 +388,6 @@ export async function uploadDraftDocument(
     },
   )
   return mapDraftDocument(dto)
-}
-
-export async function getDraftDocuments(draftId: string): Promise<CompareDraftDocument[]> {
-  const res = await request.get<CompareDraftDocumentDto[]>(fillUrl(urls.compareDraft, { draftId }))
-  return res.map(mapDraftDocument)
 }
 
 export async function deleteDraftDocument(draftId: string, docId: string): Promise<void> {
@@ -453,7 +419,7 @@ async function getIr(
 }
 
 /** IR block 需要 4 元 bbox 才能定位；超大文档中表格/图片等块 bbox 可能为 null，必须容错。 */
-function hasValidBbox(block: { bbox?: number[] | null }): block is { bbox: number[] } & typeof block {
+function hasValidBbox<T extends { bbox?: number[] | null }>(block: T): block is T & { bbox: number[] } {
   return Array.isArray(block.bbox) && block.bbox.length === 4
 }
 
@@ -463,14 +429,14 @@ interface IrBlockLike {
   text?: string | null
 }
 
-/** 由 IR block 生成定位 ref；bbox 缺失时退化为整页高亮框（无法精确定位，但可跳页并显示范围）。 */
+/** 由 IR block 生成定位 ref；bbox 缺失时 hasRect=false（仅跳页不画框），不再伪造整页坐标。 */
 function blockRef(docId: string, block: IrBlockLike, pairId: string, excerptOverride?: string | null): BlockRange {
   const valid = hasValidBbox(block)
   return {
     docId,
     page: block.pageIdx + 1,
-    bbox: valid ? [block.bbox![0], block.bbox![1], block.bbox![2], block.bbox![3]] : [0, 0, 1, 1],
-    hasRect: true,
+    bbox: valid ? [block.bbox[0], block.bbox[1], block.bbox[2], block.bbox[3]] : [0, 0, 1, 1],
+    hasRect: valid,
     pairId,
     excerpt: (excerptOverride ?? block.text) ?? undefined,
   }
@@ -590,12 +556,7 @@ export function assembleOverview(
       structureSim: c.similarity,
       priceSim: c.similarity,
     }))
-  return { docLabels, simMatrix, simMatrixSelf: simMatrix, pairs, evidence }
-}
-
-export async function getOverview(id: string): Promise<TaskOverview> {
-  const [matrix, evidence, documents] = await Promise.all([getMatrix(id), getEvidence(id), getDocuments(id)])
-  return assembleOverview(matrix, evidence, documents)
+  return { docIds: matrix.docIds, docLabels, simMatrix, simMatrixSelf: simMatrix, pairs, evidence }
 }
 
 /* —— 条款 —— */
@@ -615,35 +576,6 @@ export async function confirmClauses(payload: ConfirmClausesPayload): Promise<Co
   })
   const documents = await getDocuments(payload.taskId)
   return mapTask(dto, documents)
-}
-
-export async function getClauseLibrary(): Promise<ClauseItem[]> {
-  const res = await request.get<{ items: ClauseTemplateDto[] }>(urls.compareClauseTemplates, {
-    params: { MaxResultCount: 100 },
-  })
-  return res.items.map(mapTemplate)
-}
-
-export async function createClause(payload: Omit<ClauseItem, 'id'>): Promise<ClauseItem> {
-  const dto = await request.post<ClauseTemplateDto>(urls.compareClauseTemplates, {
-    text: payload.content || payload.title,
-    mandatory: payload.mandatory,
-    category: payload.category || undefined,
-  })
-  return mapTemplate(dto)
-}
-
-export async function updateClause(id: string, payload: Partial<ClauseItem>): Promise<ClauseItem> {
-  const dto = await request.put<ClauseTemplateDto>(fillUrl(urls.compareClauseTemplate, { id }), {
-    text: payload.content || payload.title,
-    mandatory: payload.mandatory,
-    category: payload.category || undefined,
-  })
-  return mapTemplate(dto)
-}
-
-export async function deleteClause(id: string): Promise<void> {
-  await request.delete<void>(fillUrl(urls.compareClauseTemplate, { id }))
 }
 
 /* —— 导出 —— */

@@ -12,23 +12,16 @@
     >
       <template #bodyCell="{ column, record }">
         <template v-if="column.key === 'kind'">
-          <a-tag v-if="record.kind === 'passage'" color="blue">片段</a-tag>
+          <a-tag v-if="record.kind === 'passage'" color="blue">雷同片段</a-tag>
           <a-tag v-else :color="typeColor(record.evidence.type)">{{ typeText(record.evidence.type) }}</a-tag>
         </template>
 
         <template v-else-if="column.key === 'content'">
           <div v-if="record.kind === 'passage'" class="unify-compare__passage-cell">
-            <span v-if="!expandedKeys.has(record.__key)" class="unify-compare__text">{{ record.content }}</span>
-            <span v-else class="unify-compare__full">{{ record.content }}</span>
-            <AppButton
-              v-if="record.content.length > 40"
-              variant="link"
-              size="sm"
-              class="unify-compare__toggle"
+            <span
+              :class="expandedKeys.has(record.__key) ? 'unify-compare__full' : 'unify-compare__text'"
               @click.stop="toggleExpand(record.__key)"
-            >
-              {{ expandedKeys.has(record.__key) ? '收起' : '展开' }}
-            </AppButton>
+            >{{ record.content }}</span>
           </div>
           <div v-else class="unify-compare__evidence">
             <div class="unify-compare__title">{{ record.content }}</div>
@@ -72,7 +65,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, ref } from 'vue'
+import { computed, ref, watch } from 'vue'
 import { message } from 'ant-design-vue'
 import { AppButton } from '@shared/web'
 import { EyeOutlined } from '@ant-design/icons-vue'
@@ -122,6 +115,8 @@ const props = defineProps<{
   compareEvidence: EvidenceItem[]
   documents: CompareDocMeta[]
   taskId: string
+  /** IR 代际：重解析/重新比对后自增，用于失效 refsCache 中的旧 IR 坐标 */
+  irEpoch?: number
 }>()
 
 const emit = defineEmits<{
@@ -142,6 +137,9 @@ const columns = [
 const locatingKeys = ref<Set<string>>(new Set())
 const expandedKeys = ref<Set<string>>(new Set())
 const refsCache = new Map<string, Promise<BlockRange[]>>()
+
+// 切换任务或 IR 重建（重解析/重新比对）后，缓存的 blockId→bbox 映射已失效，必须清空
+watch([() => props.taskId, () => props.irEpoch], () => refsCache.clear())
 
 function toggleExpand(key: string): void {
   const next = new Set(expandedKeys.value)
@@ -172,7 +170,7 @@ function passageRows(): CompareRow[] {
         detail: '',
         length: p.length,
         docAId: ev.docIds[0],
-        docBId: ev.docIds[1],
+        docBId: ev.docIds[1] ?? ev.docIds[0],
         pagesA: p.docA.pages ?? [],
         pagesB: p.docB.pages ?? [],
         tagText: isTender === true ? '招标响应' : isTender === false ? '雷同候选' : '—',
@@ -341,30 +339,34 @@ function typeText(t: EvidenceType): string {
   padding: @spacing-xs @spacing-xl @spacing-md;
 
   &__text {
-    display: block;
-    max-width: 280px;
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
     overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-    font-size: @font-size-xs;
-    color: @text-primary;
-  }
-
-  &__full {
-    display: block;
-    min-width: 280px;
-    max-width: 420px;
     white-space: normal;
     word-break: break-all;
     font-size: @font-size-xs;
     color: @text-primary;
     line-height: 1.6;
+    cursor: pointer;
+
+    &:hover {
+      color: @brand-primary;
+    }
   }
 
-  &__toggle {
-    padding: 0;
-    height: auto;
+  &__full {
+    display: block;
+    white-space: normal;
+    word-break: break-all;
     font-size: @font-size-xs;
+    color: @text-primary;
+    line-height: 1.6;
+    cursor: pointer;
+
+    &:hover {
+      color: @brand-primary;
+    }
   }
 
   &__title {

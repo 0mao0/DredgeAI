@@ -155,7 +155,8 @@ const emit = defineEmits<{
   tabManual: []
 }>()
 
-const singlePane = ref(false)
+// 默认直接进入 Tab 模式（单栏标签切换）；证据定位需要双栏时会自动展开。
+const singlePane = ref(true)
 const leftDocId = ref('')
 const rightDocId = ref('')
 const leftPage = ref(1)
