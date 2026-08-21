@@ -5,7 +5,7 @@
 
 ## 0. 验收红线（违反任一条即禁止上线）
 
-- 存在任一密钥为空、为模板默认值（`minioadmin` / `jyl2qtyBwbuwi7VE` / `CHANGE_ME` / `example`）或为「本地开发值」（`postgres/postgres`）。
+- 存在任一密钥为空、为模板默认值（`minioadmin` / 旧 ABP passphrase（前缀 `jyl2qty`，完整值见内部记录）/ `CHANGE_ME` / `example`）或为「本地开发值」（`postgres/postgres`）。
 - `LLM_CONFIGS` 缺失、JSON 非法、含空 `api_key` 的启用项、或所有项 `enabled` 均为 false。
 - `AI_GATEWAY_API_TOKEN` / `AI_GATEWAY_INGEST_TOKEN` 为空（生产禁止关闭网关令牌校验）。
 - `.env` 权限过宽（应仅部署用户可读）、被提交进仓库、或出现在备份/日志/截图里。
@@ -66,7 +66,7 @@ foreach ($v in @('BIDCOMPARE_DB_CONNECTION','STRING_ENCRYPTION_PASSPHRASE','ANGI
 }
 
 # 禁止的弱值/默认值
-$forbidden = @('minioadmin','jyl2qtyBwbuwi7VE','CHANGE_ME','Password=postgres','password=postgres','example')
+$forbidden = @('minioadmin','jyl2qty','CHANGE_ME','Password=postgres','password=postgres','example')
 $joined = $envMap.Values -join ' '
 foreach ($f in $forbidden) {
     if ($joined -like "*$f*") { throw "FAIL: 检测到禁止的弱值/默认值: $f" }

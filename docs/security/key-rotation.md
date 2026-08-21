@@ -1,6 +1,6 @@
 # 密钥轮换手册（Security Key Rotation）
 
-> 背景：早期 `appsettings.json` / `appsettings.Development.json` 曾把默认凭据提交进 git 历史（数据库密码、MinIO `minioadmin/minioadmin`、ABP 字符串加密 passphrase `jyl2qtyBwbuwi7VE`）。2026-08 已从配置文件移除并改为环境变量注入，但 git 历史中仍可检索到旧值。**任何可访问仓库的人均可能掌握旧凭据，生产/共享环境必须按本文档轮换。**
+> 背景：早期 `appsettings.json` / `appsettings.Development.json` 曾把默认凭据提交进 git 历史（数据库密码、MinIO `minioadmin/minioadmin`、ABP 字符串加密 passphrase，旧值已脱敏、完整值见 git 历史与内部记录）。2026-08 已从配置文件移除并改为环境变量注入，但 git 历史中仍可检索到旧值。**任何可访问仓库的人均可能掌握旧凭据，生产/共享环境必须按本文档轮换。**
 
 ## 1. 受影响资产与当前状态
 
@@ -8,7 +8,7 @@
 |------|---------------|---------|-----------|
 | PostgreSQL 密码 | `postgres` | 本地容器默认（start.ps1），生产未配置 | 部署负责人 |
 | MinIO Access/Secret | `minioadmin` / `minioadmin` | 已从配置移除，S3 密钥走环境变量 | 部署负责人 |
-| StringEncryption passphrase | `jyl2qtyBwbuwi7VE` | 已轮换为 .env 中新随机值（见下） | 已处理（本地） |
+| StringEncryption passphrase | `jyl2qty****`（完整值见内部记录） | 已轮换为 .env 中新随机值（见下） | 已处理（本地） |
 | Storage 签名密钥 | `dev-only-signing-secret-change-me` | 已轮换为 .env 中新随机值 | 已处理（本地） |
 | AnGIneer / LLM API Key | 从未入库 | .env 提供 | 无风险 |
 | AI_GATEWAY_API_TOKEN / AI_GATEWAY_INGEST_TOKEN | 从未入库 | 仅 .env，网关与后端进程各持一份 | 见 3.6 |
@@ -34,7 +34,7 @@
    - 若这些设置可重新配置 → 直接在管理端重新填写；
    - 若不可 → 先导出明文值，轮换后重新写入；
    - 开发/测试环境可直接清库重跑 `DbMigrator` 种子。
-4. 旧 passphrase `jyl2qtyBwbuwi7VE` 为 ABP 模板默认值，凡是沿用默认值的环境都应视为已泄露。
+4. 旧 passphrase（`jyl2qty****`，完整值见内部记录）为 ABP 模板默认值，凡是沿用默认值的环境都应视为已泄露。
 
 ### 3.3 MinIO / S3（`STORAGE_S3_ACCESSKEY` / `STORAGE_S3_SECRETKEY`）
 1. 在 MinIO 控制台生成新的 Access Key/Secret Key（或 `mc admin user add`）。
@@ -66,8 +66,8 @@
 
 ```bash
 # 1. 安装 git-filter-repo：pip install git-filter-repo
-# 2. 对仓库做一次性清理（替换旧值，历史中出现即替换）
-git filter-repo --replace-text <(printf 'jyl2qtyBwbuwi7VE\nminioadmin\nPassword=postgres\n')
+# 2. 对仓库做一次性清理（替换旧值，历史中出现即替换；旧 passphrase 完整值从 git 历史/内部记录获取）
+git filter-repo --replace-text <(printf '<旧passphrase>\nminioadmin\nPassword=postgres\n')
 # 3. 强制推送（需协调所有协作者）
 git push --force --all
 ```
