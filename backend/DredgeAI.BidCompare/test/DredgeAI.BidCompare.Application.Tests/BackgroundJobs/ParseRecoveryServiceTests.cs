@@ -75,7 +75,7 @@ public class ParseRecoveryServiceTests : BidCompareApplicationTestBase<BidCompar
     public async Task Recover_Should_Mark_Old_Stuck_Docs_Failed_Instead_Of_Requeue()
     {
         // 线上事故：11:35 卡死的文档被 20:44 重启的恢复逻辑再次入队，复活后继续卡 30 分钟。
-        // 修复后：ParseStartedAt 早于 DocumentParsingTimeout（35 分钟）的一律直接标失败，不再入队。
+        // 修复后：ParseStartedAt 早于 DocumentParsingTimeout（65 分钟 = AnGIneer 轮询上限 60 分钟 + 宽限）的一律直接标失败，不再入队。
         var task = await _appService.CreateAsync(new CreateCompareTaskDto { Name = "t" });
         var doc = await _appService.UploadDocumentAsync(
             task.Id, DocumentRole.Bid, "标书C.pdf",
@@ -92,7 +92,7 @@ public class ParseRecoveryServiceTests : BidCompareApplicationTestBase<BidCompar
         _jobManager.Clear();
 
         var service = GetRequiredService<ParseRecoveryService>();
-        await service.RecoverAsync(startedAt.AddMinutes(40)); // 已停滞 40 分钟，超过 35 分钟阈值
+        await service.RecoverAsync(startedAt.AddMinutes(70)); // 已停滞 70 分钟，超过 65 分钟阈值
 
         _jobManager.LastEnqueued<ParseDocumentArgs>().ShouldBeNull();
         var failed = await docRepo.GetAsync(doc.Id);

@@ -29,12 +29,23 @@ public class ExportJobTests : BidCompareApplicationTestBase<BidCompareApplicatio
         var task = await _appService.CreateAsync(new CreateCompareTaskDto { Name = "一期比标" });
         var docA = await _appService.UploadDocumentAsync(task.Id, DocumentRole.Bid, "标书A.pdf", TestFiles.Pdf(1));
         var docB = await _appService.UploadDocumentAsync(task.Id, DocumentRole.Bid, "标书B.pdf", TestFiles.Pdf(2));
+        // 每个 Job 独立工作单元（与生产 BackgroundJobExecuter 每次执行一个 scope 一致）；
+        // Job 内部会用独立工作单元做并发安全的状态推进，与外层共享 UoW 的实体跟踪会冲突
         var parseJob = GetRequiredService<ParseDocumentJob>();
         await WithUnitOfWorkAsync(async () =>
         {
             await parseJob.ExecuteAsync(new ParseDocumentArgs { TaskId = task.Id, DocumentId = docA.Id });
+        });
+        await WithUnitOfWorkAsync(async () =>
+        {
             await parseJob.ExecuteAsync(new ParseDocumentArgs { TaskId = task.Id, DocumentId = docB.Id });
+        });
+        await WithUnitOfWorkAsync(async () =>
+        {
             await GetRequiredService<CompareDocumentsJob>().ExecuteAsync(new CompareDocumentsArgs { TaskId = task.Id });
+        });
+        await WithUnitOfWorkAsync(async () =>
+        {
             await GetRequiredService<AiAnalysisJob>().ExecuteAsync(new AiAnalysisArgs { TaskId = task.Id });
         });
         return task.Id;

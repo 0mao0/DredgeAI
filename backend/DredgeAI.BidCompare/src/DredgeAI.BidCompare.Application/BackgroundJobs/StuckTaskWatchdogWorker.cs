@@ -3,6 +3,7 @@ using System.Linq;
 using System.Threading.Tasks;
 using DredgeAI.BidCompare.CompareTasks;
 using DredgeAI.BidCompare.Documents;
+using DredgeAI.BidCompare.TenderReadings;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
@@ -90,7 +91,7 @@ public class StuckTaskWatchdogWorker : AsyncPeriodicBackgroundWorkerBase, ITrans
             var task = await taskRepository.FindAsync(taskId);
             if (task?.Status == CompareTaskStatus.Parsing)
             {
-                await advancer.AdvanceAsync(task);
+                await advancer.AdvanceAsync(taskId);
             }
         }
 
@@ -109,6 +110,80 @@ public class StuckTaskWatchdogWorker : AsyncPeriodicBackgroundWorkerBase, ITrans
             }
             task.MarkFailed($"比对/分析超时（看门狗自动标记，超时阈值 {_options.TaskTimeout.TotalMinutes} 分钟）");
             await taskRepository.UpdateAsync(task, autoSave: true);
+        }
+
+        await SweepTenderReadingsAsync(serviceProvider, utcNow, taskDeadline);
+    }
+
+    /// <summary>读标线巡检：与比标同策略——文档超时标失败/续跑恢复，任务中间态超时落定失败。</summary>
+    private async Task SweepTenderReadingsAsync(IServiceProvider serviceProvider, DateTime utcNow, DateTime taskDeadline)
+    {
+        var documentRepository = serviceProvider.GetRequiredService<IRepository<TenderReadingDocument, Guid>>();
+        var taskRepository = serviceProvider.GetRequiredService<IRepository<TenderReadingTask, Guid>>();
+
+        var docDeadline = utcNow - _options.DocumentParsingTimeout;
+        var stuckDocuments = await documentRepository.GetListAsync(d =>
+            d.ParseStatus == DocumentParseStatus.Parsing &&
+            d.ParseStartedAt != null &&
+            d.ParseStartedAt < docDeadline);
+        var failedTaskIds = stuckDocuments.Select(d => d.TaskId).Distinct().ToList();
+        foreach (var document in stuckDocuments)
+        {
+            if (document.AnGineerDocId != null)
+            {
+                // DocumentParsingTimeout 恒大于 AnGIneer 轮询总上限，走到这里原 Job 已死亡，安全续跑
+                Logger.LogWarning("读标文档 {DocumentId} 解析超时，但已有 AnGIneer doc_id，尝试恢复续跑", document.Id);
+                document.MarkParsing();
+                await documentRepository.UpdateAsync(document, autoSave: true);
+                await _backgroundJobManager.EnqueueAsync(new ParseTenderDocumentArgs
+                {
+                    TaskId = document.TaskId,
+                    DocumentId = document.Id
+                });
+                failedTaskIds.Remove(document.TaskId);
+            }
+            else
+            {
+                Logger.LogWarning("读标文档 {DocumentId} 解析超时（>{Timeout}），看门狗标记失败", document.Id, _options.DocumentParsingTimeout);
+                document.MarkParseFailed($"解析超时（看门狗自动标记，超时阈值 {_options.DocumentParsingTimeout.TotalMinutes} 分钟）");
+                await documentRepository.UpdateAsync(document, autoSave: true);
+            }
+        }
+        foreach (var taskId in failedTaskIds)
+        {
+            var task = await taskRepository.FindAsync(taskId);
+            if (task?.Status != TenderReadingTaskStatus.Parsing)
+            {
+                continue;
+            }
+            var remaining = await documentRepository.CountAsync(d =>
+                d.TaskId == taskId &&
+                (d.ParseStatus == DocumentParseStatus.Pending || d.ParseStatus == DocumentParseStatus.Parsing));
+            if (remaining == 0)
+            {
+                Logger.LogWarning("读标任务 {TaskId} 全部文档解析超时，看门狗标记失败", taskId);
+                task.MarkFailed("解析超时（看门狗自动标记）");
+                await taskRepository.UpdateAsync(task, autoSave: true);
+            }
+        }
+
+        // 抽取中卡死（ExtractBaselineJob 崩溃且重试耗尽）等无文档侧信号的中间态，按任务超时兜底
+        var stuckTasks = await taskRepository.GetListAsync(t =>
+            (t.Status == TenderReadingTaskStatus.Parsing || t.Status == TenderReadingTaskStatus.Extracting) &&
+            t.LastModificationTime != null &&
+            t.LastModificationTime < taskDeadline);
+        foreach (var task in stuckTasks)
+        {
+            Logger.LogWarning("读标任务 {TaskId} 在 {Status} 超时（>{Timeout}），看门狗标记失败", task.Id, task.Status, _options.TaskTimeout);
+            try
+            {
+                task.MarkFailed($"解析/抽取超时（看门狗自动标记，超时阈值 {_options.TaskTimeout.TotalMinutes} 分钟）");
+                await taskRepository.UpdateAsync(task, autoSave: true);
+            }
+            catch (Exception ex)
+            {
+                Logger.LogWarning(ex, "读标任务 {TaskId} 超时落定失败（状态 {Status}）", task.Id, task.Status);
+            }
         }
     }
 }

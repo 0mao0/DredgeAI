@@ -12,9 +12,11 @@ using DredgeAI.BidCompare.Storage;
 using Microsoft.Extensions.Logging;
 using Volo.Abp.BackgroundJobs;
 using Volo.Abp.DependencyInjection;
+using Volo.Abp.Domain.Entities;
 using Volo.Abp.Domain.Repositories;
 using Volo.Abp.Guids;
 using Volo.Abp.Timing;
+using Volo.Abp.Uow;
 
 namespace DredgeAI.BidCompare.BackgroundJobs;
 
@@ -36,6 +38,7 @@ public class CompareDocumentsJob : AsyncBackgroundJob<CompareDocumentsArgs>, ITr
     private readonly IGuidGenerator _guidGenerator;
     private readonly IBackgroundJobManager _backgroundJobManager;
     private readonly IClock _clock;
+    private readonly IUnitOfWorkManager _unitOfWorkManager;
 
     public CompareDocumentsJob(
         IRepository<CompareTask, Guid> taskRepository,
@@ -45,7 +48,8 @@ public class CompareDocumentsJob : AsyncBackgroundJob<CompareDocumentsArgs>, ITr
         ICompareAlgoClient algoClient,
         IGuidGenerator guidGenerator,
         IBackgroundJobManager backgroundJobManager,
-        IClock clock)
+        IClock clock,
+        IUnitOfWorkManager unitOfWorkManager)
     {
         _taskRepository = taskRepository;
         _documentRepository = documentRepository;
@@ -55,11 +59,65 @@ public class CompareDocumentsJob : AsyncBackgroundJob<CompareDocumentsArgs>, ITr
         _guidGenerator = guidGenerator;
         _backgroundJobManager = backgroundJobManager;
         _clock = clock;
+        _unitOfWorkManager = unitOfWorkManager;
     }
 
+    /// <summary>
+    /// 外层兜底：算法调用按次计费，任何未预期异常都就地标记任务失败并正常返回，
+    /// 不抛给 ABP 重试（重试会重复调算法服务产生重复费用，且任务会卡 Comparing 等看门狗）。
+    /// 同时显式提供环境 UoW：Job 执行器不保证 ambient UoW，仓储扩展方法（如
+    /// FirstOrDefaultAsync(predicate)）会拿到已释放 DbContext 的 IQueryable 而抛 disposed 异常。
+    /// </summary>
     public override async Task ExecuteAsync(CompareDocumentsArgs args)
     {
-        var cancellationToken = CancellationToken.None;
+        try
+        {
+            using var uow = _unitOfWorkManager.Begin(requiresNew: true, isTransactional: false);
+            await ExecuteCoreAsync(args, CancellationToken.None);
+            await uow.CompleteAsync();
+        }
+        catch (OperationCanceledException)
+        {
+            throw;
+        }
+        catch (EntityNotFoundException ex)
+        {
+            Logger.LogInformation("比对任务 {TaskId} 关联实体不存在（任务可能已删除），跳过：{Message}", args.TaskId, ex.Message);
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "比对任务 {TaskId} 执行异常，标记失败", args.TaskId);
+            await TryMarkTaskFailedAsync(args.TaskId, $"比对执行异常：{ex.Message}");
+        }
+    }
+
+    /// <summary>兜底标记失败：独立工作单元重读实体，避免沿用已损坏的 Job 上下文；再失败则交由看门狗。</summary>
+    private async Task TryMarkTaskFailedAsync(Guid taskId, string reason)
+    {
+        try
+        {
+            using var uow = _unitOfWorkManager.Begin(requiresNew: true, isTransactional: false);
+            var task = await _taskRepository.FindAsync(taskId);
+            if (task == null || task.Status is CompareTaskStatus.Done or CompareTaskStatus.Failed)
+            {
+                return;
+            }
+            foreach (var pair in task.GetPairs().Where(p => p.Status == ComparePairStatus.Processing))
+            {
+                task.MarkPairFailed(pair.PairId, _clock.Now, reason);
+            }
+            task.MarkFailed(reason);
+            await _taskRepository.UpdateAsync(task, autoSave: true);
+            await uow.CompleteAsync();
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "任务 {TaskId} 失败态落库失败，交由看门狗兜底", taskId);
+        }
+    }
+
+    private async Task ExecuteCoreAsync(CompareDocumentsArgs args, CancellationToken cancellationToken)
+    {
         var task = await _taskRepository.GetAsync(args.TaskId, cancellationToken: cancellationToken);
 
         var bidDocs = (await _documentRepository.GetListAsync(d =>

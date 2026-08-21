@@ -11,6 +11,7 @@ using Microsoft.Extensions.Logging;
 using Volo.Abp.BackgroundJobs;
 using Volo.Abp.DependencyInjection;
 using Volo.Abp.Domain.Repositories;
+using Volo.Abp.Uow;
 
 namespace DredgeAI.BidCompare.BackgroundJobs;
 
@@ -24,6 +25,7 @@ public class ParseTaskStateAdvancer : ITransientDependency
     private readonly IRepository<CompareTask, Guid> _taskRepository;
     private readonly IFileStorage _fileStorage;
     private readonly IBackgroundJobManager _backgroundJobManager;
+    private readonly IUnitOfWorkManager _unitOfWorkManager;
     private readonly ILogger<ParseTaskStateAdvancer> _logger;
 
     public ParseTaskStateAdvancer(
@@ -31,17 +33,50 @@ public class ParseTaskStateAdvancer : ITransientDependency
         IRepository<CompareTask, Guid> taskRepository,
         IFileStorage fileStorage,
         IBackgroundJobManager backgroundJobManager,
+        IUnitOfWorkManager unitOfWorkManager,
         ILogger<ParseTaskStateAdvancer> logger)
     {
         _documentRepository = documentRepository;
         _taskRepository = taskRepository;
         _fileStorage = fileStorage;
         _backgroundJobManager = backgroundJobManager;
+        _unitOfWorkManager = unitOfWorkManager;
         _logger = logger;
     }
 
-    public async Task AdvanceAsync(CompareTask task, CancellationToken cancellationToken = default)
+    /// <summary>
+    /// 推进任务状态。多文档/多 Job 并发推进是常态，任务行的 ConcurrencyStamp 冲突属预期：
+    /// 每次尝试都在独立工作单元内重读最新实体后按最新状态重放推进（推进是状态函数，重放安全）。
+    /// </summary>
+    public async Task AdvanceAsync(Guid taskId, CancellationToken cancellationToken = default)
     {
+        const int maxAttempts = 3;
+        for (var attempt = 1; ; attempt++)
+        {
+            using var uow = _unitOfWorkManager.Begin(requiresNew: true, isTransactional: false);
+            try
+            {
+                await AdvanceOnceAsync(taskId, cancellationToken);
+                await uow.CompleteAsync(cancellationToken);
+                return;
+            }
+            catch (Exception ex) when (attempt < maxAttempts && DbConcurrency.IsConflict(ex))
+            {
+                _logger.LogDebug("任务 {TaskId} 状态推进并发冲突，重读重试（第 {Attempt}/{MaxAttempts} 次）",
+                    taskId, attempt, maxAttempts);
+            }
+        }
+    }
+
+    private async Task AdvanceOnceAsync(Guid taskId, CancellationToken cancellationToken)
+    {
+        var task = await _taskRepository.GetAsync(taskId, cancellationToken: cancellationToken);
+        // 比对/分析/终态的任务不由解析推进器处理（看门狗与恢复器可能触发本方法）
+        if (task.Status is CompareTaskStatus.Comparing or CompareTaskStatus.Analyzing
+            or CompareTaskStatus.Done or CompareTaskStatus.Failed)
+        {
+            return;
+        }
         var documents = await _documentRepository.GetListAsync(d => d.TaskId == task.Id, cancellationToken: cancellationToken);
 
         if (documents.Any(d => d.ParseStatus is DocumentParseStatus.Pending or DocumentParseStatus.Parsing))

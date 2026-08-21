@@ -10,6 +10,7 @@ using Microsoft.Extensions.Logging;
 using Volo.Abp.BackgroundJobs;
 using Volo.Abp.DependencyInjection;
 using Volo.Abp.Domain.Repositories;
+using Volo.Abp.Uow;
 
 namespace DredgeAI.BidCompare.BackgroundJobs;
 
@@ -22,6 +23,7 @@ public class ExportReportJob : AsyncBackgroundJob<ExportReportArgs>, ITransientD
     private readonly IWordReportRenderer _wordReportRenderer;
     private readonly IPdfConverter _pdfConverter;
     private readonly IFileStorage _fileStorage;
+    private readonly IUnitOfWorkManager _unitOfWorkManager;
 
     public ExportReportJob(
         IRepository<ExportJob, Guid> exportJobRepository,
@@ -29,7 +31,8 @@ public class ExportReportJob : AsyncBackgroundJob<ExportReportArgs>, ITransientD
         ReportBuilder reportBuilder,
         IWordReportRenderer wordReportRenderer,
         IPdfConverter pdfConverter,
-        IFileStorage fileStorage)
+        IFileStorage fileStorage,
+        IUnitOfWorkManager unitOfWorkManager)
     {
         _exportJobRepository = exportJobRepository;
         _taskRepository = taskRepository;
@@ -37,11 +40,30 @@ public class ExportReportJob : AsyncBackgroundJob<ExportReportArgs>, ITransientD
         _wordReportRenderer = wordReportRenderer;
         _pdfConverter = pdfConverter;
         _fileStorage = fileStorage;
+        _unitOfWorkManager = unitOfWorkManager;
     }
 
+    /// <summary>
+    /// 显式提供环境 UoW：Job 执行器不保证 ambient UoW，报告构建中的仓储扩展方法
+    /// （如 CountAsync(predicate)）会拿到已释放 DbContext 的 IQueryable 而抛 disposed 异常。
+    /// </summary>
     public override async Task ExecuteAsync(ExportReportArgs args)
     {
-        var cancellationToken = CancellationToken.None;
+        using var uow = _unitOfWorkManager.Begin(requiresNew: true, isTransactional: false);
+        try
+        {
+            await ExecuteCoreAsync(args, CancellationToken.None);
+            await uow.CompleteAsync();
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            // 完整堆栈落日志便于排查；失败态由 ExecuteCoreAsync 内部落库
+            Logger.LogWarning(ex, "导出任务 {ExportJobId} 失败", args.ExportJobId);
+        }
+    }
+
+    private async Task ExecuteCoreAsync(ExportReportArgs args, CancellationToken cancellationToken)
+    {
         var job = await _exportJobRepository.FindAsync(args.ExportJobId, cancellationToken: cancellationToken);
         if (job == null)
         {

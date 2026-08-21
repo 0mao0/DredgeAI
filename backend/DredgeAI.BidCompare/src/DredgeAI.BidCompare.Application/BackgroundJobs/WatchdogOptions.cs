@@ -11,9 +11,9 @@ public class WatchdogOptions
     /// <summary>巡检周期，默认 1 分钟。</summary>
     public TimeSpan Period { get; set; } = TimeSpan.FromMinutes(1);
 
-    /// <summary>文档 Parsing 超时（默认 35 分钟 = AnGIneer 轮询 30 分钟 + 5 分钟宽限）。</summary>
-    public TimeSpan DocumentParsingTimeout { get; set; } = TimeSpan.FromMinutes(35);
+    /// <summary>文档 Parsing 超时（默认 65 分钟 = AnGIneer 轮询总上限 60 分钟 + 5 分钟宽限；必须大于 AnGIneer:Timeout，否则原 Job 仍在正常轮询时会重复入队恢复 Job）。</summary>
+    public TimeSpan DocumentParsingTimeout { get; set; } = TimeSpan.FromMinutes(65);
 
-    /// <summary>任务 Comparing/Analyzing 超时（默认 40 分钟，覆盖算法端点超时 + 重试 + AI 分析）。</summary>
-    public TimeSpan TaskTimeout { get; set; } = TimeSpan.FromMinutes(40);
+    /// <summary>任务 Comparing/Analyzing 超时（默认 90 分钟：覆盖算法端点超时+重试（约 30 分钟）与 AI 分析最坏耗时（8 份标书串行判定约 48 分钟）并留有余量；Job 心跳会刷新 LastModificationTime，长任务正常推进时不会误触）。</summary>
+    public TimeSpan TaskTimeout { get; set; } = TimeSpan.FromMinutes(90);
 }

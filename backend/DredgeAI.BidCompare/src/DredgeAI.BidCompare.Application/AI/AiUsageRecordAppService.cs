@@ -72,11 +72,11 @@ public class AiUsageRecordAppService : ApplicationService, IAiUsageRecordAppServ
     public async Task<AiUsageStatsDto> GetStatsAsync()
     {
         var queryable = await _repository.GetQueryableAsync();
-        var items = await AsyncExecuter.ToListAsync(queryable);
+        // 聚合下沉数据库：计数与求和走 SQL，不整表读入内存
         return new AiUsageStatsDto
         {
-            TotalCalls = items.Count,
-            TotalTokens = items.Sum(x => x.TotalTokens ?? 0)
+            TotalCalls = await AsyncExecuter.CountAsync(queryable),
+            TotalTokens = await AsyncExecuter.SumAsync(queryable.Select(x => x.TotalTokens ?? 0))
         };
     }
 

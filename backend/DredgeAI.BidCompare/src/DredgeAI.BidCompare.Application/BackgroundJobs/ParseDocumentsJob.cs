@@ -129,7 +129,7 @@ public class ParseDocumentsJob : AsyncBackgroundJob<ParseDocumentsArgs>, ITransi
         }
         finally
         {
-            await _advancer.AdvanceAsync(task, cancellationToken);
+            await _advancer.AdvanceAsync(args.TaskId, cancellationToken);
         }
     }
 }
