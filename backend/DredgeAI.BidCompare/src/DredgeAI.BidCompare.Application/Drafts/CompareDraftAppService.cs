@@ -110,9 +110,15 @@ public class CompareDraftAppService : ApplicationService, ICompareDraftAppServic
         var queryable = await _draftDocumentRepository.GetQueryableAsync();
         var documents = await AsyncExecuter.ToListAsync(
             queryable.Where(d => d.DraftId == draftId));
-        foreach (var document in documents)
+
+        // 按会话前缀整树清理（逐 key 删除在部分失败时会留孤儿对象）
+        try
         {
-            await DeleteStorageQuietlyAsync(document.OriginStorageKey);
+            await _fileStorage.DeleteByPrefixAsync($"compare/drafts/{draftId}/");
+        }
+        catch
+        {
+            // 对象存储删除失败不阻塞会话删除（孤儿对象由运维清理）
         }
 
         await _draftDocumentRepository.DeleteManyAsync(documents, autoSave: true);

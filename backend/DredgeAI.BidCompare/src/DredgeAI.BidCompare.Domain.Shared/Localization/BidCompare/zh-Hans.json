@@ -10,6 +10,27 @@
     "Permission:BidCompare.Drafts": "上传暂存",
     "Permission:BidCompare.ClauseTemplates": "条款库",
     "BidCompare:UnsupportedFileType": "不支持的文件类型",
-    "BidCompare:DocumentCountOutOfRange": "投标文件数量超出上限"
+    "BidCompare:DocumentCountOutOfRange": "投标文件数量超出上限",
+    "BidCompare:InvalidTaskState": "任务状态不允许该操作",
+    "BidCompare:DocumentNotFound": "文档不存在",
+    "BidCompare:IrNotReady": "文档解析尚未完成，暂不可用",
+    "BidCompare:IrValidationFailed": "文档解析结果校验失败",
+    "BidCompare:AnGineerParseFailed": "文档解析失败",
+    "BidCompare:NoTenderDocument": "任务缺少招标文件",
+    "BidCompare:ClausesNotLocked": "条款尚未确认锁定",
+    "BidCompare:ReportNotReady": "报告尚未生成",
+    "BidCompare:ExportJobNotFound": "导出任务不存在",
+    "BidCompare:ExportFailed": "报告导出失败",
+    "BidCompare:AlgoServiceFailed": "比对算法服务不可用",
+    "BidCompare:AiGatewayFailed": "AI 服务暂不可用",
+    "TenderRead:InvalidTaskState": "任务状态不允许该操作",
+    "TenderRead:UnsupportedFileType": "不支持的文件类型",
+    "TenderRead:DocumentNotFound": "文档不存在",
+    "TenderRead:DocumentNotParsed": "文档尚未解析完成",
+    "TenderRead:IrNotReady": "文档解析尚未完成，暂不可用",
+    "TenderRead:IrValidationFailed": "文档解析结果校验失败",
+    "TenderRead:AnGineerParseFailed": "文档解析失败",
+    "TenderRead:BaselineNotFound": "基准库不存在",
+    "TenderRead:FieldNotFound": "字段不存在"
   }
 }
