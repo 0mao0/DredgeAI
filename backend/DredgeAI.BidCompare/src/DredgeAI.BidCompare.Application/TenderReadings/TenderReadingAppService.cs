@@ -283,7 +283,14 @@ public class TenderReadingAppService : ApplicationService, ITenderReadingAppServ
 
     public async Task<List<TenderReadingOutlineNodeDto>> GetOutlineAsync(Guid id)
     {
-        var document = await GetParsedDocumentOrThrowAsync(id);
+        // 解析尚未完成时目录不可用是常态（前端轮询），返回空列表而非 403，
+        // 避免把「还没好」当错误处理产生持续错误提示
+        var document = await GetParsedDocumentIfReadyAsync(id);
+        if (document == null)
+        {
+            return new List<TenderReadingOutlineNodeDto>();
+        }
+
         await using var stream = await _fileStorage.GetAsync(document.IrStorageKey!);
         using var ir = await JsonDocument.ParseAsync(stream);
 
@@ -469,12 +476,7 @@ public class TenderReadingAppService : ApplicationService, ITenderReadingAppServ
 
     private async Task<TenderReadingDocument> GetParsedDocumentOrThrowAsync(Guid taskId)
     {
-        await _taskRepository.GetAsync(taskId);
-        var documents = await GetTaskDocumentsAsync(taskId);
-        var document = documents
-            .Where(d => d.ParseStatus == DocumentParseStatus.Parsed && d.IrStorageKey != null)
-            .OrderBy(d => d.CreationTime)
-            .FirstOrDefault();
+        var document = await GetParsedDocumentIfReadyAsync(taskId);
         if (document == null)
         {
             throw new BusinessException(TenderReadErrorCodes.DocumentNotParsed)
@@ -482,6 +484,17 @@ public class TenderReadingAppService : ApplicationService, ITenderReadingAppServ
         }
 
         return document;
+    }
+
+    /// <summary>取第一个已解析且有 IR 的文档；未就绪返回 null（读接口据此给空态而非报错）。</summary>
+    private async Task<TenderReadingDocument?> GetParsedDocumentIfReadyAsync(Guid taskId)
+    {
+        await _taskRepository.GetAsync(taskId);
+        var documents = await GetTaskDocumentsAsync(taskId);
+        return documents
+            .Where(d => d.ParseStatus == DocumentParseStatus.Parsed && d.IrStorageKey != null)
+            .OrderBy(d => d.CreationTime)
+            .FirstOrDefault();
     }
 
     private async Task<List<TenderReadingDocument>> GetTaskDocumentsAsync(Guid taskId)

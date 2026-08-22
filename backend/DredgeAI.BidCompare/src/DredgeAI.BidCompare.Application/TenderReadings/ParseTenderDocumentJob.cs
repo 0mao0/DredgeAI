@@ -1,4 +1,5 @@
 using System;
+using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 using DredgeAI.BidCompare.AnGineer;
@@ -105,11 +106,12 @@ public class ParseTenderDocumentJob : AsyncBackgroundJob<ParseTenderDocumentArgs
         {
             // 多文档任务等全部文档落定后才触发一次全量抽取：
             // 逐份触发会并发执行「删旧重建」，字段与锚点互相覆盖错配
-            var remaining = await _documentRepository.CountAsync(d =>
+            // 注意：CountAsync(predicate) 是扩展方法，Job 无环境 UoW 时必挂，用 GetListAsync 内存计数
+            var unsettled = await _documentRepository.GetListAsync(d =>
                 d.TaskId == task.Id &&
-                d.Id != document.Id &&
                 (d.ParseStatus == DocumentParseStatus.Pending || d.ParseStatus == DocumentParseStatus.Parsing),
                 cancellationToken: cancellationToken);
+            var remaining = unsettled.Count(d => d.Id != document.Id);
             if (remaining > 0)
             {
                 Logger.LogInformation("读标任务 {TaskId} 仍有 {Count} 份文档解析中，抽取延后到全部落定", task.Id, remaining);

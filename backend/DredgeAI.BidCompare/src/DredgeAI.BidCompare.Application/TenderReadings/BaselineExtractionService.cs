@@ -242,16 +242,17 @@ public class BaselineExtractionService : ITransientDependency
 
         _logger.LogInformation("读标抽取开始：任务 {TaskId}，抽取器数量 {Count}", taskId, _extractors.Count());
 
-        var existingCount = await _fieldRepository.CountAsync(f => f.TaskId == taskId, cancellationToken: cancellationToken);
+        // CountAsync(predicate) 是扩展方法，后台 Job 无环境 UoW 时会拿到已释放 DbContext；
+        // 先取字段列表，用内存计数替代（下面删旧重建也要这份列表）
+        var oldFields = await _fieldRepository.GetListAsync(f => f.TaskId == taskId, cancellationToken: cancellationToken);
         var oldVersion = task.BaselineVersion;
-        if (existingCount > 0)
+        if (oldFields.Count > 0)
         {
             await _baselineStore.RemoveBaselineAsync(taskId, oldVersion, cancellationToken);
             task.BumpBaselineVersion();
         }
 
         // 重抽时整体替换，避免残留旧字段/锚点
-        var oldFields = await _fieldRepository.GetListAsync(f => f.TaskId == taskId, cancellationToken: cancellationToken);
         if (oldFields.Count > 0)
         {
             var oldFieldIds = oldFields.Select(f => f.Id).ToList();

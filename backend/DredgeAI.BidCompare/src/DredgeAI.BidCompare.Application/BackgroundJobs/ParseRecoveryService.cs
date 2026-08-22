@@ -175,11 +175,12 @@ public class ParseRecoveryService : ITransientDependency
         {
             return;
         }
-        var remaining = await _tenderDocumentRepository.CountAsync(
+        // CountAsync(predicate) 是扩展方法，恢复器无环境 UoW，用 GetListAsync 内存计数
+        var unsettled = await _tenderDocumentRepository.GetListAsync(
             d => d.TaskId == taskId &&
                  (d.ParseStatus == DocumentParseStatus.Pending || d.ParseStatus == DocumentParseStatus.Parsing),
             cancellationToken: cancellationToken);
-        if (remaining > 0)
+        if (unsettled.Count > 0)
         {
             return;
         }

@@ -156,10 +156,11 @@ public class StuckTaskWatchdogWorker : AsyncPeriodicBackgroundWorkerBase, ITrans
             {
                 continue;
             }
-            var remaining = await documentRepository.CountAsync(d =>
+            // CountAsync(predicate) 是扩展方法，看门狗无环境 UoW，用 GetListAsync 内存计数
+            var unsettled = await documentRepository.GetListAsync(d =>
                 d.TaskId == taskId &&
                 (d.ParseStatus == DocumentParseStatus.Pending || d.ParseStatus == DocumentParseStatus.Parsing));
-            if (remaining == 0)
+            if (unsettled.Count == 0)
             {
                 Logger.LogWarning("读标任务 {TaskId} 全部文档解析超时，看门狗标记失败", taskId);
                 task.MarkFailed("解析超时（看门狗自动标记）");
