@@ -61,6 +61,7 @@ graph TB
 
 ### 4.2 services/meeting-bot（新增，Python/FastAPI）
 仿 `services/compare-algo`、`services/ai-gateway` 的工程模式（pyproject.toml + uv + pytest）。部署在 GPU/DGX 侧。
+meeting-bot 与其依赖模型（FireRedASR/TTS、InsightFace、YOLO）部署在 DGX 上；LLM 与 Embedding 由独立容器/进程提供（见第 5 节清单）。
 | 端点 | 功能 | 依赖模型 |
 |---|---|---|
 | `POST /asr` | 音频 → 文本（交互用，流式可后续升级） | FireRedASR（AED 版） |
@@ -87,7 +88,26 @@ graph TB
 - AnGIneer docs-api：知识检索（规范/SOP/项目资料），生成晨会稿时补充安全要点
 - `packages/shared`：跨端类型、请求封装、样式变量
 
-## 5. 数据模型
+## 5. DGX 模型与 API 清单
+| 模型 | 用途 | 服务方式 | API 端点 | 调用方 |
+|---|---|---|---|---|
+| Qwen3.6-35B-A3B | 晨会稿生成、问答生成、意图分级 | vLLM 或 NIM（OpenAI 兼容） | `POST /v1/chat/completions`（含 SSE 流式）、`GET /v1/models` | ai-gateway（LLM_CONFIGS） |
+| bge-m3 | 知识检索向量化（1024 维） | TEI 或 FastAPI 包装（OpenAI 兼容） | `POST /v1/embeddings` | AnGIneer 检索、meeting-bot 本地检索 |
+| FireRedASR（AED 交互版） | 现场问答语音转写 | meeting-bot 内嵌 | `POST /asr`（音频 → 文本） | ABP 问答链路 |
+| FireRedASR（LLM 精转写版） | 会后长录音转写 | meeting-bot 内嵌 | `POST /transcribe`（长音频 → 全文） | ABP 会后任务 |
+| FireRedTTS-1S | 晨会稿/回答语音合成 | meeting-bot 内嵌 | `POST /tts`（文本 → 音频，流式） | ABP 问答链路、前端播放 |
+| pVAD + Turn-Detector | 端点检测、判停、打断 | meeting-bot 进程内（可选暴露 `POST /vad`、`POST /turn`） | 进程内调用优先 | meeting-bot 会话状态机 |
+| InsightFace（SCRFD + ArcFace） | 人脸检测与识别 | meeting-bot 内嵌 | `POST /recognize`、`POST /enroll` | ABP 点名流程 |
+| YOLO + ByteTrack | 人数统计 | meeting-bot 内嵌 | `POST /count` | ABP 点名流程 |
+
+部署形态与约束：
+- LLM 与 Embedding 作为独立容器/进程（vLLM/NIM、TEI 或自包装），监听独立端口，与 meeting-bot 互不阻塞
+- ASR/TTS/VAD/人脸/人数统一由 meeting-bot 托管，模型进程内单例加载，避免每请求加载
+- 所有 DGX API 只走内网，ABP 通过 HttpClient 调用，鉴权用共享密钥（Header），不暴露公网
+- 资源估算：Qwen 35B-A3B FP8 约 40–50GB，其余模型合计约 10GB；DGX Spark 128GB 统一内存可同时运行
+- 端口规划建议：vLLM/NIM 8000、Embedding 8001、meeting-bot 8101（写入 .env 配置）
+
+## 6. 数据模型
 | 实体 | 关键字段 |
 |---|---|
 | MeetingRecord | Id、Date、PreInfoJson（前置信息 A）、SpeechDraftId、Status（draft/prepared/rollcall/ongoing/completed）、StartedAt、EndedAt、TranscriptFile、VideoFile、ReportFile、CreatedBy |
@@ -96,7 +116,7 @@ graph TB
 | QaRecord | Id、MeetingRecordId、QuestionText、AnswerText、IntentType（knowledge/chitchat/meeting）、SourcesJson（AnGIneer 证据）、AudioFile、CreatedAt |
 | WorkerProfile | Id、Name、EmployeeNo、Team（班组）、FaceStatus（enrolled/pending）、FacePhotosJson、Active |
 
-## 6. API 契约草案（前端 ↔ ABP）
+## 7. API 契约草案（前端 ↔ ABP）
 | 方法/路径 | 说明 |
 |---|---|
 | POST /api/app/meeting-record | 创建会议（携带前置信息 A） |
@@ -114,19 +134,19 @@ graph TB
 
 语音链路 v1 采用"浏览器录音 → 上传 → ASR → 问答 → TTS → 播放"的同步 HTTP 模式；v2 若时延不达标，升级为 WebSocket/SSE 流式。
 
-## 7. 页面流程（分步向导）
+## 8. 页面流程（分步向导）
 1. **会前录入**：日期、天气、今日任务、风险点 → 保存
 2. **晨会稿**：点"生成"→ 展示晨会稿 B → 主持人编辑 → 确认
 3. **点名**：拍照/手动支架扫一圈 → 出勤列表（应到/实到/缺勤/未识别）→ 补扫漏检
 4. **会议**：TTS 播放晨会稿（或主持人朗读）→ 全程录音 → 按住说话问答
 5. **报告**：转写稿 + 出勤 + 问答记录 → 查看/导出 → 可选企业微信推送
 
-## 8. 数据流
+## 9. 数据流
 - **会前**：录入 A → ABP 调 AnGIneer 检索 + ai-gateway 生成 B → 前端审核
 - **会中**：照片 → meeting-bot 人脸识别 → 出勤落库；音频 → meeting-bot ASR → 问答编排 → TTS 回放
 - **会后**：长音频 → meeting-bot 精转写 → 报告生成 → 存储/推送
 
-## 9. 错误处理与降级
+## 10. 错误处理与降级
 - ai-gateway 不可用 → 晨会稿生成与问答返回明确提示，不静默失败
 - AnGIneer 检索失败 → 降级为 LLM 直答，答案标注"无知识库证据"
 - meeting-bot 不可用 → 点名提示重试；问答降级为文本输入
@@ -134,25 +154,28 @@ graph TB
 - 浏览器录音：需用户手势触发（iOS 限制），MediaRecorder 分段上传；权限拒绝时给出引导
 - 网络波动 → 前端 loading + 重试；语音上传支持断线重试
 
-## 10. 测试策略
+## 11. 测试策略
 - 前端：`pnpm run typecheck` + vitest（状态机与 API 模块单测）
 - meeting-bot：pytest（ASR/TTS/人脸端点用 mock 模型）
 - ABP：`dotnet test`（会议、出勤领域测试）
 - 联调：电脑摄像头/麦克风替代手机跑通全流程，再切手机真机
 
-## 11. 版本范围（v1 边界）
+## 12. 版本范围（v1 边界）
 v1 包含：晨会稿生成、现场点名（手动支架 + 补扫）、全程录音转写、语音问答、报告与企业微信通知。
 
 v1 不包含：电动旋转支架、固定机位自动点名、多路视频、多人同时问答、原生 App 壳（v1 为浏览器 PWA）。
 
-## 12. 风险与开放问题
+## 13. 风险与开放问题
 1. 真实服务凭据与地址：DGX vLLM 端点、ai-gateway 的 LLM_CONFIGS、AnGIneer API Key、FireRedASR/TTS 的部署位置（meeting-bot 所在 GPU 机）
 2. 人脸合规：工地人脸采集需告知同意、数据本地化存储、定期清理
 3. 浏览器兼容性：Chrome/Edge 桌面优先，手机端需验证 getUserMedia/MediaRecorder 行为（尤其 iOS Safari）
 4. 长录音转写耗时：会后异步任务，避免阻塞报告生成
 5. 现场网络：语音/照片上传大小与带宽；必要时压缩后再上传
+6. NIM 目录是否覆盖 Qwen3.6-35B-A3B；若没有则退回 vLLM/SGLang（NVFP4 + 投机解码有 DGX Spark 社区配方）
+7. DGX Spark 为 ARM 架构，vLLM/insightface/onnxruntime 等依赖需先做兼容性 PoC，个别可能需源码编译
 
-## 13. 待办（进入实施计划前）
+## 14. 待办（进入实施计划前）
 - 确认 DGX/ai-gateway/AnGIneer 实际可用的地址与密钥
-- 确认 FireRedASR/TTS 由 meeting-bot 托管还是独立服务
+- 确认 DGX 上 vLLM/NIM、Embedding、meeting-bot 的端口规划与内网可达性
+- 跑通 FireRedASR/TTS/InsightFace 在 DGX（ARM）上的最小 PoC
 - 确认企业微信通知使用 webhook 还是现有平台通道
