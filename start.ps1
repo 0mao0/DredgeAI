@@ -1,6 +1,7 @@
 ﻿param(
     [switch]$TailLogs,
-    [switch]$NoBrowser
+    [switch]$NoBrowser,
+    [switch]$OpenBrowser
 )
 
 # DredgeAI Startup Script（比标后端 + 算法服务 + 用户端/管理端前端；AnGIneer 仅检测）
@@ -430,10 +431,11 @@ Write-Host "  Backend Swagger: $backendUrl/swagger" -ForegroundColor Cyan
 Write-Host "  Logs: $logsDir" -ForegroundColor DarkGray
 Write-Host "  Tail logs with: .\start.ps1 -TailLogs" -ForegroundColor DarkGray
 
-if ($backendHealthy -and -not $NoBrowser) {
+# 默认不自动打开浏览器；需要时显式加 -OpenBrowser（-NoBrowser 仍可强制关闭）
+if ($backendHealthy -and $OpenBrowser -and -not $NoBrowser) {
     Start-Process $frontendUrl
 }
 
-if ($adminHealthy -and -not $NoBrowser) {
+if ($adminHealthy -and $OpenBrowser -and -not $NoBrowser) {
     Start-Process $adminUrl
 }
