@@ -85,18 +85,6 @@
         </AppButton>
       </div>
 
-      <div v-if="isPollingStatus(task.status)" class="read-workspace__progress">
-        <span class="read-workspace__progress-label">{{ statusText(task.status) }}</span>
-        <a-progress
-          :percent="task.progressPercent"
-          size="small"
-          class="read-workspace__progress-bar"
-        />
-        <span v-if="documents[0]?.parseStageMessage" class="read-workspace__progress-message">
-          {{ documents[0].parseStageMessage }}
-        </span>
-      </div>
-
       <div class="read-workspace__split">
         <!-- 左：目录 -->
         <SectionCard title="目录" class="read-workspace__outline">
@@ -114,10 +102,9 @@
           </a-tree>
         </SectionCard>
 
-        <!-- 中：PDF 预览 -->
-        <SectionCard title="PDF 预览" class="read-workspace__pdf">
+        <!-- 中：PDF 预览（PdfViewer 自带卡片外观与空态提示，不套外框） -->
+        <div class="read-workspace__pdf">
           <PdfViewer
-            v-if="documentFileUrl"
             :file-url="documentFileUrl"
             :title="documentTitle"
             :page="pdfPage"
@@ -127,8 +114,7 @@
             @update:page="pdfPage = $event"
             @select-highlight="onPdfHighlightSelect"
           />
-          <a-empty v-else description="请先上传并解析招标文件" />
-        </SectionCard>
+        </div>
 
         <!-- 右：基准库 -->
         <SectionCard title="基准库" class="read-workspace__baseline">
@@ -868,40 +854,6 @@ function fieldStatusColor(status: BaselineField['status']): string {
   flex-shrink: 0;
 }
 
-.read-workspace__progress {
-  display: flex;
-  align-items: center;
-  gap: @spacing-md;
-  padding: @spacing-xs @spacing-md;
-  margin-bottom: @spacing-sm;
-  background: @content-bg;
-  border: 1px solid @border-color;
-  border-radius: @radius-base;
-  font-size: @font-size-xs;
-  color: @text-secondary;
-  flex-shrink: 0;
-}
-
-.read-workspace__progress-label {
-  flex-shrink: 0;
-  font-weight: @font-weight-medium;
-  color: @text-primary;
-}
-
-.read-workspace__progress-bar {
-  flex: 1;
-  min-width: 120px;
-  margin: 0;
-}
-
-.read-workspace__progress-message {
-  max-width: 40%;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  color: @text-tertiary;
-}
-
 .read-workspace__split {
   flex: 1;
   min-height: 0;
@@ -922,11 +874,9 @@ function fieldStatusColor(status: BaselineField['status']): string {
   display: flex;
   flex-direction: column;
 
-  :deep(.section-card-body) {
+  :deep(.pdf-viewer) {
     flex: 1;
     min-height: 0;
-    display: flex;
-    flex-direction: column;
   }
 }
 
