@@ -187,6 +187,12 @@ v1 交互为半双工（按住说话）；v2 全双工候选两条路线：端�
 7. DGX Spark 为 ARM 架构，vLLM/insightface/onnxruntime 等依赖需先做兼容性 PoC，个别可能需源码编译
 
 ## 14. 待办（进入实施计划前）
+数据准备清单（影响 v1 效果；模型均开箱即用，无需训练/微调数据集）：
+- 知识库 K：规范/SOP/项目方案/安全交底文档，AnGIneer 入库并用自带评测验证检索精度
+- 人脸库：花名册照片批量导入 + 现场补录，每人 2–3 张正面照
+- 晨会稿示例 3–5 份（可选，few-shot 提升生成质量）
+- ASR 热词表：工地术语/人员名/项目名（可选，提升转写准确率）
+- 验收测试集：20–50 条典型问答 + 2–3 场模拟晨会（验收回归用）
 - 确认 DGX/ai-gateway/AnGIneer 实际可用的地址与密钥
 - 确认 DGX 上 vLLM/NIM、Embedding、meeting-bot 的端口规划与内网可达性
 - 跑通 FireRedASR/TTS/InsightFace 在 DGX（ARM）上的最小 PoC
