@@ -1,3 +1,6 @@
 [submodule "vendor/angineer-docs-ui"]
 	path = vendor/angineer-docs-ui
 	url = https://github.com/0mao0/angineer-docs-ui.git
+[submodule "vendor/angineer-aichat-ui"]
+	path = vendor/angineer-aichat-ui
+	url = https://github.com/0mao0/angineer-aichat-ui
