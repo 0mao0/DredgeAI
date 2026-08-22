@@ -1018,18 +1018,18 @@ export function registerMeetingMock(
   mock: MockAdapter,
   wrap: (h: () => unknown) => () => Promise<[number, unknown]>,
 ): void {
+  const meetingId = (url: string | undefined): string =>
+    url?.match(/\/api\/meeting\/records\/([^/]+)\//)?.[1] ?? ''
+
   mock.onPost('/api/meeting/records').reply((config) => [200, createMockMeeting(JSON.parse(config.data))])
   mock.onPost(/\/api\/meeting\/records\/[^/]+\/speech\/generate$/).reply((config) => {
-    const id = config.url?.split('/')[3] ?? ''
-    return [200, generateMockSpeech(id)]
+    return [200, generateMockSpeech(meetingId(config.url))]
   })
   mock.onGet(/\/api\/meeting\/records\/[^/]+\/speech$/).reply((config) => {
-    const id = config.url?.split('/')[3] ?? ''
-    return [200, mockMeetings.find((m) => m.id === id)?.speechDraft ?? null]
+    return [200, mockMeetings.find((m) => m.id === meetingId(config.url))?.speechDraft ?? null]
   })
   mock.onPut(/\/api\/meeting\/records\/[^/]+\/speech$/).reply((config) => {
-    const id = config.url?.split('/')[3] ?? ''
-    const meeting = mockMeetings.find((m) => m.id === id)
+    const meeting = mockMeetings.find((m) => m.id === meetingId(config.url))
     if (meeting?.speechDraft) {
       meeting.speechDraft.content = JSON.parse(config.data).content
       meeting.speechDraft.status = 'confirmed'
@@ -1037,14 +1037,12 @@ export function registerMeetingMock(
     return [200, meeting?.speechDraft ?? null]
   })
   mock.onPost(/\/api\/meeting\/records\/[^/]+\/start$/).reply((config) => {
-    const id = config.url?.split('/')[3] ?? ''
-    const meeting = mockMeetings.find((m) => m.id === id)
+    const meeting = mockMeetings.find((m) => m.id === meetingId(config.url))
     if (meeting) meeting.status = 'rollcall'
     return [200, meeting]
   })
   mock.onPost(/\/api\/meeting\/records\/[^/]+\/attendance\/recognize$/).reply((config) => {
-    const id = config.url?.split('/')[3] ?? ''
-    const meeting = mockMeetings.find((m) => m.id === id)
+    const meeting = mockMeetings.find((m) => m.id === meetingId(config.url))
     if (meeting) {
       meeting.attendance = [
         { workerId: 'w-001', name: '张建国', team: '钢筋班', status: 'present', confidence: 0.96 },
@@ -1054,11 +1052,10 @@ export function registerMeetingMock(
     return [200, { faces: meeting?.attendance ?? [] }]
   })
   mock.onGet(/\/api\/meeting\/records\/[^/]+\/attendance$/).reply((config) => {
-    const id = config.url?.split('/')[3] ?? ''
-    return [200, mockMeetings.find((m) => m.id === id)?.attendance ?? []]
+    return [200, mockMeetings.find((m) => m.id === meetingId(config.url))?.attendance ?? []]
   })
   mock.onPost(/\/api\/meeting\/records\/[^/]+\/qa$/).reply((config) => {
-    const id = config.url?.split('/')[3] ?? ''
+    const id = meetingId(config.url)
     const q = JSON.parse(config.data).question
     const rec: QaRecordDto = {
       id: `qa-${Date.now()}`,
@@ -1072,7 +1069,7 @@ export function registerMeetingMock(
     return [200, rec]
   })
   mock.onPost(/\/api\/meeting\/records\/[^/]+\/qa\/audio$/).reply((config) => {
-    const id = config.url?.split('/')[3] ?? ''
+    const id = meetingId(config.url)
     const rec: QaRecordDto = {
       id: `qa-${Date.now()}`,
       question: '（语音）今天需要注意什么？',
@@ -1085,11 +1082,10 @@ export function registerMeetingMock(
     return [200, rec]
   })
   mock.onPost(/\/api\/meeting\/records\/[^/]+\/recording$/).reply((config) => {
-    const id = config.url?.split('/')[3] ?? ''
-    return [200, mockMeetings.find((m) => m.id === id) ?? null]
+    return [200, mockMeetings.find((m) => m.id === meetingId(config.url)) ?? null]
   })
   mock.onPost(/\/api\/meeting\/records\/[^/]+\/complete$/).reply((config) => {
-    const id = config.url?.split('/')[3] ?? ''
+    const id = meetingId(config.url)
     const meeting = mockMeetings.find((m) => m.id === id)
     if (meeting) {
       meeting.status = 'completed'
@@ -1104,8 +1100,7 @@ export function registerMeetingMock(
     return [200, meeting]
   })
   mock.onGet(/\/api\/meeting\/records\/[^/]+\/report$/).reply((config) => {
-    const id = config.url?.split('/')[3] ?? ''
-    return [200, mockMeetings.find((m) => m.id === id)?.report ?? null]
+    return [200, mockMeetings.find((m) => m.id === meetingId(config.url))?.report ?? null]
   })
   mock.onGet('/api/meeting/workers').reply(wrap(() => mockWorkers))
 }
@@ -1251,6 +1246,7 @@ git commit -m "feat: AI晨会路由注册"
 ```vue
 <script setup lang="ts">
 import { ref } from 'vue'
+import PageHeader from '@shared/web/components/PageHeader.vue'
 import type { MeetingRecordDto, PreInfo } from '@/types'
 import {
   createMeeting,
@@ -1357,6 +1353,8 @@ git commit -m "feat: AI晨会分步向导骨架"
 ```vue
 <script setup lang="ts">
 import { reactive } from 'vue'
+import SectionCard from '@shared/web/components/SectionCard.vue'
+import AppButton from '@shared/web/components/AppButton.vue'
 import type { PreInfo } from '@/types'
 
 defineProps<{ loading: boolean }>()
@@ -1377,7 +1375,7 @@ function onSubmit(): void {
 <template>
   <SectionCard title="会前录入" flush>
     <a-form layout="vertical">
-      <a-form-item label="日期"><a-date-picker v-model:value="form.date" style="width: 100%" /></a-form-item>
+      <a-form-item label="日期"><a-date-picker v-model:value="form.date" value-format="YYYY-MM-DD" style="width: 100%" /></a-form-item>
       <a-form-item label="天气"><a-input v-model:value="form.weather" placeholder="如：晴，28℃" /></a-form-item>
       <a-form-item label="今日任务"><a-textarea v-model:value="form.tasks" :rows="3" placeholder="今日施工任务" /></a-form-item>
       <a-form-item label="风险点"><a-textarea v-model:value="form.riskPoints" :rows="3" placeholder="安全风险提示" /></a-form-item>
@@ -1406,6 +1404,8 @@ git commit -m "feat: AI晨会会前录入步骤"
 ```vue
 <script setup lang="ts">
 import { ref } from 'vue'
+import SectionCard from '@shared/web/components/SectionCard.vue'
+import AppButton from '@shared/web/components/AppButton.vue'
 import type { SpeechDraftDto } from '@/types'
 import { generateSpeech, saveSpeechDraft } from '@/api/modules/aiMeeting'
 import { useAudioPlayer } from '../composables/useAudioPlayer'
@@ -1488,6 +1488,8 @@ git commit -m "feat: AI晨会晨会稿步骤"
 ```vue
 <script setup lang="ts">
 import { ref, onMounted, onScopeDispose } from 'vue'
+import SectionCard from '@shared/web/components/SectionCard.vue'
+import AppButton from '@shared/web/components/AppButton.vue'
 import type { AttendanceItemDto } from '@/types'
 import { recognizeAttendance, getAttendance } from '@/api/modules/aiMeeting'
 import { useCamera } from '../composables/useCamera'
@@ -1577,6 +1579,8 @@ git commit -m "feat: AI晨会点名步骤"
 ```vue
 <script setup lang="ts">
 import { ref, onMounted } from 'vue'
+import SectionCard from '@shared/web/components/SectionCard.vue'
+import AppButton from '@shared/web/components/AppButton.vue'
 import type { QaRecordDto } from '@/types'
 import { askQa, askQaAudio, uploadMeetingRecording } from '@/api/modules/aiMeeting'
 import { useRecorder } from '../composables/useRecorder'
@@ -1696,6 +1700,7 @@ git commit -m "feat: AI晨会会议步骤（录音与按住说话问答）"
 ```vue
 <script setup lang="ts">
 import { ref, onMounted } from 'vue'
+import SectionCard from '@shared/web/components/SectionCard.vue'
 import type { ReportDto } from '@/types'
 import { getReport } from '@/api/modules/aiMeeting'
 
@@ -2319,11 +2324,11 @@ namespace DredgeAI.BidCompare.MeetingBot
 
 - [ ] **Step 3: 实现 GenerateSpeechAsync**
 
-读取会议与 PreInfo → 调用 AnGIneer 检索（query 由 "晨会安全交底、今日任务" 组合）取前 5 条文本 → 拼 prompt（系统提示 + 检索证据 + 前置信息，要求输出晨会稿结构）→ 调 `ILlmGateway` 生成 → 保存 `SpeechDraft`（Status=generated）→ 返回 DTO。
+构造函数按 Step 1 读到的接口类型补充注入 AnGIneer 客户端与 `ILlmGateway`。读取会议与 PreInfo → 调用 AnGIneer 检索（query 由 "晨会安全交底、今日任务" 组合）取前 5 条文本 → 拼 prompt（系统提示 + 检索证据 + 前置信息，要求输出晨会稿结构）→ 调 `ILlmGateway` 生成 → 保存 `SpeechDraft`（Status=generated）→ 返回 DTO。
 
 - [ ] **Step 3.5: 实现其余服务方法**
 
-`GetSpeechAsync`：按 `meeting.SpeechDraftId` 返回草稿或 null；`UpdateSpeechAsync`：更新 Content、Status=confirmed、EditedAt=now；`StartAsync`：Status=Rollcall、StartedAt=now；`SaveRecordingAsync`：用现有 `IFileStorage` 保存录音，`TranscriptFile` 存文件路径。`GenerateSpeechAsync` 中 AnGIneer 检索失败时降级为不带证据的纯 LLM 生成（答案标注"无知识库证据"）。
+`GetSpeechAsync`：按 `meeting.SpeechDraftId` 返回草稿或 null；`UpdateSpeechAsync`：更新 Content、Status=confirmed、EditedAt=now；`StartAsync`：Status=Rollcall、StartedAt=now；`SaveRecordingAsync`：用现有 `IFileStorage` 保存录音（构造函数补充注入），`TranscriptFile` 存文件路径。`GenerateSpeechAsync` 中 AnGIneer 检索失败时降级为不带证据的纯 LLM 生成（答案标注"无知识库证据"）。
 
 - [ ] **Step 4: 写单元测试（mock 检索与 LLM）**
 
