@@ -67,7 +67,7 @@ meeting-bot 与其依赖模型（FireRedASR/TTS、InsightFace、YOLO）部署在
 | `POST /asr` | 音频 → 文本（交互用，流式可后续升级） | FireRedASR（AED 版） |
 | `POST /tts` | 文本 → 音频字节 | FireRedTTS-1S |
 | `POST /recognize` | 照片/视频帧 → 人脸识别结果（去重聚合） | InsightFace（SCRFD + ArcFace） |
-| `POST /count` | 照片 → 人数统计 | YOLO + ByteTrack |
+| `POST /count` | 照片 → 人数统计（单帧检测） | YOLO |
 | `POST /transcribe` | 长音频 → 全文转写（会后异步） | FireRedASR（LLM 版） |
 | `POST /enroll` | 单人照片 → 人脸特征入库/更新 | InsightFace |
 
@@ -98,7 +98,7 @@ meeting-bot 与其依赖模型（FireRedASR/TTS、InsightFace、YOLO）部署在
 | FireRedTTS-1S | 晨会稿/回答语音合成 | meeting-bot 内嵌 | `POST /tts`（文本 → 音频，流式） | ABP 问答链路、前端播放 |
 | pVAD + Turn-Detector | 端点检测、判停、打断 | meeting-bot 进程内（可选暴露 `POST /vad`、`POST /turn`） | 进程内调用优先 | meeting-bot 会话状态机 |
 | InsightFace（SCRFD + ArcFace） | 人脸检测与识别 | meeting-bot 内嵌 | `POST /recognize`、`POST /enroll` | ABP 点名流程 |
-| YOLO + ByteTrack | 人数统计 | meeting-bot 内嵌 | `POST /count` | ABP 点名流程 |
+| YOLO | 人数统计（单帧检测） | meeting-bot 内嵌 | `POST /count` | ABP 点名流程 |
 
 部署形态与约束：
 - LLM 与 Embedding 作为独立容器/进程（vLLM/NIM、TEI 或自包装），监听独立端口，与 meeting-bot 互不阻塞
@@ -107,7 +107,7 @@ meeting-bot 与其依赖模型（FireRedASR/TTS、InsightFace、YOLO）部署在
 - 资源估算：Qwen 35B-A3B FP8 约 40–50GB，其余模型合计约 10GB；DGX Spark 128GB 统一内存可同时运行
 - 端口规划建议：vLLM/NIM 8000、Embedding 8001、meeting-bot 8101（写入 .env 配置）
 
-人数统计策略：主链路使用 YOLO+ByteTrack（确定性计数 + 跨帧去重），出勤以人脸识别 + 跟踪结果为准；Qwen（VL 版）仅作为"AI 目测人数"展示与异常兜底（如 YOLO 结果突变时复核），不承担出勤计数。若部署的是纯文本版 Qwen，则完全不参与视觉任务。
+人数统计策略：实时跟踪要求低，v1 不做跨帧跟踪（不引入 ByteTrack）。YOLO 对单张照片计数作为人数参考；多张扫拍照片按人脸身份合并去重（InsightFace 已识别身份），未识别人数取各照片最大计数兜底。出勤以 InsightFace 人脸识别结果为准。Qwen（VL 版）仅作"AI 目测人数"展示与异常兜底，不承担出勤计数；若部署的是纯文本版 Qwen，则完全不参与视觉任务。
 
 ## 6. 数据模型
 | 实体 | 关键字段 |
