@@ -175,6 +175,8 @@ v1 包含：晨会稿生成、现场点名（手动支架 + 补扫）、全程�
 
 v1 不包含：电动旋转支架、固定机位自动点名、多路视频、多人同时问答、原生 App 壳（v1 为浏览器 PWA）。
 
+v1 交互为半双工（按住说话）；v2 全双工候选两条路线：端到端 Qwen3-Omni-30B-A3B（语音进/语音出、可打断，DGX Spark 显存友好），或 FireRedChat 级联（ASR+TTS+pVAD+Turn-Detector + WebSocket/WebRTC 流式）。二者均不进入 v1。
+
 ## 13. 风险与开放问题
 1. 真实服务凭据与地址：DGX vLLM 端点、ai-gateway 的 LLM_CONFIGS、AnGIneer API Key、FireRedASR/TTS 的部署位置（meeting-bot 所在 GPU 机）
 2. 人脸合规：工地人脸采集需告知同意、数据本地化存储、定期清理
