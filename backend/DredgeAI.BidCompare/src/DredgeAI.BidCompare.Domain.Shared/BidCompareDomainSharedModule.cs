@@ -53,6 +53,7 @@ public class BidCompareDomainSharedModule : AbpModule
         Configure<AbpExceptionLocalizationOptions>(options =>
         {
             options.MapCodeNamespace("BidCompare", typeof(BidCompareResource));
+            options.MapCodeNamespace("TenderRead", typeof(BidCompareResource));
         });
     }
 }
