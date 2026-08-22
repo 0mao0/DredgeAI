@@ -18,6 +18,15 @@
 
 Phase 1 与 Phase 2 相互独立，可并行；Phase 3 依赖 Phase 1 的 meeting-bot 端点与 Phase 2 的 API 模块。
 
+## 现状核查（2026-08-23 更新）
+
+- LLM 已就绪：`DredgeAI/.env` 的 `LLM_CONFIGS` 已含 `Qwen3.6-35B-A3B-FP8`，指向 `https://ai.bim-ace.com/chat/v1`；该端点实测可访问（未带 key 返回 401，说明服务在线），由 ai-gateway 消费
+- AnGIneer 已就绪：本机 `D:\AI\AnGIneer` 已部署，`http://localhost:8790/docs` 实测可访问（200）；embedding/reranker 配置齐全
+- ai-gateway：当前未运行，`.\start.ps1` 一键启动（连同 PostgreSQL、ABP 后端、双前端）
+- 仓库内目前没有任何 ASR/TTS/人脸/人数服务，meeting-bot 是真正需要新建的部分
+- 结论：Phase 1 的 Task 1.1（Qwen 部署）、Task 1.2（Embedding）与 AnGIneer 部署**不再需要新建**，执行时改为"验证现有服务连通并记录"；Phase 1 实际新增范围只剩 meeting-bot（Task 1.3–1.11）
+- 对应调整：Task 0.1 只需补充 `MEETING_BOT_BASE_URL`、`MEETING_BOT_KEY` 并确认 `ANGINEER_API_KEY`；Task 1.1/1.2 改为验证端点（`/v1/models`、`/v1/embeddings`）后直接标记完成
+
 ## Phase 0：前置确认
 
 ### Task 0.1：收集服务地址与凭据
