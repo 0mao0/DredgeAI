@@ -148,6 +148,14 @@ meeting-bot 与其依赖模型（FireRedASR/TTS、InsightFace、YOLO）部署在
 - **会中**：照片 → meeting-bot 人脸识别 → 出勤落库；音频 → meeting-bot ASR → 问答编排 → TTS 回放
 - **会后**：长音频 → meeting-bot 精转写 → 报告生成 → 存储/推送
 
+时延目标（远程 API 验收参考）：
+- `/count`：约 200–500ms
+- `/recognize`（多人照片）：约 0.5–1s
+- `/asr`（5 秒语音）：约 0.5–1.5s
+- `/tts`：首包 200–400ms，流式输出
+- 问答全链路（按住说话 → 开始出声）：约 3–6s
+- 说明：v1 为"请求-响应 + TTS 流式"，满足点名与按住说话问答；连续视频流式计数、全双工对话（边说边打断）属 v2，需 WebSocket/WebRTC 升级
+
 ## 10. 错误处理与降级
 - ai-gateway 不可用 → 晨会稿生成与问答返回明确提示，不静默失败
 - AnGIneer 检索失败 → 降级为 LLM 直答，答案标注"无知识库证据"
