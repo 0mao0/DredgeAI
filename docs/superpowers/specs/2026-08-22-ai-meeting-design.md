@@ -107,6 +107,8 @@ meeting-bot 与其依赖模型（FireRedASR/TTS、InsightFace、YOLO）部署在
 - 资源估算：Qwen 35B-A3B FP8 约 40–50GB，其余模型合计约 10GB；DGX Spark 128GB 统一内存可同时运行
 - 端口规划建议：vLLM/NIM 8000、Embedding 8001、meeting-bot 8101（写入 .env 配置）
 
+人数统计策略：主链路使用 YOLO+ByteTrack（确定性计数 + 跨帧去重），出勤以人脸识别 + 跟踪结果为准；Qwen（VL 版）仅作为"AI 目测人数"展示与异常兜底（如 YOLO 结果突变时复核），不承担出勤计数。若部署的是纯文本版 Qwen，则完全不参与视觉任务。
+
 ## 6. 数据模型
 | 实体 | 关键字段 |
 |---|---|
