@@ -23,7 +23,9 @@ Phase 1 与 Phase 2 相互独立，可并行；Phase 3 依赖 Phase 1 的 meetin
 - LLM 已就绪：`DredgeAI/.env` 的 `LLM_CONFIGS` 已含 `Qwen3.6-35B-A3B-FP8`，指向 `https://ai.bim-ace.com/chat/v1`；该端点实测可访问（未带 key 返回 401，说明服务在线），由 ai-gateway 消费
 - AnGIneer 已就绪：本机 `D:\AI\AnGIneer` 已部署，`http://localhost:8790/docs` 实测可访问（200）；embedding/reranker 配置齐全
 - ai-gateway：当前未运行，`.\start.ps1` 一键启动（连同 PostgreSQL、ABP 后端、双前端）
-- 仓库内目前没有任何 ASR/TTS/人脸/人数服务，meeting-bot 是真正需要新建的部分
+- meeting-bot mock 服务已完成（Task 1.3–1.9）：/health、/asr、/tts、/recognize、/enroll、/count、/transcribe 端点就绪，8 个单测通过
+- user-web Phase 2 已完成（Task 2.1–2.13）：类型/URL 契约/mock/API 模块/路由/五步向导/媒体 composables，typecheck 与 17 个单测通过，dev server 冒烟 OK
+- .NET SDK：已确认本机存在 SDK 8.0.423（`C:\Users\飞\AppData\Local\Microsoft\dotnet`，含 ASP.NET Core 8.0.29 运行时），但 PATH 优先命中 `C:\Program Files\dotnet`（该安装无 SDK），直接敲 `dotnet` 会报 "No .NET SDKs found"；需用全路径 `C:\Users\飞\AppData\Local\Microsoft\dotnet\dotnet.exe` 或调整 PATH 顺序。Docker 内没有 .NET SDK 镜像
 - 结论：Phase 1 的 Task 1.1（Qwen 部署）、Task 1.2（Embedding）与 AnGIneer 部署**不再需要新建**，执行时改为"验证现有服务连通并记录"；Phase 1 实际新增范围只剩 meeting-bot（Task 1.3–1.11）
 - 对应调整：Task 0.1 只需补充 `MEETING_BOT_BASE_URL`、`MEETING_BOT_KEY` 并确认 `ANGINEER_API_KEY`；Task 1.1/1.2 改为验证端点（`/v1/models`、`/v1/embeddings`）后直接标记完成
 
