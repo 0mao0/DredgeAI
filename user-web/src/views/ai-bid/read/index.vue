@@ -58,9 +58,38 @@
     <!-- 读标工作区 -->
     <div v-else-if="task" class="read-workspace">
       <div class="read-workspace__bar">
-        <div class="read-workspace__name">
-          <span class="read-workspace__name-title">{{ task.name }}</span>
-          <a-tag :color="statusColor(task.status)">{{ statusText(task.status) }}</a-tag>
+        <div class="read-workspace__name" @mouseleave="cancelEditName">
+          <template v-if="projectNameVisible">
+            <span
+              v-if="!editingName"
+              class="read-workspace__name-title"
+              title="悬停编辑项目名"
+              @mouseenter="startEditName"
+            >{{ task.name }}</span>
+            <template v-else>
+              <a-input
+                ref="nameInputRef"
+                v-model:value="nameDraft"
+                :maxlength="128"
+                class="read-workspace__name-input"
+                :loading="nameSaving"
+                @input="nameDraftTouched = true"
+                @press-enter="saveName"
+              />
+              <AppButton
+                size="sm"
+                variant="primary"
+                :loading="nameSaving"
+                :disabled="!canConfirmName"
+                @click="saveName"
+              >
+                保存
+              </AppButton>
+              <AppButton size="sm" :disabled="nameSaving" @click="cancelEditName">取消</AppButton>
+              <span v-if="nameError" class="read-workspace__name-error">{{ nameError }}</span>
+            </template>
+          </template>
+          <a-tag v-if="task.status !== 'ready'" :color="statusColor(task.status)">{{ statusText(task.status) }}</a-tag>
           <a-tag>基准库 v{{ task.baselineVersion }}</a-tag>
         </div>
         <AppButton size="sm" @click="backToUpload">
@@ -107,81 +136,222 @@
           <PdfViewer
             :file-url="documentFileUrl"
             :title="documentTitle"
+            header-title="招标文件"
             :page="pdfPage"
             :high="pdfHighlights"
             :active-highlight-id="selectedFieldId || undefined"
             hide-original-label
+            show-side-panel-toggle
+            :side-panel-open="pdfSidePanelOpen"
+            :parse-status="task.status"
+            :parse-stage="documents[0]?.parseStage || task.progressStage"
+            :parse-step="documents[0]?.parseStageMessage || undefined"
+            :parse-error="task.failureReason || documents[0]?.parseError || undefined"
+            @update:side-panel-open="pdfSidePanelOpen = $event"
             @update:page="pdfPage = $event"
             @select-highlight="onPdfHighlightSelect"
-          />
+          >
+            <template #side-panel>
+              <div class="read-pdf-side-panel">
+                <!-- 复用 docs-ui 的解析视图组合（Markdown / 树形 / 知识图谱），不自建右栏 -->
+                <PDFParsedViewerCombo
+                  v-model:active-tab="parsedPanelTab"
+                  :markdown-content="parsedDocument?.content ?? ''"
+                  :structured-items="structuredItems"
+                  :index-summary-stats="indexSummaryStats"
+                  :has-parsed-content="Boolean(parsedDocument?.content)"
+                  :content-scroll-percent="0"
+                  :active-linked-item-id="null"
+                  :active-line-range="null"
+                  :source-file-path="documentFileUrl"
+                  :graph-data="null"
+                  :dark="isDark"
+                />
+              </div>
+            </template>
+          </PdfViewer>
         </div>
 
         <!-- 右：基准库 -->
         <SectionCard title="基准库" class="read-workspace__baseline">
           <template #extra>
+            <a-segmented
+              v-if="isEnglishDocument"
+              v-model:value="fieldLang"
+              size="small"
+              :options="[{ label: '中文', value: 'zh' }, { label: 'English', value: 'en' }]"
+              class="read-workspace__lang-toggle"
+            />
             <a-popconfirm
               title="重新抽取将覆盖该类别的现有字段（含已确认内容），确定继续吗？"
               ok-text="确定"
               cancel-text="取消"
-              @confirm="reExtractCategory"
+              @confirm="reExtractCategory(activeCategory)"
             >
-              <AppButton size="sm" :loading="reExtracting">
+              <AppButton size="sm" :loading="reExtracting" :disabled="!hasActiveCategory">
                 <ReloadOutlined />
-                重抽本类
+                重抽当前类
               </AppButton>
             </a-popconfirm>
           </template>
-          <a-tabs v-model:active-key="activeCategory" size="small" class="read-workspace__tabs">
-            <a-tab-pane
+          <a-empty
+            v-if="!baselineLoading && baseline.length === 0"
+            description="暂未抽取到基准库字段，可点击右上角“重抽当前类”"
+          />
+          <a-collapse
+            v-else
+            v-model:active-key="activeCategoryKeys"
+            class="read-workspace__collapse"
+            :bordered="false"
+          >
+            <a-collapse-panel
               v-for="cat in baselineCategoryOptions"
               :key="cat.value"
-              :tab="cat.label"
-            />
-          </a-tabs>
-
-          <div v-if="baselineLoading" class="read-workspace__baseline-body">
-            <DataSkeleton :rows="4" />
-          </div>
-          <a-empty v-else-if="activeFields.length === 0" description="该分类暂无字段" />
-          <div v-else class="read-workspace__baseline-body">
-            <div
-              v-for="field in activeFields"
-              :key="field.id"
-              class="baseline-field"
-              :class="{ 'baseline-field--active': selectedFieldId === field.id }"
-              @click="locateField(field)"
             >
-              <div class="baseline-field__head">
-                <span class="baseline-field__key">{{ field.fieldKey }}</span>
-                <div class="baseline-field__actions">
-                  <a-tag :color="fieldStatusColor(field.status)">{{ fieldStatusText(field.status) }}</a-tag>
-                  <AppButton
-                    v-if="field.status === 'auto' || field.status === 'needs_review'"
-                    variant="link"
-                    size="sm"
-                    :loading="confirmingFieldId === field.id"
-                    @click.stop="confirmField(field)"
-                  >
-                    确认
-                  </AppButton>
+              <template #header>
+                <span class="read-workspace__cat-label">{{ categoryLabel(cat.value) }}</span>
+                <a-tag class="read-workspace__cat-count">{{ fieldsOf(cat.value).length }} 项</a-tag>
+              </template>
+              <div v-if="baselineLoading" class="read-workspace__baseline-body">
+                <DataSkeleton :rows="4" />
+              </div>
+              <a-empty v-else-if="fieldsOf(cat.value).length === 0" description="该分类暂无字段" />
+              <div v-else class="read-workspace__baseline-body">
+                <div
+                  v-for="field in fieldsOf(cat.value)"
+                  :key="field.id"
+                  class="baseline-field"
+                  :class="{ 'baseline-field--active': selectedFieldId === field.id }"
+                  @click="locateField(field)"
+                >
+                  <div class="baseline-field__head">
+                    <span class="baseline-field__key">{{ fieldLabel(field) }}</span>
+                    <div class="baseline-field__meta">
+                      <a-tooltip :title="`置信度 ${Math.round(field.confidence * 100)}%`">
+                        <a-tag
+                          class="baseline-field__extractor"
+                          :class="`baseline-field__extractor--${field.extractor}`"
+                        >
+                          {{ extractorLabel(field.extractor) }}
+                        </a-tag>
+                      </a-tooltip>
+                    </div>
+                  </div>
+                  <div v-if="editingFieldId === field.id" class="baseline-field__edit" @click.stop>
+                    <a-textarea
+                      v-model:value="editFieldDraft"
+                      :auto-size="{ minRows: 2, maxRows: 6 }"
+                    />
+                    <div v-if="hasMandatoryField(field)" class="baseline-field__edit-row">
+                      <span class="baseline-field__edit-label">强制</span>
+                      <a-switch
+                        :checked="editFieldMandatory === true"
+                        size="small"
+                        @change="(v: boolean) => editFieldMandatory = v"
+                      />
+                    </div>
+                    <div v-if="hasCategoryField(field)" class="baseline-field__edit-row">
+                      <span class="baseline-field__edit-label">分类</span>
+                      <a-select
+                        v-model:value="editFieldCategory"
+                        :options="clauseCategoryOptions"
+                        allow-clear
+                        show-search
+                        placeholder="选择分类"
+                        size="small"
+                        style="width: 180px"
+                      />
+                    </div>
+                  </div>
+                  <div v-else class="baseline-field__value">
+                    <template v-if="fieldValueParts(field).text">
+                      <span class="baseline-field__value-text"><template v-if="fieldValueParts(field).textKey === 'text'"><span class="baseline-field__label">条款：</span></template>{{ fieldValueParts(field).text }}</span>
+                      <template v-if="field.sourceRefs.length">
+                        <span
+                          v-for="(source, i) in field.sourceRefs"
+                          :key="`${source.fieldId}-${i}`"
+                          class="baseline-field__ref-circle"
+                          :title="`第 ${source.pageIdx + 1} 页`"
+                          @click.stop="locateSource(source)"
+                        >{{ sourceRefNumber(field, i) }}</span>
+                      </template>
+                      <div
+                        v-if="hasMandatoryField(field)"
+                        class="baseline-field__category"
+                      >
+                        <span class="baseline-field__label">强制：</span><span
+                          :class="{ 'baseline-field__mandatory-yes': fieldValueParts(field).mandatory === true }"
+                        >{{ fieldValueParts(field).mandatory === true ? '是' : '否' }}</span>
+                      </div>
+                      <div
+                        v-if="fieldValueParts(field).category"
+                        class="baseline-field__category"
+                      >
+                        <span class="baseline-field__label">分类：</span>{{ fieldValueParts(field).category }}
+                      </div>
+                      <div
+                        v-for="extra in fieldValueParts(field).extras"
+                        :key="extra.label"
+                        class="baseline-field__category"
+                      >
+                        {{ extra.label }}：{{ extra.value }}
+                      </div>
+                    </template>
+                    <template v-else-if="fieldValueParts(field).list.length">
+                      <div
+                        v-for="(item, i) in fieldValueParts(field).list"
+                        :key="i"
+                        class="baseline-field__list-item"
+                      >
+                        <span class="baseline-field__value-text">{{ item }}</span>
+                        <span
+                          v-if="field.sourceRefs[i]"
+                          class="baseline-field__ref-circle"
+                          :title="`第 ${field.sourceRefs[i].pageIdx + 1} 页`"
+                          @click.stop="locateSource(field.sourceRefs[i])"
+                        >{{ sourceRefNumber(field, i) }}</span>
+                      </div>
+                    </template>
+                    <template v-else>
+                      {{ formatFieldValue(field.valueJson) }}
+                      <template v-if="field.sourceRefs.length">
+                        <span
+                          v-for="(source, i) in field.sourceRefs"
+                          :key="`${source.fieldId}-${i}`"
+                          class="baseline-field__ref-circle"
+                          :title="`第 ${source.pageIdx + 1} 页`"
+                          @click.stop="locateSource(source)"
+                        >{{ sourceRefNumber(field, i) }}</span>
+                      </template>
+                    </template>
+                  </div>
+                  <div class="baseline-field__footer">
+                    <template v-if="editingFieldId === field.id">
+                      <AppButton
+                        size="sm"
+                        variant="primary"
+                        :loading="editFieldSaving"
+                        @click.stop="saveEditField(field)"
+                      >
+                        确认
+                      </AppButton>
+                      <AppButton size="sm" :disabled="editFieldSaving" @click.stop="cancelEditField">
+                        取消
+                      </AppButton>
+                    </template>
+                    <AppButton
+                      v-else
+                      variant="link"
+                      size="sm"
+                      @click.stop="startEditField(field)"
+                    >
+                      修改
+                    </AppButton>
+                  </div>
                 </div>
               </div>
-              <div class="baseline-field__value">{{ formatFieldValue(field.valueJson) }}</div>
-              <div class="baseline-field__meta">
-                <span>置信度 {{ Math.round(field.confidence * 100) }}%</span>
-                <span>{{ field.extractor }} · {{ field.extractorVersion }}</span>
-              </div>
-              <div v-if="field.sourceRefs.length" class="baseline-field__refs">
-                <span
-                  v-for="(source, i) in field.sourceRefs"
-                  :key="`${source.fieldId}-${i}`"
-                  class="baseline-field__ref"
-                >
-                  第 {{ source.pageIdx + 1 }} 页 · {{ source.blockId }}
-                </span>
-              </div>
-            </div>
-          </div>
+            </a-collapse-panel>
+          </a-collapse>
         </SectionCard>
       </div>
     </div>
@@ -189,7 +359,8 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onBeforeUnmount, ref, watch } from 'vue'
+import { computed, nextTick, onBeforeUnmount, ref, watch } from 'vue'
+import { useRoute } from 'vue-router'
 import { message } from 'ant-design-vue'
 import {
   DownloadOutlined,
@@ -200,10 +371,13 @@ import {
   WarningOutlined,
 } from '@ant-design/icons-vue'
 import { AppButton, DataSkeleton, SectionCard } from '@shared/web'
-import type { BaselineCategory, BaselineField, BlockRange, SourceRef, TenderReadingDocument, TenderReadingOutlineNode, TenderReadingTask } from '@/types'
+import type { BaselineCategory, BaselineField, BlockRange, SourceRef, TenderReadingDocument, TenderReadingOutlineNode, TenderReadingParsedDocument, TenderReadingTask } from '@/types'
 import UploadFileRow from '../compare/components/UploadFileRow.vue'
 import type { UploadFileItem } from '../compare/components/UploadPage.vue'
 import PdfViewer from '../compare/components/PdfViewer.vue'
+import { PDFParsedViewerCombo } from '@angineer/docs-ui'
+import type { PreviewMode, StructuredIndexItem } from '@angineer/docs-ui'
+import { useThemeStore } from '@shared/web/stores'
 import {
   createTenderReadTask,
   deleteTenderReadTask,
@@ -212,11 +386,13 @@ import {
   getTenderReadDocumentFileUrl,
   getTenderReadDocuments,
   getTenderReadOutline,
+  getTenderReadParsedDocument,
   getTenderReadTask,
   reExtractTenderReadBaseline,
   reparseTenderReadTask,
   startTenderReadParse,
   updateTenderReadField,
+  updateTenderReadTask,
   uploadTenderReadDocument,
 } from '@/api/modules/tenderRead'
 
@@ -238,26 +414,27 @@ const outline = ref<TenderReadingOutlineNode[]>([])
 const baseline = ref<BaselineField[]>([])
 const outlineLoading = ref(false)
 const baselineLoading = ref(false)
+const parsedDocument = ref<TenderReadingParsedDocument | null>(null)
+const parsedPanelTab = ref<PreviewMode>('Preview_Markdown')
+const pdfSidePanelOpen = ref(false)
 const exporting = ref(false)
 const pdfPage = ref(1)
 const pdfHighlights = ref<BlockRange[]>([])
 const selectedFieldId = ref('')
-const activeCategory = ref<BaselineCategory>('project_info')
-const reExtracting = ref(false)
-const confirmingFieldId = ref('')
-const reparsing = ref(false)
-let pollTimer: number | null = null
-let pollGen = 0
-let pollInFlight = false
-let disposed = false
-
-const POLL_MS = 3000
-
-const canStart = computed(() => uploadItem.value?.status === 'done' && !!currentTaskId.value)
-const outlineTreeData = computed<TreeData[]>(() => outline.value.map(toTreeData))
-const documentFileUrl = computed(() => task.value && documents.value.length > 0 ? getTenderReadDocumentFileUrl(task.value.id) : '')
-const documentTitle = computed(() => documents.value[0]?.fileName ?? '')
-const activeFields = computed(() => baseline.value.filter((f) => f.category === activeCategory.value))
+/** 默认展开全部分类，让提取结果一眼可见（折叠面板容易让人以为“没提取到内容”） */
+const allBaselineCategories: BaselineCategory[] = [
+  'project_info',
+  'rejection_clauses',
+  'evaluation_criteria',
+  'technical_parameters',
+  'commercial_data',
+  'chapter_outline',
+  'seal_rules',
+  'dark_bid_format_rules',
+]
+const activeCategoryKeys = ref<BaselineCategory[]>(allBaselineCategories)
+const activeCategory = computed(() => activeCategoryKeys.value[0] ?? 'project_info')
+const hasActiveCategory = computed(() => activeCategoryKeys.value.length > 0)
 
 const baselineCategoryOptions: { value: BaselineCategory, label: string }[] = [
   { value: 'project_info', label: '项目信息' },
@@ -269,6 +446,111 @@ const baselineCategoryOptions: { value: BaselineCategory, label: string }[] = [
   { value: 'seal_rules', label: '签章规则' },
   { value: 'dark_bid_format_rules', label: '暗标格式' },
 ]
+/** 全库递增的溯源圆圈序号：按展示顺序（分类 → 字段 → 溯源）编号，跨字段不重置 */
+const sourceRefNumbers = computed(() => {
+  const map = new Map<string, number>()
+  let counter = 1
+  for (const cat of baselineCategoryOptions) {
+    for (const field of fieldsOf(cat.value)) {
+      field.sourceRefs.forEach((_, index) => {
+        map.set(`${field.id}-${index}`, counter)
+        counter += 1
+      })
+    }
+  }
+  return map
+})
+/** 字段/分类展示语言：仅英文招标文件时右上角出现切换 */
+const fieldLang = ref<'zh' | 'en'>('zh')
+const isEnglishDocument = computed(() => {
+  const texts: string[] = []
+  for (const field of baseline.value) {
+    if (field.rawText) texts.push(field.rawText)
+    try {
+      const parsed = JSON.parse(field.valueJson) as unknown
+      texts.push(typeof parsed === 'string' ? parsed : JSON.stringify(parsed))
+    } catch {
+      if (field.valueJson) texts.push(field.valueJson)
+    }
+  }
+  const all = texts.join(' ').trim()
+  if (!all) return false
+  const cjk = (all.match(/[\u4e00-\u9fff\u3400-\u4dbf]/g) || []).length
+  return cjk / all.length < 0.1
+})
+const reExtracting = ref(false)
+const reparsing = ref(false)
+const editingName = ref(false)
+const nameDraft = ref('')
+const nameDraftTouched = ref(false)
+const nameSaving = ref(false)
+const nameError = ref('')
+const nameInputRef = ref<{ focus: () => void } | null>(null)
+const editingFieldId = ref('')
+const editFieldDraft = ref('')
+const editFieldMandatory = ref(false)
+const editFieldCategory = ref<string | null>(null)
+const editFieldSaving = ref(false)
+let pollTimer: number | null = null
+let pollGen = 0
+let pollInFlight = false
+let disposed = false
+
+const POLL_MS = 3000
+const route = useRoute()
+const themeStore = useThemeStore()
+const isDark = computed(() => themeStore.isDark)
+
+const canStart = computed(() => uploadItem.value?.status === 'done' && !!currentTaskId.value)
+const outlineTreeData = computed<TreeData[]>(() => outline.value.map(toTreeData))
+const documentFileUrl = computed(() => {
+  return task.value && documents.value.length > 0 ? getTenderReadDocumentFileUrl(task.value.id) : ''
+})
+const documentTitle = computed(() => documents.value[0]?.fileName ?? '')
+const structuredItems = computed<StructuredIndexItem[]>(() =>
+  (parsedDocument.value?.ir.blocks ?? []).map((block, index) => {
+    const text = (block.text || '').trim()
+    return {
+      id: block.blockId,
+      item_type: block.type || 'segment',
+      title: text || `${block.type || 'block'} @ P${block.pageIdx + 1}`,
+      content: text,
+      order_index: index + 1,
+      meta: {
+        page_seq: block.pageIdx + 1,
+        block_seq: 0,
+        source: 'ir',
+      },
+    }
+  }),
+)
+const indexSummaryStats = computed(() => {
+  const blocks = parsedDocument.value?.ir.blocks ?? []
+  const count = (type: string): number => blocks.filter((b) => b.type === type).length
+  const paragraph = count('para')
+  const title = count('title')
+  const table = count('table')
+  const formula = count('formula')
+  const figure = count('figure') + count('image')
+  const headerFooter = count('header_footer')
+  const total = blocks.length
+  return {
+    total,
+    paragraph,
+    title,
+    table,
+    formula,
+    figure,
+    headerFooter,
+    other: Math.max(0, total - paragraph - title - table - formula - figure - headerFooter),
+    maxLevel: blocks.reduce((max, b) => Math.max(max, Number(b.textLevel) || 0), 0),
+  }
+})
+const projectNameVisible = computed(() => !!task.value)
+const canConfirmName = computed(() => {
+  const next = nameDraft.value.trim()
+  return next.length > 0 && (nameDraftTouched.value || next !== task.value?.name)
+})
 
 watch(() => task.value?.status, (status) => {
   if (!status) return
@@ -288,6 +570,11 @@ onBeforeUnmount(() => {
   disposed = true
   stopPolling()
 })
+
+// 从历史记录 / 外部链接打开指定读标任务（immediate 覆盖首次挂载，watch 覆盖页面内切换任务）
+watch(() => route.query.task, (id) => {
+  if (typeof id === 'string' && id) void openExistingTask(id)
+}, { immediate: true })
 
 async function onPickFile(file: File): Promise<boolean> {
   if (creating.value || starting.value) return false
@@ -383,6 +670,17 @@ async function startRead(): Promise<void> {
   }
 }
 
+/** 从历史记录打开已有读标任务（?task=id） */
+async function openExistingTask(id: string): Promise<void> {
+  try {
+    await loadDetail(id)
+    currentTaskId.value = id
+    view.value = 'workspace'
+  } catch {
+    message.error('读标任务加载失败')
+  }
+}
+
 function backToUpload(): void {
   stopPolling()
   view.value = 'upload'
@@ -392,6 +690,7 @@ function backToUpload(): void {
   documents.value = []
   outline.value = []
   baseline.value = []
+  parsedDocument.value = null
   pdfHighlights.value = []
   selectedFieldId.value = ''
 }
@@ -422,6 +721,8 @@ async function loadDetail(id: string): Promise<void> {
     } catch {
       baseline.value = []
     }
+
+    await loadParsedDocument(id)
   } catch (error) {
     documents.value = []
     outline.value = []
@@ -430,6 +731,19 @@ async function loadDetail(id: string): Promise<void> {
   } finally {
     outlineLoading.value = false
     baselineLoading.value = false
+  }
+}
+
+async function loadParsedDocument(id: string, stale?: () => boolean): Promise<void> {
+  if (!task.value) return
+  if (task.value.status === 'uploading' || task.value.status === 'parsing') return
+
+  try {
+    const data = await getTenderReadParsedDocument(id, true)
+    if (stale?.()) return
+    parsedDocument.value = data
+  } catch {
+    // 解析产物未就绪或读取失败时保留旧值，轮询下一轮再试
   }
 }
 
@@ -460,6 +774,8 @@ async function refreshDetail(id: string, gen: number): Promise<void> {
     } catch {
       // 尚未生成基准库时保持当前值
     }
+
+    await loadParsedDocument(id, stale)
   } catch (err) {
     if (stale()) return
     if (isNotFound(err)) {
@@ -543,34 +859,156 @@ function toTreeData(node: TenderReadingOutlineNode): TreeData {
   }
 }
 
+/** 由 IR 块构建“标题 → 正文块”的结构树，用于右侧图谱/结构视图。 */
+function fieldsOf(category: BaselineCategory): BaselineField[] {
+  return baseline.value.filter((f) => f.category === category)
+}
+
+function sourceRefNumber(field: BaselineField, index: number): number {
+  return sourceRefNumbers.value.get(`${field.id}-${index}`) ?? index + 1
+}
+
+/** 废标条款等的分类选项（LLM 输出的 category 取值） */
+const clauseCategoryOptions = [
+  { value: '资质', label: '资质' },
+  { value: '报价', label: '报价' },
+  { value: '技术', label: '技术' },
+  { value: '工期', label: '工期' },
+  { value: '格式', label: '格式' },
+  { value: '诚信', label: '诚信' },
+  { value: '商务', label: '商务' },
+]
+
+interface FieldValueParts {
+  parsed: Record<string, unknown> | null
+  text: string
+  textKey: 'text' | 'value' | null
+  list: string[]
+  mandatory: boolean | null
+  category: string | null
+  extras: Array<{ label: string, value: string }>
+}
+
+/** 解析字段 valueJson 为结构化展示/编辑所需的数据 */
+/** 提取结果对象里的英文键 → 中文标签（值内容优先展示原文，元数据用中文说明） */
+const VALUE_KEY_LABELS: Record<string, string> = {
+  text: '原文',
+  value: '值',
+  mandatory: '是否强制',
+  category: '分类',
+  dimension: '评分维度',
+  score: '分值',
+  subItems: '子项',
+  deductionRules: '扣分规则',
+  name: '参数名',
+  requiredValue: '要求值',
+  unit: '单位',
+  substantive: '实质性要求',
+  rules: '规则',
+}
+function parseFieldValue(valueJson: string): FieldValueParts {
+  try {
+    const raw = JSON.parse(valueJson) as unknown
+    if (raw && typeof raw === 'object' && !Array.isArray(raw)) {
+      const obj = raw as Record<string, unknown>
+      const textEntry = Object.entries(obj).find(([key]) => key === 'text' || key === 'value')
+      const text = textEntry ? formatValue(textEntry[1]) : ''
+      const textKey = textEntry ? (textEntry[0] === 'text' ? 'text' : 'value') : null
+      const listEntry = Object.entries(obj).find(([, val]) => Array.isArray(val))
+      const list = listEntry && Array.isArray(listEntry[1])
+        ? (listEntry[1] as unknown[]).map((item) => formatValue(item))
+        : []
+      const mandatory = typeof obj.mandatory === 'boolean' ? obj.mandatory : null
+      const category = typeof obj.category === 'string' && obj.category.trim()
+        ? obj.category
+        : null
+      const extras = Object.entries(obj)
+        .filter(([key]) => key !== 'text' && key !== 'value' && key !== 'mandatory' && key !== 'category')
+        .filter(([, val]) => !Array.isArray(val))
+        .map(([key, val]) => ({ label: VALUE_KEY_LABELS[key] || key, value: formatValue(val) }))
+      return { parsed: obj, text, textKey, list, mandatory, category, extras }
+    }
+  } catch {
+    // 非 JSON，按纯文本处理
+  }
+  return { parsed: null, text: valueJson, textKey: null, list: [], mandatory: null, category: null, extras: [] }
+}
+
+function fieldValueParts(field: BaselineField): FieldValueParts {
+  return parseFieldValue(field.valueJson)
+}
+
+function hasMandatoryField(field: BaselineField): boolean {
+  const parsed = parseFieldValue(field.valueJson).parsed
+  return parsed != null && 'mandatory' in parsed
+}
+
+function hasCategoryField(field: BaselineField): boolean {
+  const parsed = parseFieldValue(field.valueJson).parsed
+  return parsed != null && 'category' in parsed
+}
+
 function formatFieldValue(valueJson: string): string {
   try {
-    const parsed = JSON.parse(valueJson) as unknown
-    if (typeof parsed === 'string') return parsed
-    return JSON.stringify(parsed)
+    return formatValue(JSON.parse(valueJson) as unknown)
   } catch {
     return valueJson
   }
 }
 
+function formatValue(value: unknown): string {
+  if (typeof value === 'string') return value
+  if (value === null || value === undefined) return ''
+  if (typeof value === 'boolean') return value ? '是' : '否'
+  if (typeof value === 'number') return String(value)
+  if (Array.isArray(value)) {
+    return value.map((item) => formatValue(item)).join('；')
+  }
+  if (typeof value === 'object') {
+    const entries = Object.entries(value as Record<string, unknown>)
+    const mainEntry = entries.find(([key]) => key === 'text' || key === 'value')
+    if (mainEntry) {
+      const extras = entries
+        .filter(([key]) => key !== mainEntry[0])
+        .map(([key, val]) => `${VALUE_KEY_LABELS[key] || key}：${formatValue(val)}`)
+        .join('；')
+      const main = formatValue(mainEntry[1])
+      return extras ? `${main}\n${extras}` : main
+    }
+    return entries
+      .map(([key, val]) => `${VALUE_KEY_LABELS[key] || key}：${formatValue(val)}`)
+      .join('\n')
+  }
+  return String(value)
+}
+
 function locateField(field: BaselineField): void {
   selectedFieldId.value = field.id
   pdfHighlights.value = field.sourceRefs.map(sourceRefToBlockRange)
+  activeCategoryKeys.value = [...new Set([...activeCategoryKeys.value, field.category])]
   const first = field.sourceRefs[0]
   if (first) pdfPage.value = first.pageIdx + 1
+}
+
+/** 点击引用圆圈：只定位到该条溯源（页码 + 对应 bbox 高亮） */
+function locateSource(source: SourceRef): void {
+  selectedFieldId.value = source.fieldId
+  pdfHighlights.value = [sourceRefToBlockRange(source)]
+  pdfPage.value = source.pageIdx + 1
 }
 
 function autoHighlightFirstField(): void {
   if (selectedFieldId.value || pdfHighlights.value.length > 0) return
   const field = baseline.value.find((f) => f.sourceRefs.length > 0)
-  if (field) locateField(field)
+  if (field) {
+    locateField(field)
+  }
 }
 
 function onPdfHighlightSelect(highlight: { itemId?: string }): void {
   if (!highlight.itemId) return
   const field = baseline.value.find((f) => f.id === highlight.itemId)
   if (!field) return
-  activeCategory.value = field.category
   locateField(field)
 }
 
@@ -588,28 +1026,102 @@ function sourceRefToBlockRange(ref: SourceRef): BlockRange {
   }
 }
 
-async function confirmField(field: BaselineField): Promise<void> {
-  if (!task.value || confirmingFieldId.value) return
-  confirmingFieldId.value = field.id
+/* —— 项目名（悬停进入编辑态，离开恢复标题） —— */
+function startEditName(): void {
+  if (!task.value || editingName.value) return
+  nameDraft.value = task.value.name
+  nameDraftTouched.value = false
+  nameError.value = ''
+  editingName.value = true
+  nextTick(() => {
+    nameInputRef.value?.focus()
+  })
+}
+
+function cancelEditName(): void {
+  if (!task.value) return
+  nameDraft.value = task.value.name
+  nameDraftTouched.value = false
+  nameError.value = ''
+  editingName.value = false
+}
+
+async function saveName(): Promise<void> {
+  if (!task.value || nameSaving.value) return
+  const next = nameDraft.value.trim()
+  if (!next || next === task.value.name) return
+  nameSaving.value = true
+  nameError.value = ''
   try {
+    task.value = await updateTenderReadTask(task.value.id, { name: next })
+    nameDraftTouched.value = false
+    nameDraft.value = next
+    editingName.value = false
+  } catch {
+    nameError.value = '名称保存失败，可重试'
+  } finally {
+    nameSaving.value = false
+  }
+}
+
+/* —— 基准库字段编辑 —— */
+function startEditField(field: BaselineField): void {
+  editingFieldId.value = field.id
+  const parts = parseFieldValue(field.valueJson)
+  editFieldDraft.value = parts.text || formatFieldValue(field.valueJson)
+  editFieldMandatory.value = parts.mandatory === true
+  editFieldCategory.value = parts.category
+}
+
+function cancelEditField(): void {
+  editingFieldId.value = ''
+  editFieldDraft.value = ''
+  editFieldMandatory.value = false
+  editFieldCategory.value = null
+}
+
+async function saveEditField(field: BaselineField): Promise<void> {
+  if (!task.value || editFieldSaving.value) return
+  const next = editFieldDraft.value.trim()
+  if (!next) {
+    message.warning('字段内容不能为空')
+    return
+  }
+  editFieldSaving.value = true
+  try {
+    const parts = parseFieldValue(field.valueJson)
+    let valueJson: string
+    if (parts.parsed) {
+      const obj: Record<string, unknown> = { ...parts.parsed }
+      const hasText = 'text' in obj
+      const hasValue = 'value' in obj
+      if (hasText) obj.text = next
+      else if (hasValue) obj.value = next
+      if ('mandatory' in obj) obj.mandatory = editFieldMandatory.value === true
+      if ('category' in obj) obj.category = editFieldCategory.value ?? ''
+      valueJson = JSON.stringify(obj)
+    } else {
+      valueJson = JSON.stringify(next)
+    }
     const updated = await updateTenderReadField(task.value.id, field.id, {
-      valueJson: field.valueJson,
-      rawText: field.rawText,
-      status: 'confirmed',
-      confidence: field.confidence,
+      valueJson,
+      rawText: next,
+      status: 'edited',
     })
     baseline.value = baseline.value.map((f) => (f.id === updated.id ? updated : f))
-    message.success('字段已确认')
+    cancelEditField()
+    message.success('字段已修改')
   } catch (error) {
-    message.error(error instanceof Error ? error.message : '字段确认失败')
+    message.error(error instanceof Error ? error.message : '字段修改失败')
   } finally {
-    confirmingFieldId.value = ''
+    editFieldSaving.value = false
   }
 }
 
 async function onReparseTask(): Promise<void> {
   if (!task.value || reparsing.value) return
   reparsing.value = true
+  parsedDocument.value = null
   try {
     // 状态回到 parsing，status watch 自动起轮询
     task.value = await reparseTenderReadTask(task.value.id)
@@ -620,13 +1132,13 @@ async function onReparseTask(): Promise<void> {
   }
 }
 
-async function reExtractCategory(): Promise<void> {
+async function reExtractCategory(category: BaselineCategory): Promise<void> {
   if (!task.value || reExtracting.value) return
   reExtracting.value = true
   try {
     // 重抽为后台任务：返回抽取中的任务快照，状态 watch 自动起轮询，
     // 到达终态后复位按钮并刷新基准库（轮询每 tick 都会重拉基准库）
-    task.value = await reExtractTenderReadBaseline(task.value.id, activeCategory.value)
+    task.value = await reExtractTenderReadBaseline(task.value.id, category)
     selectedFieldId.value = ''
     pdfHighlights.value = []
     message.success('已提交重新抽取，完成后自动刷新')
@@ -655,19 +1167,137 @@ function statusColor(status: TenderReadingTask['status']): string {
   return statusMap[status].color
 }
 
-const fieldStatusMap: Record<BaselineField['status'], { text: string, color: string }> = {
-  auto: { text: '自动', color: 'blue' },
-  needs_review: { text: '待复核', color: 'orange' },
-  confirmed: { text: '已确认', color: 'green' },
-  edited: { text: '已编辑', color: 'purple' },
+/** 字段 key → 中文标签（规则字段 + LLM 动态生成的常见 key 全覆盖） */
+const FIELD_LABELS: Record<string, string> = {
+  name: '项目名称',
+  code: '项目编号',
+  price_ceiling: '最高限价',
+  construction_period: '工期',
+  warranty_period: '质保期',
+  payment_method: '付款方式',
+  outline: '章节框架',
+  seal_rules: '签章规则',
+  dark_bid_format_rules: '暗标格式',
+  bid_price: '投标报价',
+  demand_understanding: '需求理解',
+  key_personnel: '关键人员',
+  management_and_safeguard_measures: '管理与保障措施',
+  price_score: '价格得分',
+  project_manager: '项目经理',
+  project_team_configuration: '项目团队配置',
+  schedule_plan: '进度计划',
+  service_implementation_plan: '服务实施方案',
+  similar_project_performance: '类似项目业绩',
+  special_services_and_commitments: '专项服务与承诺',
+  technical_solution: '技术方案',
+  acceptance_payment_terms: '验收及付款条款',
+  affiliation_prohibited: '禁止挂靠',
+  bid_document_sealing: '投标文件密封',
+  bid_opening_attendance_id: '开标出席身份核验',
+  bid_plagiarism: '投标文件雷同',
+  bid_price_below_cost: '报价低于成本',
+  bid_price_exceeds_budget: '报价超出预算',
+  bid_price_exceeds_limit: '报价超出限价',
+  bid_security: '投标保证金',
+  bid_security_deposit: '投标保证金未足额',
+  bid_validity_period: '投标有效期',
+  bidder_attendance_id: '投标人出席身份核验',
+  clarification_failure: '澄清说明失败',
+  commitment_letter_seal: '承诺书未盖章',
+  commitment_letter_signature: '承诺书未签字',
+  conditional_bidding: '附带条件投标',
+  conflict_of_interest_designer: '设计单位利益冲突',
+  credit_disqualification: '信用不良取消资格',
+  excessive_missing_items: '缺项过多',
+  failure_to_meet_qualification_or_substantive_requirements: '资格或实质要求不满足',
+  failure_to_sign_in_or_decrypt: '未签到或未解密',
+  fake_materials: '虚假材料',
+  fraud_and_collusion: '弄虚作假与串通投标',
+  inspection_standards: '检验标准不符',
+  integrity_violation: '诚信违规',
+  invalid_bid_clarification_failure: '澄清说明不符',
+  invalid_bid_committee_signature: '评标委员会签字缺失',
+  invalid_bid_competitive_costs: '不可竞争费用不符',
+  invalid_bid_duration: '工期超限',
+  invalid_bid_false_materials: '虚假材料',
+  invalid_bid_fraud: '弄虚作假',
+  invalid_bid_inspection_standards: '检验标准不符',
+  invalid_bid_law_violation: '违法投标',
+  invalid_bid_multiple_bids: '一标多投',
+  invalid_bid_opening_attendance: '开标未出席',
+  invalid_bid_payment_terms: '付款条款不符',
+  invalid_bid_personnel_mismatch: '人员不匹配',
+  invalid_bid_price_range: '报价超出范围',
+  invalid_bid_qualification: '资格不符',
+  invalid_bid_scheme_requirements: '方案要求不符',
+  invalid_bid_security_deposit_missing: '保证金缺失',
+  invalid_bid_similarities: '投标文件雷同',
+  invalid_bid_substantive_response: '未实质响应',
+  invalid_bid_technical_standards: '技术标准不符',
+  joint_venture_not_accepted: '不接受联合体',
+  late_submission: '逾期递交',
+  missing_bid_letter: '投标函缺失',
+  missing_qualification_response_table: '资格响应表缺失',
+  missing_seals_on_critical_docs: '关键文件缺章',
+  multiple_bids: '一标多投',
+  no_alternative_bid: '不接受备选方案',
+  no_deviation: '不得偏离',
+  no_joint_venture: '不得联合体投标',
+  no_subcontracting: '不得分包',
+  non_competitive_fees: '不可竞争费用',
+  power_of_attorney: '授权委托书',
+  project_manager_consistency: '项目经理一致性',
+  qualification_non_compliance: '资格不符',
+  refusal_to_confirm_price_correction: '拒绝确认报价修正',
+  same_legal_representative_or_control: '同一法定代表人或控制关系',
+  scheme_requirements: '方案要求',
+  selective_bidding: '选择性报价',
+  substantial_response: '实质响应',
+  technical_standards: '技术标准',
+  unreasonable_low_price: '不合理低价',
+  bid_price_type: '报价方式',
+  bid_validity: '投标有效期',
+  budget_limit: '预算限额',
+  credit_requirement: '信用要求',
+  delivery_time: '交付时间',
+  design_depth: '设计深度',
+  design_standard: '设计标准',
+  joint_bidding: '联合体投标',
+  payment_advance: '预付款',
+  payment_final: '最终付款',
+  qualification: '资格要求',
+  service_period: '服务期限',
 }
 
-function fieldStatusText(status: BaselineField['status']): string {
-  return fieldStatusMap[status].text
+function fieldLabel(field: BaselineField): string {
+  if (fieldLang.value === 'en') return field.fieldKey.replace(/_/g, ' ')
+  const sealRule = field.fieldKey.match(/^seal_rule_(\d+)$/)
+  if (sealRule) return `签章规则 ${sealRule[1]}`
+  const darkBidRule = field.fieldKey.match(/^dark_bid_rule_(\d+)$/)
+  if (darkBidRule) return `暗标格式 ${darkBidRule[1]}`
+  return FIELD_LABELS[field.fieldKey] || field.fieldKey.replace(/_/g, ' ')
 }
 
-function fieldStatusColor(status: BaselineField['status']): string {
-  return fieldStatusMap[status].color
+const CATEGORY_LABELS: Record<BaselineCategory, { zh: string, en: string }> = {
+  project_info: { zh: '项目信息', en: 'Project Info' },
+  rejection_clauses: { zh: '废标条款', en: 'Rejection Clauses' },
+  evaluation_criteria: { zh: '评分标准', en: 'Evaluation Criteria' },
+  technical_parameters: { zh: '技术参数', en: 'Technical Parameters' },
+  commercial_data: { zh: '商务数据', en: 'Commercial Data' },
+  chapter_outline: { zh: '章节框架', en: 'Chapter Outline' },
+  seal_rules: { zh: '签章规则', en: 'Seal Rules' },
+  dark_bid_format_rules: { zh: '暗标格式', en: 'Dark Bid Format Rules' },
+}
+
+function categoryLabel(category: BaselineCategory): string {
+  const labels = CATEGORY_LABELS[category]
+  return fieldLang.value === 'en' ? labels.en : labels.zh
+}
+
+function extractorLabel(extractor: string): string {
+  if (extractor === 'rule') return '规则提取'
+  if (extractor === 'llm') return 'AI 提取'
+  return extractor
 }
 </script>
 
@@ -840,6 +1470,15 @@ function fieldStatusColor(status: BaselineField['status']): string {
   color: @text-primary;
 }
 
+.read-workspace__name-input {
+  width: 320px;
+}
+
+.read-workspace__name-error {
+  font-size: @font-size-xs;
+  color: @danger;
+}
+
 .read-workspace__banner {
   display: flex;
   align-items: center;
@@ -880,19 +1519,53 @@ function fieldStatusColor(status: BaselineField['status']): string {
   }
 }
 
+.read-pdf-side-panel {
+  height: 100%;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+
 .read-workspace__baseline {
   min-height: 0;
   max-height: 100%;
   overflow-y: auto;
 }
 
-.read-workspace__tabs {
-  :deep(.ant-tabs-nav) {
-    margin-bottom: @spacing-sm;
+.read-workspace__lang-toggle {
+  margin-right: @spacing-sm;
+}
+
+/* 左右卡片 header 压缩（目录/基准库） */
+.read-workspace__outline,
+.read-workspace__baseline {
+  :deep(.section-card-header) {
+    padding: @spacing-sm @spacing-md;
   }
-  :deep(.ant-tabs-tab) {
-    padding: 6px 10px;
+  :deep(.section-card-title) {
+    font-size: @font-size-sm;
   }
+  :deep(.section-card-body) {
+    padding: @spacing-sm @spacing-md;
+  }
+}
+
+.read-workspace__collapse {
+  :deep(.ant-collapse-header) {
+    padding: @spacing-sm @spacing-base !important;
+    align-items: center;
+  }
+  :deep(.ant-collapse-content-box) {
+    padding: @spacing-xs 0 0;
+  }
+}
+
+.read-workspace__cat-label {
+  margin-inline-end: @spacing-sm;
+}
+
+.read-workspace__cat-count {
+  margin-inline-end: 0;
 }
 
 .read-workspace__baseline-body {
@@ -900,7 +1573,7 @@ function fieldStatusColor(status: BaselineField['status']): string {
 }
 
 .baseline-field {
-  border: 1px solid @border-color;
+  border: 1px solid @text-tertiary;
   border-radius: @radius-base;
   padding: @spacing-sm @spacing-base;
   margin-bottom: @spacing-sm;
@@ -926,52 +1599,131 @@ function fieldStatusColor(status: BaselineField['status']): string {
   align-items: center;
   justify-content: space-between;
   gap: @spacing-sm;
-  margin-bottom: @spacing-xs;
-}
-
-.baseline-field__actions {
-  display: flex;
-  align-items: center;
-  gap: @spacing-xs;
-  flex-shrink: 0;
+  padding-bottom: @spacing-xs;
+  border-bottom: 1px solid @text-tertiary;
+  margin-bottom: @spacing-sm;
 }
 
 .baseline-field__key {
-  font-weight: @font-weight-semibold;
-  color: @text-primary;
+  font-weight: @font-weight-bold;
+  color: @brand-primary;
   font-size: @font-size-sm;
   word-break: break-all;
 }
 
 .baseline-field__value {
   font-size: @font-size-sm;
-  color: @text-primary;
+  color: @text-secondary;
   line-height: 1.6;
   word-break: break-all;
+  white-space: pre-line;
   margin-bottom: @spacing-xs;
+}
+
+.baseline-field__value-text {
+  white-space: pre-wrap;
+}
+
+.baseline-field__category {
+  margin-top: @spacing-xs;
+  font-size: @font-size-xs;
+  color: @text-secondary;
+}
+
+.baseline-field__list-item {
+  margin-bottom: @spacing-xs;
+  &:last-child {
+    margin-bottom: 0;
+  }
+}
+
+.baseline-field__mandatory-yes {
+  color: @danger;
+  font-weight: @font-weight-semibold;
+}
+
+.baseline-field__label {
+  font-weight: @font-weight-semibold;
+  color: @text-primary;
+}
+
+.baseline-field__edit {
+  margin-bottom: @spacing-xs;
+
+  :deep(.ant-input) {
+    font-size: @font-size-sm;
+  }
+}
+
+.baseline-field__edit-row {
+  display: flex;
+  align-items: center;
+  gap: @spacing-sm;
+  margin-top: @spacing-sm;
+}
+
+.baseline-field__edit-label {
+  flex-shrink: 0;
+  width: 40px;
+  font-size: @font-size-sm;
+  color: @text-primary;
+}
+
+.baseline-field__footer {
+  display: flex;
+  justify-content: flex-end;
+  gap: @spacing-xs;
+  margin-top: @spacing-xs;
 }
 
 .baseline-field__meta {
   display: flex;
   align-items: center;
-  gap: @spacing-md;
+  justify-content: flex-start;
+  flex-wrap: wrap;
+  gap: @spacing-sm;
   font-size: @font-size-xs;
   color: @text-tertiary;
+
+  :deep(.ant-tag) {
+    margin-inline-end: 0;
+  }
 }
 
-.baseline-field__refs {
-  display: flex;
-  flex-wrap: wrap;
-  gap: @spacing-xs;
-  margin-top: @spacing-xs;
+.baseline-field__extractor {
+  line-height: 18px;
 }
 
-.baseline-field__ref {
-  font-size: @font-size-xs;
-  color: @brand-primary;
-  background: color-mix(in srgb, @brand-primary 8%, transparent);
-  border-radius: @radius-sm;
-  padding: 2px 6px;
+.baseline-field__extractor--llm,
+.baseline-field__extractor--rule {
+  background: transparent !important;
+  border-color: @text-tertiary !important;
+  color: @text-tertiary !important;
+}
+
+.baseline-field__ref-circle {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  vertical-align: middle;
+  min-width: 14px;
+  height: 14px;
+  padding: 0 2px;
+  margin: 0 2px;
+  border-radius: 50%;
+  border: 1px solid @text-tertiary;
+  background: transparent;
+  color: @text-tertiary;
+  font-size: 8px;
+  font-weight: @font-weight-semibold;
+  line-height: 1;
+  cursor: pointer;
+  transition: border-color @transition-fast, color @transition-fast;
+  &:hover {
+    border-color: @brand-primary;
+    color: @brand-primary;
+  }
 }
 
 .read-outline__title {

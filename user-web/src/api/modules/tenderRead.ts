@@ -8,6 +8,7 @@ import type {
   TenderReadingBaseline,
   TenderReadingDocument,
   TenderReadingOutlineNode,
+  TenderReadingParsedDocument,
   TenderReadingTask,
 } from '@/types'
 
@@ -179,6 +180,14 @@ export async function deleteTenderReadTask(id: string): Promise<void> {
   await request.delete<void>(fillUrl(urls.tenderReadTask, { id }))
 }
 
+export async function updateTenderReadTask(
+  id: string,
+  input: { name: string, projectCode?: string },
+): Promise<TenderReadingTask> {
+  const dto = await request.put<TenderReadingTaskDto>(fillUrl(urls.tenderReadTaskName, { id }), input)
+  return mapTask(dto)
+}
+
 /* —— 文档 / 解析 —— */
 
 export async function getTenderReadDocuments(id: string, silent = false): Promise<TenderReadingDocument[]> {
@@ -224,6 +233,13 @@ export async function reparseTenderReadTask(id: string): Promise<TenderReadingTa
 
 export async function getTenderReadOutline(id: string, silent = false): Promise<TenderReadingOutlineNode[]> {
   return request.get<TenderReadingOutlineNode[]>(fillUrl(urls.tenderReadTaskOutline, { id }), silentConfig(silent))
+}
+
+export async function getTenderReadParsedDocument(id: string, silent = false): Promise<TenderReadingParsedDocument> {
+  return request.get<TenderReadingParsedDocument>(
+    fillUrl(urls.tenderReadTaskParsedDocument, { id }),
+    silentConfig(silent),
+  )
 }
 
 export async function getTenderReadBaseline(id: string, silent = false): Promise<TenderReadingBaseline> {

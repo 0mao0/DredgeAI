@@ -86,3 +86,38 @@ export interface TenderReadingOutlineNode {
   blockId?: string | null
   children: TenderReadingOutlineNode[]
 }
+
+/** 读标解析产物（后端 /document/parsed 返回） */
+export interface TenderReadingParsedDocument {
+  content: string
+  ir: TenderReadingIr
+}
+
+export interface TenderReadingIr {
+  schemaVersion: string
+  docId: string
+  meta: Record<string, unknown>
+  pages: TenderReadingIrPage[]
+  outline: TenderReadingOutlineNode[]
+  blocks: TenderReadingIrBlock[]
+}
+
+export interface TenderReadingIrPage {
+  pageIdx: number
+  width: number
+  height: number
+}
+
+export interface TenderReadingIrBlock {
+  blockId: string
+  pageIdx: number
+  /** 0~1 归一化坐标 [x0,y0,x1,y1] */
+  bbox: number[]
+  type: string
+  text: string
+  textLevel: number
+  source?: string | null
+  confidence?: number | null
+  table?: { html: string, imgPath: string } | null
+  imgPath?: string | null
+}

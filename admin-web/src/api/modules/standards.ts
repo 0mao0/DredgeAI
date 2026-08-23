@@ -2,6 +2,7 @@ import request from '@/api/request'
 import { urls, fillUrl } from '@shared/core/api'
 import type {
   StandardAIAnalysis,
+  StandardDocument,
   StandardParseBatchResult,
   StandardProperty,
   StandardPropertyInput,
@@ -31,8 +32,18 @@ export function updateStandard(id: string, data: Partial<StandardProperty>): Pro
   return request.put<StandardProperty>(fillUrl(urls.adminStandardUpdate, { id }), data)
 }
 
+/** 启用/停用（同步来的记录不可删除，只能软屏蔽） */
+export function setStandardEnabled(id: string, isEnabled: boolean): Promise<StandardProperty> {
+  return request.put<StandardProperty>(fillUrl(urls.adminStandardEnabled, { id }), { isEnabled })
+}
+
 export function parseStandard(id: string): Promise<StandardAIAnalysis> {
   return request.post<StandardAIAnalysis>(fillUrl(urls.adminStandardParse, { id }))
+}
+
+/** 已解析的标准原文（Markdown），用于查看弹窗右侧的解析视图 */
+export function getStandardDocument(id: string): Promise<StandardDocument> {
+  return request.get<StandardDocument>(urls.standardDocument, { params: { id } })
 }
 
 /** AI 预读单文件：返回预填的元数据（当前为 mock，真实后端调用 LLM 提取） */

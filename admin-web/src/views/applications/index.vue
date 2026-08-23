@@ -9,7 +9,7 @@
       <a-table
         :data-source="applications"
         :columns="columns"
-        :pagination="{ pageSize: 10 }"
+        :pagination="{ pageSize: 15, showTotal: (t: number) => `共 ${t} 条` }"
         :loading="loading"
         row-key="id"
         size="small"

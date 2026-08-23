@@ -81,9 +81,10 @@ import {
 } from '@ant-design/icons-vue'
 import { getBidSessions } from '@/api/modules/bid'
 import { getTasks } from '@/api/modules/compare'
+import { getTenderReadTasks } from '@/api/modules/tenderRead'
 import { useSidebarStore } from '@shared/web/stores'
 import { COMPARE_STATUS_MAP } from './compare/constants'
-import type { BidReviewSession, CompareTask } from '@/types'
+import type { BidReviewSession, CompareTask, TenderReadingTask } from '@/types'
 
 const router = useRouter()
 const sidebarStore = useSidebarStore()
@@ -119,7 +120,7 @@ interface HistoryItem {
   sortTime: number
   detail?: string
   detailTone?: string
-  raw: CompareTask | BidReviewSession
+  raw: CompareTask | BidReviewSession | TenderReadingTask
 }
 
 function formatDateTime(value: string): string {
@@ -137,45 +138,72 @@ function compareStatusTone(status: CompareTask['status']): string {
   return 'session-status--run'
 }
 
+const readStatusMap: Record<TenderReadingTask['status'], { text: string, tone: string }> = {
+  uploading: { text: '上传中', tone: 'session-status--run' },
+  parsing: { text: '解析中', tone: 'session-status--run' },
+  parsed: { text: '已解析', tone: 'session-status--run' },
+  extracting: { text: '抽取中', tone: 'session-status--run' },
+  reviewing: { text: '待复核', tone: 'session-status--warn' },
+  ready: { text: '已就绪', tone: 'session-status--ok' },
+  partial: { text: '部分完成', tone: 'session-status--warn' },
+  failed: { text: '失败', tone: 'session-status--bad' },
+}
+
 watch(sessionDrawer, async (open) => {
   if (!open) return
   historyLoading.value = true
-  try {
-    const [compareTasks, sessions] = await Promise.all([getTasks(), getBidSessions()])
-    const items: HistoryItem[] = [
-      ...compareTasks.map((t) => ({
-        id: `compare-${t.id}`,
-        kind: 'compare' as const,
-        type: '比标',
-        name: t.name,
-        statusText: compareStatusMap[t.status]?.text ?? t.status,
-        statusTone: compareStatusTone(t.status),
-        time: formatDateTime(t.createdAt),
-        sortTime: Date.parse(t.createdAt) || 0,
-        detail: `${t.documents.length} 份标书`,
-        detailTone: 'session-badge--ok',
-        raw: t,
-      })),
-      ...sessions.map((s) => ({
-        id: `read-${s.id}`,
-        kind: 'read' as const,
-        type: '读标',
-        name: s.document,
-        statusText: s.status,
-        statusTone: s.status === '已完成' ? 'session-status--ok' : 'session-status--run',
-        time: formatDateTime(s.date),
-        sortTime: Date.parse(s.date.replace(' ', 'T')) || 0,
-        detail: `${s.riskCount} 项风险`,
-        detailTone: s.riskCount > 0 ? 'session-badge--warn' : 'session-badge--ok',
-        raw: s,
-      })),
-    ].sort((a, b) => b.sortTime - a.sortTime)
-    historyItems.value = items
-  } catch {
-    historyItems.value = []
-  } finally {
-    historyLoading.value = false
-  }
+  // 各来源独立加载：某个接口失败（如比标直连真实后端不可用）不影响其他记录
+  const [compareRes, sessionsRes, readRes] = await Promise.allSettled([
+    getTasks(),
+    getBidSessions(),
+    getTenderReadTasks(),
+  ])
+  const compareTasks = compareRes.status === 'fulfilled' ? compareRes.value : []
+  const sessions = sessionsRes.status === 'fulfilled' ? sessionsRes.value : []
+  const readTasks = readRes.status === 'fulfilled' ? readRes.value : []
+  const items: HistoryItem[] = [
+    ...compareTasks.map((t) => ({
+      id: `compare-${t.id}`,
+      kind: 'compare' as const,
+      type: '比标',
+      name: t.name,
+      statusText: compareStatusMap[t.status]?.text ?? t.status,
+      statusTone: compareStatusTone(t.status),
+      time: formatDateTime(t.createdAt),
+      sortTime: Date.parse(t.createdAt) || 0,
+      detail: `${t.documents.length} 份标书`,
+      detailTone: 'session-badge--ok',
+      raw: t,
+    })),
+    ...sessions.map((s) => ({
+      id: `read-${s.id}`,
+      kind: 'read' as const,
+      type: '读标',
+      name: s.document,
+      statusText: s.status,
+      statusTone: s.status === '已完成' ? 'session-status--ok' : 'session-status--run',
+      time: formatDateTime(s.date),
+      sortTime: Date.parse(s.date.replace(' ', 'T')) || 0,
+      detail: `${s.riskCount} 项风险`,
+      detailTone: s.riskCount > 0 ? 'session-badge--warn' : 'session-badge--ok',
+      raw: s,
+    })),
+    ...readTasks.map((t) => ({
+      id: `read-${t.id}`,
+      kind: 'read' as const,
+      type: '读标',
+      name: t.name,
+      statusText: readStatusMap[t.status]?.text ?? t.status,
+      statusTone: readStatusMap[t.status]?.tone ?? 'session-status--run',
+      time: formatDateTime(t.createdAt),
+      sortTime: Date.parse(t.createdAt) || 0,
+      detail: `基线 v${t.baselineVersion}`,
+      detailTone: 'session-badge--ok',
+      raw: t,
+    })),
+  ].sort((a, b) => b.sortTime - a.sortTime)
+  historyItems.value = items
+  historyLoading.value = false
 })
 
 function openHistory(item: HistoryItem): void {
@@ -183,6 +211,11 @@ function openHistory(item: HistoryItem): void {
   if (item.kind === 'compare') {
     const task = item.raw as CompareTask
     router.push({ path: '/ai-bid/compare', query: { task: task.id } })
+    return
+  }
+  const raw = item.raw
+  if ('baselineVersion' in raw && 'docIds' in raw) {
+    router.push({ path: '/ai-bid/read', query: { task: raw.id } })
   } else {
     router.push('/ai-bid/read')
   }

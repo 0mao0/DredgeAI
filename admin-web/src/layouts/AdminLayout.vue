@@ -5,24 +5,31 @@
       :trigger="null"
       collapsible
       :theme="isDark ? 'dark' : 'light'"
-      :width="200"
+      :width="160"
       :collapsed-width="64"
       breakpoint="lg"
       class="sider"
       @breakpoint="(broken: boolean) => { collapsed = broken }"
     >
       <div class="sider-brand">
-        <div class="sider-brand__left" @click="collapsed = !collapsed">
-          <div v-if="!collapsed">
-            <Logo :collapsed="collapsed" subtitle="管理后台" />
-          </div>
-          <MenuUnfoldOutlined v-else class="sider-brand__expand-icon" />
-        </div>
-        <MenuFoldOutlined
+        <span
           v-if="!collapsed"
           class="sider-brand__trigger"
+          role="button"
+          title="收起侧栏"
           @click="collapsed = !collapsed"
-        />
+        >
+          <SidebarToggleIcon :collapsed="false" />
+        </span>
+        <span
+          v-else
+          class="sider-brand__expand-icon"
+          role="button"
+          title="展开侧栏"
+          @click="collapsed = !collapsed"
+        >
+          <SidebarToggleIcon :collapsed="true" />
+        </span>
       </div>
 
       <a-menu
@@ -77,12 +84,10 @@ import { useRouter, useRoute } from 'vue-router'
 import { message } from 'ant-design-vue'
 import {
   UserOutlined,
-  MenuFoldOutlined,
-  MenuUnfoldOutlined,
   ApiOutlined,
 } from '@ant-design/icons-vue'
 import * as Icons from '@ant-design/icons-vue'
-import Logo from '@shared/web/components/Logo.vue'
+import { SidebarToggleIcon } from '@shared/web'
 import { useAppStore } from '@/stores/app'
 import { useSidebarStore, useThemeStore } from '@shared/web/stores'
 import { getApplications } from '@/api/modules/applications'
@@ -205,7 +210,7 @@ onMounted(async () => {
   } catch {
     message.warning('应用列表加载失败，使用默认菜单')
     appMenuItems.value = [
-      { id: '1', name: '标准查询', category: '通用', route: '/applications/standard', icon: 'BookOutlined' },
+      { id: '1', name: '规范问答', category: '通用', route: '/applications/standard', icon: 'BookOutlined' },
       { id: '2', name: 'AI视频', category: '通用', route: '/applications/ai-video', icon: 'VideoCameraOutlined' },
       { id: '3', name: 'AI 配音', category: '通用', route: '/applications/dubbing', icon: 'CustomerServiceOutlined' },
       { id: '4', name: '设计经验', category: '设计', route: '/applications/design-experience', icon: 'BulbOutlined' },
@@ -246,29 +251,35 @@ function handleMenuClick({ key }: { key: string }): void {
   display: flex;
   align-items: center;
   justify-content: space-between;
-
-  &__left {
-    cursor: pointer;
-    flex: 1;
-    min-width: 0;
-  }
+  height: @header-height;
+  box-sizing: border-box;
 
   &__expand-icon {
-    display: block;
+    display: flex;
+    align-items: center;
+    justify-content: center;
     margin: 0 auto;
-    font-size: 18px;
     color: @header-text-secondary;
-    padding: @spacing-md 0;
-    text-align: center;
+    cursor: pointer;
+    &:hover { color: @brand-primary; }
   }
 
   &__trigger {
-    font-size: 14px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 28px;
+    height: 28px;
     color: @header-text-secondary;
     cursor: pointer;
     flex-shrink: 0;
-    padding-right: @spacing-sm;
-    &:hover { color: @brand-primary; }
+    margin-right: @spacing-sm;
+    border-radius: @radius-base;
+    transition: color @transition-fast, background @transition-fast;
+    &:hover {
+      color: @brand-primary;
+      background: color-mix(in srgb, @brand-primary 8%, transparent);
+    }
   }
 }
 

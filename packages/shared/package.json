@@ -17,6 +17,9 @@
     "vue": "3.5.41",
     "vue-router": "^4.2.0"
   },
+  "dependencies": {
+    "@angineer/docs-ui": "file:../../vendor/angineer-docs-ui"
+  },
   "devDependencies": {
     "@ant-design/icons-vue": "7.0.1",
     "@types/katex": "^0.16.8",

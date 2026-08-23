@@ -30,7 +30,7 @@ export interface CompareTask {
   /** 解析完成后后端推断的项目名建议 */
   suggestedName?: string | null
   progress: {
-    /** 后端阶段：parsing / clauses / comparing / analyzing / done */
+    /** 后端阶段：parsing / clauses / clauses_extracting / clauses_extract_failed / comparing / analyzing / done */
     stage?: string
     parse: number
     compare: number
@@ -44,6 +44,8 @@ export interface CompareTask {
   pairs?: ComparePair[]
   /** 条款快照（任务确认后锁定，结果页「要求」Tab 使用，禁止读全局条款库） */
   clauseSnapshot?: ClauseItem[] | null
+  /** 条款提取草案（异步提取后由任务轮询返回，确认前可编辑） */
+  clauseDrafts?: ClauseItem[] | null
   /** 招标文件文档 id（可选，未上传为 null） */
   tenderDocId?: string | null
   /** 来源读标任务（P3） */

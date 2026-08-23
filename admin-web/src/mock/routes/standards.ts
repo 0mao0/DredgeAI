@@ -1,5 +1,5 @@
 import type MockAdapter from 'axios-mock-adapter'
-import { standardAIAnalyses, standardProperties } from '@shared/mock/data/standard'
+import { standardAIAnalyses, standardDocuments, standardProperties } from '@shared/mock/data/standard'
 import type {
   StandardAIAnalysis,
   StandardHighlight,
@@ -18,6 +18,9 @@ function normalizeNature(nature?: string): string {
 const adminStandards: StandardProperty[] = standardProperties.map((p) => ({
   ...p,
   nature: normalizeNature(p.nature),
+  source: p.level === '企业标准' ? 'manual' : 'remote',
+  syncedAt: p.level === '企业标准' ? null : '2026-08-20T03:00:00Z',
+  isEnabled: p.status !== '作废',
 }))
 
 const PAGE_W = 595
@@ -122,6 +125,11 @@ function buildAnalysis(standard: StandardProperty): StandardAIAnalysis {
 export function registerStandardsMock(
   mock: MockAdapter,
 ): void {
+  mock.onGet('/api/admin/standard/document').reply((config) => {
+    const id = (config.params as Record<string, string>)?.id
+    return [200, standardDocuments.find((d) => d.id === id) || null]
+  })
+
   mock.onGet('/api/admin/standards').reply((config) => {
     const params = (config.params || {}) as Record<string, unknown>
     let items = [...adminStandards]
@@ -228,5 +236,15 @@ export function registerStandardsMock(
     const standard = adminStandards.find((s) => s.id === id)
     if (!standard) return [404, {}]
     return [200, buildAnalysis(standard)]
+  })
+
+  mock.onPut(/\/api\/admin\/standards\/.+\/enabled$/).reply((config) => {
+    const id = matchPattern(config.url, '/api/admin/standards')?.split('/')[0]
+    if (!id) return [404, {}]
+    const idx = adminStandards.findIndex((s) => s.id === id)
+    if (idx === -1) return [404, {}]
+    const body = parseJsonBody(config.data)
+    adminStandards[idx] = { ...adminStandards[idx], isEnabled: body.isEnabled === true }
+    return [200, adminStandards[idx]]
   })
 }

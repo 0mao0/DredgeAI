@@ -1,4 +1,4 @@
-import type { StandardResult, StandardSearchHistory, StandardCategory, StandardListItem, StandardProperty, StandardDocument, StandardAIAnalysis } from '@shared/types'
+import type { StandardResult, StandardSearchHistory, StandardCategory, StandardListItem, StandardProperty, StandardDocument, StandardAIAnalysis, StandardRecord, StandardFile } from '@shared/types'
 
 export const standardsSearchHistory: StandardSearchHistory[] = [
   { id: 'h-1', query: 'GB/T 19001 质量管理体系', date: '2026-07-17 10:15', resultCount: 3 },
@@ -294,6 +294,40 @@ export const standardDocuments: StandardDocument[] = [
 `,
   },
 ]
+
+/** 现有 StandardProperty 映射为规范 StandardRecord（字段对齐：issuer→department / publishYear→year / description→content） */
+export const standardRecords: StandardRecord[] = standardProperties.map((p) => ({
+  id: p.id,
+  externalId: `ext-${p.id}`,
+  parentId: p.parentId,
+  status: p.status,
+  nature: p.nature,
+  level: p.level,
+  department: p.issuer,
+  industry: p.industry,
+  year: p.publishYear,
+  name: p.name,
+  code: p.code,
+  content: p.description,
+  isEnabled: p.status !== '作废',
+  source: 'remote',
+  syncedAt: '2026-08-20T03:00:00Z',
+  externalUpdatedAt: '2026-08-19T10:00:00Z',
+}))
+
+/** 附件 mock：按标准 id 挂 1~2 份附件 */
+export const standardFilesByRecord: Record<string, StandardFile[]> = {
+  'std-1': [
+    { id: 'f-1-1', fileName: '河道管理条例（2018修订）全文.pdf', fileExtension: '.pdf', fileSize: 1523400, mimeType: 'application/pdf', parseStatus: 'parsed' },
+  ],
+  'std-9': [
+    { id: 'f-9-1', fileName: '疏浚工程施工技术规范.pdf', fileExtension: '.pdf', fileSize: 2845000, mimeType: 'application/pdf', parseStatus: 'parsed' },
+    { id: 'f-9-2', fileName: '疏浚工程施工技术规范（条文说明）.pdf', fileExtension: '.pdf', fileSize: 1120000, mimeType: 'application/pdf', parseStatus: 'parsing' },
+  ],
+  'std-16': [
+    { id: 'f-16-1', fileName: 'GB 50300-2001 旧版.pdf', fileExtension: '.pdf', fileSize: 960000, mimeType: 'application/pdf', parseStatus: 'failed', parseError: '文档扫描件模糊，OCR 置信度过低' },
+  ],
+}
 
 export const standardAIAnalyses: StandardAIAnalysis[] = [
   {

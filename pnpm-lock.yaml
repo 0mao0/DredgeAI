@@ -83,6 +83,10 @@ importers:
         version: 2.2.12(typescript@5.7.3)
 
   packages/shared:
+    dependencies:
+      '@angineer/docs-ui':
+        specifier: file:../../vendor/angineer-docs-ui
+        version: file:vendor/angineer-docs-ui(@ant-design/icons-vue@7.0.1(vue@3.5.41(typescript@5.7.3)))(ant-design-vue@4.2.6(vue@3.5.41(typescript@5.7.3)))(vue@3.5.41(typescript@5.7.3))
     devDependencies:
       '@ant-design/icons-vue':
         specifier: 7.0.1
@@ -126,6 +130,9 @@ importers:
 
   user-web:
     dependencies:
+      '@angineer/aichat-ui':
+        specifier: file:../vendor/angineer-aichat-ui
+        version: file:vendor/angineer-aichat-ui(@ant-design/icons-vue@7.0.1(vue@3.5.41(typescript@5.7.3)))(ant-design-vue@4.2.6(vue@3.5.41(typescript@5.7.3)))(vue@3.5.41(typescript@5.7.3))
       '@angineer/docs-ui':
         specifier: file:../vendor/angineer-docs-ui
         version: file:vendor/angineer-docs-ui(@ant-design/icons-vue@7.0.1(vue@3.5.41(typescript@5.7.3)))(ant-design-vue@4.2.6(vue@3.5.41(typescript@5.7.3)))(vue@3.5.41(typescript@5.7.3))
@@ -195,6 +202,13 @@ importers:
         version: 2.2.12(typescript@5.7.3)
 
 packages:
+
+  '@angineer/aichat-ui@file:vendor/angineer-aichat-ui':
+    resolution: {directory: vendor/angineer-aichat-ui, type: directory}
+    peerDependencies:
+      '@ant-design/icons-vue': 7.0.1
+      ant-design-vue: 4.2.6
+      vue: 3.5.41
 
   '@angineer/docs-ui@file:vendor/angineer-docs-ui':
     resolution: {directory: vendor/angineer-docs-ui, type: directory}
@@ -3074,6 +3088,13 @@ packages:
     resolution: {integrity: sha512-bXE4cR/kVZhKZX/RjPEflHaKVhUVl85noU3v6b8apfQEc1x4A+zBxjZ4lN8LqGd6WZ3dl98pY4o717VFmoPp+A==}
 
 snapshots:
+
+  '@angineer/aichat-ui@file:vendor/angineer-aichat-ui(@ant-design/icons-vue@7.0.1(vue@3.5.41(typescript@5.7.3)))(ant-design-vue@4.2.6(vue@3.5.41(typescript@5.7.3)))(vue@3.5.41(typescript@5.7.3))':
+    dependencies:
+      '@ant-design/icons-vue': 7.0.1(vue@3.5.41(typescript@5.7.3))
+      ant-design-vue: 4.2.6(vue@3.5.41(typescript@5.7.3))
+      katex: 0.18.4
+      vue: 3.5.41(typescript@5.7.3)
 
   '@angineer/docs-ui@file:vendor/angineer-docs-ui(@ant-design/icons-vue@7.0.1(vue@3.5.41(typescript@5.7.3)))(ant-design-vue@4.2.6(vue@3.5.41(typescript@5.7.3)))(vue@3.5.41(typescript@5.7.3))':
     dependencies:

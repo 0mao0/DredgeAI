@@ -28,7 +28,7 @@ export const mockApiCallsTrend: LineChartData = {
 export const mockAppDistribution: PieChartData = {
   name: '应用分布',
   data: [
-    { name: '标准查询', value: 28 },
+    { name: '规范问答', value: 28 },
     { name: 'AI视频', value: 14 },
     { name: 'AI配音', value: 12 },
     { name: '施工经验', value: 11 },
@@ -49,7 +49,7 @@ export const mockActiveUsersTrend: LineChartData = {
 }
 
 export const mockRecentLogs: SystemLog[] = [
-  { id: '1', type: '操作日志', operator: '管理员', content: '修改了「标准查询」应用配置', createdAt: '2026-07-18 09:30:00', level: 'info' },
+  { id: '1', type: '操作日志', operator: '管理员', content: '修改了「规范问答」应用配置', createdAt: '2026-07-18 09:30:00', level: 'info' },
   { id: '2', type: '安全告警', operator: '系统', content: '检测到异常 API 调用频率', createdAt: '2026-07-18 08:15:00', level: 'warning' },
   { id: '3', type: '系统错误', operator: '系统', content: '数据处理任务 #1023 执行失败', createdAt: '2026-07-18 07:45:00', level: 'error' },
   { id: '4', type: '操作日志', operator: '张三', content: '新增角色「数据分析师」', createdAt: '2026-07-17 16:20:00', level: 'info' },

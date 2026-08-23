@@ -11,6 +11,7 @@
     "test": "vitest run"
   },
   "dependencies": {
+    "@angineer/aichat-ui": "file:../vendor/angineer-aichat-ui",
     "@angineer/docs-ui": "file:../vendor/angineer-docs-ui",
     "@ant-design/icons-vue": "7.0.1",
     "@shared": "link:../packages/shared/src",

@@ -5,8 +5,8 @@
       :trigger="null"
       collapsible
       :theme="isDark ? 'dark' : 'light'"
-      :width="170"
-      :collapsed-width="48"
+      :width="160"
+      :collapsed-width="64"
       breakpoint="lg"
       class="sider"
       @breakpoint="(broken: boolean) => { collapsed = broken }"
@@ -19,10 +19,7 @@
             title="收起侧栏"
             @click="collapsed = !collapsed"
           >
-            <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round">
-              <rect x="4.5" y="4.5" width="15" height="15" rx="3" />
-              <line x1="10.5" y1="4.5" x2="10.5" y2="19.5" />
-            </svg>
+            <SidebarToggleIcon :collapsed="false" />
           </span>
           <div class="sider-brand__name">
             <div class="sider-brand__title">智浚 <span class="sider-brand__ai">AI</span></div>
@@ -36,11 +33,7 @@
           title="展开侧栏"
           @click="collapsed = !collapsed"
         >
-          <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round">
-            <path d="M10.5 4.5H7.5a3 3 0 0 0-3 3v9a3 3 0 0 0 3 3h3V4.5Z" fill="currentColor" stroke="none" />
-            <rect x="4.5" y="4.5" width="15" height="15" rx="3" />
-            <line x1="10.5" y1="4.5" x2="10.5" y2="19.5" />
-          </svg>
+          <SidebarToggleIcon :collapsed="true" />
         </span>
       </div>
       <a-menu
@@ -107,7 +100,7 @@
 </template>
 
 <script setup lang="ts">
-import { AppButton } from '@shared/web'
+import { AppButton, SidebarToggleIcon } from '@shared/web'
 import { ref, computed, watch, onMounted } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import {

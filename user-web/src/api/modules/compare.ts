@@ -45,6 +45,7 @@ interface CompareTaskDto {
   tenderReadingTaskId?: string | null
   tenderReadingBaselineVersion?: number | null
   clauseSnapshot?: ClauseDto[] | null
+  clauseDrafts?: ClauseDto[] | null
   progress: {
     stage: string
     percent: number
@@ -209,6 +210,7 @@ function mapTask(dto: CompareTaskDto, documents: CompareDocMeta[]): CompareTask 
     },
     pairs: dto.pairs?.map(mapPair) ?? undefined,
     clauseSnapshot: dto.clauseSnapshot?.map((c) => mapClause(c, 'ai_extracted')) ?? null,
+    clauseDrafts: dto.clauseDrafts?.map((c) => mapClause(c, 'ai_extracted')) ?? null,
     createdAt: dto.createdAt,
   }
 }
@@ -561,9 +563,11 @@ export function assembleOverview(
 
 /* —— 条款 —— */
 
-export async function extractClauses(taskId: string): Promise<ClauseItem[]> {
-  const res = await request.post<ClauseDto[]>(fillUrl(urls.compareTaskClauseExtract, { id: taskId }))
-  return res.map((c) => mapClause(c, 'ai_extracted'))
+/** 触发条款提取（异步）：后端入队后台作业，草案经任务轮询的 clauseDrafts 字段返回。 */
+export async function triggerExtractClauses(taskId: string): Promise<CompareTask> {
+  const dto = await request.post<CompareTaskDto>(fillUrl(urls.compareTaskClauseExtract, { id: taskId }))
+  const documents = await getDocuments(taskId)
+  return mapTask(dto, documents)
 }
 
 export async function confirmClauses(payload: ConfirmClausesPayload): Promise<CompareTask> {

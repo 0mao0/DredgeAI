@@ -218,7 +218,7 @@ import {
   deleteDraft,
   deleteDraftDocument,
   exportReport,
-  extractClauses,
+  triggerExtractClauses,
   assembleOverview,
   getDocuments,
   getEvidence,
@@ -421,7 +421,18 @@ async function runPoll(): Promise<void> {
     }
     // 等待条款确认期间状态只随用户动作变化，停止轮询（确认/重解析会重新 startPoll）
     if (t.progress.stage === 'clauses') {
+      if (t.clauseDrafts?.length) {
+        clauseDrafts.value = t.clauseDrafts
+      }
+      extracting.value = false
       stopPoll()
+      return
+    }
+    // 条款提取失败：停轮询并提示，用户可再次触发提取
+    if (t.progress.stage === 'clauses_extract_failed') {
+      extracting.value = false
+      stopPoll()
+      message.error(t.progress.message || '条款提取失败，请重试')
       return
     }
     schedulePoll(POLL_MS)
@@ -862,11 +873,11 @@ async function onExtractClauses(): Promise<void> {
   if (!task.value || extracting.value) return
   extracting.value = true
   try {
-    clauseDrafts.value = await extractClauses(task.value.id)
+    task.value = await triggerExtractClauses(task.value.id)
+    startPoll()
   } catch {
-    message.error('条款提取失败，请稍后重试')
-  } finally {
     extracting.value = false
+    message.error('条款提取失败，请稍后重试')
   }
 }
 
