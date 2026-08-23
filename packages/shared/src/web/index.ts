@@ -18,6 +18,7 @@ export { default as SidebarToggleIcon } from './components/SidebarToggleIcon.vue
 export { default as StandardDetailDrawer } from './components/StandardDetailDrawer.vue'
 export { default as StandardPdfViewer } from './components/StandardPdfViewer.vue'
 export { default as ThemeToggle } from './components/ThemeToggle.vue'
+export { default as UploadFileRow } from './components/UploadFileRow.vue'
 export { default as VoiceRegisterModal } from './components/VoiceRegisterModal.vue'
 export type { DataTableColumn, DataTableFilter } from './components/DataTable.vue'
 

@@ -18,7 +18,9 @@ public class EvaluationCriteriaExtractor : LlmFieldExtractorBase, IBaselineField
     private const string UserPromptTemplate =
         "以下是招标文件全文：\n\n{{DOCUMENT}}\n\n" +
         "请以 JSON 数组返回评分标准，每项格式：" +
-        "{\"fieldKey\":\"snake_case_key\",\"value\":{\"dimension\":\"评分维度\",\"score\":10,\"subItems\":[\"子项1\",\"子项2\"],\"deductionRules\":\"扣分规则\"},\"rawText\":\"原文摘要\"}。" +
+        "{\"fieldKey\":\"标准英文术语\",\"value\":{\"dimension\":\"评分维度\",\"score\":10,\"subItems\":[\"子项1\",\"子项2\"],\"deductionRules\":\"扣分规则\"},\"rawText\":\"原文摘要\"}。" +
+        "fieldKey 只能使用常见招投标标准术语（如 price_score、technical_solution、schedule_plan 等），不得发明自定义词组；" +
+        "若无法用标准术语概括，使用 evaluation_criteria_序号（序号从 1 开始连续编号）。" +
         "只返回 JSON。";
 
     public EvaluationCriteriaExtractor(ILlmGateway llmGateway) : base(llmGateway)
@@ -39,7 +41,7 @@ public class EvaluationCriteriaExtractor : LlmFieldExtractorBase, IBaselineField
             element =>
             {
                 index++;
-                var fieldKey = GetString(element, "fieldKey") ?? $"evaluation_criteria_{index}";
+                var fieldKey = BaselineFieldKeys.Normalize(Category, GetString(element, "fieldKey"), index);
                 var rawText = GetString(element, "rawText") ?? string.Empty;
                 var value = element.TryGetProperty("value", out var v) ? v : element;
                 return new BaselineFieldDraft

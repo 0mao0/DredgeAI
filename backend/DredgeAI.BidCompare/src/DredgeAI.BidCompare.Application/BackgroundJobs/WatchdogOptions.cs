@@ -16,4 +16,7 @@ public class WatchdogOptions
 
     /// <summary>任务 Comparing/Analyzing 超时（默认 90 分钟：覆盖算法端点超时+重试（约 30 分钟）与 AI 分析最坏耗时（8 份标书串行判定约 48 分钟）并留有余量；Job 心跳会刷新 LastModificationTime，长任务正常推进时不会误触）。</summary>
     public TimeSpan TaskTimeout { get; set; } = TimeSpan.FromMinutes(90);
+
+    /// <summary>读标任务解析完成（Parsed）但抽取未启动的恢复阈值（默认 5 分钟：抽取正常在解析落定后数秒内入队，超过即视为入队失败/Job 崩溃，看门狗自动补拉抽取任务）。</summary>
+    public TimeSpan TenderReadExtractRecoveryInterval { get; set; } = TimeSpan.FromMinutes(5);
 }

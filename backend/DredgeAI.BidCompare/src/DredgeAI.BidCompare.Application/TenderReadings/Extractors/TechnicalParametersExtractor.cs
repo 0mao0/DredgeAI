@@ -18,7 +18,8 @@ public class TechnicalParametersExtractor : LlmFieldExtractorBase, IBaselineFiel
     private const string UserPromptTemplate =
         "以下是招标文件全文：\n\n{{DOCUMENT}}\n\n" +
         "请以 JSON 数组返回技术参数，每项格式：" +
-        "{\"fieldKey\":\"snake_case_key\",\"value\":{\"name\":\"参数名\",\"requiredValue\":\"要求值\",\"unit\":\"单位\",\"substantive\":true},\"rawText\":\"原文摘要\"}。" +
+        "{\"fieldKey\":\"technical_parameter_序号\",\"value\":{\"name\":\"参数名\",\"requiredValue\":\"要求值\",\"unit\":\"单位\",\"substantive\":true},\"rawText\":\"原文摘要\"}。" +
+        "fieldKey 一律使用 technical_parameter_序号（序号从 1 开始连续编号），不要发明其他 key。" +
         "只返回 JSON。";
 
     public TechnicalParametersExtractor(ILlmGateway llmGateway) : base(llmGateway)
@@ -39,7 +40,7 @@ public class TechnicalParametersExtractor : LlmFieldExtractorBase, IBaselineFiel
             element =>
             {
                 index++;
-                var fieldKey = GetString(element, "fieldKey") ?? $"technical_parameter_{index}";
+                var fieldKey = BaselineFieldKeys.Normalize(Category, GetString(element, "fieldKey"), index);
                 var rawText = GetString(element, "rawText") ?? string.Empty;
                 var value = element.TryGetProperty("value", out var v) ? v : element;
                 return new BaselineFieldDraft

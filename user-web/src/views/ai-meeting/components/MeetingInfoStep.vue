@@ -125,6 +125,7 @@ import {
   transcribeAudio,
   uploadKnowledgeDocument,
 } from '@/api/modules/aiMeeting'
+import { convertToWav16k, extractErrorMessage } from '@/utils/audioToWav'
 import { useRecorder } from '../composables/useRecorder'
 
 const props = defineProps<{
@@ -190,10 +191,11 @@ async function onRelease(): Promise<void> {
   asrLoading.value = true
   asrError.value = ''
   try {
-    const text = await transcribeAudio(audio)
+    const wav = await convertToWav16k(audio)
+    const text = await transcribeAudio(wav)
     planText.value = [planText.value, text].filter(Boolean).join('\n')
-  } catch {
-    asrError.value = '语音识别失败，请重试或直接输入'
+  } catch (err) {
+    asrError.value = `语音识别失败：${extractErrorMessage(err)}`
   } finally {
     asrLoading.value = false
   }

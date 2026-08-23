@@ -186,5 +186,59 @@ public class StuckTaskWatchdogWorker : AsyncPeriodicBackgroundWorkerBase, ITrans
                 Logger.LogWarning(ex, "读标任务 {TaskId} 超时落定失败（状态 {Status}）", task.Id, task.Status);
             }
         }
+
+        // 解析完成但抽取从未启动（入队失败 / Job 崩溃且未推进到 Extracting）：
+        // 这类任务没有任何文档侧信号，且滞留 Parsed 用户侧只会看到“已解析 + 空基准库”，
+        // 用短阈值自动补拉抽取任务，而不是等 90 分钟超时后才落失败。
+        var extractRecoveryDeadline = _clock.Now - _options.TenderReadExtractRecoveryInterval;
+        var parsedStuckTasks = await taskRepository.GetListAsync(t =>
+            t.Status == TenderReadingTaskStatus.Parsed &&
+            t.LastModificationTime != null &&
+            t.LastModificationTime < extractRecoveryDeadline);
+        foreach (var task in parsedStuckTasks)
+        {
+            var parsedDoc = (await documentRepository.GetListAsync(d =>
+                    d.TaskId == task.Id &&
+                    d.ParseStatus == DocumentParseStatus.Parsed &&
+                    d.IrStorageKey != null))
+                .OrderBy(d => d.CreationTime)
+                .FirstOrDefault();
+            if (parsedDoc == null)
+            {
+                Logger.LogWarning("读标任务 {TaskId} 解析完成但缺少 IR 产物，看门狗标记失败", task.Id);
+                try
+                {
+                    task.MarkFailed("解析完成但缺少解析产物（看门狗自动标记）");
+                    await taskRepository.UpdateAsync(task, autoSave: true);
+                }
+                catch (Exception ex)
+                {
+                    Logger.LogWarning(ex, "读标任务 {TaskId} 失败态落库失败", task.Id);
+                }
+                continue;
+            }
+
+            Logger.LogWarning(
+                "读标任务 {TaskId} 解析完成但抽取未启动（超过 {Minutes} 分钟），看门狗重新入队抽取",
+                task.Id,
+                _options.TenderReadExtractRecoveryInterval.TotalMinutes);
+            // 写入一次 ExtraProperties 使 LastModificationTime 刷新，作为本次恢复的冷却信号，
+            // 避免队列延迟时下一轮巡检重复入队造成 LLM 重复计费。
+            task.ExtraProperties["TenderReadExtractRecoveryTick"] = DateTime.UtcNow.Ticks;
+            try
+            {
+                await taskRepository.UpdateAsync(task, autoSave: true);
+            }
+            catch (Exception ex)
+            {
+                Logger.LogWarning(ex, "读标任务 {TaskId} 恢复标记落库失败，仍尝试入队抽取", task.Id);
+            }
+
+            await _backgroundJobManager.EnqueueAsync(new ExtractBaselineArgs
+            {
+                TaskId = task.Id,
+                DocumentId = parsedDoc.Id
+            });
+        }
     }
 }

@@ -54,7 +54,7 @@ export function getSpeechAudio(id: string): Promise<Blob> {
 
 export function transcribeAudio(audio: Blob): Promise<string> {
   const form = new FormData()
-  form.append('audio', audio, 'speech.webm')
+  form.append('audio', audio, 'speech.wav')
   return request.post<string>(urls.meetingAsr, form, { timeout: MediaTimeout })
 }
 

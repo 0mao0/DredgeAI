@@ -90,7 +90,7 @@
 </template>
 
 <script setup lang="ts">
-import { AppButton } from '@shared/web'
+import { AppButton, UploadFileRow } from '@shared/web'
 import {
   ExclamationCircleOutlined,
   DownOutlined,
@@ -99,22 +99,10 @@ import {
   RightOutlined,
 } from '@ant-design/icons-vue'
 import { computed, ref } from 'vue'
+import type { UploadFileItem } from '@/types'
 import { MAX_BID_DOCUMENTS } from '../constants'
-import UploadFileRow from './UploadFileRow.vue'
 
-export interface UploadFileItem {
-  key: string
-  name: string
-  size: number
-  file: File
-  role: 'bid' | 'tender'
-  status: 'pending' | 'uploading' | 'done' | 'error'
-  error?: string
-  warning?: string
-  docId?: string
-  percent?: number
-  startedAt?: number
-}
+export type { UploadFileItem }
 
 const props = defineProps<{
   items: UploadFileItem[]

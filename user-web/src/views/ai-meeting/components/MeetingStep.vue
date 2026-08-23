@@ -46,6 +46,7 @@ import type { QaRecordDto } from '@/types'
 import { useRecorder } from '../composables/useRecorder'
 import { useAudioPlayer } from '../composables/useAudioPlayer'
 import { useQaAudio } from '../composables/useQaAudio'
+import { convertToWav16k } from '@/utils/audioToWav'
 
 const props = defineProps<{ loading: boolean, qaRecords: QaRecordDto[] }>()
 const emit = defineEmits<{
@@ -72,7 +73,13 @@ async function onPttRelease(): Promise<void> {
   const audio = await stopPtt()
   if (audio.size === 0) return
   pendingVoice.value = true
-  emit('askAudio', audio)
+  try {
+    const wav = await convertToWav16k(audio)
+    emit('askAudio', wav)
+  } catch {
+    // 转换失败时退回原始录音，由后端 ffmpeg 转码
+    emit('askAudio', audio)
+  }
 }
 
 function onAskText(): void {

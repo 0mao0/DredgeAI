@@ -18,7 +18,9 @@ public class RejectionClausesExtractor : LlmFieldExtractorBase, IBaselineFieldEx
     private const string UserPromptTemplate =
         "以下是招标文件全文：\n\n{{DOCUMENT}}\n\n" +
         "请以 JSON 数组返回废标/无效投标条款，每项格式：" +
-        "{\"fieldKey\":\"snake_case_key\",\"value\":{\"text\":\"条款原文\",\"mandatory\":true,\"category\":\"资质/报价/技术/工期/格式等\"},\"rawText\":\"条款原文摘要\"}。" +
+        "{\"fieldKey\":\"标准英文术语\",\"value\":{\"text\":\"条款原文\",\"mandatory\":true,\"category\":\"资质/报价/技术/工期/格式等\"},\"rawText\":\"条款原文摘要\"}。" +
+        "fieldKey 只能使用常见招投标标准术语（如 bid_security、qualification、payment_terms 等），不得发明自定义词组；" +
+        "若条款无法用标准术语概括，使用 rejection_clause_序号（序号从 1 开始连续编号）。" +
         "只返回 JSON。";
 
     public RejectionClausesExtractor(ILlmGateway llmGateway) : base(llmGateway)
@@ -39,7 +41,7 @@ public class RejectionClausesExtractor : LlmFieldExtractorBase, IBaselineFieldEx
             element =>
             {
                 index++;
-                var fieldKey = GetString(element, "fieldKey") ?? $"rejection_clause_{index}";
+                var fieldKey = BaselineFieldKeys.Normalize(Category, GetString(element, "fieldKey"), index);
                 var valueObj = GetObject(element, "value");
                 var rawText = GetString(element, "rawText")
                     ?? (valueObj.HasValue ? GetString(valueObj.Value, "text") : null)

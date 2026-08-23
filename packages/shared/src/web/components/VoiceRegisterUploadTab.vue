@@ -41,6 +41,7 @@
 <script setup lang="ts">
 import { ref, onUnmounted } from 'vue'
 import { message } from 'ant-design-vue'
+import { formatFileSize } from '../utils/format'
 
 const emit = defineEmits<{
   audioReady: [blob: Blob, fileName: string]
@@ -55,12 +56,6 @@ let uploadedBlob: Blob | null = null
 const playing = ref(false)
 let playbackEl: HTMLAudioElement | null = null
 let blobUrl: string | null = null
-
-function formatFileSize(bytes: number): string {
-  if (bytes < 1024) return `${bytes} B`
-  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`
-  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`
-}
 
 function triggerFileInput(): void {
   fileInputRef.value?.click()

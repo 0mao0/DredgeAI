@@ -92,14 +92,30 @@
           <a-tag v-if="task.status !== 'ready'" :color="statusColor(task.status)">{{ statusText(task.status) }}</a-tag>
           <a-tag>基准库 v{{ task.baselineVersion }}</a-tag>
         </div>
-        <AppButton size="sm" @click="backToUpload">
-          <PlusOutlined />
-          新建读标
-        </AppButton>
-        <AppButton size="sm" variant="primary" :loading="exporting" @click="exportBaseline">
-          <DownloadOutlined />
-          导出 JSON
-        </AppButton>
+        <a-popconfirm
+          title="整体重解将覆盖所有类别的现有字段（含已确认内容），确定继续吗？"
+          ok-text="确定"
+          cancel-text="取消"
+          :overlay-inner-style="{ width: '280px' }"
+          @confirm="onRecoverExtract"
+        >
+          <AppButton size="sm" :loading="fullReExtracting" :disabled="!canFullReExtract">
+            <RedoOutlined />
+            整体重解
+          </AppButton>
+        </a-popconfirm>
+        <a-popconfirm
+          title="确定新建读标？当前任务已保存，可在历史记录中继续查看。"
+          ok-text="确定"
+          cancel-text="取消"
+          :overlay-inner-style="{ width: '280px' }"
+          @confirm="backToUpload"
+        >
+          <AppButton size="sm">
+            <PlusOutlined />
+            新建
+          </AppButton>
+        </a-popconfirm>
       </div>
 
       <div v-if="task.failureReason" class="read-workspace__banner">
@@ -112,6 +128,11 @@
         >
           重新解析
         </AppButton>
+      </div>
+
+      <div v-if="parsedStuck" class="read-workspace__banner read-workspace__banner--warning">
+        <WarningOutlined />
+        <span>解析已完成，但抽取任务长时间未自动启动，可点击顶部「整体重解」手动触发。</span>
       </div>
 
       <div class="read-workspace__split">
@@ -183,21 +204,47 @@
               class="read-workspace__lang-toggle"
             />
             <a-popconfirm
-              title="重新抽取将覆盖该类别的现有字段（含已确认内容），确定继续吗？"
+              title="解析将覆盖该类别的现有字段（含已确认内容），确定继续吗？"
               ok-text="确定"
               cancel-text="取消"
+              :overlay-inner-style="{ width: '280px' }"
               @confirm="reExtractCategory(activeCategory)"
             >
               <AppButton size="sm" :loading="reExtracting" :disabled="!hasActiveCategory">
                 <ReloadOutlined />
-                重抽当前类
               </AppButton>
             </a-popconfirm>
+            <AppButton size="sm" variant="primary" :loading="exporting" @click="exportBaseline">
+              <DownloadOutlined />
+              导出
+            </AppButton>
           </template>
-          <a-empty
-            v-if="!baselineLoading && baseline.length === 0"
-            description="暂未抽取到基准库字段，可点击右上角“重抽当前类”"
-          />
+          <div v-if="extractInProgress" class="read-workspace__extract-progress">
+            <div class="read-workspace__extract-progress-row">
+              <span class="read-workspace__extract-progress-title">
+                <LoadingOutlined spin class="read-workspace__extract-progress-spin" />
+                {{ extractProgressText }}
+              </span>
+              <span class="read-workspace__extract-progress-percent">{{ task.progressPercent }}%</span>
+            </div>
+            <a-progress
+              :percent="task.progressPercent"
+              :show-info="false"
+              size="small"
+              class="read-workspace__extract-progress-bar"
+            />
+            <div class="read-workspace__extract-progress-hint">
+              AI 分析通常需要 1~3 分钟，完成后基准库会自动刷新，无需手动操作
+            </div>
+          </div>
+          <div v-if="baseline.length === 0" class="read-workspace__baseline-empty">
+            <DataSkeleton v-if="baselineLoading || (task && isPollingStatus(task.status))" :rows="4" />
+            <a-empty v-else description="未抽取到任何基准库字段">
+              <p class="read-workspace__baseline-empty-tip">
+                文档可能不含可抽取内容，可点击右上角「解析」重试，或新建读标重新上传。
+              </p>
+            </a-empty>
+          </div>
           <a-collapse
             v-else
             v-model:active-key="activeCategoryKeys"
@@ -360,20 +407,20 @@
 
 <script setup lang="ts">
 import { computed, nextTick, onBeforeUnmount, ref, watch } from 'vue'
-import { useRoute } from 'vue-router'
+import { useRoute, useRouter } from 'vue-router'
 import { message } from 'ant-design-vue'
 import {
   DownloadOutlined,
   ExclamationCircleOutlined,
   InboxOutlined,
+  LoadingOutlined,
   PlusOutlined,
+  RedoOutlined,
   ReloadOutlined,
   WarningOutlined,
 } from '@ant-design/icons-vue'
-import { AppButton, DataSkeleton, SectionCard } from '@shared/web'
-import type { BaselineCategory, BaselineField, BlockRange, SourceRef, TenderReadingDocument, TenderReadingOutlineNode, TenderReadingParsedDocument, TenderReadingTask } from '@/types'
-import UploadFileRow from '../compare/components/UploadFileRow.vue'
-import type { UploadFileItem } from '../compare/components/UploadPage.vue'
+import { AppButton, DataSkeleton, SectionCard, UploadFileRow } from '@shared/web'
+import type { BaselineCategory, BaselineField, BlockRange, SourceRef, TenderReadingDocument, TenderReadingOutlineNode, TenderReadingParsedDocument, TenderReadingTask, UploadFileItem } from '@/types'
 import PdfViewer from '../compare/components/PdfViewer.vue'
 import { PDFParsedViewerCombo } from '@angineer/docs-ui'
 import type { PreviewMode, StructuredIndexItem } from '@angineer/docs-ui'
@@ -421,18 +468,8 @@ const exporting = ref(false)
 const pdfPage = ref(1)
 const pdfHighlights = ref<BlockRange[]>([])
 const selectedFieldId = ref('')
-/** 默认展开全部分类，让提取结果一眼可见（折叠面板容易让人以为“没提取到内容”） */
-const allBaselineCategories: BaselineCategory[] = [
-  'project_info',
-  'rejection_clauses',
-  'evaluation_criteria',
-  'technical_parameters',
-  'commercial_data',
-  'chapter_outline',
-  'seal_rules',
-  'dark_bid_format_rules',
-]
-const activeCategoryKeys = ref<BaselineCategory[]>(allBaselineCategories)
+/** 默认仅展开「项目信息」，其余分类折叠，保持基准库界面整洁 */
+const activeCategoryKeys = ref<BaselineCategory[]>(['project_info'])
 const activeCategory = computed(() => activeCategoryKeys.value[0] ?? 'project_info')
 const hasActiveCategory = computed(() => activeCategoryKeys.value.length > 0)
 
@@ -480,6 +517,11 @@ const isEnglishDocument = computed(() => {
 })
 const reExtracting = ref(false)
 const reparsing = ref(false)
+const fullReExtracting = ref(false)
+/** 解析完成但抽取长时间未启动（入队失败/后台任务崩溃）时给出可操作提示 */
+const PARSED_STUCK_MS = 90_000
+const parsedStuck = ref(false)
+let parsedStuckTimer: number | null = null
 const editingName = ref(false)
 const nameDraft = ref('')
 const nameDraftTouched = ref(false)
@@ -498,6 +540,7 @@ let disposed = false
 
 const POLL_MS = 3000
 const route = useRoute()
+const router = useRouter()
 const themeStore = useThemeStore()
 const isDark = computed(() => themeStore.isDark)
 
@@ -552,8 +595,41 @@ const canConfirmName = computed(() => {
   return next.length > 0 && (nameDraftTouched.value || next !== task.value?.name)
 })
 
+/** 抽取阶段（解析完成→抽取中→复核）：在右侧基准库面板内展示抽取进度 */
+const extractInProgress = computed(() => {
+  const status = task.value?.status
+  return status === 'parsed' || status === 'extracting' || status === 'reviewing'
+})
+
+const extractProgressText = computed(() => {
+  switch (task.value?.status) {
+    case 'parsed':
+      return '解析完成，正在准备抽取基准库字段'
+    case 'extracting':
+      return '正在抽取基准库字段（AI 分析中）'
+    case 'reviewing':
+      return '正在复核低置信度字段'
+    default:
+      return ''
+  }
+})
+
+/** 全量重新抽取可用条件：解析/抽取/失败中不可触发（后端同样会拒绝） */
+const canFullReExtract = computed(() => {
+  const status = task.value?.status
+  return !!status && !['uploading', 'parsing', 'extracting', 'failed'].includes(status)
+})
+
 watch(() => task.value?.status, (status) => {
-  if (!status) return
+  if (!status) {
+    clearParsedStuckTimer()
+    return
+  }
+  if (status === 'parsed') {
+    startParsedStuckTimer()
+  } else {
+    clearParsedStuckTimer()
+  }
   if (isPollingStatus(status)) {
     startPolling()
   } else {
@@ -568,12 +644,31 @@ watch(() => task.value?.status, (status) => {
 
 onBeforeUnmount(() => {
   disposed = true
+  clearParsedStuckTimer()
   stopPolling()
 })
 
+function startParsedStuckTimer(): void {
+  clearParsedStuckTimer()
+  parsedStuck.value = false
+  parsedStuckTimer = window.setTimeout(() => {
+    parsedStuckTimer = null
+    parsedStuck.value = true
+  }, PARSED_STUCK_MS)
+}
+
+function clearParsedStuckTimer(): void {
+  if (parsedStuckTimer !== null) {
+    window.clearTimeout(parsedStuckTimer)
+    parsedStuckTimer = null
+  }
+  parsedStuck.value = false
+}
+
 // 从历史记录 / 外部链接打开指定读标任务（immediate 覆盖首次挂载，watch 覆盖页面内切换任务）
 watch(() => route.query.task, (id) => {
-  if (typeof id === 'string' && id) void openExistingTask(id)
+  // 自身上传流程会把 task 写入地址栏，此时 currentTaskId 已存在，跳过避免重复加载
+  if (typeof id === 'string' && id && id !== currentTaskId.value) void openExistingTask(id)
 }, { immediate: true })
 
 async function onPickFile(file: File): Promise<boolean> {
@@ -652,6 +747,7 @@ async function removeUpload(): Promise<void> {
   currentTaskId.value = ''
   uploadItem.value = null
   uploadError.value = ''
+  void router.replace({ query: {} })
 }
 
 async function startRead(): Promise<void> {
@@ -662,6 +758,8 @@ async function startRead(): Promise<void> {
     task.value = t
     view.value = 'workspace'
     uploadItem.value = null
+    // 把任务写进地址栏：刷新/重新进入页面后仍停留在工作区而不是回到上传页
+    void router.replace({ query: { task: t.id } })
     await loadDetail(t.id)
   } catch (error) {
     message.error(error instanceof Error ? error.message : '开始解析失败')
@@ -676,6 +774,7 @@ async function openExistingTask(id: string): Promise<void> {
     await loadDetail(id)
     currentTaskId.value = id
     view.value = 'workspace'
+    void router.replace({ query: { task: id } })
   } catch {
     message.error('读标任务加载失败')
   }
@@ -683,6 +782,7 @@ async function openExistingTask(id: string): Promise<void> {
 
 function backToUpload(): void {
   stopPolling()
+  clearParsedStuckTimer()
   view.value = 'upload'
   task.value = null
   currentTaskId.value = ''
@@ -693,6 +793,7 @@ function backToUpload(): void {
   parsedDocument.value = null
   pdfHighlights.value = []
   selectedFieldId.value = ''
+  void router.replace({ query: {} })
 }
 
 async function loadDetail(id: string): Promise<void> {
@@ -1001,7 +1102,11 @@ function autoHighlightFirstField(): void {
   if (selectedFieldId.value || pdfHighlights.value.length > 0) return
   const field = baseline.value.find((f) => f.sourceRefs.length > 0)
   if (field) {
-    locateField(field)
+    // 仅设置高亮与页码，不展开其所在分类（保持默认只展开「项目信息」）
+    selectedFieldId.value = field.id
+    pdfHighlights.value = field.sourceRefs.map(sourceRefToBlockRange)
+    const first = field.sourceRefs[0]
+    if (first) pdfPage.value = first.pageIdx + 1
   }
 }
 
@@ -1148,6 +1253,23 @@ async function reExtractCategory(category: BaselineCategory): Promise<void> {
   }
 }
 
+/** 解析完成但抽取未自动启动时的兜底恢复：直接提交全量重抽 */
+async function onRecoverExtract(): Promise<void> {
+  if (!task.value || fullReExtracting.value) return
+  fullReExtracting.value = true
+  try {
+    task.value = await reExtractTenderReadBaseline(task.value.id)
+    parsedStuck.value = false
+    selectedFieldId.value = ''
+    pdfHighlights.value = []
+    message.success('已提交整体重解，完成后自动刷新')
+  } catch (error) {
+    message.error(error instanceof Error ? error.message : '整体重解提交失败')
+  } finally {
+    fullReExtracting.value = false
+  }
+}
+
 const statusMap: Record<TenderReadingTask['status'], { text: string, color: string }> = {
   uploading: { text: '上传中', color: 'blue' },
   parsing: { text: '解析中', color: 'blue' },
@@ -1269,13 +1391,288 @@ const FIELD_LABELS: Record<string, string> = {
   service_period: '服务期限',
 }
 
+/** 未收录字段 key 的逐词翻译兜底：LLM 动态生成 key 无法穷举，拆词翻译避免直接显示英文 */
+const FIELD_TOKEN_LABELS: Record<string, string> = {
+  abnormal: '异常',
+  absence: '缺席',
+  absent: '缺席',
+  acceptance: '验收',
+  accepted: '接受',
+  advance: '预',
+  affiliation: '挂靠',
+  alternative: '备选',
+  amount: '金额',
+  assets: '资产',
+  attendance: '到场',
+  attorney: '委托',
+  authorization: '授权',
+  award: '中标',
+  bankruptcy: '破产',
+  below: '低于',
+  bid: '投标',
+  bidder: '投标人',
+  bidding: '投标',
+  bids: '投标',
+  bond: '保函',
+  bribery: '行贿',
+  budget: '预算',
+  business: '经营',
+  ceiling: '上限',
+  clarification: '澄清',
+  clarify: '澄清',
+  code: '编号',
+  collusion: '串通',
+  collusive: '串通',
+  commitment: '承诺',
+  commitments: '承诺',
+  committee: '委员会',
+  competitive: '竞争性',
+  compilation: '编制',
+  compliance: '合规',
+  compliant: '合规',
+  conditional: '附带条件',
+  confirm: '确认',
+  configuration: '配置',
+  conflict: '冲突',
+  consistency: '一致性',
+  consortium: '联合体',
+  construction: '施工',
+  content: '内容',
+  contract: '合同',
+  contractor: '承包',
+  control: '控制',
+  coordination: '协调',
+  corrected: '修正',
+  correction: '修正',
+  corruption: '腐败',
+  cost: '费用',
+  costs: '费用',
+  credit: '信用',
+  critical: '关键',
+  currency: '币种',
+  dark: '暗',
+  deadline: '截止',
+  decrypt: '解密',
+  defect: '缺陷',
+  delay: '延误',
+  deliverables: '交付物',
+  delivery: '交付',
+  demand: '需求',
+  deposit: '保证金',
+  depth: '深度',
+  design: '设计',
+  designer: '设计单位',
+  deviation: '偏差',
+  disqualification: '取消资格',
+  disqualifications: '取消资格',
+  disruption: '扰乱',
+  disturbance: '扰乱',
+  docs: '文件',
+  document: '文件',
+  documents: '文件',
+  duplicate: '重复',
+  duration: '工期',
+  exceed: '超出',
+  exceeded: '超出',
+  exceeds: '超出',
+  excessive: '过多',
+  explicit: '明确',
+  fail: '失败',
+  failure: '失败',
+  fake: '虚假',
+  false: '虚假',
+  fees: '费用',
+  files: '文件',
+  final: '最终',
+  fixed: '固定',
+  fixity: '固定性',
+  forgery: '伪造',
+  format: '格式',
+  fraud: '舞弊',
+  fraudulent: '虚假',
+  freeze: '冻结',
+  frozen: '冻结',
+  general: '一般',
+  guarantee: '担保',
+  hanging: '挂靠',
+  id: '证件',
+  identity: '身份',
+  implementation: '实施',
+  inconsistency: '不一致',
+  inconsistent: '不一致',
+  info: '信息',
+  inspection: '检验',
+  integrity: '诚信',
+  interest: '利益',
+  interference: '干扰',
+  invalid: '无效',
+  invoice: '发票',
+  issue: '事项',
+  item: '项',
+  items: '项',
+  joint: '联合',
+  key: '关键',
+  lack: '缺少',
+  late: '逾期',
+  law: '法律',
+  leader: '负责人',
+  legal: '法律',
+  letter: '函件',
+  level: '等级',
+  liaison: '联络',
+  license: '资质',
+  life: '寿命',
+  limit: '限价',
+  location: '地点',
+  low: '低',
+  major: '重大',
+  management: '管理',
+  manager: '经理',
+  material: '材料',
+  materials: '材料',
+  max: '最高',
+  measures: '措施',
+  meet: '满足',
+  meeting: '会议',
+  method: '方式',
+  milestone: '节点',
+  misconduct: '不良行为',
+  mismatch: '不匹配',
+  missing: '缺失',
+  multiple: '多项',
+  name: '名称',
+  no: '不得',
+  non: '不',
+  not: '不得',
+  open: '开标',
+  opening: '开标',
+  order: '秩序',
+  out: '超出',
+  outline: '大纲',
+  payment: '付款',
+  penalty: '处罚',
+  percent: '百分比',
+  performance: '履约',
+  period: '期限',
+  personnel: '人员',
+  plagiarism: '雷同',
+  plan: '方案',
+  post: '中标后',
+  power: '授权',
+  price: '报价',
+  principles: '原则',
+  prohibited: '禁止',
+  prohibition: '禁止',
+  project: '项目',
+  provide: '提供',
+  provider: '提供方',
+  qualification: '资格',
+  quality: '质量',
+  quantity: '数量',
+  quotation: '报价',
+  range: '范围',
+  rate: '费率',
+  ratio: '比例',
+  recent: '近期',
+  record: '记录',
+  refusal: '拒绝',
+  regulation: '规定',
+  rejection: '否决',
+  rep: '代表',
+  representative: '代表',
+  requirement: '要求',
+  requirements: '要求',
+  respond: '响应',
+  response: '响应',
+  restriction: '限制',
+  review: '评审',
+  rigging: '围标',
+  rule: '规则',
+  rules: '规则',
+  safeguard: '保障',
+  safety: '安全',
+  same: '同一',
+  schedule: '进度',
+  scheme: '方案',
+  scope: '范围',
+  score: '得分',
+  seal: '签章',
+  sealing: '密封',
+  seals: '签章',
+  security: '保证金',
+  selective: '选择性',
+  service: '服务',
+  services: '服务',
+  short: '过短',
+  sign: '签字',
+  signatory: '签署人',
+  signature: '签字',
+  similar: '雷同',
+  similarities: '雷同',
+  solution: '方案',
+  source: '来源',
+  special: '专项',
+  specs: '参数',
+  stamp: '盖章',
+  standard: '标准',
+  standards: '标准',
+  status: '状态',
+  subcontracting: '分包',
+  submission: '递交',
+  substantial: '实质性',
+  substantive: '实质性',
+  suspended: '暂停',
+  suspension: '停业',
+  table: '表',
+  tax: '税率',
+  team: '团队',
+  tech: '技术',
+  technical: '技术',
+  terms: '条款',
+  time: '时间',
+  title: '职务',
+  transfer: '转让',
+  type: '类型',
+  unacceptable: '不可接受',
+  understanding: '理解',
+  uniqueness: '唯一性',
+  unjustified: '无依据',
+  unreasonable: '不合理',
+  validity: '有效期',
+  variable: '可变',
+  venture: '体',
+  verification: '核验',
+  violation: '违规',
+  withdrawal: '撤回',
+}
+
+/** 纯连接词：翻译时直接省略，避免出现“的/和/或”等多余字 */
+const FIELD_LABEL_SKIP_TOKENS = new Set(['after', 'and', 'during', 'in', 'of', 'on', 'or', 'to'])
+
+/** LLM 动态字段 key → 中文标签：拆词逐词翻译后拼接，保证不出现英文 */
+function translateFieldKey(fieldKey: string): string {
+  const parts = fieldKey.split('_').filter((p) => p && !FIELD_LABEL_SKIP_TOKENS.has(p))
+  const translated = parts.map((p) => FIELD_TOKEN_LABELS[p] ?? p).join('')
+  return translated || fieldKey.replace(/_/g, ' ')
+}
+
 function fieldLabel(field: BaselineField): string {
   if (fieldLang.value === 'en') return field.fieldKey.replace(/_/g, ' ')
   const sealRule = field.fieldKey.match(/^seal_rule_(\d+)$/)
   if (sealRule) return `签章规则 ${sealRule[1]}`
   const darkBidRule = field.fieldKey.match(/^dark_bid_rule_(\d+)$/)
   if (darkBidRule) return `暗标格式 ${darkBidRule[1]}`
-  return FIELD_LABELS[field.fieldKey] || field.fieldKey.replace(/_/g, ' ')
+  const invalidBidNumber = field.fieldKey.match(/^invalid_bid_(\d+)$/)
+  if (invalidBidNumber) return `废标条款 ${invalidBidNumber[1]}`
+  const paymentMilestone = field.fieldKey.match(/^payment_milestone_(\d+)$/)
+  if (paymentMilestone) return `付款节点 ${paymentMilestone[1]}`
+  const rejectionClauseNumber = field.fieldKey.match(/^rejection_clause_(\d+)$/)
+  if (rejectionClauseNumber) return `废标条款 ${rejectionClauseNumber[1]}`
+  const evaluationCriteriaNumber = field.fieldKey.match(/^evaluation_criteria_(\d+)$/)
+  if (evaluationCriteriaNumber) return `评分标准 ${evaluationCriteriaNumber[1]}`
+  const technicalParameterNumber = field.fieldKey.match(/^technical_parameter_(\d+)$/)
+  if (technicalParameterNumber) return `技术参数 ${technicalParameterNumber[1]}`
+  return FIELD_LABELS[field.fieldKey] || translateFieldKey(field.fieldKey)
 }
 
 const CATEGORY_LABELS: Record<BaselineCategory, { zh: string, en: string }> = {
@@ -1493,6 +1890,68 @@ function extractorLabel(extractor: string): string {
   flex-shrink: 0;
 }
 
+.read-workspace__banner--warning {
+  border-color: @warning;
+  background: color-mix(in srgb, @warning 10%, @card-bg);
+  color: @warning;
+}
+
+.read-workspace__extract-progress {
+  padding: @spacing-sm @spacing-md;
+  margin-bottom: @spacing-md;
+  border: 1px solid @border-color;
+  border-radius: @radius-base;
+  background: color-mix(in srgb, @brand-primary 4%, @card-bg);
+
+  &__row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: @spacing-sm;
+    margin-bottom: @spacing-xs;
+  }
+
+  &__title {
+    display: inline-flex;
+    align-items: center;
+    gap: @spacing-xs;
+    font-size: @font-size-sm;
+    color: @text-primary;
+  }
+
+  &__spin {
+    color: @brand-primary;
+  }
+
+  &__percent {
+    font-size: @font-size-xs;
+    color: @text-tertiary;
+  }
+
+  &__bar {
+    margin-bottom: @spacing-xs;
+
+    :deep(.ant-progress-bg) {
+      background: @brand-primary;
+    }
+  }
+
+  &__hint {
+    font-size: @font-size-xs;
+    color: @text-tertiary;
+  }
+}
+
+.read-workspace__baseline-empty {
+  padding: @spacing-md 0;
+}
+
+.read-workspace__baseline-empty-tip {
+  margin-top: @spacing-xs;
+  font-size: @font-size-xs;
+  color: @text-tertiary;
+}
+
 .read-workspace__split {
   flex: 1;
   min-height: 0;
@@ -1541,6 +2000,11 @@ function extractorLabel(extractor: string): string {
 .read-workspace__baseline {
   :deep(.section-card-header) {
     padding: @spacing-sm @spacing-md;
+  }
+  :deep(.section-card-extra) {
+    display: flex;
+    align-items: center;
+    gap: 2px;
   }
   :deep(.section-card-title) {
     font-size: @font-size-sm;

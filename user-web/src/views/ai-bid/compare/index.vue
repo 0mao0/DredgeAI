@@ -194,7 +194,7 @@
 
 <script setup lang="ts">
 import { computed, nextTick, onMounted, onUnmounted, ref, watch } from 'vue'
-import { AppButton } from '@shared/web'
+import { AppButton, UploadFileRow } from '@shared/web'
 import { useRoute, useRouter } from 'vue-router'
 import { message, Modal } from 'ant-design-vue'
 import {
@@ -206,8 +206,7 @@ import {
   WifiOutlined,
 } from '@ant-design/icons-vue'
 import UploadPage from './components/UploadPage.vue'
-import type { UploadFileItem } from './components/UploadPage.vue'
-import UploadFileRow from './components/UploadFileRow.vue'
+import type { UploadFileItem, BlockRange, ClauseItem, CompareDocMeta, CompareTask, EvidenceItem, TaskOverview, TenderReadingTask } from '@/types'
 import PdfWorkspace from './components/PdfWorkspace.vue'
 import ProcessPanel from './components/ProcessPanel.vue'
 import { MAX_BID_DOCUMENTS, formatProjectName, isTerminalStatus } from './constants'
@@ -234,7 +233,6 @@ import {
   updateTaskName,
 } from '@/api/modules/compare'
 import { getTenderReadTasks } from '@/api/modules/tenderRead'
-import type { BlockRange, ClauseItem, CompareDocMeta, CompareTask, EvidenceItem, TaskOverview, TenderReadingTask } from '@/types'
 
 const route = useRoute()
 const router = useRouter()

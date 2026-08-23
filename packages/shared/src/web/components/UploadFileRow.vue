@@ -46,7 +46,8 @@
 </template>
 
 <script setup lang="ts">
-import { AppButton } from '@shared/web'
+import AppButton from './AppButton.vue'
+import { formatFileSize } from '../utils/format'
 import {
   CheckCircleFilled,
   CloseCircleFilled,
@@ -55,8 +56,7 @@ import {
   FileWordOutlined,
   WarningOutlined,
 } from '@ant-design/icons-vue'
-import { formatFileSize } from '../constants'
-import type { UploadFileItem } from './UploadPage.vue'
+import type { UploadFileItem } from '../../core/types/upload'
 
 defineProps<{
   item: UploadFileItem
@@ -74,7 +74,7 @@ function isWord(name: string): boolean {
 </script>
 
 <style scoped lang="less">
-@import '@shared/web/styles/variables.less';
+@import '../styles/variables.less';
 
 .upload-row {
   display: flex;

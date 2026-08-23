@@ -45,12 +45,6 @@ export function anGineerStepInfo(stage: string | null | undefined): { step: numb
 }
 export { buildDocLabels, docLabel, isPdfFileName, MAX_BID_DOCUMENTS, overviewDocLabels } from '@shared/core/utils/compare'
 
-export function formatFileSize(size: number): string {
-  if (size >= 1024 * 1024) return `${(size / 1024 / 1024).toFixed(1)} MB`
-  if (size >= 1024) return `${(size / 1024).toFixed(0)} KB`
-  return `${size} B`
-}
-
 /** 解析完成后生成项目名：xxx项目-比标-N本（N = 投标文件份数）。 */
 export function formatProjectName(suggestedName: string, bidCount: number): string {
   const base = suggestedName
