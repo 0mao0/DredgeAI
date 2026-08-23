@@ -26,6 +26,10 @@ public class MeetingRecordController : AbpControllerBase
     public Task<MeetingRecordDto> Create([FromBody] PreInfoInput input)
         => _service.CreateAsync(input);
 
+    [HttpGet]
+    public Task<List<MeetingHistoryDto>> History(int maxCount = 20)
+        => _service.GetHistoryAsync(maxCount);
+
     [HttpGet("{id:guid}")]
     public Task<MeetingRecordDto> Get(Guid id)
         => _service.GetAsync(id);
@@ -42,6 +46,13 @@ public class MeetingRecordController : AbpControllerBase
     public Task<SpeechDraftDto> UpdateSpeech(Guid id, [FromBody] UpdateSpeechInput input)
         => _service.UpdateSpeechAsync(id, input.Content);
 
+    [HttpGet("{id:guid}/speech/audio")]
+    public async Task<IActionResult> SpeechAudio(Guid id)
+    {
+        var audio = await _service.GetSpeechAudioAsync(id);
+        return File(audio, "audio/wav");
+    }
+
     [HttpPost("{id:guid}/start")]
     public Task<MeetingRecordDto> Start(Guid id)
         => _service.StartAsync(id);
@@ -52,7 +63,8 @@ public class MeetingRecordController : AbpControllerBase
         using var ms = new MemoryStream();
         await image.CopyToAsync(ms);
         var faces = await _service.RecognizeAttendanceAsync(id, ms.ToArray());
-        return new AttendanceRecognizeResult { Faces = faces };
+        var count = await _bot.CountAsync(ms.ToArray());
+        return new AttendanceRecognizeResult { Faces = faces, Count = count };
     }
 
     [HttpGet("{id:guid}/attendance")]
@@ -79,6 +91,14 @@ public class MeetingRecordController : AbpControllerBase
         return File(audio, "audio/wav");
     }
 
+    [HttpPost("~/api/meeting/asr")]
+    public async Task<string> Asr([FromForm] IFormFile audio)
+    {
+        using var ms = new MemoryStream();
+        await audio.CopyToAsync(ms);
+        return await _bot.AsrAsync(ms.ToArray());
+    }
+
     [HttpPost("{id:guid}/recording")]
     public async Task<MeetingRecordDto> SaveRecording(Guid id, [FromForm] IFormFile audio)
     {
@@ -98,5 +118,7 @@ public class MeetingRecordController : AbpControllerBase
     public class AttendanceRecognizeResult
     {
         public List<AttendanceItemDto> Faces { get; set; } = new();
+
+        public int Count { get; set; }
     }
 }

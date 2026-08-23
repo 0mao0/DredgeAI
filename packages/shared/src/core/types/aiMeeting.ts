@@ -23,6 +23,19 @@ export interface AttendanceItemDto {
   confidence: number
 }
 
+export interface AttendanceRecognizeResult {
+  faces: AttendanceItemDto[]
+  count: number
+}
+
+export interface MeetingHistoryDto {
+  id: string
+  date: string
+  taskPreview: string
+  status: MeetingStatus
+  createdAt: string
+}
+
 export interface QaRecordDto {
   id: string
   question: string
@@ -48,10 +61,39 @@ export interface WorkerDto {
   faceStatus: 'enrolled' | 'pending'
 }
 
+export interface WorkerCreateInput {
+  name: string
+  employeeNo: string
+  team: string
+}
+
+export interface IdCardRecognitionDto {
+  name: string
+  idCardNumber: string
+  gender: string
+  nation: string
+  birthDate: string
+  address: string
+  rawText: string
+}
+
+export interface KnowledgeJobStatusDto {
+  state: 'processing' | 'succeeded' | 'failed' | 'partial'
+  progress: number
+  stage: string | null
+  stageMessage: string | null
+}
+
+export interface KnowledgeUploadResult {
+  docId: string
+  status: KnowledgeJobStatusDto | null
+}
+
 export interface MeetingRecordDto {
   id: string
   date: string
-  preInfo: PreInfo
+  preInfo?: PreInfo
+  preInfoJson?: string
   status: MeetingStatus
   speechDraft?: SpeechDraftDto
   attendance: AttendanceItemDto[]

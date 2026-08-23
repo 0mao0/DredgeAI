@@ -11,6 +11,8 @@ public interface IMeetingRecordAppService : IApplicationService
 
     Task<MeetingRecordDto> GetAsync(Guid id);
 
+    Task<List<MeetingHistoryDto>> GetHistoryAsync(int maxCount = 20);
+
     Task<SpeechDraftDto?> GetSpeechAsync(Guid id);
 
     Task<SpeechDraftDto> GenerateSpeechAsync(Guid id);
@@ -26,6 +28,8 @@ public interface IMeetingRecordAppService : IApplicationService
     Task<QaRecordDto> AskQaAsync(Guid id, string question);
 
     Task<byte[]> GetQaAudioAsync(Guid qaId);
+
+    Task<byte[]> GetSpeechAudioAsync(Guid id);
 
     Task<MeetingRecordDto> SaveRecordingAsync(Guid id, byte[] audio, string fileName);
 

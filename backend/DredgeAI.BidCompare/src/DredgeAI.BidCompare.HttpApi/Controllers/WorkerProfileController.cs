@@ -24,6 +24,18 @@ public class WorkerProfileController : AbpControllerBase
     public Task<List<WorkerDto>> List()
         => _service.GetListAsync();
 
+    [HttpPost]
+    public Task<WorkerDto> Create([FromBody] WorkerCreateInput input)
+        => _service.CreateAsync(input);
+
+    [HttpPost("recognize-id-card")]
+    public async Task<IdCardRecognitionDto> RecognizeIdCard([FromForm] IFormFile image)
+    {
+        using var ms = new MemoryStream();
+        await image.CopyToAsync(ms);
+        return await _service.RecognizeIdCardAsync(ms.ToArray());
+    }
+
     [HttpPost("import")]
     public async Task<int> Import([FromForm] IFormFile file)
     {

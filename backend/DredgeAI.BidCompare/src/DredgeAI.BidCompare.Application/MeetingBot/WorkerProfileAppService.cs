@@ -5,6 +5,7 @@ using System.IO.Compression;
 using System.Linq;
 using System.Text.Json;
 using System.Threading.Tasks;
+using DredgeAI.BidCompare.AI;
 using DredgeAI.BidCompare.Storage;
 using DocumentFormat.OpenXml.Packaging;
 using DocumentFormat.OpenXml.Spreadsheet;
@@ -24,21 +25,59 @@ public class WorkerProfileAppService : ApplicationService, IWorkerProfileAppServ
     private readonly IRepository<WorkerProfile, Guid> _workers;
     private readonly IMeetingBotClient _bot;
     private readonly IFileStorage _fileStorage;
+    private readonly ILlmGateway _llmGateway;
 
     public WorkerProfileAppService(
         IRepository<WorkerProfile, Guid> workers,
         IMeetingBotClient bot,
-        IFileStorage fileStorage)
+        IFileStorage fileStorage,
+        ILlmGateway llmGateway)
     {
         _workers = workers;
         _bot = bot;
         _fileStorage = fileStorage;
+        _llmGateway = llmGateway;
     }
 
     public async Task<List<WorkerDto>> GetListAsync()
     {
         var all = await _workers.GetListAsync();
         return all.OrderBy(w => w.Name).Select(Map).ToList();
+    }
+
+    public async Task<WorkerDto> CreateAsync(WorkerCreateInput input)
+    {
+        if (string.IsNullOrWhiteSpace(input.Name) || string.IsNullOrWhiteSpace(input.EmployeeNo))
+        {
+            throw new BusinessException("MEETING_WORKER_REQUIRED", "姓名与工号/证件号不能为空");
+        }
+        var existing = await _workers.GetListAsync(w => w.EmployeeNo == input.EmployeeNo);
+        if (existing.Count > 0)
+        {
+            return Map(existing[0]);
+        }
+        var worker = new WorkerProfile(GuidGenerator.Create(), input.Name.Trim(), input.EmployeeNo.Trim(), input.Team.Trim());
+        await _workers.InsertAsync(worker);
+        return Map(worker);
+    }
+
+    public async Task<IdCardRecognitionDto> RecognizeIdCardAsync(byte[] image)
+    {
+        const string prompt =
+            "你是身份证信息识别助手。请识别图片中中华人民共和国居民身份证的正面字段，" +
+            "仅返回如下 JSON（字段无法识别时置为空字符串，不要输出其他内容）：" +
+            "{\"name\":\"姓名\",\"idCardNumber\":\"公民身份号码\",\"gender\":\"性别\"," +
+            "\"nation\":\"民族\",\"birthDate\":\"出生日期\",\"address\":\"住址\"}";
+
+        var base64 = Convert.ToBase64String(image);
+        var raw = await _llmGateway.CompleteMultimodalAsync(
+            "你是身份证信息识别助手，只输出指定 JSON。",
+            prompt,
+            new[] { new LlmImageInput("image/jpeg", base64) });
+
+        var dto = ParseIdCardJson(raw);
+        dto.RawText = raw;
+        return dto;
     }
 
     [DisableValidation] // byte[] 无需方法级校验，避免 Stream/数组递归校验开销
@@ -192,4 +231,43 @@ public class WorkerProfileAppService : ApplicationService, IWorkerProfileAppServ
         Team = worker.Team,
         FaceStatus = worker.FaceStatus
     };
+
+    private static IdCardRecognitionDto ParseIdCardJson(string raw)
+    {
+        var dto = new IdCardRecognitionDto();
+        var start = raw.IndexOf('{');
+        var end = raw.LastIndexOf('}');
+        if (start < 0 || end <= start)
+        {
+            return dto;
+        }
+        try
+        {
+            using var document = JsonDocument.Parse(raw.Substring(start, end - start + 1));
+            var root = document.RootElement;
+            dto.Name = ReadString(root, "name", "姓名");
+            dto.IdCardNumber = ReadString(root, "idCardNumber", "公民身份号码", "id_card_number");
+            dto.Gender = ReadString(root, "gender", "性别");
+            dto.Nation = ReadString(root, "nation", "民族");
+            dto.BirthDate = ReadString(root, "birthDate", "出生日期", "birth_date");
+            dto.Address = ReadString(root, "address", "住址");
+        }
+        catch (JsonException)
+        {
+            // 非 JSON 返回时仅保留 RawText，字段留空由前端提示重试
+        }
+        return dto;
+    }
+
+    private static string ReadString(JsonElement root, params string[] keys)
+    {
+        foreach (var key in keys)
+        {
+            if (root.TryGetProperty(key, out var value) && value.ValueKind == JsonValueKind.String)
+            {
+                return value.GetString()?.Trim() ?? "";
+            }
+        }
+        return "";
+    }
 }

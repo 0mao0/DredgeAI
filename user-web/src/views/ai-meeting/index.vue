@@ -8,19 +8,30 @@
       <a-step title="会议" />
       <a-step title="报告" />
     </a-steps>
-    <MeetingInfoStep v-if="current === 0" :loading="loading" @submit="handleCreate" />
+    <MeetingInfoStep
+      v-if="current === 0"
+      :loading="loading"
+      :initial="initialForm"
+      @submit="handleCreate"
+      @load-history="handleLoadHistory"
+    />
     <SpeechDraftStep
       v-else-if="current === 1"
       :draft="draft"
       :loading="loading"
+      :playing="playing"
+      :audio-loading="audioLoading"
       @generate="handleGenerateSpeech"
       @save="handleSaveDraft"
       @confirm="handleConfirmDraft"
+      @play-audio="handlePlaySpeech"
+      @stop-audio="stopAudio"
     />
     <AttendanceStep
       v-else-if="current === 2"
       :loading="loading"
       :list="attendance"
+      :count="peopleCount"
       @capture="handleCapture"
       @done="current = 3"
     />
@@ -53,7 +64,9 @@ import {
   completeMeeting,
   createMeeting,
   generateSpeech,
+  getMeeting,
   getReport,
+  getSpeechAudio,
   recognizeAttendance,
   saveSpeechDraft,
   startMeeting,
@@ -64,6 +77,7 @@ import SpeechDraftStep from './components/SpeechDraftStep.vue'
 import AttendanceStep from './components/AttendanceStep.vue'
 import MeetingStep from './components/MeetingStep.vue'
 import ReportStep from './components/ReportStep.vue'
+import { useAudioPlayer } from './composables/useAudioPlayer'
 
 const current = ref(0)
 const meeting = ref<MeetingRecordDto | null>(null)
@@ -72,12 +86,55 @@ const draft = ref<SpeechDraftDto | null>(null)
 const attendance = ref<AttendanceItemDto[]>([])
 const qaRecords = ref<QaRecordDto[]>([])
 const report = ref<ReportDto | null>(null)
+const peopleCount = ref<number | null>(null)
+const initialForm = ref<PreInfo | null>(null)
+const { playing, play, stop: stopAudio } = useAudioPlayer()
+const audioLoading = ref(false)
 
 async function handleCreate(preInfo: PreInfo): Promise<void> {
   loading.value = true
   try {
     meeting.value = await createMeeting(preInfo)
+    initialForm.value = null
     current.value = 1
+  } finally {
+    loading.value = false
+  }
+}
+
+async function handleLoadHistory(id: string): Promise<void> {
+  loading.value = true
+  try {
+    const record = await getMeeting(id)
+    meeting.value = record
+    draft.value = record.speechDraft ?? null
+    attendance.value = record.attendance
+    qaRecords.value = record.qaRecords
+    report.value = record.report ?? null
+    peopleCount.value = null
+    if (record.preInfoJson) {
+      try {
+        const p = JSON.parse(record.preInfoJson) as Partial<PreInfo> & { date?: string }
+        initialForm.value = {
+          date: p.date?.slice(0, 10) ?? '',
+          weather: p.weather ?? '',
+          tasks: p.tasks ?? '',
+          riskPoints: p.riskPoints ?? '',
+        }
+      } catch {
+        initialForm.value = null
+      }
+    }
+    current.value
+      = record.status === 'rollcall'
+        ? 2
+        : record.status === 'ongoing'
+          ? 3
+          : record.status === 'completed'
+            ? 4
+            : record.speechDraft
+              ? 1
+              : 0
   } finally {
     loading.value = false
   }
@@ -117,12 +174,24 @@ async function handleConfirmDraft(): Promise<void> {
   }
 }
 
+async function handlePlaySpeech(): Promise<void> {
+  if (!meeting.value) return
+  audioLoading.value = true
+  try {
+    const blob = await getSpeechAudio(meeting.value.id)
+    play(blob)
+  } finally {
+    audioLoading.value = false
+  }
+}
+
 async function handleCapture(photo: Blob): Promise<void> {
   if (!meeting.value) return
   loading.value = true
   try {
     const res = await recognizeAttendance(meeting.value.id, photo)
     attendance.value = res.faces
+    peopleCount.value = res.count
   } finally {
     loading.value = false
   }

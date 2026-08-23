@@ -197,3 +197,59 @@ v1 交互为半双工（按住说话）；v2 全双工候选两条路线：端�
 - 确认 DGX 上 vLLM/NIM、Embedding、meeting-bot 的端口规划与内网可达性
 - 跑通 FireRedASR/TTS/InsightFace 在 DGX（ARM）上的最小 PoC
 - 确认企业微信通知使用 webhook 还是现有平台通道
+
+## 15. 产品范围对齐（2026-08-23 共识，优先级高于前文设计）
+
+形态：手机端 = Web 端，user-web H5 一套代码，移动优先自适应，不做原生 App。
+
+### MVP 范围
+
+- 第一步·会前录入：语音输入 → ASR 转写；下方推荐施组对话案例 tag（点击即录入）；左上角历史记录；右上角新增上传施组方案 PDF/Word（进 AnGIneer 知识库）。
+- 第二步·晨会稿：仅 C1（前置信息 + 知识库检索 + LLM 生成规范晨会稿）。C2（结合历史晨会 + 施组方案强化生成）不在 MVP。
+- 第三步·现场念稿与点名：手动旋转手机对准人员拍照，InsightFace 识别人（谁是库里的）+ YOLO 数人数；按钮触发 TTS 朗读 C1。摄像头自动轮转、连续视频流计数、语音唤醒/控制不在 MVP。
+- 第零/四步·新人录入：人脸（InsightFace /enroll）+ 身份证信息识别。身份证不引入 OCR，用 ai-inference 已注册的 Qwen3.6（云端 API，.env 已有 key，不部署 DGX）读图取字段。
+- 第五步·问答：维持半双工按住说话，问答走 ai-gateway（内部基于 ai_inference 组件）→ Qwen。双工模型 + angineer-aichat 不在 MVP。
+- 第六步·落库：会议/晨会稿/点名/问答/报告全部入库（已具备）。
+
+### Backlog（后续阶段，不进入 MVP）
+
+- C2 晨会稿：历史晨会记录 + 用户上传施组方案作为生成上下文。
+- 摄像头自动轮转 + 连续视频流人数统计/人脸识别 + 语音唤醒控制念稿。
+- 双工问答：Qwen3-Omni 或 FireRedChat 级联，问答 LLM 切换 angineer-aichat。
+- 历史晨会作为后续问答上下文。
+
+### LLM 出口说明（2026-08-23 更正）
+
+- Qwen3.6-35B-A3B 是 ai-inference 里已注册的模型，走云端 API（AnGIneer `.env` 已有 key），不部署到 DGX。
+- ai-gateway 内部即基于 ai_inference 组件（`LLMClient`），晨会稿生成与问答统一走 ai-gateway → Qwen3.6。
+- 身份证识别同样走 Qwen3.6（用户确认其支持读图取字段），接入时按其网关实际 message 格式传图。
+
+### MVP 实施进度（2026-08-23）
+
+| 功能 | 状态 | 说明 |
+|---|---|---|
+| 第一步·语音录入 + 推荐 tag | 已实施 | 按住说话 → `POST /api/meeting/asr`；下方推荐案例点击即录入 |
+| 第一步·历史记录 | 已实施 | 左上角抽屉展示最近 20 条，点击续开会话（按状态跳转对应步骤） |
+| 第一步·上传施组方案 | 已实施 | 右上角上传 PDF/Word → AnGIneer 解析入库，前端轮询状态 |
+| 第二步·晨会稿 C1 | 已实施 | AnGIneer 检索 + ai-gateway → Qwen 生成；编辑/保存/确认 |
+| 第三步·TTS 朗读晨会稿 | 已实施 | 晨会稿页"播放/停止"按钮，`GET /api/meeting/records/{id}/speech/audio` |
+| 第三步·点名 + 人数 | 已实施 | InsightFace 识别 + YOLO 计数（`POST .../attendance/recognize` 返回 faces+count） |
+| 第零/四步·新人录入 | 已实施 | 拍身份证 → Qwen 读图取字段（`POST /api/meeting/workers/recognize-id-card`）→ 创建/复用工人（`POST /api/meeting/workers`）→ 拍人脸入库（`POST .../workers/{id}/face`） |
+| 第五步·半双工问答 | 已实施 | 按住说话 → ASR → ai-gateway 问答 → TTS 播报 |
+| 第六步·落库/报告 | 已实施 | 会议/晨会稿/点名/问答/报告入库；报告页展示 |
+| C2、自动轮转、双工问答 | Backlog | 不进入 MVP |
+
+新增/变更接口汇总：
+
+| 方法/路径 | 说明 |
+|---|---|
+| `GET /api/meeting/records?maxCount=20` | 历史记录列表 |
+| `GET /api/meeting/records/{id}/speech/audio` | 晨会稿 TTS 音频（WAV） |
+| `POST /api/meeting/asr` | 独立语音转写（会前录入用） |
+| `POST /api/meeting/knowledge/documents` | 上传施组方案 → AnGIneer 解析 |
+| `GET /api/meeting/knowledge/documents/{docId}/status` | 解析状态轮询 |
+| `POST /api/meeting/workers` | 创建工人（按工号幂等） |
+| `POST /api/meeting/workers/recognize-id-card` | 身份证图片 → Qwen 读字段 |
+| `POST .../attendance/recognize` | 响应新增 `count`（YOLO 人数） |
+
+LLM 网关新增多模态能力：`ILlmGateway.CompleteMultimodalAsync`（文本 + 若干图片，OpenAI data URL 格式），供身份证读图等场景使用。

@@ -126,6 +126,23 @@ public class MeetingRecordAppService : ApplicationService, IMeetingRecordAppServ
         return dto;
     }
 
+    public async Task<List<MeetingHistoryDto>> GetHistoryAsync(int maxCount = 20)
+    {
+        var all = await _meetings.GetListAsync();
+        return all
+            .OrderByDescending(m => m.CreationTime)
+            .Take(Math.Max(1, maxCount))
+            .Select(m => new MeetingHistoryDto
+            {
+                Id = m.Id,
+                Date = m.Date,
+                TaskPreview = ParsePreInfo(m.PreInfoJson).Tasks,
+                Status = m.Status,
+                CreationTime = m.CreationTime
+            })
+            .ToList();
+    }
+
     public async Task<SpeechDraftDto?> GetSpeechAsync(Guid id)
     {
         var meeting = await _meetings.GetAsync(id);
@@ -183,6 +200,21 @@ public class MeetingRecordAppService : ApplicationService, IMeetingRecordAppServ
             await _meetings.UpdateAsync(meeting);
         }
         return Map(draft);
+    }
+
+    public async Task<byte[]> GetSpeechAudioAsync(Guid id)
+    {
+        var meeting = await _meetings.GetAsync(id);
+        if (meeting.SpeechDraftId is null)
+        {
+            throw new BusinessException("MEETING_SPEECH_NOT_GENERATED", "请先生成晨会稿");
+        }
+        var draft = await _drafts.GetAsync(meeting.SpeechDraftId.Value);
+        if (string.IsNullOrWhiteSpace(draft.Content))
+        {
+            throw new BusinessException("MEETING_SPEECH_AUDIO_EMPTY", "晨会稿为空，无法合成语音");
+        }
+        return await _bot.TtsAsync(draft.Content);
     }
 
     public async Task<SpeechDraftDto> UpdateSpeechAsync(Guid id, string content)

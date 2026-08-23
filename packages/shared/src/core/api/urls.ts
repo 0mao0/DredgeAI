@@ -131,8 +131,13 @@ export const urls = {
 
   // AI 晨会
   meetingRecord: '/meeting/records',
+  meetingHistory: '/meeting/records',
   meetingSpeechGenerate: '/meeting/records/:id/speech/generate',
   meetingSpeechDraft: '/meeting/records/:id/speech',
+  meetingSpeechAudio: '/meeting/records/:id/speech/audio',
+  meetingAsr: '/meeting/asr',
+  meetingKnowledgeDocuments: '/meeting/knowledge/documents',
+  meetingKnowledgeDocumentStatus: '/meeting/knowledge/documents/:docId/status',
   meetingStart: '/meeting/records/:id/start',
   meetingAttendanceRecognize: '/meeting/records/:id/attendance/recognize',
   meetingAttendance: '/meeting/records/:id/attendance',
@@ -143,6 +148,8 @@ export const urls = {
   meetingComplete: '/meeting/records/:id/complete',
   meetingReport: '/meeting/records/:id/report',
   meetingWorkers: '/meeting/workers',
+  meetingWorkerFace: '/meeting/workers/:id/face',
+  meetingWorkersRecognizeIdCard: '/meeting/workers/recognize-id-card',
 } as const
 
 export type UrlKey = keyof typeof urls

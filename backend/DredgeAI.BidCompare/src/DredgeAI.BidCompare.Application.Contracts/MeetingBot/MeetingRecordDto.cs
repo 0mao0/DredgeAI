@@ -49,6 +49,19 @@ public class MeetingRecordDto
     public DateTime CreationTime { get; set; }
 }
 
+public class MeetingHistoryDto
+{
+    public Guid Id { get; set; }
+
+    public DateTime Date { get; set; }
+
+    public string TaskPreview { get; set; } = "";
+
+    public MeetingStatus Status { get; set; }
+
+    public DateTime CreationTime { get; set; }
+}
+
 public class SpeechDraftDto
 {
     public Guid Id { get; set; }
@@ -114,4 +127,30 @@ public class WorkerDto
     public string Team { get; set; } = "";
 
     public FaceStatus FaceStatus { get; set; }
+}
+
+public class WorkerCreateInput
+{
+    public string Name { get; set; } = "";
+
+    public string EmployeeNo { get; set; } = "";
+
+    public string Team { get; set; } = "";
+}
+
+public class IdCardRecognitionDto
+{
+    public string Name { get; set; } = "";
+
+    public string IdCardNumber { get; set; } = "";
+
+    public string Gender { get; set; } = "";
+
+    public string Nation { get; set; } = "";
+
+    public string BirthDate { get; set; } = "";
+
+    public string Address { get; set; } = "";
+
+    public string RawText { get; set; } = "";
 }

@@ -2,16 +2,30 @@ import request from '@/api/request'
 import { urls, fillUrl } from '@shared/core/api'
 import type {
   MeetingRecordDto,
+  MeetingHistoryDto,
   SpeechDraftDto,
   AttendanceItemDto,
+  AttendanceRecognizeResult,
   QaRecordDto,
   ReportDto,
   WorkerDto,
+  WorkerCreateInput,
+  IdCardRecognitionDto,
+  KnowledgeUploadResult,
+  KnowledgeJobStatusDto,
   PreInfo,
 } from '@/types'
 
 export function createMeeting(preInfo: PreInfo): Promise<MeetingRecordDto> {
   return request.post<MeetingRecordDto>(urls.meetingRecord, preInfo)
+}
+
+export function getMeeting(id: string): Promise<MeetingRecordDto> {
+  return request.get<MeetingRecordDto>(fillUrl(urls.meetingRecord, { id }))
+}
+
+export function getMeetingHistory(limit = 20): Promise<MeetingHistoryDto[]> {
+  return request.get<MeetingHistoryDto[]>(urls.meetingHistory, { params: { maxCount: limit } })
 }
 
 export function generateSpeech(id: string): Promise<SpeechDraftDto> {
@@ -26,14 +40,24 @@ export function saveSpeechDraft(id: string, content: string): Promise<SpeechDraf
   return request.put<SpeechDraftDto>(fillUrl(urls.meetingSpeechDraft, { id }), { content })
 }
 
+export function getSpeechAudio(id: string): Promise<Blob> {
+  return request.get<Blob>(fillUrl(urls.meetingSpeechAudio, { id }), { responseType: 'blob' })
+}
+
+export function transcribeAudio(audio: Blob): Promise<string> {
+  const form = new FormData()
+  form.append('audio', audio, 'speech.webm')
+  return request.post<string>(urls.meetingAsr, form)
+}
+
 export function startMeeting(id: string): Promise<MeetingRecordDto> {
   return request.post<MeetingRecordDto>(fillUrl(urls.meetingStart, { id }))
 }
 
-export function recognizeAttendance(id: string, photo: Blob): Promise<{ faces: AttendanceItemDto[] }> {
+export function recognizeAttendance(id: string, photo: Blob): Promise<AttendanceRecognizeResult> {
   const form = new FormData()
   form.append('image', photo, 'attendance.jpg')
-  return request.post<{ faces: AttendanceItemDto[] }>(fillUrl(urls.meetingAttendanceRecognize, { id }), form)
+  return request.post<AttendanceRecognizeResult>(fillUrl(urls.meetingAttendanceRecognize, { id }), form)
 }
 
 export function getAttendance(id: string): Promise<AttendanceItemDto[]> {
@@ -70,4 +94,30 @@ export function getReport(id: string): Promise<ReportDto | null> {
 
 export function getWorkers(): Promise<WorkerDto[]> {
   return request.get<WorkerDto[]>(urls.meetingWorkers)
+}
+
+export function createWorker(input: WorkerCreateInput): Promise<WorkerDto> {
+  return request.post<WorkerDto>(urls.meetingWorkers, input)
+}
+
+export function recognizeIdCard(image: Blob): Promise<IdCardRecognitionDto> {
+  const form = new FormData()
+  form.append('image', image, 'id-card.jpg')
+  return request.post<IdCardRecognitionDto>(urls.meetingWorkersRecognizeIdCard, form)
+}
+
+export function enrollWorkerFace(id: string, photo: Blob): Promise<WorkerDto> {
+  const form = new FormData()
+  form.append('image', photo, 'face.jpg')
+  return request.post<WorkerDto>(fillUrl(urls.meetingWorkerFace, { id }), form)
+}
+
+export function uploadKnowledgeDocument(file: File): Promise<KnowledgeUploadResult> {
+  const form = new FormData()
+  form.append('file', file)
+  return request.post<KnowledgeUploadResult>(urls.meetingKnowledgeDocuments, form)
+}
+
+export function getKnowledgeDocumentStatus(docId: string): Promise<KnowledgeJobStatusDto> {
+  return request.get<KnowledgeJobStatusDto>(fillUrl(urls.meetingKnowledgeDocumentStatus, { docId }))
 }

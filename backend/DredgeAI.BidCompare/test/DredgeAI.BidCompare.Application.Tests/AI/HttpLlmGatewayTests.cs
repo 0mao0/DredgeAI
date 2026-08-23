@@ -1,5 +1,6 @@
 using System.Net;
 using System.Net.Http;
+using System.Collections.Generic;
 using System.Threading;
 using System.Threading.Tasks;
 using DredgeAI.BidCompare.AI;
@@ -76,5 +77,26 @@ public class HttpLlmGatewayTests
         Assert.Equal("PROVIDER_UNAVAILABLE", ex.Data["serviceCode"]);
         // 502 为瞬时错误：先按 TransientHttpRetry 重试，最后一次尝试保留错误信封
         Assert.Equal(3, handler.CallCount);
+    }
+
+    [Fact]
+    public async Task CompleteMultimodalAsync_Sends_Image_Data_Url()
+    {
+        var handler = new StubHandler(HttpStatusCode.OK,
+            "{\"text\":\"姓名：张三\",\"finishReason\":\"stop\"}");
+        var gateway = CreateGateway(handler);
+
+        var text = await gateway.CompleteMultimodalAsync(
+            "system",
+            "请读取身份证字段",
+            new List<LlmImageInput>
+            {
+                new("image/jpeg", "aGVsbG8=")
+            });
+
+        Assert.Equal("姓名：张三", text);
+        var requestBody = await handler.LastRequest!.Content!.ReadAsStringAsync();
+        Assert.Contains("data:image/jpeg;base64,aGVsbG8=", requestBody);
+        Assert.Contains("\"type\":\"image_url\"", requestBody);
     }
 }

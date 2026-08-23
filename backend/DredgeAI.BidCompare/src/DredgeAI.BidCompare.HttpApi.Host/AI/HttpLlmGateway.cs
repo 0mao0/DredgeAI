@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.Net.Http;
 using System.Net.Http.Headers;
 using System.Net.Http.Json;
@@ -45,6 +46,40 @@ public class HttpLlmGateway : ILlmGateway, ITransientDependency
         string userPrompt,
         CancellationToken cancellationToken = default)
     {
+        var messages = new object[]
+        {
+            new { role = "system", content = systemPrompt },
+            new { role = "user", content = userPrompt }
+        };
+        return await PostChatAsync(messages, cancellationToken);
+    }
+
+    public async Task<string> CompleteMultimodalAsync(
+        string systemPrompt,
+        string text,
+        IReadOnlyList<LlmImageInput> images,
+        CancellationToken cancellationToken = default)
+    {
+        var contentParts = new List<object> { new { type = "text", text } };
+        foreach (var image in images)
+        {
+            contentParts.Add(new
+            {
+                type = "image_url",
+                image_url = new { url = $"data:{image.MimeType};base64,{image.Base64Data}" }
+            });
+        }
+
+        var messages = new object[]
+        {
+            new { role = "system", content = systemPrompt },
+            new { role = "user", content = contentParts }
+        };
+        return await PostChatAsync(messages, cancellationToken);
+    }
+
+    private async Task<string> PostChatAsync(object[] messages, CancellationToken cancellationToken)
+    {
         var client = _httpClientFactory.CreateClient(nameof(HttpLlmGateway));
         if (!string.IsNullOrWhiteSpace(_options.ApiToken))
         {
@@ -54,11 +89,7 @@ public class HttpLlmGateway : ILlmGateway, ITransientDependency
 
         var request = new
         {
-            messages = new object[]
-            {
-                new { role = "system", content = systemPrompt },
-                new { role = "user", content = userPrompt }
-            },
+            messages,
             mode = "instruct",
             business = "bid-compare"
         };

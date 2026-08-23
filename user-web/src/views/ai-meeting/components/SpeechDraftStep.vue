@@ -10,7 +10,13 @@
           {{ editing ? '取消编辑' : '编辑' }}
         </AppButton>
         <AppButton size="sm" :disabled="!editing" @click="onSave">保存</AppButton>
-        <AppButton size="sm" disabled>停止播放</AppButton>
+        <AppButton
+          size="sm"
+          :loading="audioLoading"
+          @click="playing ? emit('stopAudio') : emit('playAudio')"
+        >
+          {{ playing ? '停止播放' : '播放晨会稿' }}
+        </AppButton>
       </div>
       <AppButton variant="primary" size="lg" block :loading="loading" @click="emit('confirm')">
         确认并开始点名
@@ -25,11 +31,18 @@ import SectionCard from '@shared/web/components/SectionCard.vue'
 import AppButton from '@shared/web/components/AppButton.vue'
 import type { SpeechDraftDto } from '@/types'
 
-const props = defineProps<{ draft: SpeechDraftDto | null, loading: boolean }>()
+const props = defineProps<{
+  draft: SpeechDraftDto | null
+  loading: boolean
+  playing: boolean
+  audioLoading: boolean
+}>()
 const emit = defineEmits<{
   generate: []
   save: [content: string]
   confirm: []
+  playAudio: []
+  stopAudio: []
 }>()
 
 const editing = ref(false)

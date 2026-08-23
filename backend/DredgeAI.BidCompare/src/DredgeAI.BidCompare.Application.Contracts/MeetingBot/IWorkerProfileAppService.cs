@@ -9,6 +9,10 @@ public interface IWorkerProfileAppService : IApplicationService
 {
     Task<List<WorkerDto>> GetListAsync();
 
+    Task<WorkerDto> CreateAsync(WorkerCreateInput input);
+
+    Task<IdCardRecognitionDto> RecognizeIdCardAsync(byte[] image);
+
     Task<int> ImportAsync(byte[] file, string fileName);
 
     Task<WorkerDto> UpdateFaceAsync(Guid workerId, byte[] image);

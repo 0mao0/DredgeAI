@@ -10,6 +10,59 @@ export function registerMeetingMock(
     url?.match(/\/api\/meeting\/records\/([^/]+)\//)?.[1] ?? ''
 
   mock.onPost('/api/meeting/records').reply((config) => [200, createMockMeeting(JSON.parse(config.data))])
+  mock.onGet('/api/meeting/records').reply((config) => {
+    const limit = Number(config.params?.maxCount ?? 20)
+    return [
+      200,
+      [...mockMeetings]
+        .sort((a, b) => b.createdAt.localeCompare(a.createdAt))
+        .slice(0, limit)
+        .map((m) => ({
+          id: m.id,
+          date: m.date,
+          taskPreview: m.preInfo?.tasks ?? '',
+          status: m.status,
+          createdAt: m.createdAt,
+        })),
+    ]
+  })
+  mock.onGet(/\/api\/meeting\/records\/[^/]+\/speech\/audio$/).reply(() => {
+    // 1 秒静音 WAV（44 字节头 + 静音 PCM），让前端播放链路可跑通
+    const sampleRate = 8000
+    const seconds = 1
+    const dataSize = sampleRate * seconds
+    const buffer = new ArrayBuffer(44 + dataSize)
+    const view = new DataView(buffer)
+    const writeAscii = (offset: number, text: string): void => {
+      for (let i = 0; i < text.length; i++) view.setUint8(offset + i, text.charCodeAt(i))
+    }
+    writeAscii(0, 'RIFF')
+    view.setUint32(4, 36 + dataSize, true)
+    writeAscii(8, 'WAVE')
+    writeAscii(12, 'fmt ')
+    view.setUint32(16, 16, true)
+    view.setUint16(20, 1, true)
+    view.setUint16(22, 1, true)
+    view.setUint32(24, sampleRate, true)
+    view.setUint32(28, sampleRate, true)
+    view.setUint16(32, 1, true)
+    view.setUint16(34, 8, true)
+    writeAscii(36, 'data')
+    view.setUint32(40, dataSize, true)
+    return [200, new Blob([buffer], { type: 'audio/wav' })]
+  })
+  mock.onPost('/api/meeting/asr').reply(() => [
+    200,
+    '今日任务：基坑支护施工与临边防护检查，注意高处作业安全。',
+  ])
+  mock.onPost('/api/meeting/knowledge/documents').reply(() => [
+    200,
+    { docId: `doc-${Date.now()}`, status: { state: 'succeeded', progress: 100, stage: 'done', stageMessage: null } },
+  ])
+  mock.onGet(/\/api\/meeting\/knowledge\/documents\/[^/]+\/status$/).reply(() => [
+    200,
+    { state: 'succeeded', progress: 100, stage: 'done', stageMessage: null },
+  ])
   mock.onPost(/\/api\/meeting\/records\/[^/]+\/speech\/generate$/).reply((config) => {
     return [200, generateMockSpeech(meetingId(config.url))]
   })
@@ -91,4 +144,36 @@ export function registerMeetingMock(
     return [200, mockMeetings.find((m) => m.id === meetingId(config.url))?.report ?? null]
   })
   mock.onGet('/api/meeting/workers').reply(wrap(() => mockWorkers))
+  mock.onPost('/api/meeting/workers').reply((config) => {
+    const input = JSON.parse(config.data)
+    const existing = mockWorkers.find((w) => w.employeeNo === input.employeeNo)
+    if (existing) return [200, existing]
+    const worker = {
+      id: `w-${Date.now()}`,
+      name: input.name,
+      employeeNo: input.employeeNo,
+      team: input.team ?? '',
+      faceStatus: 'pending' as const,
+    }
+    mockWorkers.push(worker)
+    return [200, worker]
+  })
+  mock.onPost('/api/meeting/workers/recognize-id-card').reply(() => [
+    200,
+    {
+      name: '张建国',
+      idCardNumber: '110101199001011234',
+      gender: '男',
+      nation: '汉',
+      birthDate: '1990-01-01',
+      address: '北京市朝阳区',
+      rawText: '',
+    },
+  ])
+  mock.onPost(/\/api\/meeting\/workers\/[^/]+\/face$/).reply((config) => {
+    const id = config.url?.match(/\/api\/meeting\/workers\/([^/]+)\/face$/)?.[1] ?? ''
+    const worker = mockWorkers.find((w) => w.id === id)
+    if (worker) worker.faceStatus = 'enrolled'
+    return [200, worker ?? mockWorkers[0]]
+  })
 }

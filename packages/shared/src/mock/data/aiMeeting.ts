@@ -1,4 +1,4 @@
-import type { MeetingRecordDto, SpeechDraftDto, WorkerDto } from '@shared/types'
+import type { MeetingRecordDto, PreInfo, SpeechDraftDto, WorkerDto } from '@shared/types'
 
 export const mockWorkers: WorkerDto[] = [
   { id: 'w-001', name: '张建国', employeeNo: 'A001', team: '钢筋班', faceStatus: 'enrolled' },
@@ -9,7 +9,7 @@ export const mockWorkers: WorkerDto[] = [
 export const mockMeetings: MeetingRecordDto[] = []
 let nextMeetingId = 1
 
-export function createMockMeeting(preInfo: MeetingRecordDto['preInfo']): MeetingRecordDto {
+export function createMockMeeting(preInfo: PreInfo): MeetingRecordDto {
   const id = `meeting-${nextMeetingId++}`
   const meeting: MeetingRecordDto = {
     id,

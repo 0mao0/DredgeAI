@@ -5,6 +5,7 @@ using DredgeAI.BidCompare.AI;
 using DredgeAI.BidCompare.AnGineer;
 using DredgeAI.BidCompare.BackgroundJobs;
 using Shouldly;
+using Volo.Abp;
 using Volo.Abp.BackgroundJobs;
 using Xunit;
 
@@ -136,6 +137,45 @@ public class MeetingRecordAppServiceTests : BidCompareApplicationTestBase<BidCom
         audio[0].ShouldBe((byte)'R');
         audio[1].ShouldBe((byte)'I');
         _bot.TtsTexts.ShouldContain(qa.Answer);
+    }
+
+    [Fact]
+    public async Task GetHistory_Should_Return_Meetings_Newest_First()
+    {
+        await _appService.CreateAsync(new PreInfoInput { Date = DateTime.Today, Tasks = "基坑支护施工" });
+        var second = await _appService.CreateAsync(new PreInfoInput { Date = DateTime.Today, Tasks = "模板安装" });
+
+        var history = await _appService.GetHistoryAsync();
+
+        history.Count.ShouldBeGreaterThanOrEqualTo(2);
+        history[0].Id.ShouldBe(second.Id);
+        history.ShouldContain(h => h.TaskPreview == "基坑支护施工");
+        history.ShouldContain(h => h.Status == MeetingStatus.Draft);
+    }
+
+    [Fact]
+    public async Task GetSpeechAudio_Should_Tts_The_Draft_Content()
+    {
+        var meeting = await _appService.CreateAsync(new PreInfoInput { Tasks = "临边防护检查" });
+        _llm.QueueResponse("各位工友早上好，今天的主要任务是临边防护检查……");
+        await _appService.GenerateSpeechAsync(meeting.Id);
+
+        var audio = await _appService.GetSpeechAudioAsync(meeting.Id);
+
+        audio.Length.ShouldBeGreaterThan(0);
+        audio[0].ShouldBe((byte)'R');
+        _bot.TtsTexts.ShouldContain(t => t.Contains("临边防护检查"));
+    }
+
+    [Fact]
+    public async Task GetSpeechAudio_Should_Throw_When_Draft_Not_Generated()
+    {
+        var meeting = await _appService.CreateAsync(new PreInfoInput());
+
+        var ex = await Should.ThrowAsync<BusinessException>(
+            () => _appService.GetSpeechAudioAsync(meeting.Id));
+
+        ex.Code.ShouldBe("MEETING_SPEECH_NOT_GENERATED");
     }
 
     [Fact]
