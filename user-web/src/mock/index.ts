@@ -73,7 +73,7 @@ export function registerMock(): void {
     { key: 'apikey', register: registerApiKeyMock },
     { key: 'chart', register: registerChartMock },
     { key: 'dubbing', register: registerDubbingMock },
-    { key: 'meeting', register: registerMeetingMock },
+    { key: 'meeting', register: registerMeetingMock, passthrough: /^\/meeting\// },
     { key: 'compare', passthrough: /^\/compare\// },
     { key: 'tenderRead', passthrough: /^\/tender-read\// },
   ]
