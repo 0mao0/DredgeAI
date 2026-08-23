@@ -1,4 +1,4 @@
-param(
+﻿param(
     [switch]$SkipModels,
     [switch]$SkipStart
 )
@@ -27,8 +27,25 @@ if (-not (Test-Path "third_party\FireRedTTS\fireredtts")) {
         -OutFile ".scratch\fireredtts.tgz" -UseBasicParsing
     uv run python -c "import tarfile; tarfile.open(r'.scratch\fireredtts.tgz').extractall(r'.scratch')"
     $extracted = Get-ChildItem ".scratch" -Directory | Where-Object { $_.Name -like "FireRedTTS*" } | Select-Object -First 1
-    Move-Item $extracted.FullName "third_party\FireRedTTS"
+    $proj = $extracted.FullName
+    # upstream tarball is broken (setup.py lives inside fireredtts/ and the package has no __init__.py);
+    # restructure to: project root (setup.py) + fireredtts package (fireredtts.py + models/modules/utils)
+    New-Item -ItemType Directory -Force -Path "third_party\FireRedTTS" | Out-Null
+    New-Item -ItemType Directory -Force -Path "third_party\FireRedTTS\_pkg" | Out-Null
+    Move-Item "$proj\fireredtts\*" "third_party\FireRedTTS\_pkg\" -Force
+    New-Item -ItemType Directory -Force -Path "third_party\FireRedTTS\fireredtts" | Out-Null
+    Move-Item "third_party\FireRedTTS\_pkg\models" "third_party\FireRedTTS\fireredtts\models"
+    Move-Item "third_party\FireRedTTS\_pkg\modules" "third_party\FireRedTTS\fireredtts\modules"
+    Move-Item "third_party\FireRedTTS\_pkg\utils" "third_party\FireRedTTS\fireredtts\utils"
+    Move-Item "third_party\FireRedTTS\_pkg\fireredtts.py" "third_party\FireRedTTS\fireredtts\fireredtts.py"
+    Move-Item "third_party\FireRedTTS\_pkg\setup.py" "third_party\FireRedTTS\setup.py"
+    Move-Item "third_party\FireRedTTS\_pkg" "third_party\FireRedTTS\_pkg_empty" -ErrorAction SilentlyContinue
     New-Item -ItemType File -Force -Path "third_party\FireRedTTS\fireredtts\__init__.py" | Out-Null
+    New-Item -ItemType File -Force -Path "third_party\FireRedTTS\fireredtts\models\__init__.py" | Out-Null
+    Copy-Item "$proj\configs" "third_party\FireRedTTS\configs" -Recurse -Force
+    Copy-Item "$proj\examples" "third_party\FireRedTTS\examples" -Recurse -Force
+    Copy-Item "$proj\README.md" "third_party\FireRedTTS\README.md" -Force
+    Copy-Item "$proj\requirements.txt" "third_party\FireRedTTS\requirements.txt" -Force
     git apply --directory="third_party\FireRedTTS" "patches\fireredtts-windows.patch"
 }
 if (-not (Test-Path "third_party\FireRedTTS\fireredtts.egg-info")) {
