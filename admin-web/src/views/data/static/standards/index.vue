@@ -26,95 +26,73 @@
       </template>
     </a-result>
 
-    <div v-else ref="tableContainerRef" class="standards-table-wrap">
-      <div class="standards-filter-bar">
-        <a-input
-          v-model:value="query.keyword"
-          placeholder="搜索名称 / 编号"
-          allow-clear
-          style="width: 220px"
-        />
-        <a-select v-model:value="query.industry" allow-clear placeholder="行业" style="width: 120px">
-          <a-select-option v-for="opt in industryOptions" :key="opt" :value="opt">{{ opt }}</a-select-option>
-        </a-select>
-        <a-select v-model:value="query.nature" allow-clear placeholder="性质" style="width: 110px">
-          <a-select-option v-for="opt in natureOptions" :key="opt" :value="opt">{{ opt }}</a-select-option>
-        </a-select>
-        <a-select v-model:value="query.level" allow-clear placeholder="级别" style="width: 130px">
-          <a-select-option v-for="opt in levelOptions" :key="opt" :value="opt">{{ opt }}</a-select-option>
-        </a-select>
-        <a-select v-model:value="query.status" allow-clear placeholder="状态" style="width: 110px">
-          <a-select-option v-for="opt in statusOptions" :key="opt" :value="opt">{{ opt }}</a-select-option>
-        </a-select>
-        <a-select v-model:value="query.publishYear" allow-clear placeholder="发布年份" style="width: 120px">
-          <a-select-option v-for="year in yearOptions" :key="year" :value="year">{{ year }}</a-select-option>
-        </a-select>
-        <AppButton size="sm" class="standards-filter-bar__reset" @click="handleReset">重置</AppButton>
-        <AppButton size="sm" class="standards-filter-bar__refresh" style="display:none" :loading="refreshing" @click="handleRefresh">
-          <ReloadOutlined />
-          刷新
-        </AppButton>
-      </div>
-
-      <SectionCard nopad class="standards-table-card">
-        <div v-if="selectedRowKeys.length" class="standards-batch-bar">
-          <span class="standards-batch-bar__count">已选 {{ selectedRowKeys.length }} 条</span>
-          <a-space :size="8">
-            <AppButton size="sm" @click="openBatchParse">批量解析</AppButton>
-            <a-popconfirm
-              title="确定删除选中的标准？"
-              description="删除后不可恢复"
-              @confirm="handleBatchDelete"
-            >
-              <AppButton size="sm" danger>批量删除</AppButton>
-            </a-popconfirm>
-          </a-space>
-        </div>
-        <a-table
-          class="standards-table"
-          :data-source="standards"
-          :columns="columns"
-          :row-selection="rowSelection"
-          :pagination="{
-            current: page,
-            pageSize,
-            total,
-            showSizeChanger: false,
-            showTotal: (t: number) => `共 ${t} 条`,
-          }"
-          :loading="loading"
-          :scroll="{ x: scrollX }"
-          row-key="id"
-          size="small"
-          :locale="{ emptyText: '暂无数据' }"
-          @resize-column="handleResizeColumn"
-          @change="handleTableChange"
-        >
-          <template #bodyCell="{ column, record, index }">
-            <template v-if="column.key === 'index'">
-              {{ (page - 1) * pageSize + index + 1 }}
-            </template>
-            <template v-else-if="column.key === 'status'">
-              <a-tag :color="statusColor(record.status)">{{ record.status }}</a-tag>
-            </template>
-            <template v-else-if="column.key === 'action'">
-              <div class="action-cell">
-                <AppButton variant="link" size="sm" @click="openViewer(record)">查看</AppButton>
-                <AppButton variant="link" size="sm" @click="openParse(record)">解析</AppButton>
-                <a-popconfirm title="确认删除该标准？" placement="left" @confirm="handleDelete(record)">
-                  <AppButton variant="link" size="sm" danger>删除</AppButton>
-                </a-popconfirm>
-              </div>
-            </template>
+    <div v-else class="standards-table-wrap">
+      <DataTable
+        v-model:query="query"
+        :columns="columns"
+        :data-source="standards"
+        row-key="id"
+        :loading="loading"
+        :pagination="{ current: page, pageSize, total }"
+        :row-selection="rowSelection"
+        :filters="filters"
+        @change="handleTableChange"
+      >
+        <template #tableExtra>
+          <div v-if="selectedRowKeys.length" class="standards-batch-bar">
+            <span class="standards-batch-bar__count">已选 {{ selectedRowKeys.length }} 条</span>
+            <a-space :size="8">
+              <AppButton size="sm" @click="openBatchParse">批量解析</AppButton>
+              <a-popconfirm
+                title="确定删除选中的标准？"
+                description="删除后不可恢复"
+                @confirm="handleBatchDelete"
+              >
+                <AppButton size="sm" danger>批量删除</AppButton>
+              </a-popconfirm>
+            </a-space>
+          </div>
+        </template>
+        <template #bodyCell="{ column, record, index }">
+          <template v-if="column.key === 'index'">
+            {{ (page - 1) * pageSize + index + 1 }}
           </template>
-        </a-table>
-      </SectionCard>
+          <template v-else-if="column.key === 'status'">
+            <a-tag :color="statusColor(record.status)">{{ record.status }}</a-tag>
+          </template>
+          <template v-else-if="column.key === 'source'">
+            <a-tag :color="record.source === 'manual' ? 'orange' : 'blue'">
+              {{ record.source === 'manual' ? '人工补录' : '同步' }}
+            </a-tag>
+          </template>
+          <template v-else-if="column.key === 'syncedAt'">
+            <span class="synced-at">{{ record.syncedAt || '—' }}</span>
+          </template>
+          <template v-else-if="column.key === 'action'">
+            <div class="action-cell">
+              <AppButton variant="link" size="sm" @click="openViewer(record)">查看</AppButton>
+              <AppButton variant="link" size="sm" @click="openParse(record)">解析</AppButton>
+              <AppButton variant="link" size="sm" @click="handleToggleEnabled(record)">
+                {{ record.isEnabled === false ? '启用' : '停用' }}
+              </AppButton>
+              <a-popconfirm
+                v-if="record.source === 'manual'"
+                title="确认删除该标准？"
+                placement="left"
+                @confirm="handleDelete(record)"
+              >
+                <AppButton variant="link" size="sm" danger>删除</AppButton>
+              </a-popconfirm>
+            </div>
+          </template>
+        </template>
+      </DataTable>
     </div>
 
     <a-drawer
       v-model:open="viewerVisible"
       :title="viewerTarget?.name || '标准原文'"
-      width="960px"
+      width="760px"
       :body-style="{ padding: 0 }"
       @close="resetViewer"
     >
@@ -130,7 +108,7 @@
           :file-url="getStandardFileUrl(viewerTarget.id)"
           :page="viewerPage"
           :highlights="viewerTarget?.highlights ?? []"
-          :standard="viewerTarget"
+          :parsed-content="viewerContent"
           @update:page="viewerPage = $event"
         />
       </div>
@@ -173,7 +151,13 @@
       :confirm-loading="saving"
       @ok="handleEditSave"
     >
-      <a-form v-if="editTarget" layout="vertical" :model="editForm">
+      <a-form
+        v-if="editTarget"
+        layout="horizontal"
+        :label-col="{ flex: '72px' }"
+        :wrapper-col="{ flex: 'auto' }"
+        :model="editForm"
+      >
         <a-row :gutter="16">
           <a-col :span="12">
             <a-form-item label="名称" required>
@@ -253,7 +237,8 @@
 </template>
 
 <script setup lang="ts">
-import { AppButton } from '@shared/web'
+import { AppButton, DataTable, StandardPdfViewer } from '@shared/web'
+import type { DataTableColumn, DataTableFilter } from '@shared/web'
 import { computed, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue'
 import { message } from 'ant-design-vue'
 import {
@@ -263,8 +248,6 @@ import {
   UploadOutlined,
 } from '@ant-design/icons-vue'
 import PageHeader from '@shared/web/components/PageHeader.vue'
-import SectionCard from '@shared/web/components/SectionCard.vue'
-import StandardPdfViewer from './components/StandardPdfViewer.vue'
 import StandardUploadModal from './components/StandardUploadModal.vue'
 import StandardUploadTasksDrawer from './components/StandardUploadTasksDrawer.vue'
 import StandardBatchParseModal from './components/StandardBatchParseModal.vue'
@@ -288,9 +271,11 @@ import {
   deleteStandard,
   deleteStandards,
   getStandardFileUrl,
+  getStandardDocument,
   getStandards,
   parseStandard,
   parseStandards,
+  setStandardEnabled,
   updateStandard,
 } from '@/api/modules/standards'
 
@@ -302,7 +287,7 @@ const refreshing = ref(false)
 const error = ref('')
 const standards = ref<StandardProperty[]>([])
 
-const query = reactive({
+const query = ref({
   keyword: '',
   industry: undefined as string | undefined,
   nature: undefined as string | undefined,
@@ -311,69 +296,29 @@ const query = reactive({
   publishYear: undefined as number | undefined,
 })
 
-const columnWidths = reactive<Record<string, number>>({
-  index: 80,
-  name: 240,
-  code: 200,
-  industry: 100,
-  nature: 90,
-  level: 120,
-  status: 100,
-  publishYear: 100,
-  uploader: 120,
-  action: 180,
-})
+const columns: DataTableColumn[] = [
+  { title: '序号', dataIndex: 'index', key: 'index', width: 80, minWidth: 60, resizable: true },
+  { title: '名称', dataIndex: 'name', key: 'name', width: 240, minWidth: 240, resizable: true },
+  { title: '编号', dataIndex: 'code', key: 'code', width: 200, minWidth: 140, resizable: true },
+  { title: '行业', dataIndex: 'industry', key: 'industry', width: 100, minWidth: 80, resizable: true },
+  { title: '性质', dataIndex: 'nature', key: 'nature', width: 90, minWidth: 70, resizable: true },
+  { title: '级别', dataIndex: 'level', key: 'level', width: 120, minWidth: 100, resizable: true },
+  { title: '状态', dataIndex: 'status', key: 'status', width: 100, minWidth: 80, resizable: true },
+  { title: '发布年份', dataIndex: 'publishYear', key: 'publishYear', width: 100, minWidth: 80, resizable: true },
+  { title: '上传人', dataIndex: 'uploader', key: 'uploader', width: 120, minWidth: 100, resizable: true },
+  { title: '来源', key: 'source', width: 90 },
+  { title: '同步时间', key: 'syncedAt', width: 170 },
+  { title: '操作', key: 'action', width: 180, minWidth: 180, fixed: 'right', resizable: true },
+]
 
-const columnMinWidths: Record<string, number> = {
-  index: 60,
-  name: 240,
-  code: 140,
-  industry: 80,
-  nature: 70,
-  level: 100,
-  status: 80,
-  publishYear: 80,
-  uploader: 100,
-  action: 180,
-}
-
-const columns = computed(() => [
-  { title: '序号', dataIndex: 'index', key: 'index', width: columnWidths.index, minWidth: columnMinWidths.index, resizable: true },
-  { title: '名称', dataIndex: 'name', key: 'name', width: columnWidths.name, minWidth: columnMinWidths.name, resizable: true },
-  { title: '编号', dataIndex: 'code', key: 'code', width: columnWidths.code, minWidth: columnMinWidths.code, resizable: true },
-  { title: '行业', dataIndex: 'industry', key: 'industry', width: columnWidths.industry, minWidth: columnMinWidths.industry, resizable: true },
-  { title: '性质', dataIndex: 'nature', key: 'nature', width: columnWidths.nature, minWidth: columnMinWidths.nature, resizable: true },
-  { title: '级别', dataIndex: 'level', key: 'level', width: columnWidths.level, minWidth: columnMinWidths.level, resizable: true },
-  { title: '状态', dataIndex: 'status', key: 'status', width: columnWidths.status, minWidth: columnMinWidths.status, resizable: true },
-  { title: '发布年份', dataIndex: 'publishYear', key: 'publishYear', width: columnWidths.publishYear, minWidth: columnMinWidths.publishYear, resizable: true },
-  { title: '上传人', dataIndex: 'uploader', key: 'uploader', width: columnWidths.uploader, minWidth: columnMinWidths.uploader, resizable: true },
-  { title: '操作', key: 'action', width: columnWidths.action, minWidth: columnMinWidths.action, fixed: 'right', resizable: true },
-])
-
-const tableContainerRef = ref<HTMLElement | null>(null)
-const containerWidth = ref(0)
-let tableResizeObserver: ResizeObserver | undefined
-
-const contentWidth = computed(() =>
-  columns.value.reduce((sum, col) => sum + (typeof col.width === 'number' ? col.width : 0), 0),
-)
-const scrollX = computed(() => Math.max(containerWidth.value, contentWidth.value))
-
-function observeTableWidth(): void {
-  if (!tableContainerRef.value) return
-  tableResizeObserver = new ResizeObserver((entries) => {
-    const width = entries[0]?.contentRect.width
-    if (width) containerWidth.value = Math.round(width)
-  })
-  tableResizeObserver.observe(tableContainerRef.value)
-}
-
-function handleResizeColumn(width: number, column: { key?: string }): void {
-  const key = column.key
-  if (!key || !(key in columnWidths)) return
-  const minWidth = columnMinWidths[key] ?? 50
-  columnWidths[key] = Math.max(minWidth, Math.round(width))
-}
+const filters: DataTableFilter[] = [
+  { key: 'keyword', type: 'input', placeholder: '搜索名称 / 编号', width: 220 },
+  { key: 'industry', type: 'select', placeholder: '行业', width: 120, options: industryOptions },
+  { key: 'nature', type: 'select', placeholder: '性质', width: 110, options: natureOptions },
+  { key: 'level', type: 'select', placeholder: '级别', width: 130, options: levelOptions },
+  { key: 'status', type: 'select', placeholder: '状态', width: 110, options: statusOptions, defaultValue: '现行' },
+  { key: 'publishYear', type: 'select', placeholder: '发布年份', width: 120, options: yearOptions },
+]
 
 let filterTimer: ReturnType<typeof setTimeout> | undefined
 
@@ -390,12 +335,12 @@ async function fetchStandards(): Promise<void> {
   error.value = ''
   try {
     const res = await getStandards({
-      keyword: query.keyword.trim() || undefined,
-      industry: query.industry,
-      nature: query.nature,
-      level: query.level,
-      status: query.status,
-      publishYear: query.publishYear,
+      keyword: query.value.keyword.trim() || undefined,
+      industry: query.value.industry,
+      nature: query.value.nature,
+      level: query.value.level,
+      status: query.value.status,
+      publishYear: query.value.publishYear,
       skipCount: (page.value - 1) * pageSize,
       maxResultCount: pageSize,
     })
@@ -406,15 +351,6 @@ async function fetchStandards(): Promise<void> {
   } finally {
     loading.value = false
   }
-}
-
-function handleReset(): void {
-  query.keyword = ''
-  query.industry = undefined
-  query.nature = undefined
-  query.level = undefined
-  query.status = '现行'
-  query.publishYear = undefined
 }
 
 async function handleRefresh(): Promise<void> {
@@ -428,28 +364,33 @@ async function handleRefresh(): Promise<void> {
   }
 }
 
-interface TablePagination {
-  current?: number
-}
-
-function handleTableChange(paginationInfo: TablePagination): void {
-  page.value = paginationInfo.current || 1
+function handleTableChange(paginationInfo: unknown): void {
+  page.value = (paginationInfo as { current?: number } | null)?.current || 1
   fetchStandards()
 }
 
 const viewerVisible = ref(false)
 const viewerTarget = ref<StandardProperty | null>(null)
 const viewerPage = ref(1)
+const viewerContent = ref('')
 
-function openViewer(record: StandardProperty): void {
+async function openViewer(record: StandardProperty): Promise<void> {
   viewerTarget.value = record
   viewerPage.value = 1
+  viewerContent.value = ''
   viewerVisible.value = true
+  try {
+    const doc = await getStandardDocument(record.id)
+    viewerContent.value = doc?.content ?? ''
+  } catch {
+    viewerContent.value = ''
+  }
 }
 
 function resetViewer(): void {
   viewerTarget.value = null
   viewerPage.value = 1
+  viewerContent.value = ''
 }
 
 const editVisible = ref(false)
@@ -559,6 +500,18 @@ async function handleDelete(record: StandardProperty): Promise<void> {
   }
 }
 
+async function handleToggleEnabled(record: StandardProperty): Promise<void> {
+  const next = record.isEnabled === false
+  try {
+    await setStandardEnabled(record.id, next)
+    const idx = standards.value.findIndex((s) => s.id === record.id)
+    if (idx !== -1) standards.value[idx] = { ...standards.value[idx], isEnabled: next }
+    message.success(next ? '已启用' : '已停用')
+  } catch {
+    message.error('操作失败')
+  }
+}
+
 async function handleBatchDelete(): Promise<void> {
   const ids = selectedRowKeys.value.map(String)
   if (!ids.length) return
@@ -662,12 +615,10 @@ function handleUploadSubmit(): void {
 }
 
 onMounted(() => {
-  observeTableWidth()
   fetchStandards()
 })
 
 onBeforeUnmount(() => {
-  tableResizeObserver?.disconnect()
   disposeUpload()
 })
 </script>
@@ -688,19 +639,6 @@ onBeforeUnmount(() => {
   margin-bottom: @spacing-md;
 }
 
-.standards-filter-bar {
-  display: flex;
-  align-items: center;
-  gap: @spacing-sm;
-  flex-wrap: wrap;
-  margin-bottom: @spacing-base;
-}
-.standards-filter-bar__reset {
-  margin-left: 0;
-}
-.standards-filter-bar__refresh {
-  margin-left: auto;
-}
 .standards-header-refresh {
   display: none;
 }

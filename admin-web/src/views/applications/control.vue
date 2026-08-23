@@ -2,69 +2,62 @@
   <div class="page-container">
     <PageHeader title="发布管理" description="管理各应用及其子应用对用户端的发布状态" />
 
-    <div class="publish-table-wrap">
-      <a-table
-        :columns="columns"
-        :data-source="treeRows"
-        row-key="key"
-        :pagination="false"
-        :loading="loading"
-        :scroll="{ x: scrollX }"
-        :locale="{ emptyText: '暂无数据' }"
-        size="small"
-        :expandable="{ defaultExpandAllRows: true, expandedRowKeys, onExpand }"
-        class="publish-tree"
-        @resize-column="handleResizeColumn"
-      >
-        <template #bodyCell="{ column, record }">
-          <template v-if="column.key === 'index'">
-            <span :class="{ 'index--sub': record.level === 1 }">{{ record.index }}</span>
-          </template>
-          <template v-else-if="column.key === 'name'">
-            <div class="cell-left">
-              <span class="tree-name" :class="{ 'tree-name--sub': record.level === 1 }">
-                <span v-if="record.level === 1" class="tree-connector" />
-                <component :is="iconOptionsMap[record.icon] || iconOptionsMap.AppstoreOutlined" class="row-icon" />
-                <span class="name-text">{{ record.name }}</span>
-                <span v-if="record.level === 0 && hasSub(record)" class="sub-hint">（含 {{ subCount(record) }} 个子应用）</span>
-              </span>
-            </div>
-          </template>
-          <template v-else-if="column.key === 'category'">
-            <a-tag :color="catColor(record.category)">{{ record.category }}</a-tag>
-          </template>
-          <template v-else-if="column.key === 'status'">
-            <div class="cell-center">
-              <a-popconfirm
-                :title="record.published ? '确认下架该应用？' : '确认发布该应用？'"
-                placement="left"
-                @confirm="onToggle(record, !record.published)"
-              >
-                <a-switch
-                  :checked="record.published"
-                  checked-children="已发布"
-                  un-checked-children="已下架"
-                  class="status-switch"
-                />
-              </a-popconfirm>
-            </div>
-          </template>
-          <template v-else-if="column.key === 'scope'">
-            <div class="cell-left">
-              <span class="scope-tags">
-                <a-tag v-for="n in roleTags(record)" :key="n" color="blue">{{ n }}</a-tag>
-                <span v-if="roleTags(record).length === 0" class="no-scope">-</span>
-              </span>
-            </div>
-          </template>
-          <template v-else-if="column.key === 'setting'">
-            <div class="cell-nowrap">
-              <AppButton variant="link" size="sm" @click="openSetting(record)">设置</AppButton>
-            </div>
-          </template>
+    <DataTable
+      :columns="columns"
+      :data-source="treeRows"
+      row-key="key"
+      :loading="loading"
+      :pagination="false"
+      :expandable="{ defaultExpandAllRows: true, expandedRowKeys, onExpand }"
+    >
+      <template #bodyCell="{ column, record }">
+        <template v-if="column.key === 'index'">
+          <span :class="{ 'index--sub': record.level === 1 }">{{ record.index }}</span>
         </template>
-      </a-table>
-    </div>
+        <template v-else-if="column.key === 'name'">
+          <div class="cell-left">
+            <span class="tree-name" :class="{ 'tree-name--sub': record.level === 1 }">
+              <span v-if="record.level === 1" class="tree-connector" />
+              <component :is="iconOptionsMap[record.icon] || iconOptionsMap.AppstoreOutlined" class="row-icon" />
+              <span class="name-text">{{ record.name }}</span>
+              <span v-if="record.level === 0 && hasSub(record)" class="sub-hint">（含 {{ subCount(record) }} 个子应用）</span>
+            </span>
+          </div>
+        </template>
+        <template v-else-if="column.key === 'category'">
+          <a-tag :color="catColor(record.category)">{{ record.category }}</a-tag>
+        </template>
+        <template v-else-if="column.key === 'status'">
+          <div class="cell-center">
+            <a-popconfirm
+              :title="record.published ? '确认下架该应用？' : '确认发布该应用？'"
+              placement="left"
+              @confirm="onToggle(record, !record.published)"
+            >
+              <a-switch
+                :checked="record.published"
+                checked-children="已发布"
+                un-checked-children="已下架"
+                class="status-switch"
+              />
+            </a-popconfirm>
+          </div>
+        </template>
+        <template v-else-if="column.key === 'scope'">
+          <div class="cell-left">
+            <span class="scope-tags">
+              <a-tag v-for="n in roleTags(record)" :key="n" color="blue">{{ n }}</a-tag>
+              <span v-if="roleTags(record).length === 0" class="no-scope">-</span>
+            </span>
+          </div>
+        </template>
+        <template v-else-if="column.key === 'setting'">
+          <div class="cell-nowrap">
+            <AppButton variant="link" size="sm" @click="openSetting(record)">设置</AppButton>
+          </div>
+        </template>
+      </template>
+    </DataTable>
 
     <a-modal v-model:open="settingVisible" :title="`${settingTarget?.name} · 设置`" @ok="saveSetting">
       <a-form layout="horizontal" :label-col="{ span: 6 }" :wrapper-col="{ span: 18 }">
@@ -96,8 +89,9 @@
 </template>
 
 <script setup lang="ts">
-import { AppButton } from '@shared/web'
-import { ref, reactive, computed, onMounted } from 'vue'
+import { AppButton, DataTable } from '@shared/web'
+import type { DataTableColumn } from '@shared/web'
+import { ref, computed, onMounted } from 'vue'
 import { message } from 'ant-design-vue'
 import PageHeader from '@shared/web/components/PageHeader.vue'
 import type { ApplicationItem, Role } from '@/types'
@@ -214,46 +208,14 @@ function onExpand(keys: string[]): void {
   expandedRowKeys.value = keys
 }
 
-const columnWidths = reactive<Record<string, number>>({
-  index: 60,
-  name: 200,
-  category: 90,
-  status: 90,
-  scope: 160,
-  setting: 180,
-})
-
-const columnMinWidths: Record<string, number> = {
-  index: 60,
-  name: 150,
-  category: 80,
-  status: 80,
-  scope: 120,
-  setting: 180,
-}
-
-const columns = computed(() => [
-  { title: '序号', key: 'index', width: columnWidths.index, minWidth: columnMinWidths.index, resizable: true },
-  { title: '应用', key: 'name', width: columnWidths.name, minWidth: columnMinWidths.name, resizable: true },
-  { title: '分类', key: 'category', width: columnWidths.category, minWidth: columnMinWidths.category, resizable: true },
-  { title: '状态', key: 'status', width: columnWidths.status, minWidth: columnMinWidths.status, resizable: true },
-  { title: '授权角色', key: 'scope', width: columnWidths.scope, minWidth: columnMinWidths.scope, resizable: true },
-  { title: '操作', key: 'setting', width: columnWidths.setting, minWidth: columnMinWidths.setting, resizable: true },
-])
-
-const contentWidth = computed(() =>
-  columns.value.reduce((sum, col) => sum + (typeof col.width === 'number' ? col.width : 0), 0),
-)
-// 表格宽度恒等于各列宽之和：避免 antd 在列总宽小于容器时等比拉伸列，
-// 导致拖拽调宽时表头线与鼠标位移不一致
-const scrollX = computed(() => contentWidth.value)
-
-function handleResizeColumn(width: number, column: { key?: string }): void {
-  const key = column.key
-  if (!key || !(key in columnWidths)) return
-  const minWidth = columnMinWidths[key] ?? 50
-  columnWidths[key] = Math.max(minWidth, Math.round(width))
-}
+const columns: DataTableColumn[] = [
+  { title: '序号', key: 'index', width: 60, minWidth: 60, resizable: true },
+  { title: '应用', key: 'name', width: 200, minWidth: 150, resizable: true },
+  { title: '分类', key: 'category', width: 90, minWidth: 80, resizable: true },
+  { title: '状态', key: 'status', width: 90, minWidth: 80, resizable: true },
+  { title: '授权角色', key: 'scope', width: 160, minWidth: 120, resizable: true },
+  { title: '操作', key: 'setting', width: 180, minWidth: 180, fixed: 'right', resizable: true },
+]
 
 const loading = ref(false)
 
@@ -341,13 +303,6 @@ onMounted(async () => {
 
 .setting-tip { color: @text-secondary; }
 .cell-nowrap { white-space: nowrap; }
-
-// 表格宽度恒等于列宽之和：覆盖 rc-table 内联的 min-width: 100% 与自动布局，
-// 避免列总宽小于容器时被浏览器等比拉伸，保证拖拽调宽时表头线与鼠标位移一致
-.publish-tree :deep(table) {
-  min-width: auto !important;
-  table-layout: fixed !important;
-}
 
 .icon-grid {
   display: grid;
