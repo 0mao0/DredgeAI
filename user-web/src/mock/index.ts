@@ -14,7 +14,7 @@ import { registerApiKeyMock } from './routes/apikey'
 import { registerChartMock } from './routes/chart'
 import { registerDubbingMock } from './routes/dubbing'
 import { registerDubbingTtsMock } from './routes/dubbing-tts'
-import { registerTenderReadMock } from './routes/tenderRead'
+import { registerMeetingMock } from './routes/aiMeeting'
 
 /** 注册所有 mock 路由（按模块开关控制） */
 export function registerMock(): void {
@@ -73,8 +73,9 @@ export function registerMock(): void {
     { key: 'apikey', register: registerApiKeyMock },
     { key: 'chart', register: registerChartMock },
     { key: 'dubbing', register: registerDubbingMock },
-    { key: 'tenderRead', register: registerTenderReadMock, passthrough: /^\/tender-read\// },
+    { key: 'meeting', register: registerMeetingMock },
     { key: 'compare', passthrough: /^\/compare\// },
+    { key: 'tenderRead', passthrough: /^\/tender-read\// },
   ]
 
   for (const mod of modules) {
