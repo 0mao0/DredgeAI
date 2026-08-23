@@ -1,6 +1,7 @@
 ﻿param(
     [switch]$SkipModels,
-    [switch]$SkipStart
+    [switch]$SkipStart,
+    [string]$ModelDir = "D:\AI\AImodles\models"
 )
 
 # AI 晨会 meeting-bot 一键部署：依赖安装 + 四个模型下载 + 启动服务（默认端口 8101）
@@ -8,7 +9,7 @@ $ErrorActionPreference = "Stop"
 
 $root = Split-Path -Parent $PSScriptRoot
 $svc = Join-Path $root "services\meeting-bot"
-$models = Join-Path $svc "models"
+$models = $ModelDir
 Set-Location $svc
 
 Write-Host "[1/6] meeting-bot 依赖（Python 3.12 + 模型组）" -ForegroundColor Cyan
