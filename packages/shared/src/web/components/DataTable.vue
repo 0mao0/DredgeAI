@@ -29,8 +29,9 @@
             <a-switch v-model:checked="localQuery[f.key]" size="small" @change="emitQuery" />
           </div>
         </template>
-        <AppButton v-if="filters.length" size="sm" @click="resetQuery">重置</AppButton>
-        <slot name="toolbarExtra" />
+        <div v-if="$slots.toolbarExtra" class="data-table-filter-bar__extra">
+          <slot name="toolbarExtra" />
+        </div>
       </div>
     </div>
 
@@ -98,7 +99,6 @@
 
 <script setup lang="ts">
 import { computed, onBeforeUnmount, onMounted, reactive, ref, useSlots, watch } from 'vue'
-import AppButton from './AppButton.vue'
 import SectionCard from './SectionCard.vue'
 
 export interface DataTableColumn {
@@ -118,8 +118,6 @@ export interface DataTableFilter {
   options?: Array<string | number | { value: string | number, label: string }>
   /** switch 类型显示的标签 */
   label?: string
-  /** 重置时恢复的默认值 */
-  defaultValue?: unknown
 }
 
 const props = withDefaults(defineProps<{
@@ -260,13 +258,6 @@ function emitQuery(): void {
   }
   emit('update:query', q)
 }
-
-function resetQuery(): void {
-  for (const f of props.filters) {
-    localQuery[f.key] = f.defaultValue
-  }
-  emitQuery()
-}
 </script>
 
 <style scoped lang="less">
@@ -278,6 +269,13 @@ function resetQuery(): void {
   gap: @spacing-sm;
   flex-wrap: wrap;
   margin-bottom: @spacing-base;
+
+  &__extra {
+    display: inline-flex;
+    align-items: center;
+    gap: @spacing-sm;
+    margin-left: auto;
+  }
 }
 
 .data-table-filter-switch {

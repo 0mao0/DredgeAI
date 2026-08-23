@@ -316,7 +316,7 @@ const filters: DataTableFilter[] = [
   { key: 'industry', type: 'select', placeholder: '行业', width: 120, options: industryOptions },
   { key: 'nature', type: 'select', placeholder: '性质', width: 110, options: natureOptions },
   { key: 'level', type: 'select', placeholder: '级别', width: 130, options: levelOptions },
-  { key: 'status', type: 'select', placeholder: '状态', width: 110, options: statusOptions, defaultValue: '现行' },
+  { key: 'status', type: 'select', placeholder: '状态', width: 110, options: statusOptions },
   { key: 'publishYear', type: 'select', placeholder: '发布年份', width: 120, options: yearOptions },
 ]
 

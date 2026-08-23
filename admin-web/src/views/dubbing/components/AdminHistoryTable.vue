@@ -62,7 +62,7 @@ const query = ref({ keyword: '', status: undefined as string | undefined, delete
 const filters: DataTableFilter[] = [
   { key: 'keyword', type: 'input', placeholder: '搜索用户 / 文本', width: 240 },
   { key: 'status', type: 'select', placeholder: '状态', width: 140, options: ['生成中', '已完成', '已失败'] },
-  { key: 'deletedOnly', type: 'switch', label: '仅看用户已删除', defaultValue: false },
+  { key: 'deletedOnly', type: 'switch', label: '仅看用户已删除' },
 ]
 
 watch(query, () => {

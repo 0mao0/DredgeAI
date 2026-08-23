@@ -119,7 +119,7 @@ const columns: DataTableColumn[] = [
 const query = ref({ keyword: '', deletedOnly: false })
 const filters: DataTableFilter[] = [
   { key: 'keyword', type: 'input', placeholder: '搜索音色名称 / 用户', width: 240 },
-  { key: 'deletedOnly', type: 'switch', label: '仅看用户已删除', defaultValue: false },
+  { key: 'deletedOnly', type: 'switch', label: '仅看用户已删除' },
 ]
 const showAddModal = ref(false)
 const playingId = ref<string | null>(null)
