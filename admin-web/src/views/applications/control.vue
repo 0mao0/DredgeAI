@@ -2,66 +2,69 @@
   <div class="page-container">
     <PageHeader title="发布管理" description="管理各应用及其子应用对用户端的发布状态" />
 
-    <a-table
-      :columns="columns"
-      :data-source="treeRows"
-      row-key="key"
-      :pagination="false"
-      :loading="loading"
-      :scroll="{ x: 900 }"
-      :locale="{ emptyText: '暂无数据' }"
-      size="small"
-      :expandable="{ defaultExpandAllRows: true, expandedRowKeys, onExpand }"
-      class="publish-tree"
-    >
-      <template #bodyCell="{ column, record }">
-        <template v-if="column.key === 'index'">
-          <span :class="{ 'index--sub': record.level === 1 }">{{ record.index }}</span>
+    <div ref="tableContainerRef" class="publish-table-wrap">
+      <a-table
+        :columns="columns"
+        :data-source="treeRows"
+        row-key="key"
+        :pagination="false"
+        :loading="loading"
+        :scroll="{ x: scrollX }"
+        :locale="{ emptyText: '暂无数据' }"
+        size="small"
+        :expandable="{ defaultExpandAllRows: true, expandedRowKeys, onExpand }"
+        class="publish-tree"
+        @resize-column="handleResizeColumn"
+      >
+        <template #bodyCell="{ column, record }">
+          <template v-if="column.key === 'index'">
+            <span :class="{ 'index--sub': record.level === 1 }">{{ record.index }}</span>
+          </template>
+          <template v-else-if="column.key === 'name'">
+            <div class="cell-left">
+              <span class="tree-name" :class="{ 'tree-name--sub': record.level === 1 }">
+                <span v-if="record.level === 1" class="tree-connector" />
+                <component :is="iconOptionsMap[record.icon] || iconOptionsMap.AppstoreOutlined" class="row-icon" />
+                <span class="name-text">{{ record.name }}</span>
+                <span v-if="record.level === 0 && hasSub(record)" class="sub-hint">（含 {{ subCount(record) }} 个子应用）</span>
+              </span>
+            </div>
+          </template>
+          <template v-else-if="column.key === 'category'">
+            <a-tag :color="catColor(record.category)">{{ record.category }}</a-tag>
+          </template>
+          <template v-else-if="column.key === 'status'">
+            <div class="cell-center">
+              <a-popconfirm
+                :title="record.published ? '确认下架该应用？' : '确认发布该应用？'"
+                placement="left"
+                @confirm="onToggle(record, !record.published)"
+              >
+                <a-switch
+                  :checked="record.published"
+                  checked-children="已发布"
+                  un-checked-children="已下架"
+                  class="status-switch"
+                />
+              </a-popconfirm>
+            </div>
+          </template>
+          <template v-else-if="column.key === 'scope'">
+            <div class="cell-left">
+              <span class="scope-tags">
+                <a-tag v-for="n in roleTags(record)" :key="n" color="blue">{{ n }}</a-tag>
+                <span v-if="roleTags(record).length === 0" class="no-scope">-</span>
+              </span>
+            </div>
+          </template>
+          <template v-else-if="column.key === 'setting'">
+            <div class="cell-nowrap">
+              <AppButton variant="link" size="sm" @click="openSetting(record)">设置</AppButton>
+            </div>
+          </template>
         </template>
-        <template v-else-if="column.key === 'name'">
-          <div class="cell-left">
-            <span class="tree-name" :class="{ 'tree-name--sub': record.level === 1 }">
-              <span v-if="record.level === 1" class="tree-connector" />
-              <component :is="iconOptionsMap[record.icon] || iconOptionsMap.AppstoreOutlined" class="row-icon" />
-              <span class="name-text">{{ record.name }}</span>
-              <span v-if="record.level === 0 && hasSub(record)" class="sub-hint">（含 {{ subCount(record) }} 个子应用）</span>
-            </span>
-          </div>
-        </template>
-        <template v-else-if="column.key === 'category'">
-          <a-tag :color="catColor(record.category)">{{ record.category }}</a-tag>
-        </template>
-        <template v-else-if="column.key === 'status'">
-          <div class="cell-center">
-            <a-popconfirm
-              :title="record.published ? '确认下架该应用？' : '确认发布该应用？'"
-              placement="left"
-              @confirm="onToggle(record, !record.published)"
-            >
-              <a-switch
-                :checked="record.published"
-                checked-children="已发布"
-                un-checked-children="已下架"
-                class="status-switch"
-              />
-            </a-popconfirm>
-          </div>
-        </template>
-        <template v-else-if="column.key === 'scope'">
-          <div class="cell-left">
-            <span class="scope-tags">
-              <a-tag v-for="n in roleTags(record)" :key="n" color="blue">{{ n }}</a-tag>
-              <span v-if="roleTags(record).length === 0" class="no-scope">-</span>
-            </span>
-          </div>
-        </template>
-        <template v-else-if="column.key === 'setting'">
-          <div class="cell-nowrap">
-            <AppButton variant="link" size="sm" @click="openSetting(record)">设置</AppButton>
-          </div>
-        </template>
-      </template>
-    </a-table>
+      </a-table>
+    </div>
 
     <a-modal v-model:open="settingVisible" :title="`${settingTarget?.name} · 设置`" @ok="saveSetting">
       <a-form layout="horizontal" :label-col="{ span: 6 }" :wrapper-col="{ span: 18 }">
@@ -94,7 +97,7 @@
 
 <script setup lang="ts">
 import { AppButton } from '@shared/web'
-import { ref, computed, onMounted } from 'vue'
+import { ref, reactive, computed, onBeforeUnmount, onMounted } from 'vue'
 import { message } from 'ant-design-vue'
 import PageHeader from '@shared/web/components/PageHeader.vue'
 import type { ApplicationItem, Role } from '@/types'
@@ -211,14 +214,57 @@ function onExpand(keys: string[]): void {
   expandedRowKeys.value = keys
 }
 
-const columns = [
-  { title: '序号', key: 'index', width: 60 },
-  { title: '应用', key: 'name' },
-  { title: '分类', key: 'category', width: 90 },
-  { title: '状态', key: 'status', width: 90 },
-  { title: '授权角色', key: 'scope', width: 160 },
-  { title: '操作', key: 'setting', width: 180 },
-]
+const columnWidths = reactive<Record<string, number>>({
+  index: 60,
+  name: 260,
+  category: 90,
+  status: 90,
+  scope: 160,
+  setting: 180,
+})
+
+const columnMinWidths: Record<string, number> = {
+  index: 60,
+  name: 160,
+  category: 80,
+  status: 80,
+  scope: 120,
+  setting: 180,
+}
+
+const columns = computed(() => [
+  { title: '序号', key: 'index', width: columnWidths.index, minWidth: columnMinWidths.index, resizable: true },
+  { title: '应用', key: 'name', width: columnWidths.name, minWidth: columnMinWidths.name, resizable: true },
+  { title: '分类', key: 'category', width: columnWidths.category, minWidth: columnMinWidths.category, resizable: true },
+  { title: '状态', key: 'status', width: columnWidths.status, minWidth: columnMinWidths.status, resizable: true },
+  { title: '授权角色', key: 'scope', width: columnWidths.scope, minWidth: columnMinWidths.scope, resizable: true },
+  { title: '操作', key: 'setting', width: columnWidths.setting, minWidth: columnMinWidths.setting, resizable: true },
+])
+
+const tableContainerRef = ref<HTMLElement | null>(null)
+const containerWidth = ref(0)
+let tableResizeObserver: ResizeObserver | undefined
+
+const contentWidth = computed(() =>
+  columns.value.reduce((sum, col) => sum + (typeof col.width === 'number' ? col.width : 0), 0),
+)
+const scrollX = computed(() => Math.max(containerWidth.value, contentWidth.value))
+
+function observeTableWidth(): void {
+  if (!tableContainerRef.value) return
+  tableResizeObserver = new ResizeObserver((entries) => {
+    const width = entries[0]?.contentRect.width
+    if (width) containerWidth.value = Math.round(width)
+  })
+  tableResizeObserver.observe(tableContainerRef.value)
+}
+
+function handleResizeColumn(width: number, column: { key?: string }): void {
+  const key = column.key
+  if (!key || !(key in columnWidths)) return
+  const minWidth = columnMinWidths[key] ?? 50
+  columnWidths[key] = Math.max(minWidth, Math.round(width))
+}
 
 const loading = ref(false)
 
@@ -263,6 +309,7 @@ async function saveSetting(): Promise<void> {
 }
 
 onMounted(async () => {
+  observeTableWidth()
   loading.value = true
   try {
     const [appData, catData, roleData] = await Promise.all([getApplications(), getCategoryConfig(), getRoles()])
@@ -273,6 +320,10 @@ onMounted(async () => {
   } finally {
     loading.value = false
   }
+})
+
+onBeforeUnmount(() => {
+  tableResizeObserver?.disconnect()
 })
 </script>
 
