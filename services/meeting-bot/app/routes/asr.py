@@ -1,7 +1,6 @@
-from fastapi import APIRouter, File, UploadFile
-
-from app.engines.asr import get_asr_engine
+from fastapi import APIRouter, UploadFile, File
 from app.settings import settings
+from app.engines.asr import get_asr_engine
 
 router = APIRouter()
 _engine = get_asr_engine(settings.asr_engine)

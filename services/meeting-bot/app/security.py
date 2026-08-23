@@ -1,5 +1,4 @@
-from fastapi import HTTPException, Request
-
+from fastapi import Request, HTTPException
 from app.settings import settings
 
 

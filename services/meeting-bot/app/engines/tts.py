@@ -11,6 +11,5 @@ class MockTtsEngine(TtsEngine):
 def get_tts_engine(engine_name: str) -> TtsEngine:
     if engine_name == "firered":
         from .firered_tts import FireRedTtsEngine
-
         return FireRedTtsEngine()
     return MockTtsEngine()

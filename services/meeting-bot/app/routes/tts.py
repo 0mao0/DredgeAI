@@ -1,9 +1,8 @@
 from fastapi import APIRouter
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
-
-from app.engines.tts import get_tts_engine
 from app.settings import settings
+from app.engines.tts import get_tts_engine
 
 router = APIRouter()
 _engine = get_tts_engine(settings.tts_engine)
