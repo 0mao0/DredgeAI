@@ -31,7 +31,6 @@
             v-else-if="f.type === 'radio'"
             v-model:value="localQuery[f.key]"
             button-style="solid"
-            size="small"
             @change="emitQuery"
           >
             <a-radio-button v-for="opt in normalizedOptions(f)" :key="String(opt.value)" :value="opt.value">
@@ -42,7 +41,6 @@
             <span v-if="f.label" class="data-table-filter-switch__label">{{ f.label }}</span>
             <a-switch
               v-model:checked="localQuery[f.key]"
-              size="small"
               :checked-children="f.checkedLabel"
               :un-checked-children="f.uncheckedLabel"
               @change="emitQuery"
@@ -307,11 +305,18 @@ function emitQuery(): void {
   display: inline-flex;
   align-items: center;
   gap: @spacing-sm;
+  height: 32px;
 
   &__label {
     font-size: @font-size-sm;
     white-space: nowrap;
     color: @text-secondary;
+  }
+
+  // 开关与输入框同高对齐：antd switch 默认高度低于 32px，用行内高度撑起
+  :deep(.ant-switch) {
+    display: inline-flex;
+    align-items: center;
   }
 }
 
