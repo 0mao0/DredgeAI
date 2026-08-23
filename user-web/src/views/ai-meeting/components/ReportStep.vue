@@ -4,16 +4,12 @@
     <template v-else>
       <div class="report-step__block">
         <div class="label">出勤</div>
-        <a-table
-          size="small"
-          row-key="workerId"
-          :columns="[
-            { title: '姓名', dataIndex: 'name' },
-            { title: '班组', dataIndex: 'team' },
-            { title: '状态', dataIndex: 'status', width: 110 },
-          ]"
+        <DataTable
+          :columns="columns"
           :data-source="report.attendance"
+          row-key="workerId"
           :pagination="false"
+          :card="false"
         />
       </div>
       <div class="report-step__block">
@@ -33,9 +29,17 @@
 
 <script setup lang="ts">
 import SectionCard from '@shared/web/components/SectionCard.vue'
+import { DataTable } from '@shared/web'
+import type { DataTableColumn } from '@shared/web'
 import type { ReportDto } from '@/types'
 
 defineProps<{ report: ReportDto | null }>()
+
+const columns: DataTableColumn[] = [
+  { title: '姓名', dataIndex: 'name', key: 'name', width: 120, minWidth: 100, resizable: true },
+  { title: '班组', dataIndex: 'team', key: 'team', width: 160, minWidth: 120, resizable: true },
+  { title: '状态', dataIndex: 'status', key: 'status', width: 110, minWidth: 90, resizable: true },
+]
 </script>
 
 <style scoped lang="less">

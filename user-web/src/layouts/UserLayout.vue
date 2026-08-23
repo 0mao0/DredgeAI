@@ -13,6 +13,15 @@
     >
       <div class="sider-brand" :class="{ 'sider-brand--collapsed': collapsed }">
         <template v-if="!collapsed">
+          <div class="sider-brand__name">
+            <div class="sider-brand__title-row">
+              <ShipAiLogo class="sider-brand__logo" />
+              <div class="sider-brand__text">
+                <div class="sider-brand__title">智浚 <span class="sider-brand__ai">AI</span></div>
+                <div class="sider-brand__sub">DredgeAI</div>
+              </div>
+            </div>
+          </div>
           <span
             class="sider-brand__trigger"
             role="button"
@@ -21,10 +30,6 @@
           >
             <SidebarToggleIcon :collapsed="false" />
           </span>
-          <div class="sider-brand__name">
-            <div class="sider-brand__title">智浚 <span class="sider-brand__ai">AI</span></div>
-            <div class="sider-brand__sub">DredgeAI</div>
-          </div>
         </template>
         <span
           v-else
@@ -48,7 +53,7 @@
           <span>工作台</span>
         </a-menu-item>
         <a-menu-item v-for="app in appStore.sidebarApps" :key="app.route">
-          <component :is="iconMap[app.icon]" />
+          <component :is="resolveAppIcon(app.icon)" />
           <span>{{ app.title }}</span>
         </a-menu-item>
       </a-menu>
@@ -100,7 +105,7 @@
 </template>
 
 <script setup lang="ts">
-import { AppButton, SidebarToggleIcon } from '@shared/web'
+import { AppButton, resolveAppIcon, ShipAiLogo, SidebarToggleIcon } from '@shared/web'
 import { ref, computed, watch, onMounted } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import {
@@ -110,11 +115,9 @@ import {
   BulbFilled,
   BulbOutlined,
 } from '@ant-design/icons-vue'
-import * as Icons from '@ant-design/icons-vue'
 import { useAppStore } from '@/stores/app'
 import { useUserStore } from '@/stores/user'
 import { useSidebarStore, useThemeStore } from '@shared/web/stores'
-import type { Component } from 'vue'
 
 const appStore = useAppStore()
 const userStore = useUserStore()
@@ -125,30 +128,6 @@ const isDark = computed(() => themeStore.isDark)
 
 function toggleTheme(): void {
   themeStore.toggleTheme()
-}
-
-const iconMap: Record<string, Component> = {
-  FileSearchOutlined: Icons.FileSearchOutlined,
-  BookOutlined: Icons.BookOutlined,
-  EditOutlined: Icons.EditOutlined,
-  SafetyOutlined: Icons.SafetyOutlined,
-  DashboardOutlined: Icons.DashboardOutlined,
-  ApiOutlined: Icons.ApiOutlined,
-  QuestionCircleOutlined: Icons.QuestionCircleOutlined,
-  SwapOutlined: Icons.SwapOutlined,
-  CodeOutlined: Icons.CodeOutlined,
-  TeamOutlined: Icons.TeamOutlined,
-  AuditOutlined: Icons.AuditOutlined,
-  SearchOutlined: Icons.SearchOutlined,
-  WarningOutlined: Icons.WarningOutlined,
-  FundOutlined: Icons.FundOutlined,
-  VideoCameraOutlined: Icons.VideoCameraOutlined,
-  CustomerServiceOutlined: Icons.CustomerServiceOutlined,
-  BulbOutlined: Icons.BulbOutlined,
-  ToolOutlined: Icons.ToolOutlined,
-  FileProtectOutlined: Icons.FileProtectOutlined,
-  RadarChartOutlined: Icons.RadarChartOutlined,
-  ExperimentOutlined: Icons.ExperimentOutlined,
 }
 
 const router = useRouter()
@@ -208,6 +187,22 @@ onMounted(() => {
   }
 
   &__name {
+    display: flex;
+    flex-direction: column;
+    min-width: 0;
+  }
+
+  &__title-row {
+    display: flex;
+    align-items: center;
+    gap: @spacing-sm;
+  }
+
+  &__logo {
+    flex-shrink: 0;
+  }
+
+  &__text {
     display: flex;
     flex-direction: column;
     min-width: 0;

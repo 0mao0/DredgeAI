@@ -1,6 +1,7 @@
 <template>
   <DataTable
     v-model:query="query"
+    storage-key="admin-api-permissions"
     :columns="columns"
     :data-source="users"
     :pagination="{ pageSize: 15, showTotal: (t: number) => `共 ${t} 人` }"
@@ -30,12 +31,13 @@
   <a-modal :open="limitsOpen" title="编辑用户限制" width="820px" @update:open="emit('update:limitsOpen', $event)" @ok="emit('limitsOk')">
     <template v-if="limitsTarget">
       <p class="limits-dimension">限制维度：每周</p>
-      <a-table
+      <DataTable
+        storage-key="admin-api-limits"
         :data-source="limitsForm"
         :columns="limitColumns"
         row-key="modelName"
         :pagination="false"
-        size="small"
+        :card="false"
         class="limits-table"
       >
         <template #bodyCell="{ column, record, index }">
@@ -58,7 +60,7 @@
             <a-input-number v-model:value="limitsForm[index].tokensWarn" :min="0" :disabled="!record.enabled" style="width:100%" placeholder="0=不预警" />
           </template>
         </template>
-      </a-table>
+      </DataTable>
     </template>
   </a-modal>
 </template>
@@ -112,7 +114,7 @@ const columns: DataTableColumn[] = [
   { title: '操作', key: 'action', width: 100, minWidth: 100, fixed: 'right', resizable: true },
 ]
 
-const limitColumns = [
+const limitColumns: DataTableColumn[] = [
   { title: '启用', key: 'enabled', width: 60 },
   { title: '模型', key: 'modelName', width: 130 },
   { title: '调用次限制', key: 'callsLimit', width: 150 },

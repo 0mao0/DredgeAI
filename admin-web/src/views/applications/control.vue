@@ -8,11 +8,28 @@
       row-key="key"
       :loading="loading"
       :pagination="false"
+      :row-class-name="rowClassName"
       :expandable="{ defaultExpandAllRows: true, expandedRowKeys, onExpand }"
     >
+      <template #toolbarExtra>
+        <a-popconfirm
+          title="将清空所有用户的个性化顺序，恢复为 admin 默认顺序，确定继续吗？"
+          ok-text="确定"
+          cancel-text="取消"
+          @confirm="handleResetUserOrders"
+        >
+          <AppButton size="sm" :loading="resetting">
+            <ReloadOutlined />
+            重置用户顺序
+          </AppButton>
+        </a-popconfirm>
+      </template>
       <template #bodyCell="{ column, record }">
         <template v-if="column.key === 'index'">
           <span :class="{ 'index--sub': record.level === 1 }">{{ record.index }}</span>
+        </template>
+        <template v-else-if="column.key === 'order'">
+          <span :class="{ 'order-idx--sub': record.level === 1 }">{{ record.level === 0 ? record.index : '-' }}</span>
         </template>
         <template v-else-if="column.key === 'name'">
           <div class="cell-left">
@@ -53,6 +70,22 @@
         </template>
         <template v-else-if="column.key === 'setting'">
           <div class="cell-nowrap">
+            <AppButton
+              variant="link"
+              size="sm"
+              :disabled="!canMove(record, 'up') || movingId === (record.subId ?? record.appId)"
+              @click="moveApp(record, 'up')"
+            >
+              <ArrowUpOutlined />上移
+            </AppButton>
+            <AppButton
+              variant="link"
+              size="sm"
+              :disabled="!canMove(record, 'down') || movingId === (record.subId ?? record.appId)"
+              @click="moveApp(record, 'down')"
+            >
+              <ArrowDownOutlined />下移
+            </AppButton>
             <AppButton variant="link" size="sm" @click="openSetting(record)">设置</AppButton>
           </div>
         </template>
@@ -89,16 +122,20 @@
 </template>
 
 <script setup lang="ts">
-import { AppButton, DataTable } from '@shared/web'
+import { APP_ICONS, AppButton, DataTable } from '@shared/web'
 import type { DataTableColumn } from '@shared/web'
 import { ref, computed, onMounted } from 'vue'
 import { message } from 'ant-design-vue'
+import { ArrowDownOutlined, ArrowUpOutlined, ReloadOutlined } from '@ant-design/icons-vue'
 import PageHeader from '@shared/web/components/PageHeader.vue'
 import type { ApplicationItem, Role } from '@/types'
-import * as Icons from '@ant-design/icons-vue'
 import {
   getApplications,
   getCategoryConfig,
+  getAppOrder,
+  moveAppOrder,
+  resetUserOrders,
+  seedAppOrder,
   setSubAppStatus,
   setApplicationStatus,
   setApplicationCategory,
@@ -106,6 +143,7 @@ import {
   setApplicationIcon,
   setSubAppIcon,
 } from '@/api/modules/applications'
+import { sortAppsByOrder } from '@/utils/appOrder'
 import { getRoles } from '@/api/modules/roles'
 import type { CategoryConfig } from '@/api/modules/applications'
 
@@ -136,6 +174,13 @@ function roleTags(row: TreeRow): string[] {
 }
 
 const apps = ref<ApplicationItem[]>([])
+const orderIds = ref<string[]>([])
+const subOrders = ref<Record<string, string[]>>({})
+const movingId = ref('')
+const resetting = ref(false)
+const movedKey = ref('')
+let movedTimer: number | undefined
+const ORDER_STORAGE_KEY = 'dredge-admin-app-order'
 const categories = ref<CategoryConfig[]>([])
 const catColorMap = computed(() => {
   const m: Record<string, string> = {}
@@ -146,28 +191,28 @@ function catColor(c: string): string {
   return catColorMap.value[c] || 'default'
 }
 
-const iconOptions = [
-  { value: 'BookOutlined', comp: Icons.BookOutlined },
-  { value: 'VideoCameraOutlined', comp: Icons.VideoCameraOutlined },
-  { value: 'CustomerServiceOutlined', comp: Icons.CustomerServiceOutlined },
-  { value: 'BulbOutlined', comp: Icons.BulbOutlined },
-  { value: 'ToolOutlined', comp: Icons.ToolOutlined },
-  { value: 'FileProtectOutlined', comp: Icons.FileProtectOutlined },
-  { value: 'DashboardOutlined', comp: Icons.DashboardOutlined },
-  { value: 'RadarChartOutlined', comp: Icons.RadarChartOutlined },
-  { value: 'ExperimentOutlined', comp: Icons.ExperimentOutlined },
-  { value: 'FileSearchOutlined', comp: Icons.FileSearchOutlined },
-  { value: 'TeamOutlined', comp: Icons.TeamOutlined },
-  { value: 'AppstoreOutlined', comp: Icons.AppstoreOutlined },
-]
-const iconOptionsMap: Record<string, unknown> = Object.fromEntries(iconOptions.map((o) => [o.value, o.comp]))
+// 图标选项与映射与 user-web 共用共享表，避免两端漂移
+const iconOptions = Object.entries(APP_ICONS).map(([value, comp]) => ({ value, comp }))
+const iconOptionsMap: Record<string, unknown> = APP_ICONS
+
+const orderedApps = computed(() => {
+  return sortAppsByOrder(apps.value, orderIds.value)
+})
 
 const treeRows = computed<TreeRow[]>(() => {
   const rows: TreeRow[] = []
   let appIdx = 0
-  for (const app of apps.value) {
+  for (const app of orderedApps.value) {
     appIdx++
     const subs = app.subApps || []
+    const parentOrder = subOrders.value[app.id]
+    const sortedSubs = parentOrder?.length
+      ? [...subs].sort((x, y) => {
+          const xi = parentOrder.indexOf(x.id)
+          const yi = parentOrder.indexOf(y.id)
+          return (xi === -1 ? Number.MAX_SAFE_INTEGER : xi) - (yi === -1 ? Number.MAX_SAFE_INTEGER : yi)
+        })
+      : subs
     rows.push({
       key: `app-${app.id}`,
       index: String(appIdx),
@@ -178,7 +223,7 @@ const treeRows = computed<TreeRow[]>(() => {
       icon: app.icon || 'AppstoreOutlined',
       appId: app.id,
     })
-    subs.forEach((sub, si) => {
+    sortedSubs.forEach((sub, si) => {
       rows.push({
         key: `sub-${sub.id}`,
         index: `${appIdx}.${si + 1}`,
@@ -196,6 +241,133 @@ const treeRows = computed<TreeRow[]>(() => {
   return rows
 })
 
+function canMove(record: TreeRow, direction: 'up' | 'down'): boolean {
+  const key = record.subId ?? record.appId
+  const list = record.level === 0
+    ? orderIds.value
+    : (subOrders.value[record.parentId ?? ''] ?? [])
+  const index = list.indexOf(key)
+  if (index === -1) return true
+  if (direction === 'up') return index > 0
+  return index < list.length - 1
+}
+
+function subOrdersPayload(): Record<string, string[]> {
+  const out: Record<string, string[]> = {}
+  for (const a of apps.value) {
+    if (a.subApps?.length) out[a.id] = a.subApps.map((s) => s.id)
+  }
+  return out
+}
+
+async function loadOrder(): Promise<void> {
+  try {
+    let order = await getAppOrder()
+    const ids = apps.value.map((a) => a.id)
+    const subsComplete = apps.value.every((a) => {
+      const subIds = (a.subApps ?? []).map((s) => s.id)
+      if (subIds.length === 0) return true
+      const known = order.subOrders?.[a.id] ?? []
+      return subIds.every((id) => known.includes(id))
+    })
+    if (!ids.every((id) => order.appIds.includes(id)) || !subsComplete) {
+      // 后端 seed 为合并语义：保留已有位置，仅追加新应用/子应用
+      order = await seedAppOrder(ids, subOrdersPayload())
+    }
+    orderIds.value = order.appIds
+    subOrders.value = order.subOrders ?? {}
+  } catch {
+    // 后端顺序服务不可用：优先恢复本地保存的顺序，保证刷新后不回到目录顺序
+    const local = readLocalOrder()
+    if (local) {
+      orderIds.value = local.appIds
+      subOrders.value = local.subOrders ?? {}
+    } else {
+      orderIds.value = apps.value.map((a) => a.id)
+      subOrders.value = subOrdersPayload()
+    }
+    message.warning('应用顺序服务未启动，顺序调整仅保存在当前浏览器')
+  }
+}
+
+function readLocalOrder(): { appIds: string[], subOrders?: Record<string, string[]> } | null {
+  try {
+    const raw = localStorage.getItem(ORDER_STORAGE_KEY)
+    if (!raw) return null
+    const parsed = JSON.parse(raw) as { appIds?: unknown, subOrders?: Record<string, string[]> }
+    if (!Array.isArray(parsed?.appIds)) return null
+    return { appIds: parsed.appIds as string[], subOrders: parsed.subOrders }
+  } catch {
+    return null
+  }
+}
+
+function saveLocalOrder(): void {
+  try {
+    localStorage.setItem(ORDER_STORAGE_KEY, JSON.stringify({ appIds: orderIds.value, subOrders: subOrders.value }))
+  } catch {
+    // localStorage 不可用时忽略
+  }
+}
+
+async function moveApp(record: TreeRow, direction: 'up' | 'down'): Promise<void> {
+  if (movingId.value) return
+  const key = record.subId ?? record.appId
+  movingId.value = key
+  try {
+    const order = await moveAppOrder(key, direction)
+    orderIds.value = order.appIds
+    subOrders.value = order.subOrders ?? {}
+  } catch {
+    // 后端不可用时本地交换（子项在母项组内交换）
+    if (record.level === 0) {
+      const index = orderIds.value.indexOf(key)
+      const target = direction === 'up' ? index - 1 : index + 1
+      if (index >= 0 && target >= 0 && target < orderIds.value.length) {
+        const next = [...orderIds.value]
+        ;[next[index], next[target]] = [next[target], next[index]]
+        orderIds.value = next
+        saveLocalOrder()
+      }
+    } else {
+      const parentId = record.parentId
+      if (!parentId) return
+      const list = [...(subOrders.value[parentId] ?? [])]
+      const index = list.indexOf(key)
+      const target = direction === 'up' ? index - 1 : index + 1
+      if (index >= 0 && target >= 0 && target < list.length) {
+        ;[list[index], list[target]] = [list[target], list[index]]
+        subOrders.value = { ...subOrders.value, [parentId]: list }
+        saveLocalOrder()
+      }
+    }
+  } finally {
+    movingId.value = ''
+  }
+  // 移动后短暂高亮该行，方便看到落点
+  movedKey.value = record.key
+  if (movedTimer) window.clearTimeout(movedTimer)
+  movedTimer = window.setTimeout(() => {
+    if (movedKey.value === record.key) movedKey.value = ''
+  }, 2000)
+}
+
+function rowClassName(record: TreeRow): string {
+  return record.key === movedKey.value ? 'row-moved' : ''
+}
+
+async function handleResetUserOrders(): Promise<void> {
+  resetting.value = true
+  try {
+    const res = await resetUserOrders()
+    message.success(`已重置 ${res.count} 个用户的个性化顺序`)
+  } catch {
+    message.error('重置失败，请确认后端应用顺序服务已启动')
+  } finally {
+    resetting.value = false
+  }
+}
+
 function hasSub(row: TreeRow): boolean {
   return treeRows.value.some((r) => r.parentId === row.appId)
 }
@@ -210,11 +382,12 @@ function onExpand(keys: string[]): void {
 
 const columns: DataTableColumn[] = [
   { title: '序号', key: 'index', width: 60, minWidth: 60, resizable: true },
+  { title: '用户顺序', key: 'order', width: 90, minWidth: 80, resizable: true },
   { title: '应用', key: 'name', width: 200, minWidth: 150, resizable: true },
   { title: '分类', key: 'category', width: 90, minWidth: 80, resizable: true },
   { title: '状态', key: 'status', width: 90, minWidth: 80, resizable: true },
   { title: '授权角色', key: 'scope', width: 160, minWidth: 120, resizable: true },
-  { title: '操作', key: 'setting', width: 180, minWidth: 180, fixed: 'right', resizable: true },
+  { title: '操作', key: 'setting', width: 210, minWidth: 210, fixed: 'right', resizable: true },
 ]
 
 const loading = ref(false)
@@ -266,6 +439,7 @@ onMounted(async () => {
     apps.value = appData
     categories.value = catData
     roles.value = roleData
+    await loadOrder()
     expandedRowKeys.value = apps.value.filter((a) => a.subApps?.length).map((a) => `app-${a.id}`)
   } finally {
     loading.value = false
@@ -279,9 +453,22 @@ onMounted(async () => {
 .tree-name { display: inline-flex; align-items: center; gap: @spacing-sm; }
 .tree-name--sub { color: @text-secondary; }
 .index--sub { color: @text-tertiary; }
+.order-idx--sub { color: @text-tertiary; }
 .row-icon { font-size: 14px; color: @text-secondary; }
 .name-text { font-weight: 500; }
 .sub-hint { font-size: @font-size-xs; color: @text-tertiary; }
+
+// 移动后的行高亮（与 hover 同款底色 + 首列品牌色边），1.6s 后自动淡出
+:deep(.row-moved) {
+  > td {
+    // 比 hover（@surface-hover）更强：品牌色 14% 叠加卡片底色
+    background: color-mix(in srgb, @brand-primary 14%, @card-bg) !important;
+    transition: background 0.3s ease;
+  }
+  > td:first-child {
+    box-shadow: inset 3px 0 0 @brand-primary;
+  }
+}
 
 .tree-connector {
   display: inline-block;
@@ -302,7 +489,13 @@ onMounted(async () => {
 }
 
 .setting-tip { color: @text-secondary; }
-.cell-nowrap { white-space: nowrap; }
+.cell-nowrap {
+  white-space: nowrap;
+  // antd 对 icon + span 默认 8px 间距，操作列按钮收紧
+  :deep(.ant-btn .anticon + span) {
+    margin-left: 2px;
+  }
+}
 
 .icon-grid {
   display: grid;

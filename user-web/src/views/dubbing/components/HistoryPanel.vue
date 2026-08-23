@@ -70,7 +70,8 @@ void props
     height: 100%;
     min-height: 0;
     overflow-y: auto;
-    padding: @spacing-md @spacing-xl @spacing-xl;
+    // 表格贴边，与标准 DataTable 卡片样式一致
+    padding: 0;
   }
 }
 </style>

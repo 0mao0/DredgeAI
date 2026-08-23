@@ -11,17 +11,12 @@
       </div>
       <AppButton size="sm" block @click="enrollOpen = true">新人录入（拍身份证 + 人脸）</AppButton>
     </div>
-    <a-table
-      size="small"
-      row-key="workerId"
-      :columns="[
-        { title: '姓名', dataIndex: 'name' },
-        { title: '班组', dataIndex: 'team' },
-        { title: '状态', dataIndex: 'status', width: 110 },
-        { title: '置信度', dataIndex: 'confidence', width: 100 },
-      ]"
+    <DataTable
+      :columns="columns"
       :data-source="list"
+      row-key="workerId"
       :pagination="false"
+      :card="false"
     />
     <AppButton v-if="list.length" variant="primary" size="lg" block @click="emit('done')">
       点名完成，进入会议
@@ -35,6 +30,8 @@
 import { onMounted, onScopeDispose, ref } from 'vue'
 import SectionCard from '@shared/web/components/SectionCard.vue'
 import AppButton from '@shared/web/components/AppButton.vue'
+import { DataTable } from '@shared/web'
+import type { DataTableColumn } from '@shared/web'
 import type { AttendanceItemDto } from '@/types'
 import { useCamera } from '../composables/useCamera'
 import WorkerEnrollDrawer from './WorkerEnrollDrawer.vue'
@@ -45,6 +42,13 @@ defineProps<{
   count: number | null
 }>()
 const emit = defineEmits<{ capture: [photo: Blob], done: [] }>()
+
+const columns: DataTableColumn[] = [
+  { title: '姓名', dataIndex: 'name', key: 'name', width: 120, minWidth: 100, resizable: true },
+  { title: '班组', dataIndex: 'team', key: 'team', width: 160, minWidth: 120, resizable: true },
+  { title: '状态', dataIndex: 'status', key: 'status', width: 110, minWidth: 90, resizable: true },
+  { title: '置信度', dataIndex: 'confidence', key: 'confidence', width: 100, minWidth: 80, resizable: true },
+]
 
 const videoRef = ref<HTMLVideoElement | null>(null)
 const enrollOpen = ref(false)

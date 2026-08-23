@@ -1,39 +1,32 @@
 <template>
-  <a-table
+  <DataTable
+    :columns="columns"
     :data-source="tasks"
     :loading="loading"
-    :pagination="paginationProps"
+    :pagination="{ pageSize: 5, hideOnSinglePage: tasks.length <= 5 }"
     row-key="id"
-    size="small"
-    :scroll="{ x: 694 }"
+    :card="false"
     class="history-table"
   >
-    <a-table-column title="文本" data-index="text" ellipsis width="180">
-      <template #default="{ record }">
+    <template #bodyCell="{ column, record, index }">
+      <template v-if="column.key === 'index'">
+        {{ index + 1 }}
+      </template>
+      <template v-else-if="column.key === 'text'">
         <a-tooltip :title="record.text">
           <span>{{ record.text.length > 25 ? `${record.text.slice(0, 25)}...` : record.text }}</span>
         </a-tooltip>
       </template>
-    </a-table-column>
-    <a-table-column title="声音" data-index="voiceName" width="56" align="center" />
-    <a-table-column title="状态" data-index="status" width="50" align="center">
-      <template #default="{ record }">
+      <template v-else-if="column.key === 'status'">
         <a-tag :color="statusColor(record.status)">{{ record.status }}</a-tag>
       </template>
-    </a-table-column>
-    <a-table-column title="时长" width="42" align="center">
-      <template #default="{ record }">
+      <template v-else-if="column.key === 'duration'">
         {{ record.durationSec ? `${record.durationSec}s` : '-' }}
       </template>
-    </a-table-column>
-    <a-table-column title="Token" data-index="tokenCost" width="44" align="center" />
-    <a-table-column title="时间" data-index="createdAt" width="92" align="center">
-      <template #default="{ record }">
+      <template v-else-if="column.key === 'createdAt'">
         {{ formatTime(record.createdAt) }}
       </template>
-    </a-table-column>
-    <a-table-column title="操作" width="230" fixed="right">
-      <template #default="{ record }">
+      <template v-else-if="column.key === 'action'">
         <div class="history-actions">
           <AppButton
             v-if="record.status === '已完成' && record.audioUrl"
@@ -65,19 +58,19 @@
           </a-popconfirm>
         </div>
       </template>
-    </a-table-column>
+    </template>
     <template #emptyText>
       <div class="history-empty">
         <CustomerServiceOutlined class="history-empty__icon" />
         <p>暂无配音记录，生成后将显示在这里</p>
       </div>
     </template>
-  </a-table>
+  </DataTable>
 </template>
 
 <script setup lang="ts">
-import { AppButton } from '@shared/web'
-import { computed } from 'vue'
+import { AppButton, DataTable } from '@shared/web'
+import type { DataTableColumn } from '@shared/web'
 import { CustomerServiceOutlined } from '@ant-design/icons-vue'
 import type { DubbingTask } from '@/types'
 
@@ -93,6 +86,19 @@ const emit = defineEmits<{
   reEdit: [task: DubbingTask]
   regenerate: [task: DubbingTask]
 }>()
+
+const columns: DataTableColumn[] = [
+  { title: '序号', key: 'index', width: 60 },
+  // 文本列作为弹性列吸收剩余宽度，其余列保持合适默认宽
+  { title: '文本', dataIndex: 'text', key: 'text', ellipsis: true, width: 260, minWidth: 180, resizable: true, flex: true },
+  { title: '声音', dataIndex: 'voiceName', key: 'voiceName', width: 90, minWidth: 80, resizable: true },
+  { title: '状态', key: 'status', width: 90, minWidth: 80, resizable: true },
+  { title: '时长', key: 'duration', width: 90, minWidth: 80, resizable: true },
+  { title: 'Token', dataIndex: 'tokenCost', key: 'tokenCost', width: 90, minWidth: 80, resizable: true },
+  // 时间列紧邻固定右侧的操作列，按标准页惯例不参与拖拽（fixed-right 浮层会盖住其手柄）
+  { title: '时间', key: 'createdAt', width: 130, minWidth: 110 },
+  { title: '操作', key: 'action', width: 230, minWidth: 210, fixed: 'right', resizable: true },
+]
 
 function statusColor(status: string): string {
   if (status === '生成中') return 'blue'
@@ -110,12 +116,7 @@ function formatTime(iso: string): string {
   return `${mo}-${da} ${h}:${mi}`
 }
 
-const paginationProps = computed(() => ({
-  pageSize: 5,
-  showSizeChanger: false,
-  showTotal: (total: number) => `共 ${total} 条`,
-  hideOnSinglePage: props.tasks.length <= 5,
-}))
+void props
 </script>
 
 <style scoped lang="less">

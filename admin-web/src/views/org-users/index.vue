@@ -2,61 +2,54 @@
   <div class="page-container">
     <PageHeader title="组织用户" description="用户与组织结构管理" />
 
-    <SectionCard nopad class="org-users-card">
-      <div class="table-top-bar">
-        <a-input-search
-          v-model:value="searchKeyword"
-          placeholder="搜索姓名或手机号"
-          style="width: 240px"
-          allow-clear
-          @search="handleSearch"
-        />
+    <DataTable
+      v-model:query="query"
+      storage-key="admin-org-users-v3"
+      :columns="columns"
+      :data-source="users"
+      row-key="id"
+      :loading="loading"
+      :pagination="{ pageSize: 15 }"
+      :filters="filters"
+    >
+      <template #toolbarExtra>
         <AppButton size="sm" :loading="refreshing" @click="handleRefresh">
           <ReloadOutlined />
           刷新
         </AppButton>
-      </div>
-      <a-table
-        :data-source="users"
-        :columns="columns"
-        :pagination="{ pageSize: 15, showTotal: (t: number) => `共 ${t} 条` }"
-        :loading="loading"
-        row-key="id"
-        size="small"
-      >
-        <template #bodyCell="{ column, record }">
-          <template v-if="column.key === 'departments'">
-            <span>{{ record.departments.join('、') }}</span>
-          </template>
-          <template v-else-if="column.key === 'roles'">
-            <div class="role-cell">
-              <span class="role-cell__tags">
-                <template v-if="record._roleNames && record._roleNames.length">
-                  <a-tag v-for="r in record._roleNames" :key="r" color="blue" class="role-tag">{{ r }}</a-tag>
-                </template>
-                <span v-else class="no-role-label">未分配</span>
-              </span>
-              <AppButton variant="link" size="sm" class="role-set-btn" @click="openRoleModal(record)"><SettingOutlined /></AppButton>
-            </div>
-          </template>
-          <template v-else-if="column.key === 'action'">
-            <div class="action-cell">
-              <a-popconfirm
-                :title="record.status === 'active' ? '确认限制该用户登录？' : '确认允许该用户登录？'"
-                placement="left"
-                @confirm="toggleStatus(record)"
-              >
-                <a-switch
-                  :checked="record.status === 'disabled'"
-                  checked-children="允许登录"
-                  un-checked-children="限制登录"
-                />
-              </a-popconfirm>
-            </div>
-          </template>
+      </template>
+      <template #bodyCell="{ column, record }">
+        <template v-if="column.key === 'departments'">
+          <span>{{ record.departments.join('、') }}</span>
         </template>
-      </a-table>
-    </SectionCard>
+        <template v-else-if="column.key === 'roles'">
+          <div class="role-cell">
+            <span class="role-cell__tags">
+              <template v-if="record._roleNames && record._roleNames.length">
+                <a-tag v-for="r in record._roleNames" :key="r" color="blue" class="role-tag">{{ r }}</a-tag>
+              </template>
+              <span v-else class="no-role-label">未分配</span>
+            </span>
+            <AppButton variant="link" size="sm" class="role-set-btn" @click="openRoleModal(record)"><SettingOutlined /></AppButton>
+          </div>
+        </template>
+        <template v-else-if="column.key === 'action'">
+          <div class="action-cell">
+            <a-popconfirm
+              :title="record.status === 'active' ? '确认限制该用户登录？' : '确认允许该用户登录？'"
+              placement="left"
+              @confirm="toggleStatus(record)"
+            >
+              <a-switch
+                :checked="record.status === 'disabled'"
+                checked-children="允许登录"
+                un-checked-children="限制登录"
+              />
+            </a-popconfirm>
+          </div>
+        </template>
+      </template>
+    </DataTable>
 
     <a-modal
       v-model:open="roleModalVisible"
@@ -72,30 +65,43 @@
 </template>
 
 <script setup lang="ts">
-import { AppButton } from '@shared/web'
-import { ref, onMounted } from 'vue'
+import { AppButton, DataTable } from '@shared/web'
+import type { DataTableColumn, DataTableFilter } from '@shared/web'
+import { ref, onMounted, watch } from 'vue'
 import { message } from 'ant-design-vue'
 import { ReloadOutlined, SettingOutlined } from '@ant-design/icons-vue'
 import PageHeader from '@shared/web/components/PageHeader.vue'
-import SectionCard from '@shared/web/components/SectionCard.vue'
 import type { OrgUser, Role } from '@/types'
 import { getOrgUsers, setUserStatus, setUserRoles } from '@/api/modules/org-users'
 import { getRoles } from '@/api/modules/roles'
 
 const loading = ref(false)
 const refreshing = ref(false)
-const searchKeyword = ref('')
 const users = ref<(OrgUser & { _roleNames?: string[] })[]>([])
 const allRoles = ref<Role[]>([])
 
-const columns = [
-  { title: '序号', dataIndex: 'index', width: 80 },
-  { title: '姓名', dataIndex: 'name', width: 100 },
-  { title: '手机', dataIndex: 'phone', width: 140 },
-  { title: '部门', key: 'departments', width: 220 },
-  { title: '角色', key: 'roles' },
-  { title: '操作', key: 'action', width: 120 },
+const query = ref({ keyword: '' })
+
+const filters: DataTableFilter[] = [
+  { key: 'keyword', type: 'input', placeholder: '搜索姓名或手机号', width: 240 },
 ]
+
+const columns: DataTableColumn[] = [
+  { title: '序号', dataIndex: 'index', key: 'index', width: 80, minWidth: 60, resizable: true },
+  { title: '姓名', dataIndex: 'name', key: 'name', width: 120, minWidth: 100, resizable: true },
+  { title: '手机', dataIndex: 'phone', key: 'phone', width: 140, minWidth: 120, resizable: true },
+  { title: '部门', key: 'departments', width: 220, minWidth: 180, resizable: true },
+  { title: '角色', key: 'roles', width: 160, minWidth: 140, resizable: true, flex: true },
+  // 操作列不固定右侧：fixed-right 浮层会盖住相邻“角色”列的拖拽手柄
+  { title: '操作', key: 'action', width: 120, minWidth: 120, resizable: true },
+]
+
+let filterTimer: ReturnType<typeof setTimeout> | undefined
+
+watch(() => query.value.keyword, () => {
+  clearTimeout(filterTimer)
+  filterTimer = setTimeout(() => { void fetchUsers() }, 300)
+})
 
 function resolveRoleNames(roleIds: string[]): string[] {
   return roleIds.map((rid) => allRoles.value.find((r) => r.id === rid)?.name || rid)
@@ -104,7 +110,7 @@ function resolveRoleNames(roleIds: string[]): string[] {
 async function fetchUsers(): Promise<void> {
   loading.value = true
   try {
-    const res = await getOrgUsers({ keyword: searchKeyword.value || undefined })
+    const res = await getOrgUsers({ keyword: query.value.keyword.trim() || undefined })
     users.value = res.items.map((u, i) => ({
       ...u,
       index: i + 1,
@@ -115,10 +121,6 @@ async function fetchUsers(): Promise<void> {
   } finally {
     loading.value = false
   }
-}
-
-function handleSearch(): void {
-  fetchUsers()
 }
 
 async function handleRefresh(): Promise<void> {
@@ -188,14 +190,6 @@ onMounted(async () => {
 }
 .page-container :deep(.page-header) {
   margin-bottom: @spacing-md;
-}
-
-.table-top-bar {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: @spacing-sm @spacing-xl;
-  border-bottom: 1px solid @border-color;
 }
 
 .role-cell {

@@ -29,6 +29,7 @@
     <div v-else class="standards-table-wrap">
       <DataTable
         v-model:query="query"
+        storage-key="admin-standards"
         :columns="columns"
         :data-source="standards"
         row-key="id"

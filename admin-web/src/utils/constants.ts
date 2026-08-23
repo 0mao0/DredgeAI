@@ -6,7 +6,8 @@ export const USE_MOCK = import.meta.env.DEV && import.meta.env.VITE_USE_MOCK !==
 export const MOCK_MODULES: Record<string, boolean> = {
   dashboard: true,
   permissions: true,
-  applications: true,
+  // 应用目录直连真实后端（admin 发布管理 / user-web 应用列表共享同一份数据）
+  applications: false,
   datasource: true,
   analytics: true,
   profile: true,
@@ -15,6 +16,8 @@ export const MOCK_MODULES: Record<string, boolean> = {
   orgUsers: true,
   roles: true,
   standards: true,
+  // 应用顺序直连真实后端（admin / user-web 共享同一后端进程）
+  appOrder: false,
 }
 
 export const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || '/api/admin/'

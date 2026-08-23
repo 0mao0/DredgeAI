@@ -42,6 +42,8 @@ export interface ApplicationItem {
 /** user-web 侧应用卡片（由 ApplicationItem/SubApp 推导） */
 export interface AppCard {
   id: string
+  /** 子应用所属主应用 id（用于映射 admin 全局默认顺序）；主应用缺省时用 id */
+  parentAppId?: string
   title: string
   description: string
   category: '通用' | '设计' | '施工' | '经营'

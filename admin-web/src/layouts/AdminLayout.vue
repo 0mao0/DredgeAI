@@ -5,13 +5,22 @@
       :trigger="null"
       collapsible
       :theme="isDark ? 'dark' : 'light'"
-      :width="160"
+      :width="176"
       :collapsed-width="64"
       breakpoint="lg"
       class="sider"
       @breakpoint="(broken: boolean) => { collapsed = broken }"
     >
-      <div class="sider-brand">
+      <div class="sider-brand" :class="{ 'sider-brand--collapsed': collapsed }">
+        <div v-if="!collapsed" class="sider-brand__name">
+          <div class="sider-brand__title-row">
+            <ShipAiLogo class="sider-brand__logo" />
+            <div class="sider-brand__text">
+              <div class="sider-brand__title">智浚 <span class="sider-brand__ai">AI</span></div>
+              <div class="sider-brand__sub">管理后台</div>
+            </div>
+          </div>
+        </div>
         <span
           v-if="!collapsed"
           class="sider-brand__trigger"
@@ -87,10 +96,11 @@ import {
   ApiOutlined,
 } from '@ant-design/icons-vue'
 import * as Icons from '@ant-design/icons-vue'
-import { SidebarToggleIcon } from '@shared/web'
+import { ShipAiLogo, SidebarToggleIcon } from '@shared/web'
 import { useAppStore } from '@/stores/app'
 import { useSidebarStore, useThemeStore } from '@shared/web/stores'
-import { getApplications } from '@/api/modules/applications'
+import { getAppOrder, getApplications } from '@/api/modules/applications'
+import { sortAppsByOrder } from '@/utils/appOrder'
 import { getCategoryColor, getCategoryAlphaBg } from '@shared/core/utils'
 import ThemeToggle from '@shared/web/components/ThemeToggle.vue'
 import { adminAppManifests, adminMenuGroups } from '@/router/manifests'
@@ -199,8 +209,13 @@ onMounted(async () => {
     message.warning('获取用户信息失败，使用默认配置')
   }
   try {
-    const apps = await getApplications()
-    appMenuItems.value = apps.map((a) => ({
+    const [apps, orderRes] = await Promise.all([
+      getApplications(),
+      getAppOrder().catch(() => null),
+    ])
+    // 应用菜单与发布管理的顺序保持一致（按 admin 默认顺序排序）
+    const orderedApps = sortAppsByOrder(apps, orderRes?.appIds ?? [])
+    appMenuItems.value = orderedApps.map((a) => ({
       id: a.id,
       name: a.name,
       category: a.category,
@@ -250,9 +265,61 @@ function handleMenuClick({ key }: { key: string }): void {
 .sider-brand {
   display: flex;
   align-items: center;
-  justify-content: space-between;
+  justify-content: flex-start;
+  gap: @spacing-md;
   height: @header-height;
   box-sizing: border-box;
+  padding: 0 @spacing-md 0 calc(@spacing-xl + 4px);
+
+  &--collapsed {
+    padding: 0;
+  }
+
+  &__name {
+    display: flex;
+    flex-direction: column;
+    min-width: 0;
+  }
+
+  &__title-row {
+    display: flex;
+    align-items: center;
+    gap: @spacing-sm;
+  }
+
+  &__logo {
+    flex-shrink: 0;
+  }
+
+  &__text {
+    display: flex;
+    flex-direction: column;
+    min-width: 0;
+  }
+
+  &__title {
+    font-size: @font-size-lg;
+    font-weight: @font-weight-semibold;
+    color: @header-text;
+    line-height: 1.2;
+    letter-spacing: 0.02em;
+  }
+
+  &__ai {
+    background: var(--color-brand-gradient);
+    -webkit-background-clip: text;
+    background-clip: text;
+    -webkit-text-fill-color: transparent;
+    font-weight: @font-weight-bold;
+  }
+
+  &__sub {
+    font-size: 11px;
+    color: @header-text-secondary;
+    letter-spacing: 0.6px;
+    line-height: 1.3;
+    margin-top: 2px;
+  }
 
   &__expand-icon {
     display: flex;
@@ -273,7 +340,6 @@ function handleMenuClick({ key }: { key: string }): void {
     color: @header-text-secondary;
     cursor: pointer;
     flex-shrink: 0;
-    margin-right: @spacing-sm;
     border-radius: @radius-base;
     transition: color @transition-fast, background @transition-fast;
     &:hover {

@@ -107,6 +107,10 @@ tests/
 # meeting-bot 的 pytest 用例需要入库（上面的 tests/ 只针对根目录测试标书）
 !services/meeting-bot/tests/
 !services/meeting-bot/tests/**
+# keep Python bytecode/cache out of the un-ignored tests dir
+services/meeting-bot/tests/__pycache__/
+services/meeting-bot/tests/**/__pycache__/
+services/meeting-bot/tests/**/*.py[cod]
 
 # pdf.js 运行资源（由 user-web vite 插件启动时复制到 public，不入库）
 **/public/cmaps/

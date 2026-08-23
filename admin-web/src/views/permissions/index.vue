@@ -1,18 +1,19 @@
 <template>
   <div class="page-container">
-    <PageHeader title="权限管理" description="管理系统角色和权限" />
-
-    <SectionCard title="角色列表" flush>
+    <PageHeader title="权限管理" description="管理系统角色和权限">
       <template #extra>
         <AppButton variant="primary" size="sm" @click="openCreateModal">新增角色</AppButton>
       </template>
-      <a-table
-        :data-source="roles"
+    </PageHeader>
+
+    <div class="permissions-table-wrap">
+      <DataTable
+        storage-key="admin-permissions-roles"
         :columns="columns"
-        :pagination="{ pageSize: 15, showTotal: (t: number) => `共 ${t} 条` }"
-        :loading="loading"
+        :data-source="roles"
         row-key="id"
-        size="small"
+        :pagination="{ pageSize: 15 }"
+        :loading="loading"
       >
         <template #bodyCell="{ column, record }">
           <template v-if="column.key === 'index'">
@@ -36,8 +37,8 @@
             </a-popconfirm>
           </template>
         </template>
-      </a-table>
-    </SectionCard>
+      </DataTable>
+    </div>
 
     <a-modal
       v-model:open="formModalVisible"
@@ -98,11 +99,11 @@
 </template>
 
 <script setup lang="ts">
-import { AppButton } from '@shared/web'
+import { AppButton, DataTable } from '@shared/web'
+import type { DataTableColumn } from '@shared/web'
 import { ref, computed, onMounted, h } from 'vue'
 import { message } from 'ant-design-vue'
 import PageHeader from '@shared/web/components/PageHeader.vue'
-import SectionCard from '@shared/web/components/SectionCard.vue'
 import type { Role, OrgUser, ApplicationItem } from '@/types'
 import {
   getRoles,
@@ -127,13 +128,14 @@ import type { PermTreeNode } from './types'
 const loading = ref(false)
 const roles = ref<(Role & { _index?: number })[]>([])
 
-const columns = [
+const columns: DataTableColumn[] = [
   { title: '序号', key: 'index', width: 80 },
-  { title: '角色', dataIndex: 'name', width: 120 },
-  { title: '应用权限', key: 'appCount', width: 100 },
-  { title: '人员', key: 'users', width: 90 },
-  { title: '创建时间', dataIndex: 'createdAt', width: 120 },
-  { title: '操作', key: 'action', width: 160 },
+  { title: '角色', dataIndex: 'name', key: 'name', width: 140, minWidth: 120, resizable: true },
+  { title: '应用权限', key: 'appCount', width: 110, minWidth: 90, resizable: true },
+  { title: '人员', key: 'users', width: 90, minWidth: 80, resizable: true },
+  { title: '创建时间', dataIndex: 'createdAt', key: 'createdAt', width: 130, minWidth: 110, resizable: true },
+  // 不固定右侧：fixed-right 浮层会盖住相邻可拖拽列（创建时间）的手柄
+  { title: '操作', key: 'action', width: 160, minWidth: 160, resizable: true },
 ]
 
 async function fetchRoles(): Promise<void> {

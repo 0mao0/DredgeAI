@@ -7,6 +7,7 @@ using System.Security.Claims;
 using DredgeAI.BidCompare.AI;
 using DredgeAI.BidCompare.Analysis;
 using DredgeAI.BidCompare.AnGineer;
+using DredgeAI.BidCompare.Applications;
 using DredgeAI.BidCompare.BackgroundJobs;
 using DredgeAI.BidCompare.Exports;
 using DredgeAI.BidCompare.Reporting;
@@ -133,6 +134,24 @@ public class BidCompareHttpApiHostModule : AbpModule
         Configure<LibreOfficeOptions>(configuration.GetSection("LibreOffice"));
         Configure<WatchdogOptions>(configuration.GetSection("Watchdog"));
         Configure<CleanupOptions>(configuration.GetSection("Cleanup"));
+        // 应用展示顺序存储：JSON 文件持久化（App_Data/app-order.json），后端重启不丢
+        context.Services.AddSingleton(sp =>
+        {
+            var env = sp.GetRequiredService<IHostEnvironment>();
+            var dataDir = Path.Combine(env.ContentRootPath, "App_Data");
+            Directory.CreateDirectory(dataDir);
+            return new ApplicationOrderStore(Path.Combine(dataDir, "app-order.json"));
+        });
+        // 应用目录存储：JSON 文件持久化（App_Data/app-catalog.json），首次运行以内置种子初始化
+        context.Services.AddSingleton(sp =>
+        {
+            var env = sp.GetRequiredService<IHostEnvironment>();
+            var dataDir = Path.Combine(env.ContentRootPath, "App_Data");
+            Directory.CreateDirectory(dataDir);
+            // 种子资源随 HttpApi 项目复制到输出目录，按程序集目录解析
+            var seedPath = Path.Combine(AppContext.BaseDirectory, "Resources", "seed-app-catalog.json");
+            return new ApplicationCatalogStore(Path.Combine(dataDir, "app-catalog.json"), seedPath);
+        });
         Configure<MeetingBotOptions>(configuration.GetSection("MeetingBot"));
         Configure<WeatherOptions>(configuration.GetSection("Weather"));
         // AnGIneer 轮询间隔为 5s，服务端 keep-alive 超时也是 5s 级别，

@@ -29,6 +29,7 @@ function buildUserApps(): AppCard[] {
         if (sub.status !== '已发布') continue
         cards.push({
           id: sub.id,
+          parentAppId: sub.parentAppId,
           title: sub.name,
           description: sub.description || `${app.name}的子应用`,
           category: sub.category,

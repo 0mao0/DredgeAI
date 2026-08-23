@@ -1,23 +1,19 @@
 <template>
   <div class="role-user-tab">
-    <div class="role-user-tab__header">
-      <a-input-search
-        v-model:value="searchText"
-        placeholder="搜索用户姓名"
-        style="width: 200px"
-        allow-clear
-      />
-      <AppButton variant="primary" size="sm" @click="showAddModal = true">新增人员</AppButton>
-    </div>
-
-    <a-table
-      :data-source="filteredUsers"
+    <DataTable
+      v-model:query="query"
+      storage-key="admin-role-user-tab"
       :columns="columns"
-      :pagination="{ pageSize: 10, showTotal: (t: number) => `共 ${t} 条` }"
-      :loading="loading"
+      :data-source="filteredUsers"
       row-key="id"
-      size="small"
+      :pagination="{ pageSize: 10 }"
+      :loading="loading"
+      :filters="filters"
+      :card="false"
     >
+      <template #toolbarExtra>
+        <AppButton variant="primary" size="sm" @click="showAddModal = true">新增人员</AppButton>
+      </template>
       <template #bodyCell="{ column, record }">
         <template v-if="column.key === 'departments'">
           <a-tag v-for="d in record.departments" :key="d" color="default">{{ d }}</a-tag>
@@ -32,7 +28,7 @@
           </a-popconfirm>
         </template>
       </template>
-    </a-table>
+    </DataTable>
 
     <a-modal
       v-model:open="showAddModal"
@@ -51,7 +47,8 @@
 </template>
 
 <script setup lang="ts">
-import { AppButton } from '@shared/web'
+import { AppButton, DataTable } from '@shared/web'
+import type { DataTableColumn, DataTableFilter } from '@shared/web'
 import { ref, computed } from 'vue'
 import { message } from 'ant-design-vue'
 import type { OrgUser, Role } from '@/types'
@@ -69,17 +66,27 @@ const emit = defineEmits<{
 
 const searchText = ref('')
 
+const filters: DataTableFilter[] = [
+  { key: 'keyword', type: 'input', placeholder: '搜索用户姓名', width: 200 },
+]
+
+const query = computed({
+  get: () => ({ keyword: searchText.value }),
+  set: (v: { keyword: string }) => { searchText.value = v.keyword ?? '' },
+})
+
 const filteredUsers = computed(() => {
   if (!searchText.value) return props.roleUsers
   const kw = searchText.value.toLowerCase()
   return props.roleUsers.filter((u) => u.name.includes(kw))
 })
 
-const columns = [
-  { title: '姓名', dataIndex: 'name' },
-  { title: '手机', dataIndex: 'phone', width: 140 },
-  { title: '部门', key: 'departments', width: 200 },
-  { title: '操作', key: 'action', width: 80 },
+const columns: DataTableColumn[] = [
+  { title: '姓名', dataIndex: 'name', key: 'name', width: 120, minWidth: 100, resizable: true },
+  { title: '手机', dataIndex: 'phone', key: 'phone', width: 140, minWidth: 120, resizable: true },
+  { title: '部门', key: 'departments', width: 200, minWidth: 160, resizable: true },
+  // 不固定右侧：fixed-right 浮层会盖住相邻可拖拽列（部门）的手柄
+  { title: '操作', key: 'action', width: 90, minWidth: 90, resizable: true },
 ]
 
 const showAddModal = ref(false)
@@ -99,15 +106,6 @@ async function handleAdd(): Promise<void> {
 
 <style scoped lang="less">
 @import '@shared/web/styles/variables.less';
-
-.role-user-tab {
-  &__header {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    margin-bottom: @spacing-base;
-  }
-}
 
 .user-check-group {
   display: flex;

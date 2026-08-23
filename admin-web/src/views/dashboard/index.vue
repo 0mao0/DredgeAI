@@ -46,13 +46,14 @@
       </a-row>
 
       <SectionCard title="最近操作日志">
-        <a-table
-          :data-source="recentLogs"
+        <DataTable
+          storage-key="admin-dashboard-logs"
           :columns="logColumns"
-          :pagination="false"
-          size="small"
+          :data-source="recentLogs"
+          row-key="id"
           :loading="loading"
-          :locale="{ emptyText: '暂无数据' }"
+          :pagination="false"
+          :card="false"
         />
       </SectionCard>
     </template>
@@ -60,7 +61,8 @@
 </template>
 
 <script setup lang="ts">
-import { AppButton } from '@shared/web'
+import { AppButton, DataTable } from '@shared/web'
+import type { DataTableColumn } from '@shared/web'
 import { ref, computed } from 'vue'
 import PageHeader from '@shared/web/components/PageHeader.vue'
 import SectionCard from '@shared/web/components/SectionCard.vue'
@@ -92,11 +94,11 @@ const apiCallsTrend = ref<{ categories: string[], series: { name: string, data: 
 const appDistribution = ref<{ name: string, data: { name: string, value: number }[] }>({ name: '', data: [] })
 const activeUsersTrend = ref<{ categories: string[], series: { name: string, data: number[] }[] }>({ categories: [], series: [] })
 
-const logColumns = [
-  { title: '类型', dataIndex: 'type', key: 'type', width: 100 },
-  { title: '操作人', dataIndex: 'operator', key: 'operator', width: 100 },
-  { title: '内容', dataIndex: 'content', key: 'content', ellipsis: true },
-  { title: '时间', dataIndex: 'createdAt', key: 'createdAt', width: 160, responsive: ['md'] },
+const logColumns: DataTableColumn[] = [
+  { title: '类型', dataIndex: 'type', key: 'type', width: 110, minWidth: 90, resizable: true },
+  { title: '操作人', dataIndex: 'operator', key: 'operator', width: 110, minWidth: 90, resizable: true },
+  { title: '内容', dataIndex: 'content', key: 'content', width: 360, minWidth: 240, resizable: true, ellipsis: true },
+  { title: '时间', dataIndex: 'createdAt', key: 'createdAt', width: 160, minWidth: 140, resizable: true, responsive: ['md'] },
 ]
 
 const apiCallsChartOption = computed(() => {

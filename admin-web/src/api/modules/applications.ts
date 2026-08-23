@@ -2,8 +2,38 @@ import request from '@/api/request'
 import { urls } from '@shared/core/api'
 import type { ApplicationItem, SubApp } from '@/types'
 
+export interface AppOrderResult {
+  appIds: string[]
+  /** 各母项应用下的子应用默认顺序（母项 id → 子应用 id 列表） */
+  subOrders?: Record<string, string[]>
+}
+
+export interface ResetUserOrdersResult {
+  count: number
+}
+
 export function getApplications(): Promise<ApplicationItem[]> {
   return request.get<ApplicationItem[]>(urls.applications)
+}
+
+/** 获取 admin 全局默认顺序（应用 id 列表） */
+export function getAppOrder(): Promise<AppOrderResult> {
+  return request.get<AppOrderResult>(urls.adminAppOrder)
+}
+
+/** 首次加载时用当前应用目录顺序播种默认顺序（含子应用分组顺序） */
+export function seedAppOrder(appIds: string[], subOrders?: Record<string, string[]>): Promise<AppOrderResult> {
+  return request.post<AppOrderResult>(urls.adminAppOrderSeed, { appIds, subOrders })
+}
+
+/** 上移/下移一个应用，返回重排后的默认顺序 */
+export function moveAppOrder(appId: string, direction: 'up' | 'down'): Promise<AppOrderResult> {
+  return request.post<AppOrderResult>(urls.adminAppOrderMove, { appId, direction })
+}
+
+/** 清空所有用户的个性化顺序（管理员显式动作） */
+export function resetUserOrders(): Promise<ResetUserOrdersResult> {
+  return request.post<ResetUserOrdersResult>(urls.adminAppOrderReset)
 }
 
 /** 获取某模块已发布的子应用列表 */

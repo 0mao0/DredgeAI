@@ -134,7 +134,7 @@
                   class="app-card-icon"
                   :style="{ '--app-icon-color': getCategoryColor(app.category) }"
                 >
-                  <component :is="iconMap[app.icon]" />
+                  <component :is="resolveAppIcon(app.icon)" />
                 </div>
                 <div class="app-card-body">
                   <div class="app-card-name-row">
@@ -169,32 +169,17 @@ import {
   AppstoreOutlined,
   CheckCircleOutlined,
 } from '@ant-design/icons-vue'
-import * as Icons from '@ant-design/icons-vue'
 import { useUserStore } from '@/stores/user'
 import { useAppStore } from '@/stores/app'
 import { useThemeStore } from '@shared/web/stores'
+import { resolveAppIcon } from '@shared/web'
 import { getCategoryColor, getCategoryAlphaBg } from '@shared/core/utils'
-import type { Component } from 'vue'
 
 const userStore = useUserStore()
 const appStore = useAppStore()
 const themeStore = useThemeStore()
 
 // 应用图标映射（覆盖所有已定义的应用图标）
-const iconMap: Record<string, Component> = {
-  BookOutlined: Icons.BookOutlined,
-  VideoCameraOutlined: Icons.VideoCameraOutlined,
-  CustomerServiceOutlined: Icons.CustomerServiceOutlined,
-  BulbOutlined: Icons.BulbOutlined,
-  ToolOutlined: Icons.ToolOutlined,
-  FileProtectOutlined: Icons.FileProtectOutlined,
-  DashboardOutlined: Icons.DashboardOutlined,
-  RadarChartOutlined: Icons.RadarChartOutlined,
-  ExperimentOutlined: Icons.ExperimentOutlined,
-  FileSearchOutlined: Icons.FileSearchOutlined,
-  AppstoreOutlined: Icons.AppstoreOutlined,
-}
-
 // 主题选项
 const themeOptions = [
   { value: 'light' as const, label: '浅色' },
@@ -251,13 +236,14 @@ function catPillStyle(category: string) {
   return { color: c, borderColor: c, background: getCategoryAlphaBg(category) }
 }
 
-// 按可见顺序排序，已激活在前、未激活在后
+// 已激活应用按侧边栏合并顺序展示，未激活在后（保证与侧边栏一致）
 const filteredApps = computed(() => {
+  const sidebarOrder = new Map(appStore.sidebarApps.map((a, i) => [a.route, i]))
   return appStore.authorizedApps
     .filter((a) => a.route)
     .sort((a, b) => {
-      const ai = appStore.visibleAppRoutes.indexOf(a.route!)
-      const bi = appStore.visibleAppRoutes.indexOf(b.route!)
+      const ai = sidebarOrder.get(a.route!) ?? -1
+      const bi = sidebarOrder.get(b.route!) ?? -1
       if (ai === -1 && bi === -1) return 0
       if (ai === -1) return 1
       if (bi === -1) return -1
@@ -305,6 +291,7 @@ function onDrop(idx: number): void {
   const [moved] = routes.splice(fromIdx, 1)
   routes.splice(toIdx, 0, moved)
   appStore.setVisibleRoutes(routes)
+  void appStore.saveUserOrder(routes)
   onDragEnd()
 }
 </script>

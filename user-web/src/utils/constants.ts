@@ -11,7 +11,8 @@ export const USE_MOCK = import.meta.env.DEV && import.meta.env.VITE_USE_MOCK !==
 /** 按模块控制 mock：设为 false 则该模块请求直连真实 API */
 export const MOCK_MODULES: Record<string, boolean> = {
   user: true,
-  app: true,
+  // 应用列表直连真实后端（与 admin 发布管理共享同一份目录）
+  app: false,
   task: true,
   file: true,
   bid: true,
@@ -24,6 +25,8 @@ export const MOCK_MODULES: Record<string, boolean> = {
   compare: false,
   // tenderRead 直连真实后端（解析/提取由后端 AnGIneer 管线执行）
   tenderRead: false,
+  // 应用顺序直连真实后端（admin / user-web 共享同一后端进程）
+  appOrder: false,
 }
 
 // TTS Mock 开关：关闭后 TTS 请求直连 CosyVoice server.py（http://localhost:8000）
