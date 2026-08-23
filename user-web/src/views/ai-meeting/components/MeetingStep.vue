@@ -24,7 +24,12 @@
     <div class="meeting-step__qa">
       <div v-for="qa in qaRecords" :key="qa.id" class="meeting-step__qa-item">
         <div><b>问：</b>{{ qa.question }}</div>
-        <div><b>答：</b>{{ qa.answer }}</div>
+        <div class="meeting-step__qa-answer">
+          <b>答：</b>{{ qa.answer }}
+          <a-button size="small" type="link" :loading="playingId === qa.id" @click="playById(qa.id)">
+            🔊 播放
+          </a-button>
+        </div>
       </div>
     </div>
     <AppButton variant="primary" size="lg" block :loading="loading" @click="onFinish">
@@ -34,19 +39,23 @@
 </template>
 
 <script setup lang="ts">
-import { onMounted, ref } from 'vue'
+import { onMounted, ref, toRef } from 'vue'
 import SectionCard from '@shared/web/components/SectionCard.vue'
 import AppButton from '@shared/web/components/AppButton.vue'
 import type { QaRecordDto } from '@/types'
 import { useRecorder } from '../composables/useRecorder'
+import { useAudioPlayer } from '../composables/useAudioPlayer'
+import { useQaAudio } from '../composables/useQaAudio'
 
-defineProps<{ loading: boolean, qaRecords: QaRecordDto[] }>()
+const props = defineProps<{ loading: boolean, qaRecords: QaRecordDto[] }>()
 const emit = defineEmits<{
   askText: [question: string]
   askAudio: [audio: Blob]
   finish: [recording: Blob]
 }>()
 
+const { play } = useAudioPlayer()
+const { pendingVoice, playingId, playById } = useQaAudio(toRef(props, 'qaRecords'), play)
 const { recording: pttRecording, start: startPtt, stop: stopPtt } = useRecorder()
 const { recording: meetingRecording, start: startMeetingRec, stop: stopMeetingRec } = useRecorder()
 const question = ref('')
@@ -62,6 +71,7 @@ async function onPttPress(): Promise<void> {
 async function onPttRelease(): Promise<void> {
   const audio = await stopPtt()
   if (audio.size === 0) return
+  pendingVoice.value = true
   emit('askAudio', audio)
 }
 
@@ -88,5 +98,10 @@ async function onFinish(): Promise<void> {
   background: @content-bg;
   border-radius: @radius-base;
   margin-bottom: @spacing-sm;
+}
+.meeting-step__qa-answer {
+  display: flex;
+  align-items: baseline;
+  gap: @spacing-xs;
 }
 </style>

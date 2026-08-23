@@ -44,4 +44,21 @@ describe('useAudioPlayer', () => {
     player.play(new Blob(['x']))
     expect(player.playing.value).toBe(true)
   })
+
+  it('play 被浏览器自动播放策略拦截时 playing 回到 false', async () => {
+    class FakeAudio {
+      src = ''
+      onended: (() => void) | null = null
+      play = vi.fn(() => Promise.reject(new Error('NotAllowedError')))
+      pause = vi.fn()
+      currentTime = 0
+    }
+    vi.stubGlobal('Audio', FakeAudio)
+    vi.stubGlobal('URL', { createObjectURL: vi.fn(() => 'blob:fake'), revokeObjectURL: vi.fn() })
+    const player = useAudioPlayer()
+
+    player.play(new Blob(['x']))
+
+    await vi.waitFor(() => expect(player.playing.value).toBe(false))
+  })
 })

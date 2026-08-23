@@ -50,6 +50,10 @@ export function askQaAudio(id: string, audio: Blob): Promise<QaRecordDto> {
   return request.post<QaRecordDto>(fillUrl(urls.meetingQaAudio, { id }), form)
 }
 
+export function getQaAudio(qaId: string): Promise<Blob> {
+  return request.get<Blob>(fillUrl(urls.meetingQaAudioGet, { qaId }), { responseType: 'blob' })
+}
+
 export function uploadMeetingRecording(id: string, audio: Blob): Promise<MeetingRecordDto> {
   const form = new FormData()
   form.append('audio', audio, 'meeting.webm')
