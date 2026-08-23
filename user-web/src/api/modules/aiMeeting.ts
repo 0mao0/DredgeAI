@@ -37,7 +37,7 @@ export function parsePlan(planText: string): Promise<PlanParseResult> {
 }
 
 export function generateSpeech(id: string): Promise<SpeechDraftDto> {
-  return request.post<SpeechDraftDto>(fillUrl(urls.meetingSpeechGenerate, { id }))
+  return request.post<SpeechDraftDto>(fillUrl(urls.meetingSpeechGenerate, { id }), undefined, { timeout: MediaTimeout })
 }
 
 export function getSpeechDraft(id: string): Promise<SpeechDraftDto | null> {

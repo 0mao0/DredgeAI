@@ -123,6 +123,13 @@ async function handleCreate(preInfo: PreInfo): Promise<void> {
     meeting.value = await createMeeting(preInfo)
     planText.value = ''
     planResult.value = null
+    try {
+      draft.value = await generateSpeech(meeting.value.id)
+    } catch (err) {
+      // 自动生成失败时进入晨会稿页，由页面上的“生成晨会稿”按钮重试
+      draft.value = null
+      message.warning(`晨会稿自动生成失败：${extractErrorMessage(err)}，可在晨会稿页点击重试`)
+    }
     current.value = 2
   } finally {
     loading.value = false
