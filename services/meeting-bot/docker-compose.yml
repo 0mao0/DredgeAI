@@ -1,0 +1,30 @@
+# AI 晨会模型服务容器（模拟 DGX 统一模型服务场景）
+# 前置：模型权重位于宿主 D:/AI/AImodles/models；Docker Desktop 已启用 NVIDIA runtime
+services:
+  meeting-bot:
+    build: .
+    image: meeting-bot:dev
+    container_name: meeting-bot
+    ports:
+      - "8101:8101"
+    environment:
+      MEETING_BOT_KEY: dev-key
+      ASR_ENGINE: firered
+      TTS_ENGINE: firered
+      FACE_ENGINE: insightface
+      COUNT_ENGINE: yolo
+      MODEL_DIR: /app/models
+      ASR_DEVICE: auto
+      TTS_DEVICE: auto
+      FACE_PROVIDERS: cpu
+      COUNT_DEVICE: cpu
+    volumes:
+      - D:/AI/AImodles/models:/app/models
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu]
+    restart: unless-stopped
