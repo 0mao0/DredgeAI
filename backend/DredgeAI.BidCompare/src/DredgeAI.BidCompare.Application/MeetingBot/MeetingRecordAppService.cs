@@ -9,6 +9,7 @@ using DredgeAI.BidCompare.AI;
 using DredgeAI.BidCompare.AnGineer;
 using DredgeAI.BidCompare.BackgroundJobs;
 using DredgeAI.BidCompare.Storage;
+using DredgeAI.BidCompare.Weather;
 using Microsoft.Extensions.Logging;
 using Volo.Abp;
 using Volo.Abp.Application.Services;
@@ -44,6 +45,11 @@ public class MeetingRecordAppService : ApplicationService, IMeetingRecordAppServ
     private const string QaChitchatSystemPrompt =
         "你是工地晨会助手。请友好、简短地回应非安全知识的闲聊问题，回答控制在 2-3 句话。";
 
+    private const string PlanParseSystemPrompt =
+        "你是工地晨会信息整理助手。请把用户口述/输入的今日计划整理为结构化 JSON，仅返回 JSON：\n" +
+        "{\"tasks\":\"今日任务（保留关键信息并整理为可直接执行的表述）\",\"riskPoints\":\"安全风险点（结合施工内容列举，逗号分隔）\"," +
+        "\"city\":\"若提到项目所在城市/地区则填写，否则空字符串\"}";
+
     private readonly IRepository<MeetingRecord, Guid> _meetings;
     private readonly IRepository<SpeechDraft, Guid> _drafts;
     private readonly IRepository<AttendanceRecord, Guid> _attendance;
@@ -52,6 +58,7 @@ public class MeetingRecordAppService : ApplicationService, IMeetingRecordAppServ
     private readonly IMeetingBotClient _bot;
     private readonly IAnGineerClient _anGineer;
     private readonly ILlmGateway _llmGateway;
+    private readonly IWeatherClient _weather;
     private readonly IFileStorage _fileStorage;
     private readonly IBackgroundJobManager _backgroundJobManager;
 
@@ -64,6 +71,7 @@ public class MeetingRecordAppService : ApplicationService, IMeetingRecordAppServ
         IMeetingBotClient bot,
         IAnGineerClient anGineer,
         ILlmGateway llmGateway,
+        IWeatherClient weather,
         IFileStorage fileStorage,
         IBackgroundJobManager backgroundJobManager)
     {
@@ -75,6 +83,7 @@ public class MeetingRecordAppService : ApplicationService, IMeetingRecordAppServ
         _bot = bot;
         _anGineer = anGineer;
         _llmGateway = llmGateway;
+        _weather = weather;
         _fileStorage = fileStorage;
         _backgroundJobManager = backgroundJobManager;
     }
@@ -124,6 +133,44 @@ public class MeetingRecordAppService : ApplicationService, IMeetingRecordAppServ
             Report = await BuildReportAsync(meeting)
         };
         return dto;
+    }
+
+    public async Task<PlanParseResult> ParsePlanAsync(string planText)
+    {
+        if (string.IsNullOrWhiteSpace(planText))
+        {
+            throw new BusinessException("MEETING_PLAN_EMPTY", "请先输入或说出今日计划");
+        }
+
+        var raw = await _llmGateway.CompleteAsync(PlanParseSystemPrompt, $"计划内容：\n{planText}");
+        var parsed = ParsePlanJson(raw);
+        if (string.IsNullOrWhiteSpace(parsed.Tasks))
+        {
+            throw new BusinessException("MEETING_PLAN_PARSE_FAILED", "未能从输入中解析出今日任务，请补充后重试");
+        }
+
+        var city = parsed.City?.Trim() ?? "";
+        var weather = "";
+        if (!string.IsNullOrEmpty(city))
+        {
+            try
+            {
+                weather = await _weather.GetWeatherTextAsync(city);
+            }
+            catch (Exception ex)
+            {
+                Logger.LogWarning(ex, "天气查询失败：{City}，天气字段留空", city);
+            }
+        }
+
+        return new PlanParseResult
+        {
+            Date = DateTime.Today,
+            Weather = weather,
+            Tasks = parsed.Tasks,
+            RiskPoints = parsed.RiskPoints,
+            City = city
+        };
     }
 
     public async Task<List<MeetingHistoryDto>> GetHistoryAsync(int maxCount = 20)
@@ -486,6 +533,42 @@ public class MeetingRecordAppService : ApplicationService, IMeetingRecordAppServ
         }
     }
 
+    private static PlanParseSnapshot ParsePlanJson(string raw)
+    {
+        var result = new PlanParseSnapshot();
+        var start = raw.IndexOf('{');
+        var end = raw.LastIndexOf('}');
+        if (start < 0 || end <= start)
+        {
+            return result;
+        }
+        try
+        {
+            using var document = JsonDocument.Parse(raw.Substring(start, end - start + 1));
+            var root = document.RootElement;
+            result.Tasks = ReadString(root, "tasks", "今日任务");
+            result.RiskPoints = ReadString(root, "riskPoints", "risk_points", "风险点");
+            result.City = ReadString(root, "city", "城市");
+        }
+        catch (JsonException)
+        {
+            // 非 JSON 时按空处理，上层提示补充
+        }
+        return result;
+    }
+
+    private static string ReadString(JsonElement root, params string[] keys)
+    {
+        foreach (var key in keys)
+        {
+            if (root.TryGetProperty(key, out var value) && value.ValueKind == JsonValueKind.String)
+            {
+                return value.GetString()?.Trim() ?? "";
+            }
+        }
+        return "";
+    }
+
     private static SpeechDraftDto Map(SpeechDraft draft) => new()
     {
         Id = draft.Id,
@@ -534,5 +617,14 @@ public class MeetingRecordAppService : ApplicationService, IMeetingRecordAppServ
         public string Tasks { get; set; } = "";
 
         public string RiskPoints { get; set; } = "";
+    }
+
+    private class PlanParseSnapshot
+    {
+        public string Tasks { get; set; } = "";
+
+        public string RiskPoints { get; set; } = "";
+
+        public string City { get; set; } = "";
     }
 }

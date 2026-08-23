@@ -5,58 +5,55 @@
       <AppButton size="sm" @click="uploadOpen = true">上传施组方案</AppButton>
     </div>
 
-    <SectionCard title="语音录入今日计划" flush>
-      <div class="meeting-info-step__mic">
-        <button
-          class="meeting-info-step__mic-btn"
-          :class="{ 'is-recording': recording }"
-          type="button"
-          @pointerdown="onPress"
-          @pointerup="onRelease"
-          @pointerleave="onRelease"
-          @pointercancel="onRelease"
-        >
-          <AudioOutlined />
-          <span>{{ recording ? '松开发言' : '按住说话录入计划' }}</span>
-        </button>
-        <div v-if="asrLoading" class="meeting-info-step__hint">语音识别中，请稍候…</div>
-        <div v-else-if="asrError" class="meeting-info-step__hint is-error">{{ asrError }}</div>
-        <div v-else class="meeting-info-step__hint">说出今日任务与风险点，或点击下方推荐案例快速录入</div>
+    <div class="meeting-info-step__mic-zone">
+      <button
+        class="meeting-info-step__mic"
+        :class="{ 'is-recording': recording }"
+        type="button"
+        @pointerdown="onPress"
+        @pointerup="onRelease"
+        @pointerleave="onRelease"
+        @pointercancel="onRelease"
+      >
+        <AudioOutlined />
+      </button>
+      <div class="meeting-info-step__caption">
+        {{ recording ? '松开结束录音' : '按住说话，说出今日计划' }}
       </div>
-      <a-textarea
-        v-model:value="form.tasks"
-        :rows="4"
-        placeholder="今日计划（可编辑）"
-      />
-      <div class="meeting-info-step__tags">
-        <a-tag
-          v-for="tag in recommendedTags"
-          :key="tag"
-          class="meeting-info-step__tag"
-          color="blue"
-          @click="appendTag(tag)"
-        >
-          {{ tag }}
-        </a-tag>
-      </div>
-    </SectionCard>
+      <div v-if="asrLoading" class="meeting-info-step__hint">正在识别…首次识别需加载模型，请稍候</div>
+      <div v-else-if="asrError" class="meeting-info-step__hint is-error">{{ asrError }}</div>
+      <div v-else class="meeting-info-step__hint">也可以点击下方示例，或直接输入文字</div>
+    </div>
 
-    <SectionCard title="补充信息" flush>
-      <a-form layout="vertical">
-        <a-form-item label="日期">
-          <a-date-picker v-model:value="form.date" value-format="YYYY-MM-DD" style="width: 100%" />
-        </a-form-item>
-        <a-form-item label="天气">
-          <a-input v-model:value="form.weather" placeholder="如：晴，28℃" />
-        </a-form-item>
-        <a-form-item label="风险点">
-          <a-textarea v-model:value="form.riskPoints" :rows="2" placeholder="安全风险提示（可在语音中描述）" />
-        </a-form-item>
-      </a-form>
-    </SectionCard>
+    <a-textarea
+      v-model:value="planText"
+      class="meeting-info-step__plan"
+      :rows="4"
+      placeholder="今日计划将在这里显示，可编辑"
+    />
 
-    <AppButton variant="primary" size="lg" block :loading="loading" @click="onSubmit">
-      保存并生成晨会稿
+    <div class="meeting-info-step__tags">
+      <div class="meeting-info-step__tags-title">推荐示例</div>
+      <a-tag
+        v-for="item in recommendedCases"
+        :key="item.label"
+        class="meeting-info-step__tag"
+        color="blue"
+        @click="planText = item.plan"
+      >
+        {{ item.label }}
+      </a-tag>
+    </div>
+
+    <AppButton
+      variant="primary"
+      size="lg"
+      block
+      :loading="parsing"
+      :disabled="!planText.trim()"
+      @click="onParse"
+    >
+      下一步，整理信息
     </AppButton>
 
     <a-drawer
@@ -118,11 +115,10 @@
 </template>
 
 <script setup lang="ts">
-import { reactive, ref, watch } from 'vue'
+import { ref, watch } from 'vue'
 import { AudioOutlined, InboxOutlined } from '@ant-design/icons-vue'
-import SectionCard from '@shared/web/components/SectionCard.vue'
 import AppButton from '@shared/web/components/AppButton.vue'
-import type { MeetingHistoryDto, PreInfo } from '@/types'
+import type { MeetingHistoryDto } from '@/types'
 import {
   getMeetingHistory,
   getKnowledgeDocumentStatus,
@@ -132,40 +128,47 @@ import {
 import { useRecorder } from '../composables/useRecorder'
 
 const props = defineProps<{
-  loading: boolean
-  initial?: PreInfo | null
+  parsing: boolean
+  plan: string
 }>()
 const emit = defineEmits<{
-  submit: [preInfo: PreInfo]
-  loadHistory: [id: string]
+  'parse': [planText: string]
+  'update:plan': [planText: string]
+  'loadHistory': [id: string]
 }>()
 
-const recommendedTags = [
-  '今日任务：钢筋绑扎与模板安装',
-  '今日任务：基坑支护施工，注意边坡稳定',
-  '重点风险：高处作业，必须系挂安全带',
-  '今日任务：混凝土浇筑，注意振捣与养护',
-  '重点风险：临时用电与动火作业',
+const recommendedCases = [
+  {
+    label: '基坑支护',
+    plan: '今日任务：基坑支护施工，重点检查边坡稳定与临边防护；深基坑作业严格执行专项方案，雨前检查排水系统。',
+  },
+  {
+    label: '钢筋模板',
+    plan: '今日任务：钢筋绑扎与模板安装，作业前核对图纸与材料，绑扎间距按规范执行，模板支撑验收合格后再浇筑。',
+  },
+  {
+    label: '混凝土浇筑',
+    plan: '今日任务：混凝土浇筑，检查泵管与布料机固定，分层振捣密实并及时养护，浇筑过程中专人看护模板支撑。',
+  },
+  {
+    label: '高处作业',
+    plan: '今日任务：屋面与脚手架高处作业，作业前检查脚手架连墙件与防护栏杆，作业人员全程系挂安全带。',
+  },
+  {
+    label: '临时用电',
+    plan: '今日任务：现场临时用电检查与动火作业，配电箱上锁挂牌，动火前办理动火证并配备灭火器。',
+  },
 ]
 
-const form = reactive<PreInfo>({
-  date: new Date().toISOString().slice(0, 10),
-  weather: '',
-  tasks: '',
-  riskPoints: '',
-})
-
+const planText = ref('')
 watch(
-  () => props.initial,
+  () => props.plan,
   (value) => {
-    if (!value) return
-    form.date = value.date || form.date
-    form.weather = value.weather ?? ''
-    form.tasks = value.tasks ?? ''
-    form.riskPoints = value.riskPoints ?? ''
+    if (value !== planText.value) planText.value = value
   },
   { immediate: true },
 )
+watch(planText, (value) => emit('update:plan', value))
 
 const { recording, start: startRecording, stop: stopRecording } = useRecorder()
 const asrLoading = ref(false)
@@ -185,9 +188,10 @@ async function onRelease(): Promise<void> {
   const audio = await stopRecording()
   if (audio.size === 0) return
   asrLoading.value = true
+  asrError.value = ''
   try {
     const text = await transcribeAudio(audio)
-    form.tasks = [form.tasks, text].filter(Boolean).join('\n')
+    planText.value = [planText.value, text].filter(Boolean).join('\n')
   } catch {
     asrError.value = '语音识别失败，请重试或直接输入'
   } finally {
@@ -195,14 +199,9 @@ async function onRelease(): Promise<void> {
   }
 }
 
-function appendTag(tag: string): void {
-  const lines = form.tasks.split('\n').filter((l) => l.trim())
-  if (!lines.includes(tag)) lines.push(tag)
-  form.tasks = lines.join('\n')
-}
-
-function onSubmit(): void {
-  emit('submit', { ...form })
+function onParse(): void {
+  if (!planText.value.trim()) return
+  emit('parse', planText.value.trim())
 }
 
 const historyOpen = ref(false)
@@ -298,52 +297,65 @@ function statusColor(status: MeetingHistoryDto['status']): string {
 .meeting-info-step__toolbar {
   display: flex;
   justify-content: space-between;
-  margin-bottom: @spacing-md;
+  margin-bottom: @spacing-xl;
 }
-.meeting-info-step__mic {
-  margin-bottom: @spacing-md;
-}
-.meeting-info-step__mic-btn {
-  width: 100%;
-  min-height: 88px;
+.meeting-info-step__mic-zone {
   display: flex;
   flex-direction: column;
   align-items: center;
+  margin-bottom: @spacing-xl;
+}
+.meeting-info-step__mic {
+  width: 96px;
+  height: 96px;
+  border-radius: 50%;
+  border: none;
+  background: @brand-gradient;
+  color: #fff;
+  font-size: 36px;
+  display: flex;
+  align-items: center;
   justify-content: center;
-  gap: @spacing-sm;
-  border: 1px dashed @border-color;
-  border-radius: @radius-lg;
-  background: @content-bg;
-  color: @text-secondary;
   cursor: pointer;
+  box-shadow: @shadow-brand;
+  transition: transform @transition-fast;
   touch-action: none;
-  font-size: @font-size-lg;
-  transition: all 0.2s;
 
   &.is-recording {
-    border-color: @danger;
-    color: @danger;
-    background: color-mix(in srgb, var(--color-danger) 6%, transparent);
+    transform: scale(1.08);
+    animation: meeting-mic-pulse 1.2s ease-in-out infinite;
   }
 }
+.meeting-info-step__caption {
+  margin-top: @spacing-md;
+  font-size: @font-size-base;
+  color: @text-primary;
+}
 .meeting-info-step__hint {
-  margin-top: @spacing-sm;
+  margin-top: @spacing-xs;
   font-size: @font-size-sm;
-  color: @text-secondary;
+  color: @text-tertiary;
 
   &.is-error {
     color: @danger;
   }
 }
+.meeting-info-step__plan {
+  margin-bottom: @spacing-lg;
+}
 .meeting-info-step__tags {
-  display: flex;
-  flex-wrap: wrap;
-  gap: @spacing-xs;
-  margin-top: @spacing-md;
+  margin-bottom: @spacing-xl;
+}
+.meeting-info-step__tags-title {
+  font-size: @font-size-sm;
+  color: @text-secondary;
+  margin-bottom: @spacing-sm;
+}
+.meeting-info-step__tags :deep(.ant-tag) {
+  margin-bottom: @spacing-xs;
 }
 .meeting-info-step__tag {
   cursor: pointer;
-  margin-inline-end: 0;
 }
 .meeting-info-step__history-item {
   display: flex;
@@ -369,5 +381,10 @@ function statusColor(status: MeetingHistoryDto['status']): string {
   gap: @spacing-sm;
   margin-top: @spacing-md;
   color: @text-secondary;
+}
+
+@keyframes meeting-mic-pulse {
+  0%, 100% { box-shadow: @shadow-brand; }
+  50% { box-shadow: 0 0 0 10px color-mix(in srgb, var(--color-brand) 20%, transparent); }
 }
 </style>

@@ -1,22 +1,23 @@
 <template>
   <div class="ai-meeting-page">
-    <PageHeader title="AI晨会" description="会前录入 → 晨会稿 → 点名 → 会议 → 报告" />
-    <a-steps :current="current" size="small" responsive>
-      <a-step title="会前录入" />
-      <a-step title="晨会稿" />
-      <a-step title="点名" />
-      <a-step title="会议" />
-      <a-step title="报告" />
-    </a-steps>
+    <PageHeader title="AI晨会" description="录入 → 确认 → 晨会稿 → 点名 → 会议 → 报告" />
+    <MeetingSteps :items="steps" :current="current" @go="handleGoStep" />
     <MeetingInfoStep
       v-if="current === 0"
-      :loading="loading"
-      :initial="initialForm"
-      @submit="handleCreate"
+      v-model:plan="planText"
+      :parsing="parsing"
+      @parse="handleParse"
       @load-history="handleLoadHistory"
     />
-    <SpeechDraftStep
+    <PlanConfirmStep
       v-else-if="current === 1"
+      :plan="planResult"
+      :loading="loading"
+      @submit="handleCreate"
+      @back="current = 0"
+    />
+    <SpeechDraftStep
+      v-else-if="current === 2"
       :draft="draft"
       :loading="loading"
       :playing="playing"
@@ -28,22 +29,22 @@
       @stop-audio="stopAudio"
     />
     <AttendanceStep
-      v-else-if="current === 2"
+      v-else-if="current === 3"
       :loading="loading"
       :list="attendance"
       :count="peopleCount"
       @capture="handleCapture"
-      @done="current = 3"
+      @done="current = 4"
     />
     <MeetingStep
-      v-else-if="current === 3"
+      v-else-if="current === 4"
       :loading="loading"
       :qa-records="qaRecords"
       @ask-text="handleAskText"
       @ask-audio="handleAskAudio"
       @finish="handleMeetingFinish"
     />
-    <ReportStep v-else-if="current === 4" :report="report" />
+    <ReportStep v-else-if="current === 5" :report="report" />
   </div>
 </template>
 
@@ -53,6 +54,7 @@ import PageHeader from '@shared/web/components/PageHeader.vue'
 import type {
   AttendanceItemDto,
   MeetingRecordDto,
+  PlanParseResult,
   PreInfo,
   QaRecordDto,
   ReportDto,
@@ -67,18 +69,22 @@ import {
   getMeeting,
   getReport,
   getSpeechAudio,
+  parsePlan,
   recognizeAttendance,
   saveSpeechDraft,
   startMeeting,
   uploadMeetingRecording,
 } from '@/api/modules/aiMeeting'
 import MeetingInfoStep from './components/MeetingInfoStep.vue'
+import PlanConfirmStep from './components/PlanConfirmStep.vue'
 import SpeechDraftStep from './components/SpeechDraftStep.vue'
 import AttendanceStep from './components/AttendanceStep.vue'
 import MeetingStep from './components/MeetingStep.vue'
 import ReportStep from './components/ReportStep.vue'
+import MeetingSteps from './components/MeetingSteps.vue'
 import { useAudioPlayer } from './composables/useAudioPlayer'
 
+const steps = ['录入', '确认', '晨会稿', '点名', '会议', '报告']
 const current = ref(0)
 const meeting = ref<MeetingRecordDto | null>(null)
 const loading = ref(false)
@@ -87,16 +93,33 @@ const attendance = ref<AttendanceItemDto[]>([])
 const qaRecords = ref<QaRecordDto[]>([])
 const report = ref<ReportDto | null>(null)
 const peopleCount = ref<number | null>(null)
-const initialForm = ref<PreInfo | null>(null)
+const planText = ref('')
+const planResult = ref<PlanParseResult | null>(null)
+const parsing = ref(false)
 const { playing, play, stop: stopAudio } = useAudioPlayer()
 const audioLoading = ref(false)
+
+async function handleParse(planText: string): Promise<void> {
+  parsing.value = true
+  try {
+    planResult.value = await parsePlan(planText)
+    current.value = 1
+  } finally {
+    parsing.value = false
+  }
+}
+
+function handleGoStep(index: number): void {
+  if (index < current.value) current.value = index
+}
 
 async function handleCreate(preInfo: PreInfo): Promise<void> {
   loading.value = true
   try {
     meeting.value = await createMeeting(preInfo)
-    initialForm.value = null
-    current.value = 1
+    planText.value = ''
+    planResult.value = null
+    current.value = 2
   } finally {
     loading.value = false
   }
@@ -112,28 +135,25 @@ async function handleLoadHistory(id: string): Promise<void> {
     qaRecords.value = record.qaRecords
     report.value = record.report ?? null
     peopleCount.value = null
+    planResult.value = null
+    planText.value = ''
     if (record.preInfoJson) {
       try {
         const p = JSON.parse(record.preInfoJson) as Partial<PreInfo> & { date?: string }
-        initialForm.value = {
-          date: p.date?.slice(0, 10) ?? '',
-          weather: p.weather ?? '',
-          tasks: p.tasks ?? '',
-          riskPoints: p.riskPoints ?? '',
-        }
+        planText.value = p.tasks ?? ''
       } catch {
-        initialForm.value = null
+        planText.value = ''
       }
     }
     current.value
       = record.status === 'rollcall'
-        ? 2
+        ? 3
         : record.status === 'ongoing'
-          ? 3
+          ? 4
           : record.status === 'completed'
-            ? 4
+            ? 5
             : record.speechDraft
-              ? 1
+              ? 2
               : 0
   } finally {
     loading.value = false
@@ -168,7 +188,7 @@ async function handleConfirmDraft(): Promise<void> {
       draft.value = await saveSpeechDraft(meeting.value.id, draft.value.content)
     }
     meeting.value = await startMeeting(meeting.value.id)
-    current.value = 2
+    current.value = 3
   } finally {
     loading.value = false
   }
@@ -226,7 +246,7 @@ async function handleMeetingFinish(recording: Blob): Promise<void> {
     }
     meeting.value = await completeMeeting(meeting.value.id)
     report.value = await getReport(meeting.value.id)
-    current.value = 4
+    current.value = 5
   } finally {
     loading.value = false
   }
@@ -240,8 +260,5 @@ async function handleMeetingFinish(recording: Blob): Promise<void> {
   max-width: 720px;
   margin: 0 auto;
   padding: @page-padding;
-}
-.ai-meeting-page :deep(.ant-steps) {
-  margin-bottom: @spacing-lg;
 }
 </style>

@@ -8,6 +8,14 @@ export interface PreInfo {
   riskPoints: string
 }
 
+export interface PlanParseResult {
+  date: string
+  weather: string
+  tasks: string
+  riskPoints: string
+  city: string
+}
+
 export interface SpeechDraftDto {
   id: string
   content: string

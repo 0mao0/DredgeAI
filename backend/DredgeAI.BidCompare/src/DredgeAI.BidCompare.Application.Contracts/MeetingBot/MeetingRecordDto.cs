@@ -24,6 +24,24 @@ public class AskQaInput
     public string Question { get; set; } = "";
 }
 
+public class PlanParseInput
+{
+    public string PlanText { get; set; } = "";
+}
+
+public class PlanParseResult
+{
+    public DateTime Date { get; set; }
+
+    public string Weather { get; set; } = "";
+
+    public string Tasks { get; set; } = "";
+
+    public string RiskPoints { get; set; } = "";
+
+    public string City { get; set; } = "";
+}
+
 public class MeetingRecordDto
 {
     public Guid Id { get; set; }

@@ -30,6 +30,10 @@ public class MeetingRecordController : AbpControllerBase
     public Task<List<MeetingHistoryDto>> History(int maxCount = 20)
         => _service.GetHistoryAsync(maxCount);
 
+    [HttpPost("~/api/meeting/parse-plan")]
+    public Task<PlanParseResult> ParsePlan([FromBody] PlanParseInput input)
+        => _service.ParsePlanAsync(input.PlanText);
+
     [HttpGet("{id:guid}")]
     public Task<MeetingRecordDto> Get(Guid id)
         => _service.GetAsync(id);

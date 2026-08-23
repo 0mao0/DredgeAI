@@ -228,14 +228,15 @@ v1 交互为半双工（按住说话）；v2 全双工候选两条路线：端�
 
 | 功能 | 状态 | 说明 |
 |---|---|---|
-| 第一步·语音录入 + 推荐 tag | 已实施 | 按住说话 → `POST /api/meeting/asr`；下方推荐案例点击即录入 |
+| 第一步·语音录入 + 推荐 tag | 已实施 | 圆话筒按住说话 → `POST /api/meeting/asr`；推荐案例 tag 为简写，点击填入完整计划文本 |
+| 第二步·信息确认（结构化） | 已实施 | `POST /api/meeting/parse-plan`：LLM 把需求解析为 今日任务/风险点/城市，天气自动查询（wttr.in），整页可编辑确认后再生成晨会稿 |
 | 第一步·历史记录 | 已实施 | 左上角抽屉展示最近 20 条，点击续开会话（按状态跳转对应步骤） |
 | 第一步·上传施组方案 | 已实施 | 右上角上传 PDF/Word → AnGIneer 解析入库，前端轮询状态 |
 | 第二步·晨会稿 C1 | 已实施 | AnGIneer 检索 + ai-gateway → Qwen 生成；编辑/保存/确认 |
 | 第三步·TTS 朗读晨会稿 | 已实施 | 晨会稿页"播放/停止"按钮，`GET /api/meeting/records/{id}/speech/audio` |
 | 第三步·点名 + 人数 | 已实施 | InsightFace 识别 + YOLO 计数（`POST .../attendance/recognize` 返回 faces+count） |
 | 第零/四步·新人录入 | 已实施 | 拍身份证 → Qwen 读图取字段（`POST /api/meeting/workers/recognize-id-card`）→ 创建/复用工人（`POST /api/meeting/workers`）→ 拍人脸入库（`POST .../workers/{id}/face`） |
-| 第五步·半双工问答 | 已实施 | 按住说话 → ASR → ai-gateway 问答 → TTS 播报 |
+| 第五步·半双工问答 | 已实施 | 按住说话 → ASR → ai-gateway 问答 → TTS 播报；媒体类请求超时放宽到 120s（ASR 首次加载模型） |
 | 第六步·落库/报告 | 已实施 | 会议/晨会稿/点名/问答/报告入库；报告页展示 |
 | C2、自动轮转、双工问答 | Backlog | 不进入 MVP |
 
@@ -243,6 +244,7 @@ v1 交互为半双工（按住说话）；v2 全双工候选两条路线：端�
 
 | 方法/路径 | 说明 |
 |---|---|
+| `POST /api/meeting/parse-plan` | 计划结构化解析（LLM）+ 天气自动获取（wttr.in，免 key，失败留空） |
 | `GET /api/meeting/records?maxCount=20` | 历史记录列表 |
 | `GET /api/meeting/records/{id}/speech/audio` | 晨会稿 TTS 音频（WAV） |
 | `POST /api/meeting/asr` | 独立语音转写（会前录入用） |
@@ -253,3 +255,5 @@ v1 交互为半双工（按住说话）；v2 全双工候选两条路线：端�
 | `POST .../attendance/recognize` | 响应新增 `count`（YOLO 人数） |
 
 LLM 网关新增多模态能力：`ILlmGateway.CompleteMultimodalAsync`（文本 + 若干图片，OpenAI data URL 格式），供身份证读图等场景使用。
+
+步骤条：6 步（录入 → 确认 → 晨会稿 → 点名 → 会议 → 报告），移动端使用自定义紧凑圆点步骤条（不再随 antd responsive 变为竖向）。

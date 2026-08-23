@@ -4,6 +4,7 @@ using System.Threading.Tasks;
 using DredgeAI.BidCompare.AI;
 using DredgeAI.BidCompare.AnGineer;
 using DredgeAI.BidCompare.BackgroundJobs;
+using DredgeAI.BidCompare.Weather;
 using Shouldly;
 using Volo.Abp;
 using Volo.Abp.BackgroundJobs;
@@ -151,6 +152,45 @@ public class MeetingRecordAppServiceTests : BidCompareApplicationTestBase<BidCom
         history[0].Id.ShouldBe(second.Id);
         history.ShouldContain(h => h.TaskPreview == "基坑支护施工");
         history.ShouldContain(h => h.Status == MeetingStatus.Draft);
+    }
+
+    [Fact]
+    public async Task ParsePlan_Should_Structure_Text_And_Fill_Weather()
+    {
+        var weather = (FakeWeatherClient)GetRequiredService<IWeatherClient>();
+        weather.WeatherText = "多云 26℃";
+        weather.ThrowOnQuery = false;
+        _llm.QueueResponse(
+            "{\"tasks\":\"基坑支护施工，检查边坡稳定与临边防护\",\"riskPoints\":\"坍塌,高处坠落\",\"city\":\"上海\"}");
+
+        var result = await _appService.ParsePlanAsync("今天上海做基坑支护，注意边坡稳定");
+
+        result.Tasks.ShouldContain("基坑支护");
+        result.RiskPoints.ShouldContain("坍塌");
+        result.Weather.ShouldBe("多云 26℃");
+        result.City.ShouldBe("上海");
+        weather.QueriedCities.ShouldContain("上海");
+    }
+
+    [Fact]
+    public async Task ParsePlan_Should_Throw_When_Plan_Empty()
+    {
+        var ex = await Should.ThrowAsync<BusinessException>(
+            () => _appService.ParsePlanAsync("   "));
+        ex.Code.ShouldBe("MEETING_PLAN_EMPTY");
+    }
+
+    [Fact]
+    public async Task ParsePlan_Should_Leave_Weather_Empty_When_Query_Fails()
+    {
+        var weather = (FakeWeatherClient)GetRequiredService<IWeatherClient>();
+        weather.ThrowOnQuery = true;
+        _llm.QueueResponse("{\"tasks\":\"模板安装与钢筋绑扎\",\"riskPoints\":\"\",\"city\":\"上海\"}");
+
+        var result = await _appService.ParsePlanAsync("今天做模板安装");
+
+        result.Weather.ShouldBe("");
+        result.Tasks.ShouldContain("模板安装");
     }
 
     [Fact]

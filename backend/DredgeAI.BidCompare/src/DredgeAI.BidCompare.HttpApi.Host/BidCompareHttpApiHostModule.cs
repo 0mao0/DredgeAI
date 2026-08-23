@@ -22,6 +22,7 @@ using DredgeAI.BidCompare.EntityFrameworkCore;
 using DredgeAI.BidCompare.MeetingBot;
 using DredgeAI.BidCompare.MultiTenancy;
 using DredgeAI.BidCompare.Storage;
+using DredgeAI.BidCompare.Weather;
 using Volo.Abp.AspNetCore.Mvc.UI.Theme.LeptonXLite;
 using Volo.Abp.AspNetCore.Mvc.UI.Theme.LeptonXLite.Bundling;
 using Microsoft.OpenApi.Models;
@@ -133,6 +134,7 @@ public class BidCompareHttpApiHostModule : AbpModule
         Configure<WatchdogOptions>(configuration.GetSection("Watchdog"));
         Configure<CleanupOptions>(configuration.GetSection("Cleanup"));
         Configure<MeetingBotOptions>(configuration.GetSection("MeetingBot"));
+        Configure<WeatherOptions>(configuration.GetSection("Weather"));
         // AnGIneer 轮询间隔为 5s，服务端 keep-alive 超时也是 5s 级别，
         // 缩短连接池空闲寿命，避免复用已被服务端关闭的旧连接（SocketException 10053）。
         // 显式 Timeout：默认 100s 不够 200MB 级标书上传，加长到 10 分钟（上限，状态轮询照常快速返回）。
@@ -169,6 +171,11 @@ public class BidCompareHttpApiHostModule : AbpModule
                 client.DefaultRequestHeaders.Add("X-Meeting-Bot-Key", options.Key);
             }
         });
+        context.Services.AddHttpClient(nameof(HttpWeatherClient), (sp, client) =>
+        {
+            client.Timeout = TimeSpan.FromSeconds(10);
+        });
+        context.Services.AddTransient<IWeatherClient, HttpWeatherClient>();
         context.Services.AddTransient<IMeetingBotClient, MeetingBotClient>();
         context.Services.AddHttpClient();
     }

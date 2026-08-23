@@ -132,6 +132,7 @@ export const urls = {
   // AI 晨会
   meetingRecord: '/meeting/records',
   meetingHistory: '/meeting/records',
+  meetingParsePlan: '/meeting/parse-plan',
   meetingSpeechGenerate: '/meeting/records/:id/speech/generate',
   meetingSpeechDraft: '/meeting/records/:id/speech',
   meetingSpeechAudio: '/meeting/records/:id/speech/audio',

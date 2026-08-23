@@ -10,6 +10,19 @@ export function registerMeetingMock(
     url?.match(/\/api\/meeting\/records\/([^/]+)\//)?.[1] ?? ''
 
   mock.onPost('/api/meeting/records').reply((config) => [200, createMockMeeting(JSON.parse(config.data))])
+  mock.onPost('/api/meeting/parse-plan').reply((config) => {
+    const text = JSON.parse(config.data).planText ?? ''
+    return [
+      200,
+      {
+        date: new Date().toISOString().slice(0, 10),
+        weather: '多云 26℃',
+        tasks: text || '（未输入）',
+        riskPoints: '高处作业、临边防护',
+        city: '上海',
+      },
+    ]
+  })
   mock.onGet('/api/meeting/records').reply((config) => {
     const limit = Number(config.params?.maxCount ?? 20)
     return [

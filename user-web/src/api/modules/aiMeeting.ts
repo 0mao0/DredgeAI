@@ -13,8 +13,12 @@ import type {
   IdCardRecognitionDto,
   KnowledgeUploadResult,
   KnowledgeJobStatusDto,
+  PlanParseResult,
   PreInfo,
 } from '@/types'
+
+/** 媒体/模型请求耗时较长（ASR 首次加载模型、TTS 合成、长音频等），放宽 axios 默认 15s 超时。 */
+const MediaTimeout = 120_000
 
 export function createMeeting(preInfo: PreInfo): Promise<MeetingRecordDto> {
   return request.post<MeetingRecordDto>(urls.meetingRecord, preInfo)
@@ -26,6 +30,10 @@ export function getMeeting(id: string): Promise<MeetingRecordDto> {
 
 export function getMeetingHistory(limit = 20): Promise<MeetingHistoryDto[]> {
   return request.get<MeetingHistoryDto[]>(urls.meetingHistory, { params: { maxCount: limit } })
+}
+
+export function parsePlan(planText: string): Promise<PlanParseResult> {
+  return request.post<PlanParseResult>(urls.meetingParsePlan, { planText }, { timeout: MediaTimeout })
 }
 
 export function generateSpeech(id: string): Promise<SpeechDraftDto> {
@@ -41,13 +49,13 @@ export function saveSpeechDraft(id: string, content: string): Promise<SpeechDraf
 }
 
 export function getSpeechAudio(id: string): Promise<Blob> {
-  return request.get<Blob>(fillUrl(urls.meetingSpeechAudio, { id }), { responseType: 'blob' })
+  return request.get<Blob>(fillUrl(urls.meetingSpeechAudio, { id }), { responseType: 'blob', timeout: MediaTimeout })
 }
 
 export function transcribeAudio(audio: Blob): Promise<string> {
   const form = new FormData()
   form.append('audio', audio, 'speech.webm')
-  return request.post<string>(urls.meetingAsr, form)
+  return request.post<string>(urls.meetingAsr, form, { timeout: MediaTimeout })
 }
 
 export function startMeeting(id: string): Promise<MeetingRecordDto> {
@@ -57,7 +65,11 @@ export function startMeeting(id: string): Promise<MeetingRecordDto> {
 export function recognizeAttendance(id: string, photo: Blob): Promise<AttendanceRecognizeResult> {
   const form = new FormData()
   form.append('image', photo, 'attendance.jpg')
-  return request.post<AttendanceRecognizeResult>(fillUrl(urls.meetingAttendanceRecognize, { id }), form)
+  return request.post<AttendanceRecognizeResult>(
+    fillUrl(urls.meetingAttendanceRecognize, { id }),
+    form,
+    { timeout: MediaTimeout },
+  )
 }
 
 export function getAttendance(id: string): Promise<AttendanceItemDto[]> {
@@ -71,17 +83,17 @@ export function askQa(id: string, question: string): Promise<QaRecordDto> {
 export function askQaAudio(id: string, audio: Blob): Promise<QaRecordDto> {
   const form = new FormData()
   form.append('audio', audio, 'question.webm')
-  return request.post<QaRecordDto>(fillUrl(urls.meetingQaAudio, { id }), form)
+  return request.post<QaRecordDto>(fillUrl(urls.meetingQaAudio, { id }), form, { timeout: MediaTimeout })
 }
 
 export function getQaAudio(qaId: string): Promise<Blob> {
-  return request.get<Blob>(fillUrl(urls.meetingQaAudioGet, { qaId }), { responseType: 'blob' })
+  return request.get<Blob>(fillUrl(urls.meetingQaAudioGet, { qaId }), { responseType: 'blob', timeout: MediaTimeout })
 }
 
 export function uploadMeetingRecording(id: string, audio: Blob): Promise<MeetingRecordDto> {
   const form = new FormData()
   form.append('audio', audio, 'meeting.webm')
-  return request.post<MeetingRecordDto>(fillUrl(urls.meetingRecording, { id }), form)
+  return request.post<MeetingRecordDto>(fillUrl(urls.meetingRecording, { id }), form, { timeout: MediaTimeout })
 }
 
 export function completeMeeting(id: string): Promise<MeetingRecordDto> {
@@ -115,7 +127,7 @@ export function enrollWorkerFace(id: string, photo: Blob): Promise<WorkerDto> {
 export function uploadKnowledgeDocument(file: File): Promise<KnowledgeUploadResult> {
   const form = new FormData()
   form.append('file', file)
-  return request.post<KnowledgeUploadResult>(urls.meetingKnowledgeDocuments, form)
+  return request.post<KnowledgeUploadResult>(urls.meetingKnowledgeDocuments, form, { timeout: MediaTimeout })
 }
 
 export function getKnowledgeDocumentStatus(docId: string): Promise<KnowledgeJobStatusDto> {

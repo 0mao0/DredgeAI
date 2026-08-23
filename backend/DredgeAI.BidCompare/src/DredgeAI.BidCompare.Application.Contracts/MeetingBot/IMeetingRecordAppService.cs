@@ -11,6 +11,8 @@ public interface IMeetingRecordAppService : IApplicationService
 
     Task<MeetingRecordDto> GetAsync(Guid id);
 
+    Task<PlanParseResult> ParsePlanAsync(string planText);
+
     Task<List<MeetingHistoryDto>> GetHistoryAsync(int maxCount = 20);
 
     Task<SpeechDraftDto?> GetSpeechAsync(Guid id);
