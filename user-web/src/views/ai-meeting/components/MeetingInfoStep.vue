@@ -22,7 +22,6 @@
       </div>
       <div v-if="asrLoading" class="meeting-info-step__hint">正在识别…首次识别需加载模型，请稍候</div>
       <div v-else-if="asrError" class="meeting-info-step__hint is-error">{{ asrError }}</div>
-      <div v-else class="meeting-info-step__hint">也可以点击下方示例，或直接输入文字</div>
     </div>
 
     <a-textarea
