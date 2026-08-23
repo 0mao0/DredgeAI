@@ -7,8 +7,13 @@
         <UsageCharts :tasks="tasks" :time-series="timeSeries" :loading="loadingSummary" @range-change="handleRangeChange" />
       </a-tab-pane>
       <a-tab-pane key="history" tab="历史记录">
-        <AdminDubbingFilters :loading="loading" @search="handleSearch" />
-        <AdminHistoryTable :tasks="tasks" :loading="loading" @play="handlePlay" @delete="handleDelete" />
+        <AdminHistoryTable
+          :tasks="tasks"
+          :loading="loading"
+          @search="handleSearch"
+          @play="handlePlay"
+          @delete="handleDelete"
+        />
       </a-tab-pane>
       <a-tab-pane key="voice" tab="音色管理">
         <AdminVoiceManager
@@ -37,7 +42,6 @@
 import { ref, onMounted } from 'vue'
 import { message } from 'ant-design-vue'
 import PageHeader from '@shared/web/components/PageHeader.vue'
-import AdminDubbingFilters from './components/AdminDubbingFilters.vue'
 import AdminHistoryTable from './components/AdminHistoryTable.vue'
 import AdminVoiceManager from './components/AdminVoiceManager.vue'
 import UsageMetrics from './components/UsageMetrics.vue'
@@ -52,7 +56,7 @@ const loading = ref(false)
 const summary = ref<DubbingUsageSummary | null>(null)
 const timeSeries = ref<DubbingUsageTimeSeries | null>(null)
 const loadingSummary = ref(false)
-const currentFilters = ref({ keyword: '', status: '', deletedOnly: false, dateRange: ['', ''] as [string, string] })
+const currentFilters = ref({ keyword: '', status: undefined as string | undefined, deletedOnly: false })
 const currentTask = ref<DubbingTask | null>(null)
 const playerVisible = ref(false)
 const voices = ref<VoiceItem[]>([])

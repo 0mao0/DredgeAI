@@ -13,7 +13,7 @@
             @change="emitQuery"
           />
           <a-select
-            v-else
+            v-else-if="f.type === 'select'"
             v-model:value="localQuery[f.key]"
             :placeholder="f.placeholder"
             allow-clear
@@ -24,6 +24,10 @@
               {{ opt.label }}
             </a-select-option>
           </a-select>
+          <div v-else class="data-table-filter-switch">
+            <span class="data-table-filter-switch__label">{{ f.label }}</span>
+            <a-switch v-model:checked="localQuery[f.key]" size="small" @change="emitQuery" />
+          </div>
         </template>
         <AppButton v-if="filters.length" size="sm" @click="resetQuery">重置</AppButton>
         <slot name="toolbarExtra" />
@@ -108,10 +112,12 @@ export interface DataTableColumn {
 
 export interface DataTableFilter {
   key: string
-  type: 'input' | 'select'
+  type: 'input' | 'select' | 'switch'
   placeholder?: string
   width?: number
   options?: Array<string | number | { value: string | number, label: string }>
+  /** switch 类型显示的标签 */
+  label?: string
   /** 重置时恢复的默认值 */
   defaultValue?: unknown
 }
@@ -272,6 +278,18 @@ function resetQuery(): void {
   gap: @spacing-sm;
   flex-wrap: wrap;
   margin-bottom: @spacing-base;
+}
+
+.data-table-filter-switch {
+  display: inline-flex;
+  align-items: center;
+  gap: @spacing-sm;
+
+  &__label {
+    font-size: @font-size-sm;
+    white-space: nowrap;
+    color: @text-secondary;
+  }
 }
 
 // 覆盖 rc-table 内联 min-width: 100% 与自动布局，

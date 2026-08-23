@@ -1,9 +1,11 @@
 <template>
   <DataTable
+    v-model:query="query"
     :columns="columns"
     :data-source="tasks"
     :loading="loading"
     :pagination="paginationProps"
+    :filters="filters"
     row-key="id"
   >
     <template #bodyCell="{ column, record }: { column: { key: string }; record: DubbingTask }">
@@ -44,13 +46,28 @@
 
 <script setup lang="ts">
 import { AppButton, DataTable } from '@shared/web'
-import type { DataTableColumn } from '@shared/web'
-import { computed } from 'vue'
+import type { DataTableColumn, DataTableFilter } from '@shared/web'
+import { computed, ref, watch } from 'vue'
 import { PlayCircleOutlined, DeleteOutlined } from '@ant-design/icons-vue'
 import type { DubbingTask } from '@/types'
 
 const props = defineProps<{ tasks: DubbingTask[], loading: boolean }>()
-const emit = defineEmits<{ play: [task: DubbingTask], delete: [id: string] }>()
+const emit = defineEmits<{
+  play: [task: DubbingTask]
+  delete: [id: string]
+  search: [filters: { keyword: string, status: string | undefined, deletedOnly: boolean }]
+}>()
+
+const query = ref({ keyword: '', status: undefined as string | undefined, deletedOnly: false })
+const filters: DataTableFilter[] = [
+  { key: 'keyword', type: 'input', placeholder: '搜索用户 / 文本', width: 240 },
+  { key: 'status', type: 'select', placeholder: '状态', width: 140, options: ['生成中', '已完成', '已失败'] },
+  { key: 'deletedOnly', type: 'switch', label: '仅看用户已删除', defaultValue: false },
+]
+
+watch(query, () => {
+  emit('search', { ...query.value })
+}, { deep: true })
 
 const paginationProps = computed(() => ({
   pageSize: 10,

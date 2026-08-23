@@ -1,33 +1,20 @@
 <template>
   <div class="admin-voice-manager">
     <DataTable
+      v-model:query="query"
       :columns="columns"
       :data-source="voices"
       :loading="loading"
       row-key="id"
       :pagination="{ pageSize: 15 }"
+      :filters="filters"
       empty-text="暂无音色数据"
     >
-      <template #toolbar>
-        <div class="admin-voice-manager__toolbar">
-          <AppButton variant="primary" @click="showAddModal = true">
-            <template #icon><PlusOutlined /></template>
-            添加公有音色
-          </AppButton>
-          <a-input-search
-            v-model:value="query"
-            placeholder="搜索音色名称 / 用户"
-            allow-clear
-            style="width:240px"
-            @search="emitSearch"
-            @change="emitSearch"
-          />
-          <div class="toolbar-spacer" />
-          <div class="toolbar-item">
-            <span class="toolbar-label">仅看用户已删除</span>
-            <a-switch v-model:checked="deletedOnly" size="small" @change="emitSearch" />
-          </div>
-        </div>
+      <template #toolbarExtra>
+        <AppButton variant="primary" @click="showAddModal = true">
+          <template #icon><PlusOutlined /></template>
+          添加公有音色
+        </AppButton>
       </template>
       <template #bodyCell="{ column, record }: { column: { key: string }; record: VoiceItem }">
         <template v-if="column.key === 'gender'">
@@ -98,8 +85,8 @@
 
 <script setup lang="ts">
 import { AppButton, DataTable, VoiceRegisterModal } from '@shared/web'
-import type { DataTableColumn } from '@shared/web'
-import { ref } from 'vue'
+import type { DataTableColumn, DataTableFilter } from '@shared/web'
+import { ref, watch } from 'vue'
 import {
   PlusOutlined,
   ManOutlined,
@@ -129,15 +116,18 @@ const columns: DataTableColumn[] = [
   { title: '操作', key: 'action', width: 150, minWidth: 150, fixed: 'right', resizable: true },
 ]
 
-const query = ref('')
-const deletedOnly = ref(false)
+const query = ref({ keyword: '', deletedOnly: false })
+const filters: DataTableFilter[] = [
+  { key: 'keyword', type: 'input', placeholder: '搜索音色名称 / 用户', width: 240 },
+  { key: 'deletedOnly', type: 'switch', label: '仅看用户已删除', defaultValue: false },
+]
 const showAddModal = ref(false)
 const playingId = ref<string | null>(null)
 const audioRef = ref<HTMLAudioElement>()
 
-function emitSearch(): void {
-  emit('search', { keyword: query.value.trim(), deletedOnly: deletedOnly.value })
-}
+watch(query, () => {
+  emit('search', { keyword: query.value.keyword.trim(), deletedOnly: query.value.deletedOnly })
+}, { deep: true })
 
 function playSample(voice: VoiceItem): void {
   if (!voice.sampleUrl || playingId.value) return
@@ -174,31 +164,8 @@ function formatTime(iso?: string): string {
 <style scoped lang="less">
 @import '@shared/web/styles/variables.less';
 
-.admin-voice-manager {
-  &__toolbar {
-    display: flex;
-    gap: @spacing-base;
-    flex-wrap: wrap;
-    align-items: center;
-    margin-bottom: @spacing-base;
-  }
-}
 .admin-voice-manager :deep(.ant-table-cell) {
   font-size: @font-size-sm;
-}
-
-.toolbar-spacer {
-  flex: 1 1 auto;
-}
-.toolbar-item {
-  display: flex;
-  align-items: center;
-  gap: @spacing-sm;
-  margin-left: auto;
-}
-.toolbar-label {
-  font-size: @font-size-sm;
-  white-space: nowrap;
 }
 
 .voice-gender {
