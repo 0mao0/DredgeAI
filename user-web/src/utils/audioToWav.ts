@@ -26,11 +26,23 @@ export async function convertToWav16k(blob: Blob): Promise<Blob> {
   }
 }
 
+const KNOWN_ERROR_MESSAGES: Record<string, string> = {
+  MEETING_PLAN_EMPTY: '请先输入或说出今日计划',
+  MEETING_PLAN_PARSE_FAILED: '未能从输入中识别出今日任务，请说得更完整一些',
+  MEETING_PLAN_LLM_FAILED: '智能整理服务暂时不可用，请稍后重试',
+  MEETING_BOT_CALL_FAILED: '语音服务暂时不可用，请稍后重试',
+  AI_GATEWAY_FAILED: 'AI 服务暂时不可用，请稍后重试',
+}
+
 export function extractErrorMessage(err: unknown): string {
   const anyErr = err as {
-    response?: { status?: number, data?: { error?: { message?: string } } }
+    response?: { status?: number, data?: { error?: { code?: string, message?: string } } }
     message?: string
   } | null
+  const code = anyErr?.response?.data?.error?.code
+  if (code && KNOWN_ERROR_MESSAGES[code]) {
+    return KNOWN_ERROR_MESSAGES[code]!
+  }
   if (anyErr?.response?.data?.error?.message) {
     return anyErr.response.data.error.message
   }

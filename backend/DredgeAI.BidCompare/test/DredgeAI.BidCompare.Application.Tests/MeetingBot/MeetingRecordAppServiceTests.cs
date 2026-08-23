@@ -194,6 +194,17 @@ public class MeetingRecordAppServiceTests : BidCompareApplicationTestBase<BidCom
     }
 
     [Fact]
+    public async Task ParsePlan_Should_Degrade_To_Raw_Input_When_Llm_Fails()
+    {
+        _llm.ThrowOnNextCall = true;
+
+        var result = await _appService.ParsePlanAsync("今天上海做基坑支护");
+
+        result.Tasks.ShouldContain("基坑支护");
+        result.RiskPoints.ShouldBe("");
+    }
+
+    [Fact]
     public async Task GetSpeechAudio_Should_Tts_The_Draft_Content()
     {
         var meeting = await _appService.CreateAsync(new PreInfoInput { Tasks = "临边防护检查" });

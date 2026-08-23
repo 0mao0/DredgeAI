@@ -13,11 +13,18 @@ public class FakeLlmGateway : ILlmGateway
 
     public List<(string System, string Text, int ImageCount)> MultimodalRequests { get; } = new();
 
+    public bool ThrowOnNextCall { get; set; }
+
     public void QueueResponse(string response) => _responses.Enqueue(response);
 
     public Task<string> CompleteAsync(string systemPrompt, string userPrompt, CancellationToken cancellationToken = default)
     {
         Requests.Add((systemPrompt, userPrompt));
+        if (ThrowOnNextCall)
+        {
+            ThrowOnNextCall = false;
+            throw new System.InvalidOperationException("LLM service unavailable");
+        }
         if (_responses.Count == 0)
         {
             throw new System.InvalidOperationException("FakeLlmGateway：响应队列已空，存在未预期的 LLM 调用");
@@ -32,6 +39,11 @@ public class FakeLlmGateway : ILlmGateway
         CancellationToken cancellationToken = default)
     {
         MultimodalRequests.Add((systemPrompt, text, images.Count));
+        if (ThrowOnNextCall)
+        {
+            ThrowOnNextCall = false;
+            throw new System.InvalidOperationException("LLM service unavailable");
+        }
         if (_responses.Count == 0)
         {
             throw new System.InvalidOperationException("FakeLlmGateway：响应队列已空，存在未预期的 LLM 调用");

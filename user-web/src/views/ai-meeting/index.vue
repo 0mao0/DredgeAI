@@ -50,6 +50,7 @@
 
 <script setup lang="ts">
 import { ref } from 'vue'
+import { message } from 'ant-design-vue'
 import PageHeader from '@shared/web/components/PageHeader.vue'
 import type {
   AttendanceItemDto,
@@ -83,6 +84,7 @@ import MeetingStep from './components/MeetingStep.vue'
 import ReportStep from './components/ReportStep.vue'
 import MeetingSteps from './components/MeetingSteps.vue'
 import { useAudioPlayer } from './composables/useAudioPlayer'
+import { extractErrorMessage } from '@/utils/audioToWav'
 
 const steps = ['录入', '确认', '晨会稿', '点名', '会议', '报告']
 const current = ref(0)
@@ -104,6 +106,8 @@ async function handleParse(planText: string): Promise<void> {
   try {
     planResult.value = await parsePlan(planText)
     current.value = 1
+  } catch (err) {
+    message.error(`整理失败：${extractErrorMessage(err)}`)
   } finally {
     parsing.value = false
   }

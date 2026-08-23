@@ -142,13 +142,20 @@ public class MeetingRecordAppService : ApplicationService, IMeetingRecordAppServ
             throw new BusinessException("MEETING_PLAN_EMPTY", "请先输入或说出今日计划");
         }
 
-        var raw = await _llmGateway.CompleteAsync(PlanParseSystemPrompt, $"计划内容：\n{planText}");
-        var parsed = ParsePlanJson(raw);
-        if (string.IsNullOrWhiteSpace(parsed.Tasks))
+        PlanParseSnapshot parsed;
+        try
         {
-            throw new BusinessException("MEETING_PLAN_PARSE_FAILED", "未能从输入中解析出今日任务，请补充后重试");
+            var raw = await _llmGateway.CompleteAsync(PlanParseSystemPrompt, $"计划内容：\n{planText}");
+            parsed = ParsePlanJson(raw);
+        }
+        catch (Exception ex)
+        {
+            // LLM 不可用/解析失败时降级：任务保留原始输入，风险点留空由用户补充，不阻断流程
+            Logger.LogWarning(ex, "计划结构化解析失败，降级为原始输入");
+            parsed = new PlanParseSnapshot { Tasks = planText };
         }
 
+        var tasks = string.IsNullOrWhiteSpace(parsed.Tasks) ? planText : parsed.Tasks;
         var city = parsed.City?.Trim() ?? "";
         var weather = "";
         if (!string.IsNullOrEmpty(city))
@@ -167,7 +174,7 @@ public class MeetingRecordAppService : ApplicationService, IMeetingRecordAppServ
         {
             Date = DateTime.Today,
             Weather = weather,
-            Tasks = parsed.Tasks,
+            Tasks = tasks,
             RiskPoints = parsed.RiskPoints,
             City = city
         };
