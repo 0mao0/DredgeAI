@@ -216,7 +216,7 @@ function onExpand(keys: string[]): void {
 
 const columnWidths = reactive<Record<string, number>>({
   index: 60,
-  name: 260,
+  name: 200,
   category: 90,
   status: 90,
   scope: 160,
@@ -225,7 +225,7 @@ const columnWidths = reactive<Record<string, number>>({
 
 const columnMinWidths: Record<string, number> = {
   index: 60,
-  name: 160,
+  name: 150,
   category: 80,
   status: 80,
   scope: 120,
