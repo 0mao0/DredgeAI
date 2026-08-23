@@ -49,7 +49,7 @@ public interface ICompareTaskAppService : IApplicationService
 
     Task<SimilarityMatrixDto> GetMatrixAsync(Guid id);
 
-    Task<List<ClauseDto>> ExtractClausesAsync(Guid id);
+    Task<CompareTaskDto> ExtractClausesAsync(Guid id);
 
     Task<CompareTaskDto> ConfirmClausesAsync(Guid id, ConfirmClausesInput input);
 

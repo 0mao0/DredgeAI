@@ -265,21 +265,34 @@ public class BaselineExtractionService : ITransientDependency
 
         var savedCount = 0;
         var failureMessages = new List<string>();
-        foreach (var extractor in _extractors)
+
+        // 并行执行各分类提取器：耗时主要在 LLM 网络调用上，串行会放大单任务耗时；
+        // 校验/落库仍在主流程按顺序执行，避免并发写冲突。
+        var extractorResults = await Task.WhenAll(
+            _extractors.Select(async extractor =>
+            {
+                try
+                {
+                    var drafts = await extractor.ExtractAsync(context, cancellationToken);
+                    return (Extractor: extractor, Drafts: drafts, Error: (string?)null);
+                }
+                catch (Exception ex) when (ex is not OperationCanceledException)
+                {
+                    _logger.LogWarning(ex, "抽取器 {Category} 执行失败", extractor.Category);
+                    return (Extractor: extractor, Drafts: (IReadOnlyList<BaselineFieldDraft>)Array.Empty<BaselineFieldDraft>(), Error: ex.Message);
+                }
+            }));
+
+        foreach (var result in extractorResults)
         {
-            cancellationToken.ThrowIfCancellationRequested();
-            IReadOnlyList<BaselineFieldDraft> drafts;
-            try
+            var extractor = result.Extractor;
+            if (result.Error != null)
             {
-                drafts = await extractor.ExtractAsync(context, cancellationToken);
-            }
-            catch (Exception ex) when (ex is not OperationCanceledException)
-            {
-                _logger.LogWarning(ex, "抽取器 {Category} 执行失败", extractor.Category);
-                failureMessages.Add($"{extractor.Category}: {ex.Message}");
+                failureMessages.Add($"{extractor.Category}: {result.Error}");
                 continue;
             }
 
+            var drafts = result.Drafts;
             _logger.LogInformation("抽取器 {Category} 产出 {Count} 个字段", extractor.Category, drafts.Count);
 
             foreach (var draft in drafts)

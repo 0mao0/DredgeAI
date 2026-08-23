@@ -42,7 +42,22 @@ public class ClauseExtractionTests : BidCompareApplicationTestBase<BidCompareApp
     }
 
     [Fact]
-    public async Task Extract_Should_Return_Draft_Without_Persisting()
+    public async Task Extract_Should_Enqueue_Job_And_Return_Task()
+    {
+        var (taskId, _, _) = await PrepareAwaitingClausesTaskAsync();
+        _jobManager.Clear();
+
+        var result = await _appService.ExtractClausesAsync(taskId);
+
+        // 异步触发：仅入队后台作业并更新进度，草案由轮询感知
+        _jobManager.LastEnqueued<ExtractClausesArgs>()!.TaskId.ShouldBe(taskId);
+        result.Progress.Stage.ShouldBe("clauses_extracting");
+        result.ClauseDrafts.ShouldBeNull();
+        result.Status.ShouldBe(CompareTaskStatus.AwaitingClauses);
+    }
+
+    [Fact]
+    public async Task ExtractJob_Should_Generate_Drafts_Without_Locking_Snapshot()
     {
         var (taskId, _, _) = await PrepareAwaitingClausesTaskAsync();
         _llmGateway.QueueResponse("""
@@ -54,19 +69,24 @@ public class ClauseExtractionTests : BidCompareApplicationTestBase<BidCompareApp
         ```
         """);
 
-        var drafts = await _appService.ExtractClausesAsync(taskId);
+        var job = GetRequiredService<ExtractClausesJob>();
+        await WithUnitOfWorkAsync(async () =>
+        {
+            await job.ExecuteAsync(new ExtractClausesArgs { TaskId = taskId });
+        });
 
-        drafts.Count.ShouldBe(2);
-        drafts.ShouldAllBe(d => d.Source == ClauseSource.Extracted);
-        drafts.ShouldAllBe(d => !string.IsNullOrWhiteSpace(d.ClauseId));
-        drafts[0].Text.ShouldContain("总承包一级资质");
-        drafts[0].Mandatory.ShouldBeTrue();
-        drafts[1].Category.ShouldBe("工期");
-
-        // 草案不落库：任务仍处于待确认，快照仍为空（spec §3.2：AI 提取不当黑盒）
+        // 草案挂在任务 DTO 上，状态保持待确认、快照仍为空（spec §3.2：AI 提取不当黑盒）
         var detail = await _appService.GetAsync(taskId);
+        detail.ClauseDrafts.ShouldNotBeNull();
+        detail.ClauseDrafts!.Count.ShouldBe(2);
+        detail.ClauseDrafts.ShouldAllBe(d => d.Source == ClauseSource.Extracted);
+        detail.ClauseDrafts.ShouldAllBe(d => !string.IsNullOrWhiteSpace(d.ClauseId));
+        detail.ClauseDrafts[0].Text.ShouldContain("总承包一级资质");
+        detail.ClauseDrafts[0].Mandatory.ShouldBeTrue();
+        detail.ClauseDrafts[1].Category.ShouldBe("工期");
         detail.Status.ShouldBe(CompareTaskStatus.AwaitingClauses);
         detail.ClauseSnapshot.ShouldBeNull();
+        detail.Progress.Stage.ShouldBe("clauses");
 
         // prompt 中应带招标文件 content.md 内容
         _llmGateway.Requests.Single().User.ShouldContain("第三章 技术方案");

@@ -77,6 +77,11 @@ public class TenderReadingController : AbpControllerBase
     public Task<System.Collections.Generic.List<TenderReadingOutlineNodeDto>> GetOutlineAsync(Guid id)
         => _appService.GetOutlineAsync(id);
 
+    /// <summary>GET /api/tender-read/tasks/{id}/document/parsed 解析产物（Markdown + IR）。</summary>
+    [HttpGet("{id}/document/parsed")]
+    public Task<TenderReadingParsedDocumentDto> GetParsedDocumentAsync(Guid id)
+        => _appService.GetParsedDocumentAsync(id);
+
     /// <summary>GET /api/tender-read/tasks/{id}/baseline 完整基准库。</summary>
     [HttpGet("{id}/baseline")]
     public Task<TenderReadingBaselineDto> GetBaselineAsync(Guid id)

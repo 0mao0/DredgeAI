@@ -30,6 +30,9 @@ public class CompareTask : FullAuditedAggregateRoot<Guid>
     /// <summary>条款清单快照（JSON 数组，元素见 ClauseSnapshotItem），锁定后不可变（spec §6.2）。</summary>
     public string? ClauseSnapshotJson { get; private set; }
 
+    /// <summary>条款提取草案（JSON 数组，元素见 ClauseDto），确认前可反复重抽/覆盖，确认后转 ClauseSnapshotJson。</summary>
+    public string? ClauseDraftsJson { get; private set; }
+
     /// <summary>报告 JSON 缓存（CompareReportDto 序列化），任务 Done 后生成。</summary>
     public string? ReportJson { get; private set; }
 
@@ -193,6 +196,20 @@ public class CompareTask : FullAuditedAggregateRoot<Guid>
             CompareTaskStatus.Parsing, CompareTaskStatus.Parsed,
             CompareTaskStatus.Partial, CompareTaskStatus.AwaitingClauses);
         ClauseSnapshotJson = Check.NotNullOrWhiteSpace(snapshotJson, nameof(snapshotJson));
+    }
+
+    /// <summary>写入条款提取草案（确认前可覆盖）。</summary>
+    public void SetClauseDrafts(string draftsJson)
+    {
+        EnsureStatus(nameof(SetClauseDrafts),
+            CompareTaskStatus.Parsed, CompareTaskStatus.Partial, CompareTaskStatus.AwaitingClauses);
+        ClauseDraftsJson = Check.NotNullOrWhiteSpace(draftsJson, nameof(draftsJson));
+    }
+
+    /// <summary>清空草案（提取失败时回退，避免残留陈旧草案）。</summary>
+    public void ClearClauseDrafts()
+    {
+        ClauseDraftsJson = null;
     }
 
     public void SetReport(string reportJson, DateTime generatedAt)

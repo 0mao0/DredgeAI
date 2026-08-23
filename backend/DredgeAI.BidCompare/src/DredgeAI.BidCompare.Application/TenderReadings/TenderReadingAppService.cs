@@ -3,11 +3,13 @@ using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
+using System.Text;
 using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
 using DredgeAI.BidCompare.Documents;
 using DredgeAI.BidCompare.Exports;
+using DredgeAI.BidCompare.Ir;
 using DredgeAI.BidCompare.Storage;
 using Microsoft.Extensions.Logging;
 using Volo.Abp;
@@ -301,6 +303,44 @@ public class TenderReadingAppService : ApplicationService, ITenderReadingAppServ
         }
 
         return JsonSerializer.Deserialize<List<TenderReadingOutlineNodeDto>>(outline.GetRawText(), OutlineJsonOptions) ?? new();
+    }
+
+    public async Task<TenderReadingParsedDocumentDto> GetParsedDocumentAsync(Guid id)
+    {
+        // 解析未完成时返回空产物，前端轮询到状态就绪后再拉取
+        var document = await GetParsedDocumentIfReadyAsync(id);
+        if (document == null)
+        {
+            return new TenderReadingParsedDocumentDto();
+        }
+
+        string irJson;
+        await using (var irStream = await _fileStorage.GetAsync(document.IrStorageKey!))
+        using (var reader = new StreamReader(irStream))
+        {
+            irJson = await reader.ReadToEndAsync();
+        }
+
+        var ir = JsonSerializer.Deserialize<DocumentIrDto>(irJson, OutlineJsonOptions) ?? new DocumentIrDto();
+
+        string content;
+        if (!string.IsNullOrWhiteSpace(document.DocMdStorageKey)
+            && await _fileStorage.ExistsAsync(document.DocMdStorageKey))
+        {
+            await using var mdStream = await _fileStorage.GetAsync(document.DocMdStorageKey);
+            using var mdReader = new StreamReader(mdStream);
+            content = await mdReader.ReadToEndAsync();
+        }
+        else
+        {
+            content = BuildMarkdownFromIr(ir);
+        }
+
+        return new TenderReadingParsedDocumentDto
+        {
+            Content = content,
+            Ir = ir
+        };
     }
 
     public async Task<TenderReadingBaselineDto> GetBaselineAsync(Guid id)
@@ -604,6 +644,53 @@ public class TenderReadingAppService : ApplicationService, ITenderReadingAppServ
         {
             return Array.Empty<double>();
         }
+    }
+
+    /// <summary>AnGIneer 未产出 content.md 时，用 IR 块重建一份可读 Markdown（页眉/页脚忽略）。</summary>
+    private static string BuildMarkdownFromIr(DocumentIrDto ir)
+    {
+        var sb = new StringBuilder();
+        foreach (var block in ir.Blocks)
+        {
+            if (block.Type is "header" or "footer")
+            {
+                continue;
+            }
+
+            var text = block.Text?.Trim() ?? string.Empty;
+            switch (block.Type)
+            {
+                case "title":
+                    var level = Math.Clamp(block.TextLevel > 0 ? block.TextLevel : 1, 1, 6);
+                    if (text.Length > 0)
+                    {
+                        sb.Append('#', level).Append(' ').AppendLine(text);
+                    }
+                    break;
+                case "equation":
+                    if (text.Length > 0)
+                    {
+                        sb.AppendLine("$$").AppendLine(text).AppendLine("$$");
+                    }
+                    break;
+                case "image":
+                    sb.AppendLine(text.Length > 0 ? $"[图片] {text}" : "[图片]");
+                    break;
+                case "table":
+                    sb.AppendLine(block.Table?.Html ?? (text.Length > 0 ? text : "[表格]"));
+                    break;
+                default:
+                    if (text.Length > 0)
+                    {
+                        sb.AppendLine(text);
+                    }
+                    break;
+            }
+
+            sb.AppendLine();
+        }
+
+        return sb.ToString();
     }
 
     private static string ContentTypeOf(string extension) => extension switch

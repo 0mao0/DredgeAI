@@ -31,6 +31,8 @@ public interface ITenderReadingAppService : IApplicationService
 
     Task<List<TenderReadingOutlineNodeDto>> GetOutlineAsync(Guid id);
 
+    Task<TenderReadingParsedDocumentDto> GetParsedDocumentAsync(Guid id);
+
     Task<TenderReadingBaselineDto> GetBaselineAsync(Guid id);
 
     Task<List<BaselineFieldDto>> GetBaselineByCategoryAsync(Guid id, BaselineCategory category);

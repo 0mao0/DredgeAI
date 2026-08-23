@@ -18,8 +18,8 @@ public class DarkBidFormatRulesExtractor : IBaselineFieldExtractor, ITransientDe
         BaselineExtractionContext context,
         CancellationToken cancellationToken = default)
     {
-        var matches = new List<string>();
-        var sourceRefs = new List<SourceMapItemDraft>();
+        var drafts = new List<BaselineFieldDraft>();
+        var index = 0;
 
         foreach (var block in EnumerateBlocks(context.IrRoot))
         {
@@ -30,36 +30,41 @@ public class DarkBidFormatRulesExtractor : IBaselineFieldExtractor, ITransientDe
                 continue;
             }
 
+            var hit = false;
             foreach (var keyword in Keywords)
             {
                 if (text!.Contains(keyword, StringComparison.Ordinal))
                 {
-                    matches.Add(text.Trim());
-                    sourceRefs.Add(new SourceMapItemDraft
-                    {
-                        BlockId = GetString(block, "blockId") ?? string.Empty,
-                        PageIdx = GetInt(block, "pageIdx"),
-                        Bbox = GetBbox(block),
-                        Text = text.Trim()
-                    });
+                    hit = true;
                     break;
                 }
             }
-        }
+            if (!hit)
+            {
+                continue;
+            }
 
-        var drafts = new List<BaselineFieldDraft>();
-        if (matches.Count > 0)
-        {
+            index++;
+            var raw = text.Trim();
             drafts.Add(new BaselineFieldDraft
             {
-                FieldKey = "dark_bid_format_rules",
-                ValueJson = JsonSerializer.Serialize(new { rules = matches }),
-                RawText = string.Join("；", matches),
+                FieldKey = $"dark_bid_rule_{index}",
+                ValueJson = JsonSerializer.Serialize(new { value = raw }),
+                RawText = raw,
                 Confidence = 0.88,
                 Status = BaselineFieldStatus.Auto,
                 Extractor = "rule",
                 ExtractorVersion = "1.0",
-                SourceRefs = sourceRefs
+                SourceRefs = new List<SourceMapItemDraft>
+                {
+                    new()
+                    {
+                        BlockId = GetString(block, "blockId") ?? string.Empty,
+                        PageIdx = GetInt(block, "pageIdx"),
+                        Bbox = GetBbox(block),
+                        Text = raw
+                    }
+                }
             });
         }
 

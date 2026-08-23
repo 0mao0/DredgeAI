@@ -31,6 +31,9 @@ public class CompareTaskDto : EntityDto<Guid>
 
     public List<ClauseDto>? ClauseSnapshot { get; set; }
 
+    /// <summary>条款提取草案（确认前可编辑，异步提取后由任务轮询返回）。</summary>
+    public List<ClauseDto>? ClauseDrafts { get; set; }
+
     public CompareProgressDto Progress { get; set; } = new();
 
     public List<ComparePairDto>? Pairs { get; set; }

@@ -115,9 +115,9 @@ public class CompareTaskController : AbpControllerBase
     public Task<Analysis.SimilarityMatrixDto> GetMatrixAsync(Guid id)
         => _appService.GetMatrixAsync(id);
 
-    /// <summary>POST /api/compare/tasks/{id}/clauses/extract 触发从招标文件提取条款草案</summary>
+    /// <summary>POST /api/compare/tasks/{id}/clauses/extract 触发从招标文件提取条款草案（异步，草案经任务轮询返回）</summary>
     [HttpPost("{id}/clauses/extract")]
-    public Task<List<Clauses.ClauseDto>> ExtractClausesAsync(Guid id)
+    public Task<CompareTaskDto> ExtractClausesAsync(Guid id)
         => _appService.ExtractClausesAsync(id);
 
     /// <summary>PUT /api/compare/tasks/{id}/clauses 确认后的条款清单（锁定快照）</summary>
