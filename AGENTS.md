@@ -56,7 +56,7 @@
 ### 2.1 页面布局 & 间距
 
 - 所有组件（弹框、卡片、表单、页面区块等）采用紧凑间距，**不要依赖组件库默认值**（如 antd 的 `margin-bottom: 24px`）。
-- 参考页面：admin-web `views/api/index.vue`、`views/dubbing/*`。
+- 参考页面：admin-web `views/data/static/standards/index.vue`（列表页标准样板：PageHeader 间距 + 筛选栏 + 表格）、`views/api/index.vue`、`views/dubbing/*`。
 - **弹框、按钮、表单间距等 → 加载 `skill: layout-conventions`**
 
 #### 间距速查表
@@ -105,6 +105,7 @@
 - **empty**：无数据时可通过 `:locale="{ emptyText: '暂无数据' }"` 自定义空态文案。
 - **row-key**：必须设置 `row-key="id"`，避免 antd 警告。
 - **响应式**：多列表格加 `:scroll="{ x: 1100 }"` 防止窄屏溢出。
+- **标准样板**：管理端列表页统一使用共享组件 `@shared/web` 的 `DataTable`（内置 `size="small"`、`pageSize: 15`、`showTotal`、`row-key`、操作列 `fixed='right'`、列宽可拖拽、横向自适应、配置驱动筛选栏），**禁止在页面内自行实现 a-table + 列宽拖拽/筛选栏/自适应逻辑**；参考 admin-web `views/data/static/standards/index.vue` 与 `views/applications/control.vue` 的用法。
 - **模板**：
 
 ```ts
@@ -136,6 +137,7 @@ const columns = [
 
 - 筛选控件使用默认尺寸（不写 `size`），搜索框/选择器宽度建议 100~240px，按实际字段数调整。
 - 若某页有“重置”按钮，应紧跟最后一个筛选字段，不要用 `margin-left: auto` 推到右侧。
+- 新页面的筛选栏一律照此实现，不新增背景、边框或自定义样式变体。
 
 
 
