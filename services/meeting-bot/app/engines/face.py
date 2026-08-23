@@ -28,5 +28,12 @@ class MockFaceEngine(FaceEngine):
 def get_face_engine(engine_name: str) -> FaceEngine:
     if engine_name == "insightface":
         from .insightface_engine import InsightFaceEngine
-        return InsightFaceEngine()
+
+        from app.settings import settings
+
+        return InsightFaceEngine(
+            model_dir=settings.model_dir,
+            threshold=settings.face_recognize_threshold,
+            providers=settings.face_providers,
+        )
     return MockFaceEngine()

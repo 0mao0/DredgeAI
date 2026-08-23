@@ -19,5 +19,8 @@ class MockAsrEngine(AsrEngine):
 def get_asr_engine(engine_name: str) -> AsrEngine:
     if engine_name == "firered":
         from .firered_asr import FireRedAsrEngine
-        return FireRedAsrEngine()
+
+        from app.settings import settings
+
+        return FireRedAsrEngine(model_dir=settings.model_dir, device=settings.asr_device)
     return MockAsrEngine()

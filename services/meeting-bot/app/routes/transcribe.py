@@ -1,4 +1,5 @@
-import asyncio, uuid
+import asyncio
+import uuid
 from fastapi import APIRouter, UploadFile, File
 from app.settings import settings
 from app.engines.asr import get_asr_engine
@@ -16,7 +17,6 @@ async def start_transcribe(audio: UploadFile = File(...)):
 
     async def run():
         _jobs[job_id]["status"] = "running"
-        await asyncio.sleep(0.01)  # v1 mock；真实实现换成 FireRedASR-LLM 调用
         _jobs[job_id]["text"] = _engine.transcribe(data).text
         _jobs[job_id]["status"] = "done"
 

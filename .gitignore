@@ -109,3 +109,10 @@ tests/
 **/public/cmaps/
 **/public/standard_fonts/
 **/public/wasm/
+
+# meeting-bot models & runtimes
+services/meeting-bot/models/
+services/meeting-bot/.venv-tts/
+services/meeting-bot/third_party/
+services/meeting-bot/.scratch/
+services/meeting-bot/*.log

@@ -11,5 +11,8 @@ class MockCountEngine(CountEngine):
 def get_count_engine(engine_name: str) -> CountEngine:
     if engine_name == "yolo":
         from .yolo_engine import YoloCountEngine
-        return YoloCountEngine()
+
+        from app.settings import settings
+
+        return YoloCountEngine(model_dir=settings.model_dir, device=settings.count_device)
     return MockCountEngine()
