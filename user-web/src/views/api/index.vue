@@ -4,93 +4,66 @@
 
     <a-tabs v-model:active-key="activeTab" class="api-tabs">
       <a-tab-pane key="keys" tab="API 管理">
-        <SectionCard nopad class="mb-24">
-          <template #extra>
-            <AppButton variant="primary" size="sm" @click="showCreateModal = true">
+        <DataTable
+          :columns="columns"
+          :data-source="apiKeys"
+          :pagination="{ pageSize: 15 }"
+          row-key="id"
+        >
+          <template #toolbarExtra>
+            <AppButton variant="primary" @click="showCreateModal = true">
               <PlusOutlined />
               创建 Key
             </AppButton>
           </template>
-          <a-table
-            size="small"
-            :data-source="apiKeys"
-            :columns="columns"
-            :pagination="{ pageSize: 10 }"
-            row-key="id"
-          >
-            <template #bodyCell="{ column, record }">
-              <template v-if="column.key === 'key'">
-                <code class="key-text">{{ record.key }}</code>
-              </template>
-              <template v-else-if="column.key === 'doc'">
-                <AppButton variant="link" size="sm" @click="openDoc(record.docUrl)">
-                  <FileTextOutlined /> 文档
-                </AppButton>
-              </template>
-              <template v-else-if="column.key === 'action'">
-                <AppButton variant="link" size="sm" @click="handleEdit(record)">编辑</AppButton>
-                <a-popconfirm title="确认删除？" @confirm="handleDelete(record.id)">
-                  <AppButton variant="link" size="sm" danger>删除</AppButton>
-                </a-popconfirm>
-              </template>
+          <template #bodyCell="{ column, record }">
+            <template v-if="column.key === 'key'">
+              <code class="key-text">{{ record.key }}</code>
             </template>
-          </a-table>
-        </SectionCard>
+            <template v-else-if="column.key === 'doc'">
+              <AppButton variant="link" size="sm" @click="openDoc(record.docUrl)">
+                <FileTextOutlined /> 文档
+              </AppButton>
+            </template>
+            <template v-else-if="column.key === 'action'">
+              <AppButton variant="link" size="sm" @click="handleEdit(record)">编辑</AppButton>
+              <a-popconfirm title="确认删除？" @confirm="handleDelete(record.id)">
+                <AppButton variant="link" size="sm" danger>删除</AppButton>
+              </a-popconfirm>
+            </template>
+          </template>
+        </DataTable>
       </a-tab-pane>
 
       <a-tab-pane key="calls" tab="调用记录">
-        <SectionCard nopad>
-          <div class="user-filter-bar">
-            <a-input-search
-              v-model:value="callUserKeyword"
-              placeholder="搜索用户"
-              allow-clear
-              style="width:180px"
-            />
-            <a-select
-              v-model:value="callModelFilter"
-              mode="multiple"
-              allow-clear
-              placeholder="模型"
-              :max-tag-count="0"
-              :max-tag-placeholder="callModelFilter.length ? `已选 ${callModelFilter.length}` : '全部'"
-              style="width:140px"
-            >
-              <a-select-option v-for="m in allModelNames" :key="m" :value="m">{{ m }}</a-select-option>
-            </a-select>
-            <a-select v-model:value="callStatusFilter" allow-clear placeholder="状态" style="width:100px">
-              <a-select-option value="成功">成功</a-select-option>
-              <a-select-option value="失败">失败</a-select-option>
-            </a-select>
-          </div>
-          <a-table
-            size="small"
-            :data-source="callRecords"
-            :columns="callColumns"
-            :pagination="{ pageSize: 15, showTotal: (t: number) => `共 ${t} 条` }"
-            row-key="id"
-          >
-            <template #bodyCell="{ column, record }">
-              <template v-if="column.key === 'userName'">
-                <a-tooltip :title="`${record.department} · ${record.userName} · ${record.userPhone}`">
-                  <span>{{ record.userName }}</span>
-                </a-tooltip>
-              </template>
-              <template v-else-if="column.key === 'latency'">
-                {{ (record.latency ?? 0) }}ms
-              </template>
-              <template v-else-if="column.key === 'inputTokens'">
-                {{ ((record.inputTokens ?? 0) / 10000).toFixed(1) }} 万
-              </template>
-              <template v-else-if="column.key === 'outputTokens'">
-                {{ ((record.outputTokens ?? 0) / 10000).toFixed(1) }} 万
-              </template>
-              <template v-else-if="column.key === 'status'">
-                <a-tag :color="record.status === '成功' ? 'green' : 'red'">{{ record.status }}</a-tag>
-              </template>
+        <DataTable
+          v-model:query="callQuery"
+          :columns="callColumns"
+          :data-source="callRecords"
+          :pagination="{ pageSize: 15 }"
+          :filters="callFilters"
+          row-key="id"
+        >
+          <template #bodyCell="{ column, record }">
+            <template v-if="column.key === 'userName'">
+              <a-tooltip :title="`${record.department} · ${record.userName} · ${record.userPhone}`">
+                <span>{{ record.userName }}</span>
+              </a-tooltip>
             </template>
-          </a-table>
-        </SectionCard>
+            <template v-else-if="column.key === 'latency'">
+              {{ (record.latency ?? 0) }}ms
+            </template>
+            <template v-else-if="column.key === 'inputTokens'">
+              {{ ((record.inputTokens ?? 0) / 10000).toFixed(1) }} 万
+            </template>
+            <template v-else-if="column.key === 'outputTokens'">
+              {{ ((record.outputTokens ?? 0) / 10000).toFixed(1) }} 万
+            </template>
+            <template v-else-if="column.key === 'status'">
+              <a-tag :color="record.status === '成功' ? 'green' : 'red'">{{ record.status }}</a-tag>
+            </template>
+          </template>
+        </DataTable>
       </a-tab-pane>
 
       <a-tab-pane key="usage" tab="用量分析">
@@ -195,7 +168,8 @@
 </template>
 
 <script setup lang="ts">
-import { AppButton } from '@shared/web'
+import { AppButton, DataTable } from '@shared/web'
+import type { DataTableColumn, DataTableFilter } from '@shared/web'
 import { ref, computed, onMounted, watch } from 'vue'
 import { message } from 'ant-design-vue'
 import { PlusOutlined, CopyOutlined, FileTextOutlined } from '@ant-design/icons-vue'
@@ -213,13 +187,13 @@ const activeTab = ref('keys')
 
 // ─── API Key 管理 ──────────────────────────────────────
 
-const columns = [
-  { title: '名称', dataIndex: 'name', key: 'name' },
-  { title: 'Key', key: 'key', width: 240 },
-  { title: '模型', dataIndex: 'modelType', key: 'modelType' },
-  { title: '创建日期', dataIndex: 'createdAt', key: 'createdAt', width: 120 },
-  { title: 'API 文档', key: 'doc', width: 110 },
-  { title: '操作', key: 'action', width: 130 },
+const columns: DataTableColumn[] = [
+  { title: '名称', dataIndex: 'name', key: 'name', width: 160, minWidth: 120, resizable: true },
+  { title: 'Key', key: 'key', width: 240, minWidth: 180, resizable: true },
+  { title: '模型', dataIndex: 'modelType', key: 'modelType', width: 120, minWidth: 100, resizable: true },
+  { title: '创建日期', dataIndex: 'createdAt', key: 'createdAt', width: 120, minWidth: 110, resizable: true },
+  { title: 'API 文档', key: 'doc', width: 110, minWidth: 90, resizable: true },
+  { title: '操作', key: 'action', width: 130, minWidth: 130, fixed: 'right', resizable: true },
 ]
 
 const apiKeys = ref<ApiKey[]>([])
@@ -390,15 +364,30 @@ const mockCallRecords: CallRecord[] = (() => {
   return records.sort((a, b) => b.time.localeCompare(a.time))
 })()
 
-const callColumns = [
-  { title: '时间', dataIndex: 'time', key: 'time', width: 160 },
-  { title: '模型', dataIndex: 'modelName', key: 'modelName' },
-  { title: '用户', key: 'userName', width: 100 },
-  { title: '输入 Token', key: 'inputTokens', width: 100 },
-  { title: '输出 Token', key: 'outputTokens', width: 100 },
-  { title: '延迟', key: 'latency', width: 90 },
-  { title: '状态', key: 'status', width: 80 },
+const callColumns: DataTableColumn[] = [
+  { title: '时间', dataIndex: 'time', key: 'time', width: 160, minWidth: 140, resizable: true },
+  { title: '模型', dataIndex: 'modelName', key: 'modelName', width: 180, minWidth: 120, resizable: true },
+  { title: '用户', key: 'userName', width: 100, minWidth: 90, resizable: true },
+  { title: '输入 Token', key: 'inputTokens', width: 100, minWidth: 90, resizable: true },
+  { title: '输出 Token', key: 'outputTokens', width: 100, minWidth: 90, resizable: true },
+  { title: '延迟', key: 'latency', width: 90, minWidth: 80, resizable: true },
+  { title: '状态', key: 'status', width: 80, minWidth: 70, resizable: true },
 ]
+
+const callFilters: DataTableFilter[] = [
+  { key: 'userKeyword', type: 'input', placeholder: '搜索用户', width: 180 },
+  { key: 'modelFilter', type: 'select', multiple: true, placeholder: '模型', width: 160, options: allModelNames },
+  { key: 'statusFilter', type: 'select', placeholder: '状态', width: 100, options: ['成功', '失败'] },
+]
+
+const callQuery = computed({
+  get: () => ({ userKeyword: callUserKeyword.value, modelFilter: callModelFilter.value, statusFilter: callStatusFilter.value }),
+  set: (v: { userKeyword: string, modelFilter: string[], statusFilter: string | undefined }) => {
+    callUserKeyword.value = v.userKeyword
+    callModelFilter.value = v.modelFilter
+    callStatusFilter.value = v.statusFilter
+  },
+})
 
 const callRecords = computed(() => {
   let list = mockCallRecords
@@ -562,15 +551,6 @@ function copyCreatedKey(): void {
 .stats-tab :deep(.section-card-body) {
   padding: @spacing-md @spacing-xl;
 }
-.user-filter-bar {
-  display: flex;
-  gap: @spacing-sm;
-  align-items: center;
-  padding: @spacing-md @spacing-xl;
-  border-bottom: 1px solid @border-color;
-  flex-wrap: wrap;
-}
-
 .key-text {
   font-family: 'Consolas', 'Monaco', monospace;
   font-size: @font-size-xs;
