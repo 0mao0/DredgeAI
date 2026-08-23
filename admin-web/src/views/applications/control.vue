@@ -7,6 +7,9 @@
       :data-source="treeRows"
       row-key="key"
       :pagination="false"
+      :loading="loading"
+      :scroll="{ x: 900 }"
+      :locale="{ emptyText: '暂无数据' }"
       size="small"
       :expandable="{ defaultExpandAllRows: true, expandedRowKeys, onExpand }"
       class="publish-tree"
@@ -20,11 +23,13 @@
             <span class="tree-name" :class="{ 'tree-name--sub': record.level === 1 }">
               <span v-if="record.level === 1" class="tree-connector" />
               <component :is="iconOptionsMap[record.icon] || iconOptionsMap.AppstoreOutlined" class="row-icon" />
-              <a-tag :color="catColor(record.category)">{{ record.category }}</a-tag>
               <span class="name-text">{{ record.name }}</span>
               <span v-if="record.level === 0 && hasSub(record)" class="sub-hint">（含 {{ subCount(record) }} 个子应用）</span>
             </span>
           </div>
+        </template>
+        <template v-else-if="column.key === 'category'">
+          <a-tag :color="catColor(record.category)">{{ record.category }}</a-tag>
         </template>
         <template v-else-if="column.key === 'status'">
           <div class="cell-center">
@@ -51,7 +56,9 @@
           </div>
         </template>
         <template v-else-if="column.key === 'setting'">
-          <AppButton variant="link" size="sm" @click="openSetting(record)">设置</AppButton>
+          <div class="cell-nowrap">
+            <AppButton variant="link" size="sm" @click="openSetting(record)">设置</AppButton>
+          </div>
         </template>
       </template>
     </a-table>
@@ -153,6 +160,7 @@ const iconOptions = [
   { value: 'RadarChartOutlined', comp: Icons.RadarChartOutlined },
   { value: 'ExperimentOutlined', comp: Icons.ExperimentOutlined },
   { value: 'FileSearchOutlined', comp: Icons.FileSearchOutlined },
+  { value: 'TeamOutlined', comp: Icons.TeamOutlined },
   { value: 'AppstoreOutlined', comp: Icons.AppstoreOutlined },
 ]
 const iconOptionsMap: Record<string, unknown> = Object.fromEntries(iconOptions.map((o) => [o.value, o.comp]))
@@ -205,11 +213,14 @@ function onExpand(keys: string[]): void {
 
 const columns = [
   { title: '序号', key: 'index', width: 60 },
-  { title: '应用', key: 'name', width: 120, align: 'left' },
-  { title: '状态', key: 'status', width: 70 },
-  { title: '授权角色', key: 'scope', width: 160, align: 'left' },
-  { title: '操作', key: 'setting', width: 20 },
+  { title: '应用', key: 'name' },
+  { title: '分类', key: 'category', width: 90 },
+  { title: '状态', key: 'status', width: 90 },
+  { title: '授权角色', key: 'scope', width: 160 },
+  { title: '操作', key: 'setting', width: 180 },
 ]
+
+const loading = ref(false)
 
 async function onToggle(row: TreeRow, val: boolean): Promise<void> {
   if (row.level === 1 && row.subId) {
@@ -252,11 +263,16 @@ async function saveSetting(): Promise<void> {
 }
 
 onMounted(async () => {
-  const [appData, catData, roleData] = await Promise.all([getApplications(), getCategoryConfig(), getRoles()])
-  apps.value = appData
-  categories.value = catData
-  roles.value = roleData
-  expandedRowKeys.value = apps.value.filter((a) => a.subApps?.length).map((a) => `app-${a.id}`)
+  loading.value = true
+  try {
+    const [appData, catData, roleData] = await Promise.all([getApplications(), getCategoryConfig(), getRoles()])
+    apps.value = appData
+    categories.value = catData
+    roles.value = roleData
+    expandedRowKeys.value = apps.value.filter((a) => a.subApps?.length).map((a) => `app-${a.id}`)
+  } finally {
+    loading.value = false
+  }
 })
 </script>
 
@@ -289,14 +305,7 @@ onMounted(async () => {
 }
 
 .setting-tip { color: @text-secondary; }
-
-.publish-tree :deep(.ant-table-thead > tr > th) {
-  text-align: center;
-}
-
-.publish-tree :deep(.ant-table-tbody > tr > td:nth-child(3)) {
-  text-align: left !important;
-}
+.cell-nowrap { white-space: nowrap; }
 
 .icon-grid {
   display: grid;
