@@ -323,7 +323,7 @@ function statusColor(status: MeetingHistoryDto['status']): string {
   &.is-recording {
     border-color: @danger;
     color: @danger;
-    background: fade(@danger, 6%);
+    background: color-mix(in srgb, var(--color-danger) 6%, transparent);
   }
 }
 .meeting-info-step__hint {
