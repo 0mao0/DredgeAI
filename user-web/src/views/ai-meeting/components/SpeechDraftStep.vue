@@ -1,7 +1,7 @@
 <template>
   <SectionCard title="晨会稿" flush>
     <AppButton v-if="!draft" variant="primary" block :loading="loading" @click="emit('generate')">
-      生成晨会稿
+      {{ loading ? '正在生成晨会稿…' : '生成晨会稿' }}
     </AppButton>
     <template v-else>
       <a-textarea v-model:value="content" :disabled="!editing" :rows="10" />

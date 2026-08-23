@@ -123,6 +123,8 @@ async function handleCreate(preInfo: PreInfo): Promise<void> {
     meeting.value = await createMeeting(preInfo)
     planText.value = ''
     planResult.value = null
+    // 立刻进入晨会稿页，在该页显示生成中状态，不在确认页干等
+    current.value = 2
     try {
       draft.value = await generateSpeech(meeting.value.id)
     } catch (err) {
@@ -130,7 +132,6 @@ async function handleCreate(preInfo: PreInfo): Promise<void> {
       draft.value = null
       message.warning(`晨会稿自动生成失败：${extractErrorMessage(err)}，可在晨会稿页点击重试`)
     }
-    current.value = 2
   } finally {
     loading.value = false
   }
