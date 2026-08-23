@@ -82,3 +82,12 @@ uv run pytest tests/test_engines_integration.py -v   # 需要 data/meeting-bot/s
 
 - ASR/TTS 换用 GPU 推理：`ASR_DEVICE=cuda`、`TTS_DEVICE=cuda`（1S 如需升级，按 `patches/fireredtts-windows.patch` 反向应用到 Linux 源码，去掉 pynini/fairseq 问题后 1S 可跑）
 - 模型目录与 venv 不随仓库提交（gitignore 已配置），DGX 上重复执行部署脚本即可
+
+## 八、容器化运行（模拟 DGX 统一模型服务，2026-08-23）
+
+- 模型权重统一存放 `D:/AI/AImodles/models`（仓库外），容器挂载为 `/app/models`。
+- Dockerfile / docker-compose 见 `services/meeting-bot/`。构建前置：`third_party/FireRedTTS` 已在本地。
+- 启动：`cd services/meeting-bot; docker compose up -d --build`（GPU 全部；ASR+TTS 合计约 7.9GB 显存，8GB 卡接近满载）。
+- 冒烟：`$env:MEETING_BOT_BASE_URL="http://localhost:8101"; uv run pytest tests/test_container_smoke.py -v`。
+- 实测（2026-08-23）：镜像 29.5GB；容器启动约 30s 就绪；全 API 冒烟 5/5 通过（首次合计约 3m50s，含 ASR 加载与 TTS worker 拉起）。
+- DGX 迁移：本机 x86_64 镜像不可直接运行于 ARM64 DGX Spark；届时用 `docker buildx --platform linux/arm64` 重建或改用 NVIDIA NIM。容器拓扑、环境变量、挂载结构在 DGX 上原样复用。
