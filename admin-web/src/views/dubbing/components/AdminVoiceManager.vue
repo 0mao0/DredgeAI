@@ -1,35 +1,34 @@
 <template>
   <div class="admin-voice-manager">
-    <div class="admin-voice-manager__toolbar">
-      <AppButton variant="primary" @click="showAddModal = true">
-        <template #icon><PlusOutlined /></template>
-        添加公有音色
-      </AppButton>
-      <a-input-search
-        v-model:value="query"
-        placeholder="搜索音色名称 / 用户"
-        allow-clear
-        style="width:240px"
-        @search="emitSearch"
-        @change="emitSearch"
-      />
-      <div class="toolbar-spacer" />
-      <div class="toolbar-item">
-        <span class="toolbar-label">仅看用户已删除</span>
-        <a-switch v-model:checked="deletedOnly" size="small" @change="emitSearch" />
-      </div>
-    </div>
-
-    <a-table
-      :data-source="voices"
+    <DataTable
       :columns="columns"
+      :data-source="voices"
       :loading="loading"
       row-key="id"
-      :pagination="{ pageSize: 15, showSizeChanger: false, showTotal: (t: number) => `共 ${t} 条` }"
-      size="small"
-      class="admin-voice-manager__table"
-      :locale="{ emptyText: '暂无音色数据' }"
+      :pagination="{ pageSize: 15 }"
+      empty-text="暂无音色数据"
     >
+      <template #toolbar>
+        <div class="admin-voice-manager__toolbar">
+          <AppButton variant="primary" @click="showAddModal = true">
+            <template #icon><PlusOutlined /></template>
+            添加公有音色
+          </AppButton>
+          <a-input-search
+            v-model:value="query"
+            placeholder="搜索音色名称 / 用户"
+            allow-clear
+            style="width:240px"
+            @search="emitSearch"
+            @change="emitSearch"
+          />
+          <div class="toolbar-spacer" />
+          <div class="toolbar-item">
+            <span class="toolbar-label">仅看用户已删除</span>
+            <a-switch v-model:checked="deletedOnly" size="small" @change="emitSearch" />
+          </div>
+        </div>
+      </template>
       <template #bodyCell="{ column, record }: { column: { key: string }; record: VoiceItem }">
         <template v-if="column.key === 'gender'">
           <span
@@ -84,7 +83,7 @@
           </a-popconfirm>
         </template>
       </template>
-    </a-table>
+    </DataTable>
 
     <VoiceRegisterModal
       v-model:open="showAddModal"
@@ -98,7 +97,8 @@
 </template>
 
 <script setup lang="ts">
-import { AppButton, VoiceRegisterModal } from '@shared/web'
+import { AppButton, DataTable, VoiceRegisterModal } from '@shared/web'
+import type { DataTableColumn } from '@shared/web'
 import { ref } from 'vue'
 import {
   PlusOutlined,
@@ -119,14 +119,14 @@ const emit = defineEmits<{
   delete: [id: string]
 }>()
 
-const columns = [
-  { title: '音色名称', dataIndex: 'name', key: 'name', width: 180 },
-  { title: '性别', key: 'gender', width: 60 },
-  { title: '公有/私有', key: 'visibility', width: 100 },
-  { title: '所属用户', key: 'user', width: 100 },
-  { title: '用户删除状态', key: 'deletedByUser', width: 140 },
-  { title: '创建时间', key: 'createdAt', width: 160 },
-  { title: '操作', key: 'action', width: 150, fixed: 'right' },
+const columns: DataTableColumn[] = [
+  { title: '音色名称', dataIndex: 'name', key: 'name', width: 180, minWidth: 140, resizable: true },
+  { title: '性别', key: 'gender', width: 60, minWidth: 60, resizable: true },
+  { title: '公有/私有', key: 'visibility', width: 100, minWidth: 90, resizable: true },
+  { title: '所属用户', key: 'user', width: 100, minWidth: 90, resizable: true },
+  { title: '用户删除状态', key: 'deletedByUser', width: 140, minWidth: 110, resizable: true },
+  { title: '创建时间', key: 'createdAt', width: 160, minWidth: 140, resizable: true },
+  { title: '操作', key: 'action', width: 150, minWidth: 150, fixed: 'right', resizable: true },
 ]
 
 const query = ref('')
@@ -182,11 +182,9 @@ function formatTime(iso?: string): string {
     align-items: center;
     margin-bottom: @spacing-base;
   }
-  &__table {
-    :deep(.ant-table-cell) {
-      font-size: @font-size-sm;
-    }
-  }
+}
+.admin-voice-manager :deep(.ant-table-cell) {
+  font-size: @font-size-sm;
 }
 
 .toolbar-spacer {

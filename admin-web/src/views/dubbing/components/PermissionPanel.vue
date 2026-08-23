@@ -7,12 +7,11 @@
       </a-radio-group>
       <span class="perm-panel__count">{{ displayUsers.length }} 人</span>
     </div>
-    <a-table
+    <DataTable
       :columns="columns"
       :data-source="displayUsers"
-      :pagination="{ pageSize: 10, showSizeChanger: false, showTotal: (t: number) => `共 ${t} 人` }"
+      :pagination="{ pageSize: 10, showTotal: (t: number) => `共 ${t} 人` }"
       row-key="id"
-      size="small"
     >
       <template #bodyCell="{ column, record }">
         <template v-if="column.key === 'action'">
@@ -24,13 +23,15 @@
           />
         </template>
       </template>
-    </a-table>
+    </DataTable>
   </div>
 </template>
 
 <script setup lang="ts">
 import { ref, computed } from 'vue'
 import { message } from 'ant-design-vue'
+import { DataTable } from '@shared/web'
+import type { DataTableColumn } from '@shared/web'
 
 interface OrgUser {
   id: string
@@ -62,11 +63,11 @@ const mockUsers: OrgUser[] = [
   { id: 'u-018', name: '陈晨', department: '设计部', role: '设计师' },
 ]
 
-const columns = [
-  { title: '姓名', dataIndex: 'name', key: 'name', width: 120 },
-  { title: '部门', dataIndex: 'department', key: 'department', width: 100 },
-  { title: '角色', dataIndex: 'role', key: 'role', width: 80 },
-  { title: '配音权限', key: 'action', width: 100 },
+const columns: DataTableColumn[] = [
+  { title: '姓名', dataIndex: 'name', key: 'name', width: 120, minWidth: 100, resizable: true },
+  { title: '部门', dataIndex: 'department', key: 'department', width: 100, minWidth: 90, resizable: true },
+  { title: '角色', dataIndex: 'role', key: 'role', width: 80, minWidth: 70, resizable: true },
+  { title: '配音权限', key: 'action', width: 100, minWidth: 90, resizable: true },
 ]
 
 const userAuth = ref<Record<string, boolean>>(

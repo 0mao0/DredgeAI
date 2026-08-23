@@ -1,12 +1,10 @@
 <template>
-  <a-table
-    :data-source="tasks"
+  <DataTable
     :columns="columns"
+    :data-source="tasks"
     :loading="loading"
     :pagination="paginationProps"
     row-key="id"
-    size="small"
-    :scroll="{ x: 1100 }"
   >
     <template #bodyCell="{ column, record }: { column: { key: string }; record: DubbingTask }">
       <template v-if="column.key === 'text'">
@@ -41,11 +39,12 @@
         </a-tooltip>
       </template>
     </template>
-  </a-table>
+  </DataTable>
 </template>
 
 <script setup lang="ts">
-import { AppButton } from '@shared/web'
+import { AppButton, DataTable } from '@shared/web'
+import type { DataTableColumn } from '@shared/web'
 import { computed } from 'vue'
 import { PlayCircleOutlined, DeleteOutlined } from '@ant-design/icons-vue'
 import type { DubbingTask } from '@/types'
@@ -59,15 +58,15 @@ const paginationProps = computed(() => ({
   hideOnSinglePage: props.tasks.length <= 10,
 }))
 
-const columns = [
-  { title: '用户', key: 'user', width: 160 },
-  { title: '文本', key: 'text', ellipsis: true, width: 240 },
-  { title: '配音音色', key: 'voice', dataIndex: 'voiceName', width: 120 },
-  { title: '状态', key: 'status', width: 100 },
-  { title: '时长 / Token', key: 'duration', width: 140 },
-  { title: '用户删除状态', key: 'deletedByUser', width: 140 },
-  { title: '创建时间', key: 'createdAt', dataIndex: 'createdAt', width: 160 },
-  { title: '操作', key: 'actions', width: 160, fixed: 'right' },
+const columns: DataTableColumn[] = [
+  { title: '用户', key: 'user', width: 160, minWidth: 120, resizable: true },
+  { title: '文本', key: 'text', width: 240, minWidth: 200, resizable: true },
+  { title: '配音音色', key: 'voice', dataIndex: 'voiceName', width: 120, minWidth: 100, resizable: true },
+  { title: '状态', key: 'status', width: 100, minWidth: 80, resizable: true },
+  { title: '时长 / Token', key: 'duration', width: 140, minWidth: 110, resizable: true },
+  { title: '用户删除状态', key: 'deletedByUser', width: 140, minWidth: 110, resizable: true },
+  { title: '创建时间', key: 'createdAt', dataIndex: 'createdAt', width: 160, minWidth: 140, resizable: true },
+  { title: '操作', key: 'actions', width: 160, minWidth: 160, fixed: 'right', resizable: true },
 ]
 
 function statusColor(status: string): string {
