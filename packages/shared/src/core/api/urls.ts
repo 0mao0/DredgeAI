@@ -20,6 +20,12 @@ export const urls = {
   standardPropertyList: '/standard/property/list',
   standardDocument: '/standard/document',
   standardAIAnalysis: '/standard/ai-analysis',
+  standardRecords: '/standard/records',
+  standardRecordsTree: '/standard/records/tree',
+  standardRecord: '/standard/records/:id',
+  standardRecordFiles: '/standard/records/:id/files',
+  standardRecordFileContent: '/standard/records/:id/files/:fileId/content',
+  standardQaAsk: '/standard/qa/ask',
   chartEfficiencyTrend: '/chart/efficiency-trend',
 
   // 共享（双端均使用 /apikey 命名，统一规范）
@@ -69,11 +75,13 @@ export const urls = {
   // AI 读标
   tenderReadTasks: '/tender-read/tasks',
   tenderReadTask: '/tender-read/tasks/:id',
+  tenderReadTaskName: '/tender-read/tasks/:id/name',
   tenderReadTaskDocuments: '/tender-read/tasks/:id/documents',
   tenderReadTaskDocument: '/tender-read/tasks/:id/document',
   tenderReadTaskParse: '/tender-read/tasks/:id/parse',
   tenderReadTaskReparse: '/tender-read/tasks/:id/reparse',
   tenderReadTaskOutline: '/tender-read/tasks/:id/outline',
+  tenderReadTaskParsedDocument: '/tender-read/tasks/:id/document/parsed',
   tenderReadTaskBaseline: '/tender-read/tasks/:id/baseline',
   tenderReadTaskField: '/tender-read/tasks/:id/fields/:fieldId',
   tenderReadTaskReExtract: '/tender-read/tasks/:id/re-extract',
@@ -112,6 +120,22 @@ export const urls = {
   adminStandardPreview: '/standards/preview',
   adminStandardsBatchDelete: '/standards/batch-delete',
   adminStandardsBatchParse: '/standards/batch-parse',
+  adminStandardEnabled: '/standards/:id/enabled',
+  adminStandardSyncStatus: '/standards/sync-status',
+
+  // AI 晨会
+  meetingRecord: '/meeting/records',
+  meetingSpeechGenerate: '/meeting/records/:id/speech/generate',
+  meetingSpeechDraft: '/meeting/records/:id/speech',
+  meetingStart: '/meeting/records/:id/start',
+  meetingAttendanceRecognize: '/meeting/records/:id/attendance/recognize',
+  meetingAttendance: '/meeting/records/:id/attendance',
+  meetingQa: '/meeting/records/:id/qa',
+  meetingQaAudio: '/meeting/records/:id/qa/audio',
+  meetingRecording: '/meeting/records/:id/recording',
+  meetingComplete: '/meeting/records/:id/complete',
+  meetingReport: '/meeting/records/:id/report',
+  meetingWorkers: '/meeting/workers',
 } as const
 
 export type UrlKey = keyof typeof urls
