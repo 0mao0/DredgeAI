@@ -25,6 +25,8 @@ public interface IMeetingRecordAppService : IApplicationService
 
     Task<QaRecordDto> AskQaAsync(Guid id, string question);
 
+    Task<byte[]> GetQaAudioAsync(Guid qaId);
+
     Task<MeetingRecordDto> SaveRecordingAsync(Guid id, byte[] audio, string fileName);
 
     Task<MeetingRecordDto> CompleteAsync(Guid id);

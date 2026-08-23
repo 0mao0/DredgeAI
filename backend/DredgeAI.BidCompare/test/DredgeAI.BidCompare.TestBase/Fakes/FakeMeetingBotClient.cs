@@ -18,11 +18,16 @@ public class FakeMeetingBotClient : IMeetingBotClient
 
     public List<(string WorkerId, string Name)> Enrolled { get; } = [];
 
+    public List<string> TtsTexts { get; } = [];
+
     public Task<string> AsrAsync(byte[] audio, CancellationToken ct = default)
         => Task.FromResult(AsrText);
 
     public Task<byte[]> TtsAsync(string text, CancellationToken ct = default)
-        => Task.FromResult(new byte[] { 0x52, 0x49, 0x46, 0x46, 0x00 });
+    {
+        TtsTexts.Add(text);
+        return Task.FromResult(new byte[] { 0x52, 0x49, 0x46, 0x46, 0x00 });
+    }
 
     public Task<List<FaceMatchDto>> RecognizeAsync(byte[] image, CancellationToken ct = default)
         => Task.FromResult(RecognizedFaces);

@@ -72,6 +72,13 @@ public class MeetingRecordController : AbpControllerBase
         return await _service.AskQaAsync(id, text);
     }
 
+    [HttpGet("~/api/meeting/qa/{qaId:guid}/audio")]
+    public async Task<IActionResult> QaAudio(Guid qaId)
+    {
+        var audio = await _service.GetQaAudioAsync(qaId);
+        return File(audio, "audio/wav");
+    }
+
     [HttpPost("{id:guid}/recording")]
     public async Task<MeetingRecordDto> SaveRecording(Guid id, [FromForm] IFormFile audio)
     {

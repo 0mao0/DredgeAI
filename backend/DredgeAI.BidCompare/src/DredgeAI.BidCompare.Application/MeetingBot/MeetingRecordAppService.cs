@@ -347,6 +347,16 @@ public class MeetingRecordAppService : ApplicationService, IMeetingRecordAppServ
         return Map(chatRecord);
     }
 
+    public async Task<byte[]> GetQaAudioAsync(Guid qaId)
+    {
+        var qa = await _qa.GetAsync(qaId);
+        if (string.IsNullOrWhiteSpace(qa.Answer))
+        {
+            throw new BusinessException("MEETING_QA_AUDIO_EMPTY", "答案为空，无法合成语音");
+        }
+        return await _bot.TtsAsync(qa.Answer);
+    }
+
     public async Task<MeetingRecordDto> SaveRecordingAsync(Guid id, byte[] audio, string fileName)
     {
         var meeting = await _meetings.GetAsync(id);

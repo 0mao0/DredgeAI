@@ -124,6 +124,21 @@ public class MeetingRecordAppServiceTests : BidCompareApplicationTestBase<BidCom
     }
 
     [Fact]
+    public async Task GetQaAudio_Should_Return_Tts_Wav_For_Answer()
+    {
+        var meeting = await _appService.CreateAsync(new PreInfoInput());
+        _llm.QueueResponse("按规范要求，临边作业必须系挂安全带。");
+        var qa = await _appService.AskQaAsync(meeting.Id, "高处作业的规范要求是什么");
+
+        var audio = await _appService.GetQaAudioAsync(qa.Id);
+
+        audio.Length.ShouldBeGreaterThan(0);
+        audio[0].ShouldBe((byte)'R');
+        audio[1].ShouldBe((byte)'I');
+        _bot.TtsTexts.ShouldContain(qa.Answer);
+    }
+
+    [Fact]
     public async Task Complete_Should_Enqueue_Background_Job_And_Return_Report()
     {
         var meeting = await _appService.CreateAsync(new PreInfoInput());
