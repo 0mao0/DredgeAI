@@ -19,7 +19,7 @@ export const MOCK_MODULES: Record<string, boolean> = {
   apikey: true,
   chart: true,
   dubbing: true,
-  meeting: true,
+  meeting: false, // AI 晨会已接入真实后端（meeting-bot + ABP），关闭 mock
   // compare 直连真实后端（上传会话依赖后端存储），如需 mock 设为 true 并提供注册器
   compare: false,
   // tenderRead 直连真实后端（解析/提取由后端 AnGIneer 管线执行）

@@ -69,6 +69,29 @@ public class FakeAnGineerClient : IAnGineerClient
         ContentMd: System.Text.Encoding.UTF8.GetBytes(SampleIr.ValidContentMd),
         Images: new Dictionary<string, byte[]> { ["images/t1.jpg"] = new byte[] { 0xFF, 0xD8 } });
 
+    /// <summary>知识检索命中（SearchAsync 返回）；空列表 = 模拟检索失败降级。</summary>
+    // 注意：不能用接口类型（IReadOnlyList<...>），否则 Autofac PropertiesAutowired 会注入空列表
+    private List<AnGineerHit> _searchResults = new List<AnGineerHit>
+    {
+        new AnGineerHit(
+            "今日重点：临边防护检查、高处作业必须系挂安全带，恶劣天气停止露天高处作业。",
+            "安全交底-晨会模板",
+            0.92,
+            "doc-001")
+    };
+
+    public List<AnGineerHit> SearchResults
+    {
+        get => _searchResults;
+        set => _searchResults = value;
+    }
+
+    public Task<IReadOnlyList<AnGineerHit>> SearchAsync(
+        string query,
+        int topK = 5,
+        CancellationToken cancellationToken = default)
+        => Task.FromResult<IReadOnlyList<AnGineerHit>>(SearchResults.Take(topK).ToList());
+
     public async Task<string> SubmitAsync(string fileName, Func<Task<Stream>> openContent, CancellationToken cancellationToken = default)
     {
         await using var _ = await openContent();

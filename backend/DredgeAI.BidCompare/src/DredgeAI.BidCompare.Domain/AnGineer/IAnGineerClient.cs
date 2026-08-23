@@ -43,6 +43,12 @@ public record AnGineerPackage(
 public interface IAnGineerClient
 {
     /// <summary>
+    /// 知识库检索（POST /api/knowledge/internal/retrieve），返回命中文本列表。
+    /// 供晨会稿生成与现场问答引用知识库；检索失败返回空列表（上层降级为纯 LLM）。
+    /// </summary>
+    Task<IReadOnlyList<AnGineerHit>> SearchAsync(string query, int topK = 5, CancellationToken cancellationToken = default);
+
+    /// <summary>
     /// 提交解析任务，返回提供方任务 id。
     /// 传入流工厂而非流实例：内部重试时每次重新打开，避免 StreamContent dispose 后复用已关闭流
     /// （Cannot access a closed file）。
@@ -60,3 +66,6 @@ public interface IAnGineerClient
     /// <summary>流式打开单个产物（调用方负责 Dispose 返回的流），大产物不整份驻留内存。</summary>
     Task<Stream> OpenArtifactAsync(string jobId, AnGineerArtifact artifact, CancellationToken cancellationToken = default);
 }
+
+/// <summary>知识检索命中项（AnGIneer internal/retrieve items 的轻量投影）。</summary>
+public record AnGineerHit(string Text, string Title, double Score, string DocId);

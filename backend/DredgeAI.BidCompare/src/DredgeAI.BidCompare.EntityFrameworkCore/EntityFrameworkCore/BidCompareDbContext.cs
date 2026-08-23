@@ -8,6 +8,7 @@ using DredgeAI.BidCompare.Drafts;
 using DredgeAI.BidCompare.Evidences;
 using DredgeAI.BidCompare.Exports;
 using DredgeAI.BidCompare.AI;
+using DredgeAI.BidCompare.MeetingBot;
 using DredgeAI.BidCompare.TenderReadings;
 using Volo.Abp.Data;
 using Volo.Abp.DependencyInjection;
@@ -73,6 +74,11 @@ public class BidCompareDbContext :
     public DbSet<TenderReadingDocument> TenderReadingDocuments { get; set; }
     public DbSet<BaselineField> BaselineFields { get; set; }
     public DbSet<SourceMapItem> SourceMapItems { get; set; }
+    public DbSet<MeetingRecord> MeetingRecords { get; set; }
+    public DbSet<SpeechDraft> SpeechDrafts { get; set; }
+    public DbSet<AttendanceRecord> AttendanceRecords { get; set; }
+    public DbSet<QaRecord> QaRecords { get; set; }
+    public DbSet<WorkerProfile> WorkerProfiles { get; set; }
 
     public BidCompareDbContext(DbContextOptions<BidCompareDbContext> options)
         : base(options)
@@ -104,6 +110,7 @@ public class BidCompareDbContext :
             b.Property(x => x.Name).IsRequired().HasMaxLength(128);
             b.Property(x => x.Status).IsRequired();
             b.Property(x => x.ClauseSnapshotJson).HasColumnType("text");
+            b.Property(x => x.ClauseDraftsJson).HasColumnType("text");
             b.Property(x => x.ReportJson).HasColumnType("text");
             b.Property(x => x.ProgressStage).IsRequired().HasMaxLength(32);
             b.Property(x => x.ProgressMessage).HasMaxLength(1024);
@@ -241,6 +248,64 @@ public class BidCompareDbContext :
             b.Property(x => x.Text).IsRequired().HasColumnType("text");
             b.HasIndex(x => x.FieldId);
             b.HasIndex(x => new { x.FieldId, x.PageIdx });
+        });
+
+        builder.Entity<MeetingRecord>(b =>
+        {
+            b.ToTable("BcMeetingRecords");
+            b.ConfigureByConvention();
+            b.Property(x => x.PreInfoJson).IsRequired().HasColumnType("text");
+            b.Property(x => x.Status).IsRequired();
+            b.Property(x => x.TranscriptFile).HasMaxLength(512);
+            b.Property(x => x.TranscriptText).HasColumnType("text");
+            b.Property(x => x.ReportFile).HasMaxLength(512);
+            b.Property(x => x.ReportError).HasMaxLength(2048);
+            b.HasIndex(x => x.Status);
+            b.HasIndex(x => x.Date);
+        });
+
+        builder.Entity<SpeechDraft>(b =>
+        {
+            b.ToTable("BcSpeechDrafts");
+            b.ConfigureByConvention();
+            b.Property(x => x.Content).IsRequired().HasColumnType("text");
+            b.Property(x => x.Status).IsRequired().HasMaxLength(16);
+            b.HasIndex(x => x.MeetingRecordId).IsUnique();
+        });
+
+        builder.Entity<AttendanceRecord>(b =>
+        {
+            b.ToTable("BcAttendanceRecords");
+            b.ConfigureByConvention();
+            b.Property(x => x.Name).IsRequired().HasMaxLength(64);
+            b.Property(x => x.Team).HasMaxLength(64);
+            b.Property(x => x.Status).IsRequired();
+            b.Property(x => x.Confidence).IsRequired();
+            b.HasIndex(x => x.MeetingRecordId);
+            b.HasIndex(x => new { x.MeetingRecordId, x.WorkerId });
+        });
+
+        builder.Entity<QaRecord>(b =>
+        {
+            b.ToTable("BcQaRecords");
+            b.ConfigureByConvention();
+            b.Property(x => x.Question).IsRequired().HasColumnType("text");
+            b.Property(x => x.Answer).IsRequired().HasColumnType("text");
+            b.Property(x => x.IntentType).IsRequired();
+            b.Property(x => x.SourcesJson).IsRequired().HasColumnType("text");
+            b.HasIndex(x => x.MeetingRecordId);
+        });
+
+        builder.Entity<WorkerProfile>(b =>
+        {
+            b.ToTable("BcWorkerProfiles");
+            b.ConfigureByConvention();
+            b.Property(x => x.Name).IsRequired().HasMaxLength(64);
+            b.Property(x => x.EmployeeNo).IsRequired().HasMaxLength(32);
+            b.Property(x => x.Team).HasMaxLength(64);
+            b.Property(x => x.FaceStatus).IsRequired();
+            b.Property(x => x.FacePhotosJson).IsRequired().HasColumnType("text");
+            b.HasIndex(x => x.EmployeeNo).IsUnique();
         });
     }
 }

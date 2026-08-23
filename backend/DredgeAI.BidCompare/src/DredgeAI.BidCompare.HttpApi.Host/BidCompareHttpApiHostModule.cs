@@ -19,6 +19,7 @@ using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using DredgeAI.BidCompare.EntityFrameworkCore;
+using DredgeAI.BidCompare.MeetingBot;
 using DredgeAI.BidCompare.MultiTenancy;
 using DredgeAI.BidCompare.Storage;
 using Volo.Abp.AspNetCore.Mvc.UI.Theme.LeptonXLite;
@@ -131,6 +132,7 @@ public class BidCompareHttpApiHostModule : AbpModule
         Configure<LibreOfficeOptions>(configuration.GetSection("LibreOffice"));
         Configure<WatchdogOptions>(configuration.GetSection("Watchdog"));
         Configure<CleanupOptions>(configuration.GetSection("Cleanup"));
+        Configure<MeetingBotOptions>(configuration.GetSection("MeetingBot"));
         // AnGIneer 轮询间隔为 5s，服务端 keep-alive 超时也是 5s 级别，
         // 缩短连接池空闲寿命，避免复用已被服务端关闭的旧连接（SocketException 10053）。
         // 显式 Timeout：默认 100s 不够 200MB 级标书上传，加长到 10 分钟（上限，状态轮询照常快速返回）。
@@ -157,6 +159,17 @@ public class BidCompareHttpApiHostModule : AbpModule
             client.BaseAddress = new Uri(options.BaseUrl.TrimEnd('/') + "/");
             client.Timeout = TimeSpan.FromSeconds(options.TimeoutSeconds);
         });
+        context.Services.AddHttpClient(nameof(MeetingBotClient), (sp, client) =>
+        {
+            var options = sp.GetRequiredService<IOptions<MeetingBotOptions>>().Value;
+            client.BaseAddress = new Uri(options.BaseUrl.TrimEnd('/') + "/");
+            client.Timeout = TimeSpan.FromMinutes(5);
+            if (!string.IsNullOrWhiteSpace(options.Key))
+            {
+                client.DefaultRequestHeaders.Add("X-Meeting-Bot-Key", options.Key);
+            }
+        });
+        context.Services.AddTransient<IMeetingBotClient, MeetingBotClient>();
         context.Services.AddHttpClient();
     }
 

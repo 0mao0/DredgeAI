@@ -17,6 +17,7 @@
 
   <ItemGroup>
     <ProjectReference Include="..\..\src\DredgeAI.BidCompare.Domain\DredgeAI.BidCompare.Domain.csproj" />
+    <ProjectReference Include="..\..\src\DredgeAI.BidCompare.Application.Contracts\DredgeAI.BidCompare.Application.Contracts.csproj" />
   </ItemGroup>
 
   <ItemGroup>

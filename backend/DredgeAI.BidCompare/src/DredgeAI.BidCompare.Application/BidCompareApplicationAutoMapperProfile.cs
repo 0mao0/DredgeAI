@@ -12,5 +12,11 @@ public class BidCompareApplicationAutoMapperProfile : Profile
 
         CreateMap<Clauses.ClauseTemplate, ClauseTemplates.ClauseTemplateDto>();
         CreateMap<AI.AiUsageRecord, AI.AiUsageRecordDto>();
+
+        CreateMap<MeetingBot.MeetingRecord, MeetingBot.MeetingRecordDto>();
+        CreateMap<MeetingBot.SpeechDraft, MeetingBot.SpeechDraftDto>();
+        CreateMap<MeetingBot.AttendanceRecord, MeetingBot.AttendanceItemDto>();
+        CreateMap<MeetingBot.QaRecord, MeetingBot.QaRecordDto>();
+        CreateMap<MeetingBot.WorkerProfile, MeetingBot.WorkerDto>();
     }
 }

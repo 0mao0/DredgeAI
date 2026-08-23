@@ -6,6 +6,7 @@ using System.Net;
 using System.Net.Http;
 using System.Net.Http.Headers;
 using System.Net.Http.Json;
+using System.Text.Json;
 using System.Text.Json.Serialization;
 using System.Threading;
 using System.Threading.Tasks;
@@ -137,6 +138,43 @@ public class HttpAnGineerClient : IAnGineerClient, ITransientDependency
             .ToList();
     }
 
+    public async Task<IReadOnlyList<AnGineerHit>> SearchAsync(
+        string query,
+        int topK = 5,
+        CancellationToken cancellationToken = default)
+    {
+        var client = CreateClient();
+        var request = new
+        {
+            query,
+            top_k = topK,
+            task_type = "content_qa",
+            mode = "text"
+        };
+        using var response = await client.PostAsJsonAsync(
+            "/api/knowledge/internal/retrieve", request, cancellationToken);
+        if (!response.IsSuccessStatusCode)
+        {
+            _logger.LogWarning(
+                "AnGIneer 知识检索失败（{Status}），返回空结果供上层降级",
+                (int)response.StatusCode);
+            return [];
+        }
+
+        var payload = await response.Content.ReadFromJsonAsync<RetrieveResponse>(
+            new JsonSerializerOptions { PropertyNamingPolicy = JsonNamingPolicy.CamelCase },
+            cancellationToken);
+        if (payload?.Items == null)
+        {
+            return [];
+        }
+
+        return payload.Items
+            .Where(i => !string.IsNullOrWhiteSpace(i.Text))
+            .Select(i => new AnGineerHit(i.Text!, i.Title ?? "", i.Score, i.DocId ?? ""))
+            .ToList();
+    }
+
     /// <summary>流式打开产物（ResponseHeadersRead + 响应随流释放），带有限次退避重试。</summary>
     public async Task<Stream> OpenArtifactAsync(string jobId, AnGineerArtifact artifact, CancellationToken cancellationToken = default)
     {
@@ -210,6 +248,23 @@ public class HttpAnGineerClient : IAnGineerClient, ITransientDependency
     {
         [JsonPropertyName("items")]
         public List<ArtifactItem>? Items { get; set; }
+    }
+
+    private class RetrieveResponse
+    {
+        public List<RetrieveItem>? Items { get; set; }
+    }
+
+    private class RetrieveItem
+    {
+        public string? Text { get; set; }
+
+        public string? Title { get; set; }
+
+        public double Score { get; set; }
+
+        [JsonPropertyName("doc_id")]
+        public string? DocId { get; set; }
     }
 
     private class ArtifactItem
