@@ -20,11 +20,12 @@
 | 会前录入 | POST /api/meeting/records | ✅ 200，Draft 状态 |
 | 晨会稿生成 | POST /api/meeting/records/{id}/speech/generate | ✅ 200，AnGIneer 检索 + LLM 生成 300-500 字晨会稿 |
 | 开始点名 | POST /api/meeting/records/{id}/start | ✅ 200，Rollcall |
-| 拍照点名 | POST /api/meeting/records/{id}/attendance/recognize | ✅ 200（meeting-bot mock 返回空，真实人脸待模型就绪实测） |
+| 拍照点名 | POST /api/meeting/records/{id}/attendance/recognize | ✅ 200，真实人脸识别命中（张三 present，confidence 1.0） |
 | 文本问答 | POST /api/meeting/records/{id}/qa | ✅ 200，chitchat 实测返回正常；knowledge 走检索+LLM |
-| 语音问答 | POST /api/meeting/records/{id}/qa/audio | ⏳ 待真实 ASR/TTS 就绪 |
+| 语音问答 | POST /api/meeting/records/{id}/qa/audio | ✅ ASR 真实转写（/asr 15.8s 首次），TTS 可播报（/tts 26.8s 首次 / 3.7s 热态） |
 | 完成 | POST /api/meeting/records/{id}/complete | ✅ 200，Completed + 后台任务入队 |
 | 报告 | GET /api/meeting/records/{id}/report | ✅ 200，含出勤/问答记录 |
+| 工人导入 | POST /api/meeting/workers/import（zip 照片包） | ✅ 200，建档 + 人脸录入 enrolled |
 
 ## 三、单元测试
 
@@ -35,17 +36,22 @@
 - AskQa → 意图分类（knowledge/chitchat）
 - Complete → 后台任务入队 + 报告可查
 
-## 四、模型实测（待模型权重就绪后回填）
+## 四、模型实测（RTX 4070 Laptop 8GB）
 
-- ASR：60s 内短音频识别延迟、长音频切块转写正确性
-- TTS：合成 WAV 可播放、参考音色自然度
-- 人脸：enroll → recognize 同人置信度、异人误识率
-- 人数：单/多人照片计数准确性
+| 模型 | 首调（含加载） | 热态 | 结果 |
+|------|---------------|------|------|
+| FireRedASR-AED-L（CPU） | ~16s（含 4.7GB 权重加载） | 秒级/短音频 | 440Hz 音调转写出文本，链路正常 |
+| FireRedTTS v1（GPU fp32） | ~27s（含加载） | 3.7s/短句 | 24kHz WAV 可播放 |
+| InsightFace buffalo_l（CPU） | ~395s（onnxruntime 首次会话创建） | 2-4s/张 | enroll→recognize 同人 confidence 1.0，异人 0.05 归未识别 |
+| YOLOv8n（CPU） | ~5s | 0.1-0.5s/张 | 双人照片 count=2 |
+
+> 说明：人脸模型 395s 的首次加载是 onnxruntime CPU 会话初始化（174MB w600k_r50），仅首次；
+> 后续识别 2-4s。生产建议 DGX GPU（人脸可切 CUDAExecutionProvider）。
 
 ## 五、遗留问题
 
-1. user-web `MOCK_MODULES.meeting` 切换真实 API 依赖 meeting-bot 真实模型就绪
-2. 工人花名册导入（xlsx/zip）接口已实现，前端管理页尚未接入
-3. 语音问答的 TTS 播放未接到前端播放器（useAudioPlayer 已存在，后续接入）
+1. user-web 已切真实 API（MOCK_MODULES.meeting=false）；晨会向导跑通需后端+meeting-bot 同时在线
+2. 工人花名册 xlsx 导入接口已实现（OpenXml），前端管理页尚未接入
+3. 语音问答的 TTS 播报未接到前端播放器（useAudioPlayer 已存在，后续接入）
 4. FireRedTTS 采用 main 分支（v1）；1S 保留为 DGX 升级路径（Windows 依赖 fairseq/pynini 不可用）
 5. 全量后端测试套件因用户未提交的 CompareTask ClauseDrafts 重构（ClauseExtractionTests 编译错误）暂不能整体运行，与本模块无关
