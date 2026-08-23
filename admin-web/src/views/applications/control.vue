@@ -2,7 +2,7 @@
   <div class="page-container">
     <PageHeader title="发布管理" description="管理各应用及其子应用对用户端的发布状态" />
 
-    <div ref="tableContainerRef" class="publish-table-wrap">
+    <div class="publish-table-wrap">
       <a-table
         :columns="columns"
         :data-source="treeRows"
@@ -97,7 +97,7 @@
 
 <script setup lang="ts">
 import { AppButton } from '@shared/web'
-import { ref, reactive, computed, onBeforeUnmount, onMounted } from 'vue'
+import { ref, reactive, computed, onMounted } from 'vue'
 import { message } from 'ant-design-vue'
 import PageHeader from '@shared/web/components/PageHeader.vue'
 import type { ApplicationItem, Role } from '@/types'
@@ -241,23 +241,12 @@ const columns = computed(() => [
   { title: '操作', key: 'setting', width: columnWidths.setting, minWidth: columnMinWidths.setting, resizable: true },
 ])
 
-const tableContainerRef = ref<HTMLElement | null>(null)
-const containerWidth = ref(0)
-let tableResizeObserver: ResizeObserver | undefined
-
 const contentWidth = computed(() =>
   columns.value.reduce((sum, col) => sum + (typeof col.width === 'number' ? col.width : 0), 0),
 )
-const scrollX = computed(() => Math.max(containerWidth.value, contentWidth.value))
-
-function observeTableWidth(): void {
-  if (!tableContainerRef.value) return
-  tableResizeObserver = new ResizeObserver((entries) => {
-    const width = entries[0]?.contentRect.width
-    if (width) containerWidth.value = Math.round(width)
-  })
-  tableResizeObserver.observe(tableContainerRef.value)
-}
+// 表格宽度恒等于各列宽之和：避免 antd 在列总宽小于容器时等比拉伸列，
+// 导致拖拽调宽时表头线与鼠标位移不一致
+const scrollX = computed(() => contentWidth.value)
 
 function handleResizeColumn(width: number, column: { key?: string }): void {
   const key = column.key
@@ -309,7 +298,6 @@ async function saveSetting(): Promise<void> {
 }
 
 onMounted(async () => {
-  observeTableWidth()
   loading.value = true
   try {
     const [appData, catData, roleData] = await Promise.all([getApplications(), getCategoryConfig(), getRoles()])
@@ -320,10 +308,6 @@ onMounted(async () => {
   } finally {
     loading.value = false
   }
-})
-
-onBeforeUnmount(() => {
-  tableResizeObserver?.disconnect()
 })
 </script>
 
@@ -357,6 +341,13 @@ onBeforeUnmount(() => {
 
 .setting-tip { color: @text-secondary; }
 .cell-nowrap { white-space: nowrap; }
+
+// 表格宽度恒等于列宽之和：覆盖 rc-table 内联的 min-width: 100% 与自动布局，
+// 避免列总宽小于容器时被浏览器等比拉伸，保证拖拽调宽时表头线与鼠标位移一致
+.publish-tree :deep(table) {
+  min-width: auto !important;
+  table-layout: fixed !important;
+}
 
 .icon-grid {
   display: grid;
