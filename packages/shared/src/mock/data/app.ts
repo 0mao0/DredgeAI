@@ -18,6 +18,7 @@ const MODULE_ROUTES: Record<string, string> = {
   6: '/construction-review',
   7: '/dredge-efficiency',
   9: '/ai-bid',
+  10: '/ai-meeting',
 }
 
 function buildUserApps(): AppCard[] {
@@ -56,8 +57,8 @@ function buildUserApps(): AppCard[] {
 }
 
 /**
- * 9 个用户端应用模块，与 admin-web 共享同一套发布数据。测试用户已全部授权，默认勾选 5 个放入侧边栏。
- * 分类：通用(3) | 设计(1) | 施工(3) | 经营(2)
+ * 10 个用户端应用模块，与 admin-web 共享同一套发布数据。测试用户已全部授权，默认勾选 8 个放入侧边栏。
+ * 分类：通用(3) | 设计(1) | 施工(4) | 经营(2)
  */
 export const appCards: AppCard[] = buildUserApps()
 
@@ -68,6 +69,7 @@ export const DEFAULT_SIDEBAR_ROUTES = [
   '/ai-dubbing',
   '/dredge-efficiency',
   '/ai-bid',
+  '/ai-meeting',
   '/intelligence/dredge',
   '/intelligence/tech',
 ]

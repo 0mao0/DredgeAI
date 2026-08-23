@@ -1,8 +1,8 @@
 import type { ApplicationItem } from '@shared/types'
 
-/** 9 个应用模块，与 user-web 共享同一套数据。分类：通用 | 经营 | 设计 | 施工 */
+/** 10 个应用模块，与 user-web 共享同一套数据。分类：通用 | 经营 | 设计 | 施工 */
 export const mockApplications: ApplicationItem[] = [
-  { id: '1', name: '标准查询', category: '通用', manager: '李文', version: 'v2.1.0', status: '运营中', userCount: 1240, apiCalls: 256000, createdAt: '2026-01-15', icon: 'BookOutlined', route: '/applications/standard' },
+  { id: '1', name: '规范问答', category: '通用', manager: '李文', version: 'v2.1.0', status: '运营中', userCount: 1240, apiCalls: 256000, createdAt: '2026-01-15', icon: 'BookOutlined', route: '/applications/standard' },
   { id: '2', name: 'AI视频', category: '通用', manager: '周晓', version: 'v1.3.0', status: '运营中', userCount: 620, apiCalls: 98000, createdAt: '2026-02-20', icon: 'VideoCameraOutlined', route: '/applications/ai-video' },
   { id: '3', name: 'AI 配音', category: '通用', manager: '陈晨', version: 'v1.5.2', status: '运营中', userCount: 540, apiCalls: 72000, createdAt: '2026-03-10', icon: 'CustomerServiceOutlined', route: '/applications/dubbing' },
   { id: '4', name: '设计经验', category: '设计', manager: '吴敏', version: 'v1.0.0', status: '运营中', userCount: 320, apiCalls: 41000, createdAt: '2026-04-01', icon: 'BulbOutlined', route: '/applications/design-experience' },
@@ -14,4 +14,5 @@ export const mockApplications: ApplicationItem[] = [
     { id: '8-2', name: '科技情报', category: '经营', parentAppId: '8', parentAppName: '情报采集', route: '/intelligence/tech', icon: 'ExperimentOutlined', version: 'v1.0.0', status: '已发布', scope: '所有', description: '通用科技前沿情报，支持用户订阅与智能推送' },
   ] },
   { id: '9', name: 'AI投标', category: '经营', manager: '冯杰', version: 'v3.0.2', status: '运营中', userCount: 290, apiCalls: 76000, createdAt: '2026-01-01', icon: 'FileSearchOutlined', route: '/applications/ai-bid' },
+  { id: '10', name: 'AI晨会', category: '施工', manager: '刘洋', version: 'v0.1.0', status: '运营中', userCount: 0, apiCalls: 0, createdAt: '2026-08-23', icon: 'TeamOutlined', route: '/applications/ai-meeting', scope: '所有' },
 ]
