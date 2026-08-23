@@ -1,8 +1,8 @@
-from fastapi import FastAPI
+from fastapi import Depends, FastAPI
 
-from app.settings import settings
+from app.security import require_key
 
-app = FastAPI(title="meeting-bot")
+app = FastAPI(title="meeting-bot", dependencies=[Depends(require_key)])
 
 
 @app.get("/health")
