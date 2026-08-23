@@ -1,5 +1,7 @@
 using System;
 using System.Collections.Generic;
+using System.Linq;
+using System.Text;
 using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
@@ -140,42 +142,125 @@ public abstract class LlmFieldExtractorBase
             return result;
         }
 
-        var needle = rawText.Trim();
-        if (needle.Length > 40)
+        var normalizedNeedle = NormalizeForMatch(rawText);
+        if (normalizedNeedle.Length == 0)
         {
-            needle = needle[..40];
+            return result;
         }
 
+        // 候选 needle：最长语义段优先，再按 40/30/24/18/14/10 逐步缩短前缀，
+        // 兼容 LLM 提炼文本与原文在空白、标点、截断上的差异。
+        var candidates = BuildNeedleCandidates(normalizedNeedle);
+
+        var scored = new List<(int Score, JsonElement Block)>();
         foreach (var block in blocks.EnumerateArray())
         {
-            var text = block.TryGetProperty("text", out var textProp) && textProp.ValueKind == JsonValueKind.String
-                ? textProp.GetString()
-                : null;
-            if (string.IsNullOrWhiteSpace(text) || !text!.Contains(needle, StringComparison.Ordinal))
+            var text = GetBlockString(block, "text");
+            if (string.IsNullOrWhiteSpace(text))
             {
                 continue;
             }
 
-            result.Add(new SourceMapItemDraft
+            var normalizedBlock = NormalizeForMatch(text);
+            if (normalizedBlock.Length == 0)
             {
-                BlockId = block.TryGetProperty("blockId", out var blockIdProp) && blockIdProp.ValueKind == JsonValueKind.String
-                    ? blockIdProp.GetString() ?? string.Empty
-                    : string.Empty,
-                PageIdx = block.TryGetProperty("pageIdx", out var pageProp) && pageProp.ValueKind == JsonValueKind.Number
-                    ? pageProp.GetInt32()
-                    : 0,
-                Bbox = ReadBbox(block),
-                Text = text
-            });
+                continue;
+            }
 
-            if (result.Count >= 3)
+            var score = 0;
+            foreach (var needle in candidates)
             {
-                break;
+                if (needle.Length <= score)
+                {
+                    continue;
+                }
+
+                if (normalizedBlock.Contains(needle, StringComparison.Ordinal))
+                {
+                    score = needle.Length;
+                    break;
+                }
+            }
+
+            if (score > 0)
+            {
+                scored.Add((score, block));
             }
         }
 
-        return result;
+        if (scored.Count == 0)
+        {
+            return result;
+        }
+
+        var bestScore = scored.Max(x => x.Score);
+        var threshold = Math.Max(12, bestScore * 3 / 4);
+        return scored
+            .Where(x => x.Score >= threshold)
+            .OrderByDescending(x => x.Score)
+            .ThenBy(x => GetBlockInt(x.Block, "pageIdx"))
+            .Take(3)
+            .Select(x => new SourceMapItemDraft
+            {
+                BlockId = GetBlockString(x.Block, "blockId") ?? string.Empty,
+                PageIdx = GetBlockInt(x.Block, "pageIdx"),
+                Bbox = ReadBbox(x.Block),
+                Text = GetBlockString(x.Block, "text") ?? string.Empty
+            })
+            .ToList();
     }
+
+    /// <summary>去掉空白与标点、统一小写，用于容错匹配（忽略换行/空格/全半角差异）。</summary>
+    private static string NormalizeForMatch(string input)
+    {
+        var sb = new StringBuilder(input.Length);
+        foreach (var ch in input)
+        {
+            if (char.IsWhiteSpace(ch) || char.IsPunctuation(ch) || char.IsSymbol(ch))
+            {
+                continue;
+            }
+
+            sb.Append(char.ToLowerInvariant(ch));
+        }
+
+        return sb.ToString();
+    }
+
+    /// <summary>生成由长到短的匹配候选：最长语义段 + 逐级缩短的前缀。</summary>
+    private static List<string> BuildNeedleCandidates(string normalized)
+    {
+        var candidates = new List<string>();
+        var longestSegment = normalized
+            .Split(new[] { '；', ';', '，', ',', '。', '.', '、', '：', ':' }, StringSplitOptions.RemoveEmptyEntries)
+            .OrderByDescending(segment => segment.Length)
+            .FirstOrDefault();
+        if (!string.IsNullOrWhiteSpace(longestSegment))
+        {
+            candidates.Add(longestSegment);
+        }
+
+        candidates.Add(normalized.Length > 40 ? normalized[..40] : normalized);
+        foreach (var length in new[] { 30, 24, 18, 14, 10 })
+        {
+            if (normalized.Length >= length)
+            {
+                candidates.Add(normalized[..length]);
+            }
+        }
+
+        return candidates.Distinct().ToList();
+    }
+
+    private static string? GetBlockString(JsonElement block, string property)
+        => block.TryGetProperty(property, out var value) && value.ValueKind == JsonValueKind.String
+            ? value.GetString()
+            : null;
+
+    private static int GetBlockInt(JsonElement block, string property)
+        => block.TryGetProperty(property, out var value) && value.ValueKind == JsonValueKind.Number
+            ? value.GetInt32()
+            : 0;
 
     private static double[] ReadBbox(JsonElement block)
     {
