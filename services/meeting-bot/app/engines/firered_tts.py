@@ -12,6 +12,14 @@ import uuid
 from app.engines.tts import TtsEngine
 
 
+def _venv_python_candidates(service_root: str) -> list[str]:
+    """Windows 布局 Scripts/python.exe，Linux/macOS 布局 bin/python。"""
+    return [
+        os.path.join(service_root, ".venv-tts", "Scripts", "python.exe"),
+        os.path.join(service_root, ".venv-tts", "bin", "python"),
+    ]
+
+
 class FireRedTtsEngine(TtsEngine):
     def __init__(
         self,
@@ -38,9 +46,10 @@ class FireRedTtsEngine(TtsEngine):
         self._prompt_text = prompt_text or ""
 
         if not venv_python:
-            candidate = os.path.join(service_root, ".venv-tts", "Scripts", "python.exe")
-            if os.path.exists(candidate):
-                self._venv_python = candidate
+            for candidate in _venv_python_candidates(service_root):
+                if os.path.exists(candidate):
+                    self._venv_python = candidate
+                    break
 
         self._proc: subprocess.Popen | None = None
         self._lock = threading.Lock()
