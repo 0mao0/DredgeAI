@@ -2587,3 +2587,10 @@ git commit -m "fix: AI晨会端到端联调修复"
 git add docs/ai-meeting-acceptance.md
 git commit -m "docs: AI晨会端到端验收报告"
 ```
+
+## 执行结果快照（2026-08-23 晚）
+- 四个模型已落地：FireRedASR-AED-L（ModelScope，本机 CPU/GPU 可选）、FireRedTTS（main 分支 v1，3.1GB，GPU fp32）、InsightFace buffalo_l（CPU）、YOLOv8n（CPU）
+- FireRedTTS 采用 main 分支而非 1S：1S 依赖 fairseq/pynini 且包结构缺失，Windows 无法编译；补丁见 services/meeting-bot/patches/fireredtts-windows.patch，DGX 升级路径保留
+- meeting-bot 真实引擎已接入：firered_asr / firered_tts（常驻 3.10 worker）/ insightface_engine / yolo_engine；部署脚本 scripts/deploy-meeting-bot.ps1；文档 docs/meeting-bot-deploy.md
+- Phase 3 后端完成（Task 3.1-3.10）：领域实体 + 迁移（Add_MeetingBot_Entities 已应用）、MeetingBot HTTP 客户端、晨会稿生成（AnGIneer internal/retrieve + LLM）、工人人脸库、点名、问答（文本/语音）、会后转写报告后台任务；6 个单测通过；Swagger 冒烟全链路通过
+- 前端 MOCK_MODULES.meeting 已置为 false（切真实 API）；语音问答 TTS 播放器接入留待后续
