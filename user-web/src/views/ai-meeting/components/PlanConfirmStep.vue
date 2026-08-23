@@ -1,11 +1,5 @@
 <template>
   <SectionCard title="信息确认" flush>
-    <a-alert
-      type="info"
-      show-icon
-      class="plan-confirm__tip"
-      message="以下内容由系统根据你的输入自动整理（天气自动获取），可修改后生成晨会稿"
-    />
     <a-form layout="vertical">
       <a-form-item label="日期">
         <a-date-picker v-model:value="form.date" value-format="YYYY-MM-DD" style="width: 100%" />
@@ -71,9 +65,6 @@ function onSubmit(): void {
 <style scoped lang="less">
 @import '@shared/web/styles/variables.less';
 
-.plan-confirm__tip {
-  margin-bottom: @spacing-lg;
-}
 .plan-confirm__actions {
   display: flex;
   gap: @spacing-md;
