@@ -165,6 +165,8 @@ async function handleMeetingFinish(recording: Blob): Promise<void> {
 </script>
 
 <style scoped lang="less">
+@import '@shared/web/styles/variables.less';
+
 .ai-meeting-page {
   max-width: 720px;
   margin: 0 auto;

@@ -51,9 +51,11 @@ async function onCapture(): Promise<void> {
 </script>
 
 <style scoped lang="less">
+@import '@shared/web/styles/variables.less';
+
 .attendance-step__video {
   width: 100%;
-  border-radius: @radius-md;
+  border-radius: @radius-base;
 }
 .attendance-step__actions {
   margin: @spacing-md 0;

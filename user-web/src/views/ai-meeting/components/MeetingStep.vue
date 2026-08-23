@@ -78,13 +78,15 @@ async function onFinish(): Promise<void> {
 </script>
 
 <style scoped lang="less">
+@import '@shared/web/styles/variables.less';
+
 .meeting-step__qa {
   margin-top: @spacing-md;
 }
 .meeting-step__qa-item {
   padding: @spacing-sm @spacing-md;
   background: @content-bg;
-  border-radius: @radius-md;
+  border-radius: @radius-base;
   margin-bottom: @spacing-sm;
 }
 </style>

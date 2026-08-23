@@ -39,6 +39,8 @@ defineProps<{ report: ReportDto | null }>()
 </script>
 
 <style scoped lang="less">
+@import '@shared/web/styles/variables.less';
+
 .report-step__block {
   margin-bottom: @spacing-lg;
 }

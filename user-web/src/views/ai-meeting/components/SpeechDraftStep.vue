@@ -50,6 +50,8 @@ function onSave(): void {
 </script>
 
 <style scoped lang="less">
+@import '@shared/web/styles/variables.less';
+
 .speech-draft-step__actions {
   display: flex;
   gap: @spacing-sm;
