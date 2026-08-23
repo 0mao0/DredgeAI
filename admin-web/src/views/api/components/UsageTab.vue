@@ -69,55 +69,29 @@
     </template>
 
     <template v-if="usageDimension === '用户维度'">
-      <SectionCard nopad>
-        <div class="user-filter-bar">
-          <a-input-search
-            :value="userKeyword"
-            placeholder="搜索姓名 / 部门"
-            allow-clear
-            style="width:200px"
-            @update:value="emit('update:userKeyword', $event)"
-          />
-          <a-select :value="userDepartment" allow-clear placeholder="部门" style="width:140px" @update:value="emit('update:userDepartment', $event)">
-            <a-select-option v-for="d in allDepartments" :key="d" :value="d">{{ d }}</a-select-option>
-          </a-select>
-          <a-select
-            :value="userModel"
-            mode="multiple"
-            allow-clear
-            placeholder="全部"
-            :max-tag-count="0"
-            :max-tag-placeholder="userModel.length === 0 || userModel.length === allModelNames.length ? '全部' : `已选 ${userModel.length} 项`"
-            style="width:140px"
-            @update:value="emit('update:userModel', $event)"
-          >
-            <a-select-option v-for="m in allModelNames" :key="m" :value="m">{{ m }}</a-select-option>
-          </a-select>
-        </div>
-        <a-table
-          size="small"
-          :data-source="mergedUserData"
-          :columns="consumptionColumns"
-          :pagination="{ pageSize: 15, showTotal: (t: number) => `共 ${t} 人` }"
-          row-key="userId"
-          :locale="{ emptyText: '暂无数据' }"
-        >
-          <template #bodyCell="{ column, record, index }">
-            <template v-if="column.key === 'rank'">
-              <span class="rank-badge" :class="[{ gold: index < 3 }]">{{ index + 1 }}</span>
-            </template>
-            <template v-else-if="column.key === 'calls'">
-              {{ formatNumber(record.calls) }}
-            </template>
-            <template v-else-if="column.key === 'tokens'">
-              {{ formatNumber(record.tokens) }}
-            </template>
-            <template v-else-if="column.key === 'models'">
-              <a-tag :color="(record.modelLimits?.length ?? 0) === allModelNames.length ? 'green' : 'orange'">{{ (record.modelLimits?.length ?? 0) === allModelNames.length ? '全部' : '部分' }}</a-tag>
-            </template>
+      <DataTable
+        v-model:query="query"
+        :columns="columns"
+        :data-source="mergedUserData"
+        :pagination="{ pageSize: 15, showTotal: (t: number) => `共 ${t} 人` }"
+        :filters="filters"
+        row-key="userId"
+      >
+        <template #bodyCell="{ column, record, index }">
+          <template v-if="column.key === 'rank'">
+            <span class="rank-badge" :class="[{ gold: index < 3 }]">{{ index + 1 }}</span>
           </template>
-        </a-table>
-      </SectionCard>
+          <template v-else-if="column.key === 'calls'">
+            {{ formatNumber(record.calls) }}
+          </template>
+          <template v-else-if="column.key === 'tokens'">
+            {{ formatNumber(record.tokens) }}
+          </template>
+          <template v-else-if="column.key === 'models'">
+            <a-tag :color="(record.modelLimits?.length ?? 0) === allModelNames.length ? 'green' : 'orange'">{{ (record.modelLimits?.length ?? 0) === allModelNames.length ? '全部' : '部分' }}</a-tag>
+          </template>
+        </template>
+      </DataTable>
     </template>
   </div>
 </template>
@@ -126,11 +100,14 @@
 import SectionCard from '@shared/web/components/SectionCard.vue'
 import ChartContainer from '@shared/web/components/ChartContainer.vue'
 import MetricCard from '@shared/web/components/MetricCard.vue'
+import { DataTable } from '@shared/web'
+import type { DataTableColumn, DataTableFilter } from '@shared/web'
 import { formatNumber } from '@shared/core/utils/format'
 import { useCssVar } from '@shared/web/composables/useCssVar'
+import { computed } from 'vue'
 import type { MergedUserRecord, DayjsLike } from '../types'
 
-defineProps<{
+const props = defineProps<{
   usageDimension: string
   overviewTotalCalls: number
   overviewTotalTokens: number
@@ -161,13 +138,28 @@ const emit = defineEmits<{
 const brandColor = useCssVar('--color-brand')
 const accentColor = useCssVar('--color-accent')
 
-const consumptionColumns = [
-  { title: '排名', key: 'rank', width: 70 },
-  { title: '用户', dataIndex: 'name', key: 'name' },
-  { title: '部门', dataIndex: 'department', key: 'department' },
-  { title: '总调用次数', key: 'calls', sorter: (a: MergedUserRecord, b: MergedUserRecord) => a.calls - b.calls, sortDirections: ['ascend', 'descend'] as const },
-  { title: '总 Token 用量', key: 'tokens', sorter: (a: MergedUserRecord, b: MergedUserRecord) => a.tokens - b.tokens, sortDirections: ['ascend', 'descend'] as const },
-  { title: '授权模型', key: 'models', width: 100 },
+const filters: DataTableFilter[] = [
+  { key: 'userKeyword', type: 'input', placeholder: '搜索姓名 / 部门', width: 200 },
+  { key: 'userDepartment', type: 'select', placeholder: '部门', width: 140, options: props.allDepartments },
+  { key: 'userModel', type: 'select', multiple: true, placeholder: '全部', width: 160, options: props.allModelNames },
+]
+
+const query = computed({
+  get: () => ({ userKeyword: props.userKeyword, userDepartment: props.userDepartment, userModel: props.userModel }),
+  set: (v: { userKeyword: string, userDepartment: string, userModel: string[] }) => {
+    if (v.userKeyword !== props.userKeyword) emit('update:userKeyword', v.userKeyword)
+    if (v.userDepartment !== props.userDepartment) emit('update:userDepartment', v.userDepartment)
+    if (v.userModel !== props.userModel) emit('update:userModel', v.userModel)
+  },
+})
+
+const columns: DataTableColumn[] = [
+  { title: '排名', key: 'rank', width: 70, minWidth: 60, resizable: true },
+  { title: '用户', dataIndex: 'name', key: 'name', width: 120, minWidth: 100, resizable: true },
+  { title: '部门', dataIndex: 'department', key: 'department', width: 120, minWidth: 100, resizable: true },
+  { title: '总调用次数', key: 'calls', width: 130, minWidth: 110, sorter: (a: MergedUserRecord, b: MergedUserRecord) => a.calls - b.calls, sortDirections: ['ascend', 'descend'] as const, resizable: true },
+  { title: '总 Token 用量', key: 'tokens', width: 140, minWidth: 120, sorter: (a: MergedUserRecord, b: MergedUserRecord) => a.tokens - b.tokens, sortDirections: ['ascend', 'descend'] as const, resizable: true },
+  { title: '授权模型', key: 'models', width: 100, minWidth: 90, resizable: true },
 ]
 </script>
 
@@ -204,26 +196,6 @@ const consumptionColumns = [
 }
 .stats-tab :deep(.section-card-body) {
   padding: @spacing-md @spacing-xl;
-}
-
-.user-filter-bar {
-  display: flex;
-  gap: @spacing-sm;
-  align-items: center;
-  flex-wrap: wrap;
-  padding: 0;
-  margin-bottom: @spacing-base;
-
-  :deep(.ant-input-group-wrapper) {
-    display: inline-flex;
-    align-items: center;
-    vertical-align: middle;
-  }
-  :deep(.ant-input-search-button) {
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-  }
 }
 
 .rank-badge {

@@ -1,48 +1,30 @@
 <template>
-  <SectionCard nopad>
-    <div class="user-filter-bar">
-      <a-input-search
-        :value="keyword"
-        placeholder="搜索姓名 / 部门"
-        allow-clear
-        style="width:200px"
-        @update:value="emit('update:keyword', $event)"
-      />
-      <a-switch
-        :checked="partialOnly"
-        checked-children="部分权限"
-        un-checked-children="全部权限"
-        class="perm-switch"
-        @update:checked="emit('update:partialOnly', $event)"
-      />
-    </div>
-    <a-table
-      size="small"
-      :data-source="users"
-      :columns="permissionColumns"
-      :pagination="{ pageSize: 15, showTotal: (t: number) => `共 ${t} 人` }"
-      row-key="userId"
-      :locale="{ emptyText: '暂无数据' }"
-    >
-      <template #bodyCell="{ column, record, index }">
-        <template v-if="column.key === 'index'">
-          {{ index + 1 }}
-        </template>
-        <template v-else-if="column.key === 'models'">
-          <a-tag :color="(record.modelLimits?.length ?? 0) === allModelNames.length ? 'green' : 'orange'">{{ (record.modelLimits?.length ?? 0) === allModelNames.length ? '全部' : '部分' }}</a-tag>
-        </template>
-        <template v-else-if="column.key === 'callsLimit'">
-          {{ formatLimit(record, 'calls') }}
-        </template>
-        <template v-else-if="column.key === 'tokensLimit'">
-          {{ formatLimit(record, 'tokens') }}
-        </template>
-        <template v-else-if="column.key === 'action'">
-          <AppButton variant="link" size="sm" @click="emit('editLimits', record)">编辑</AppButton>
-        </template>
+  <DataTable
+    v-model:query="query"
+    :columns="columns"
+    :data-source="users"
+    :pagination="{ pageSize: 15, showTotal: (t: number) => `共 ${t} 人` }"
+    :filters="filters"
+    row-key="userId"
+  >
+    <template #bodyCell="{ column, record, index }">
+      <template v-if="column.key === 'index'">
+        {{ index + 1 }}
       </template>
-    </a-table>
-  </SectionCard>
+      <template v-else-if="column.key === 'models'">
+        <a-tag :color="(record.modelLimits?.length ?? 0) === allModelNames.length ? 'green' : 'orange'">{{ (record.modelLimits?.length ?? 0) === allModelNames.length ? '全部' : '部分' }}</a-tag>
+      </template>
+      <template v-else-if="column.key === 'callsLimit'">
+        {{ formatLimit(record, 'calls') }}
+      </template>
+      <template v-else-if="column.key === 'tokensLimit'">
+        {{ formatLimit(record, 'tokens') }}
+      </template>
+      <template v-else-if="column.key === 'action'">
+        <AppButton variant="link" size="sm" @click="emit('editLimits', record)">编辑</AppButton>
+      </template>
+    </template>
+  </DataTable>
 
   <!-- Edit Limits Modal -->
   <a-modal :open="limitsOpen" title="编辑用户限制" width="820px" @update:open="emit('update:limitsOpen', $event)" @ok="emit('limitsOk')">
@@ -82,12 +64,13 @@
 </template>
 
 <script setup lang="ts">
-import { AppButton } from '@shared/web'
-import SectionCard from '@shared/web/components/SectionCard.vue'
+import { AppButton, DataTable } from '@shared/web'
+import type { DataTableColumn, DataTableFilter } from '@shared/web'
+import { computed } from 'vue'
 import { formatLimit } from '../utils'
 import type { MergedUserRecord, ModelLimitEntry } from '../types'
 
-defineProps<{
+const props = defineProps<{
   users: MergedUserRecord[]
   allModelNames: string[]
   keyword: string
@@ -106,14 +89,27 @@ const emit = defineEmits<{
 
 const limitsForm = defineModel<ModelLimitEntry[]>('limitsForm', { required: true })
 
-const permissionColumns = [
-  { title: '序号', key: 'index', width: 70 },
-  { title: '用户', dataIndex: 'name', key: 'name', width: 100 },
-  { title: '部门', dataIndex: 'department', key: 'department', width: 100 },
-  { title: '已授权模型', key: 'models', width: 120 },
-  { title: '调用限制', key: 'callsLimit', width: 120 },
-  { title: 'Token 限制', key: 'tokensLimit', width: 120 },
-  { title: '操作', key: 'action', width: 100 },
+const filters: DataTableFilter[] = [
+  { key: 'keyword', type: 'input', placeholder: '搜索姓名 / 部门', width: 200 },
+  { key: 'partialOnly', type: 'switch', checkedLabel: '部分权限', uncheckedLabel: '全部权限' },
+]
+
+const query = computed({
+  get: () => ({ keyword: props.keyword, partialOnly: props.partialOnly }),
+  set: (v: { keyword: string, partialOnly: boolean }) => {
+    if (v.keyword !== props.keyword) emit('update:keyword', v.keyword)
+    if (v.partialOnly !== props.partialOnly) emit('update:partialOnly', v.partialOnly)
+  },
+})
+
+const columns: DataTableColumn[] = [
+  { title: '序号', key: 'index', width: 70, minWidth: 60, resizable: true },
+  { title: '用户', dataIndex: 'name', key: 'name', width: 100, minWidth: 90, resizable: true },
+  { title: '部门', dataIndex: 'department', key: 'department', width: 100, minWidth: 90, resizable: true },
+  { title: '已授权模型', key: 'models', width: 120, minWidth: 100, resizable: true },
+  { title: '调用限制', key: 'callsLimit', width: 120, minWidth: 100, resizable: true },
+  { title: 'Token 限制', key: 'tokensLimit', width: 120, minWidth: 100, resizable: true },
+  { title: '操作', key: 'action', width: 100, minWidth: 100, fixed: 'right', resizable: true },
 ]
 
 const limitColumns = [
@@ -129,26 +125,6 @@ const limitColumns = [
 <style scoped lang="less">
 @import '@shared/web/styles/variables.less';
 
-.user-filter-bar {
-  display: flex;
-  gap: @spacing-sm;
-  align-items: center;
-  flex-wrap: wrap;
-  padding: 0;
-  margin-bottom: @spacing-base;
-
-  :deep(.ant-input-group-wrapper) {
-    display: inline-flex;
-    align-items: center;
-    vertical-align: middle;
-  }
-  :deep(.ant-input-search-button) {
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-  }
-}
-
 .limits-table {
   margin-top: @spacing-md;
 }
@@ -159,8 +135,5 @@ const limitColumns = [
   font-weight: @font-weight-semibold;
   margin-bottom: @spacing-md;
   color: @text-primary;
-}
-.perm-switch {
-  margin-left: auto;
 }
 </style>

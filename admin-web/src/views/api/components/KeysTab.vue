@@ -1,19 +1,17 @@
 <template>
-  <SectionCard nopad>
-    <template #extra>
-      <AppButton variant="primary" size="sm" @click="emit('openCreate')">
-        <PlusOutlined />
-        添加模型
-      </AppButton>
-    </template>
-    <a-table
-      size="small"
+  <div class="keys-tab">
+    <DataTable
+      :columns="columns"
       :data-source="models"
-      :columns="modelColumns"
       :pagination="{ pageSize: 15 }"
       row-key="id"
-      :locale="{ emptyText: '暂无数据' }"
     >
+      <template #toolbarExtra>
+        <AppButton variant="primary" @click="emit('openCreate')">
+          <PlusOutlined />
+          添加模型
+        </AppButton>
+      </template>
       <template #bodyCell="{ column, record, index }">
         <template v-if="column.key === 'index'">
           {{ index + 1 }}
@@ -36,65 +34,65 @@
           </a-popconfirm>
         </template>
       </template>
-    </a-table>
-  </SectionCard>
+    </DataTable>
 
-  <!-- Create Modal -->
-  <a-modal :open="createOpen" title="添加模型" @update:open="emit('update:createOpen', $event)" @ok="emit('create')" @cancel="emit('cancelCreate')">
-    <a-form layout="horizontal" :label-col="{ span: 7 }" :wrapper-col="{ span: 17 }">
-      <a-form-item label="模型名称" required>
-        <a-input v-model:value="newModel.name" placeholder="用户自定义名称" />
-      </a-form-item>
-      <a-form-item label="实际模型" required>
-        <a-select v-model:value="newModel.actualModel" :options="deployedModelOptions" placeholder="选择已部署的模型" />
-      </a-form-item>
-      <a-form-item label="模型类型" required>
-        <a-select v-model:value="newModel.modelType" :options="modelTypeOptions" placeholder="选择模型分类" />
-      </a-form-item>
-      <a-form-item label="IP 地址">
-        <a-input v-model:value="newModel.ipAddress" placeholder="如：192.168.1.100" />
-      </a-form-item>
-      <a-form-item label="API 文档链接">
-        <a-input v-model:value="newModel.docUrl" placeholder="https://docs.example.com/model" />
-      </a-form-item>
-      <a-form-item label="状态">
-        <a-select v-model:value="newModel.status" :options="statusOptions" />
-      </a-form-item>
-    </a-form>
-  </a-modal>
+    <!-- Create Modal -->
+    <a-modal :open="createOpen" title="添加模型" @update:open="emit('update:createOpen', $event)" @ok="emit('create')" @cancel="emit('cancelCreate')">
+      <a-form layout="horizontal" :label-col="{ span: 7 }" :wrapper-col="{ span: 17 }">
+        <a-form-item label="模型名称" required>
+          <a-input v-model:value="newModel.name" placeholder="用户自定义名称" />
+        </a-form-item>
+        <a-form-item label="实际模型" required>
+          <a-select v-model:value="newModel.actualModel" :options="deployedModelOptions" placeholder="选择已部署的模型" />
+        </a-form-item>
+        <a-form-item label="模型类型" required>
+          <a-select v-model:value="newModel.modelType" :options="modelTypeOptions" placeholder="选择模型分类" />
+        </a-form-item>
+        <a-form-item label="IP 地址">
+          <a-input v-model:value="newModel.ipAddress" placeholder="如：192.168.1.100" />
+        </a-form-item>
+        <a-form-item label="API 文档链接">
+          <a-input v-model:value="newModel.docUrl" placeholder="https://docs.example.com/model" />
+        </a-form-item>
+        <a-form-item label="状态">
+          <a-select v-model:value="newModel.status" :options="statusOptions" />
+        </a-form-item>
+      </a-form>
+    </a-modal>
 
-  <!-- Edit Modal -->
-  <a-modal :open="editOpen" title="编辑模型" @update:open="emit('update:editOpen', $event)" @ok="emit('editOk')">
-    <a-form v-if="editTarget" layout="horizontal" :label-col="{ span: 7 }" :wrapper-col="{ span: 17 }">
-      <a-form-item label="模型名称" required>
-        <a-input v-model:value="editForm.name" placeholder="用户自定义名称" />
-      </a-form-item>
-      <a-form-item label="实际模型" required>
-        <a-select v-model:value="editForm.actualModel" :options="deployedModelOptions" placeholder="选择已部署的模型" />
-      </a-form-item>
-      <a-form-item label="模型类型" required>
-        <a-select v-model:value="editForm.modelType" :options="modelTypeOptions" placeholder="选择模型分类" />
-      </a-form-item>
-      <a-form-item label="IP 地址">
-        <a-input v-model:value="editForm.ipAddress" placeholder="如：192.168.1.100" />
-      </a-form-item>
-      <a-form-item label="API 文档链接">
-        <a-input v-model:value="editForm.docUrl" placeholder="https://docs.example.com/model" />
-      </a-form-item>
-      <a-form-item label="状态">
-        <a-select v-model:value="editForm.status" :options="statusOptions" />
-      </a-form-item>
-      <a-form-item label="创建日期">
-        <span class="readonly-field">{{ editTarget.createdAt }}</span>
-      </a-form-item>
-    </a-form>
-  </a-modal>
+    <!-- Edit Modal -->
+    <a-modal :open="editOpen" title="编辑模型" @update:open="emit('update:editOpen', $event)" @ok="emit('editOk')">
+      <a-form v-if="editTarget" layout="horizontal" :label-col="{ span: 7 }" :wrapper-col="{ span: 17 }">
+        <a-form-item label="模型名称" required>
+          <a-input v-model:value="editForm.name" placeholder="用户自定义名称" />
+        </a-form-item>
+        <a-form-item label="实际模型" required>
+          <a-select v-model:value="editForm.actualModel" :options="deployedModelOptions" placeholder="选择已部署的模型" />
+        </a-form-item>
+        <a-form-item label="模型类型" required>
+          <a-select v-model:value="editForm.modelType" :options="modelTypeOptions" placeholder="选择模型分类" />
+        </a-form-item>
+        <a-form-item label="IP 地址">
+          <a-input v-model:value="editForm.ipAddress" placeholder="如：192.168.1.100" />
+        </a-form-item>
+        <a-form-item label="API 文档链接">
+          <a-input v-model:value="editForm.docUrl" placeholder="https://docs.example.com/model" />
+        </a-form-item>
+        <a-form-item label="状态">
+          <a-select v-model:value="editForm.status" :options="statusOptions" />
+        </a-form-item>
+        <a-form-item label="创建日期">
+          <span class="readonly-field">{{ editTarget.createdAt }}</span>
+        </a-form-item>
+      </a-form>
+    </a-modal>
+  </div>
 </template>
 
 <script setup lang="ts">
-import { AppButton } from '@shared/web'
+import { AppButton, DataTable } from '@shared/web'
+import type { DataTableColumn } from '@shared/web'
 import { PlusOutlined, FileTextOutlined } from '@ant-design/icons-vue'
-import SectionCard from '@shared/web/components/SectionCard.vue'
 import { formatConsumption } from '../utils'
 import type { ModelItem, ModelForm, SelectOption } from '../types'
 
@@ -122,14 +120,14 @@ const emit = defineEmits<{
 const newModel = defineModel<ModelForm>('newModel', { required: true })
 const editForm = defineModel<ModelForm>('editForm', { required: true })
 
-const modelColumns = [
-  { title: '序号', key: 'index', width: 70 },
-  { title: '模型名称', dataIndex: 'name', key: 'name' },
-  { title: '模型类型', dataIndex: 'modelType', key: 'modelType' },
-  { title: '消耗额度', key: 'consumption' },
-  { title: '状态', key: 'status', width: 100 },
-  { title: 'API 文档', key: 'doc', width: 110 },
-  { title: '操作', key: 'action', width: 130 },
+const columns: DataTableColumn[] = [
+  { title: '序号', key: 'index', width: 70, minWidth: 60, resizable: true },
+  { title: '模型名称', dataIndex: 'name', key: 'name', width: 200, minWidth: 140, resizable: true },
+  { title: '模型类型', dataIndex: 'modelType', key: 'modelType', width: 120, minWidth: 100, resizable: true },
+  { title: '消耗额度', key: 'consumption', width: 140, minWidth: 110, resizable: true },
+  { title: '状态', key: 'status', width: 100, minWidth: 80, resizable: true },
+  { title: 'API 文档', key: 'doc', width: 110, minWidth: 90, resizable: true },
+  { title: '操作', key: 'action', width: 130, minWidth: 130, fixed: 'right', resizable: true },
 ]
 
 function openDoc(url: string): void {

@@ -1,62 +1,8 @@
 <template>
   <div class="page-container" :class="{ 'api-page--keys': activeTab === 'keys', 'api-page--alerts': activeTab === 'alerts', 'api-page--permissions': activeTab === 'permissions', 'api-page--calls': activeTab === 'calls' }">
-    <PageHeader title="API 管理" description="管理接入的模型、统计平台用量与配置用户限制">
-      <template #extra>
-        <AppButton v-if="activeTab === 'keys'" variant="primary" size="sm" @click="showCreateModal = true">
-          <PlusOutlined />
-          添加模型
-        </AppButton>
-        <a-radio-group v-if="activeTab === 'alerts'" v-model:value="alertFilter" size="small" button-style="solid">
-          <a-radio-button value="all">全部</a-radio-button>
-          <a-radio-button value="calls">调用超限</a-radio-button>
-          <a-radio-button value="tokens">Token 超限</a-radio-button>
-        </a-radio-group>
-      </template>
-    </PageHeader>
+    <PageHeader title="API 管理" description="管理接入的模型、统计平台用量与配置用户限制" />
 
     <a-tabs v-model:active-key="activeTab" class="api-tabs" :class="{ 'api-tabs--keys': activeTab === 'keys', 'api-tabs--alerts': activeTab === 'alerts', 'api-tabs--permissions': activeTab === 'permissions', 'api-tabs--calls': activeTab === 'calls', 'api-tabs--usage': activeTab === 'usage' }">
-      <template #tabBarExtraContent>
-        <a-space v-if="activeTab === 'keys'" :size="8">
-          <AppButton variant="primary" size="sm" @click="showCreateModal = true">
-            <PlusOutlined />
-            添加模型
-          </AppButton>
-        </a-space>
-        <a-space v-else-if="activeTab === 'calls'" :size="8">
-          <a-input-search v-model:value="callUserKeyword" placeholder="搜索用户" allow-clear size="small" style="width:180px" />
-          <a-select v-model:value="callModelFilter" mode="multiple" allow-clear placeholder="模型" size="small" :max-tag-count="0" :max-tag-placeholder="callModelFilter.length ? `已选 ${callModelFilter.length}` : '全部'" style="width:140px">
-            <a-select-option v-for="m in allModelNames" :key="m" :value="m">{{ m }}</a-select-option>
-          </a-select>
-          <a-select v-model:value="callStatusFilter" allow-clear placeholder="状态" style="width:100px">
-            <a-select-option value="成功">成功</a-select-option>
-            <a-select-option value="失败">失败</a-select-option>
-          </a-select>
-        </a-space>
-        <a-space v-else-if="activeTab === 'permissions'" :size="8">
-          <a-input-search v-model:value="permissionKeyword" placeholder="搜索姓名 / 部门" allow-clear size="small" style="width:200px" />
-          <a-switch v-model:checked="partialOnly" checked-children="部分权限" un-checked-children="全部权限" size="small" />
-        </a-space>
-        <a-space v-else-if="activeTab === 'alerts'" :size="8">
-          <a-radio-group v-model:value="alertFilter" size="small" button-style="solid">
-            <a-radio-button value="all">全部</a-radio-button>
-            <a-radio-button value="calls">调用超限</a-radio-button>
-            <a-radio-button value="tokens">Token 超限</a-radio-button>
-          </a-radio-group>
-        </a-space>
-        <a-space v-else-if="activeTab === 'usage'" :size="8">
-          <a-segmented v-model:value="usageDimension" :options="['模型维度', '用户维度']" />
-          <template v-if="usageDimension === '用户维度'">
-            <a-input-search v-model:value="userKeyword" placeholder="搜索姓名 / 部门" allow-clear size="small" style="width:200px" />
-            <a-select v-model:value="userDepartment" allow-clear placeholder="部门" style="width:140px">
-              <a-select-option v-for="d in allDepartments" :key="d" :value="d">{{ d }}</a-select-option>
-            </a-select>
-            <a-select v-model:value="userModel" mode="multiple" allow-clear placeholder="全部" :max-tag-count="0" :max-tag-placeholder="userModel.length === 0 || userModel.length === allModelNames.length ? '全部' : `已选 ${userModel.length} 项`" style="width:140px">
-              <a-select-option v-for="m in allModelNames" :key="m" :value="m">{{ m }}</a-select-option>
-            </a-select>
-          </template>
-        </a-space>
-      </template>
-
       <a-tab-pane key="keys" tab="模型管理">
         <KeysTab
           v-model:create-open="showCreateModal"
@@ -133,10 +79,8 @@
 </template>
 
 <script setup lang="ts">
-import { AppButton } from '@shared/web'
 import { ref, computed, onMounted, watch } from 'vue'
 import { message } from 'ant-design-vue'
-import { PlusOutlined } from '@ant-design/icons-vue'
 import PageHeader from '@shared/web/components/PageHeader.vue'
 import { useCssVar } from '@shared/web/composables/useCssVar'
 import { useChartTheme } from '@shared/web/composables/useChartTheme'

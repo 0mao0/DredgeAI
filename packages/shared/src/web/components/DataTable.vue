@@ -17,16 +17,36 @@
             v-model:value="localQuery[f.key]"
             :placeholder="f.placeholder"
             allow-clear
-            :style="{ width: `${f.width || 120}px` }"
+            :mode="f.multiple ? 'multiple' : undefined"
+            :max-tag-count="f.multiple ? 0 : undefined"
+            :max-tag-placeholder="f.multiple ? `已选 ${(localQuery[f.key] as string[] | undefined)?.length ?? 0}` : undefined"
+            :style="{ width: `${f.width || (f.multiple ? 160 : 120)}px` }"
             @change="emitQuery"
           >
             <a-select-option v-for="opt in normalizedOptions(f)" :key="String(opt.value)" :value="opt.value">
               {{ opt.label }}
             </a-select-option>
           </a-select>
+          <a-radio-group
+            v-else-if="f.type === 'radio'"
+            v-model:value="localQuery[f.key]"
+            button-style="solid"
+            size="small"
+            @change="emitQuery"
+          >
+            <a-radio-button v-for="opt in normalizedOptions(f)" :key="String(opt.value)" :value="opt.value">
+              {{ opt.label }}
+            </a-radio-button>
+          </a-radio-group>
           <div v-else class="data-table-filter-switch">
-            <span class="data-table-filter-switch__label">{{ f.label }}</span>
-            <a-switch v-model:checked="localQuery[f.key]" size="small" @change="emitQuery" />
+            <span v-if="f.label" class="data-table-filter-switch__label">{{ f.label }}</span>
+            <a-switch
+              v-model:checked="localQuery[f.key]"
+              size="small"
+              :checked-children="f.checkedLabel"
+              :un-checked-children="f.uncheckedLabel"
+              @change="emitQuery"
+            />
           </div>
         </template>
         <div v-if="$slots.toolbarExtra" class="data-table-filter-bar__extra">
@@ -112,12 +132,17 @@ export interface DataTableColumn {
 
 export interface DataTableFilter {
   key: string
-  type: 'input' | 'select' | 'switch'
+  type: 'input' | 'select' | 'switch' | 'radio'
   placeholder?: string
   width?: number
   options?: Array<string | number | { value: string | number, label: string }>
+  /** select 多选模式 */
+  multiple?: boolean
   /** switch 类型显示的标签 */
   label?: string
+  /** switch 选中/未选中文案 */
+  checkedLabel?: string
+  uncheckedLabel?: string
 }
 
 const props = withDefaults(defineProps<{
