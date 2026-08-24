@@ -1,0 +1,8 @@
+.venv
+models
+third_party
+tests
+__pycache__
+*.pyc
+.pytest_cache
+.env
