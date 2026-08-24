@@ -1,66 +1,69 @@
 <template>
   <div class="speech-draft-step">
-    <div v-if="!draft" class="speech-draft-step__generate">
-      <div v-if="loading" class="speech-draft-step__loading">
-        <div class="speech-draft-step__spinner">
-          <span class="speech-draft-step__dot" />
-          <span class="speech-draft-step__dot" />
-          <span class="speech-draft-step__dot" />
+    <SectionCard flush>
+      <div v-if="!draft" class="speech-draft-step__generate">
+        <div v-if="loading" class="speech-draft-step__loading">
+          <div class="speech-draft-step__spinner">
+            <span class="speech-draft-step__dot" />
+            <span class="speech-draft-step__dot" />
+            <span class="speech-draft-step__dot" />
+          </div>
+          <div class="speech-draft-step__loading-title">AI生成晨会稿中...</div>
+          <div class="speech-draft-step__loading-sub">正在结合今日计划与知识库组织语言，请稍候</div>
         </div>
-        <div class="speech-draft-step__loading-title">AI生成晨会稿中...</div>
-        <div class="speech-draft-step__loading-sub">正在结合今日计划与知识库组织语言，请稍候</div>
-      </div>
-      <AppButton v-else variant="primary" block @click="emit('generate')">生成晨会稿</AppButton>
-    </div>
-
-    <template v-else>
-      <div class="speech-draft-step__meta">
-        <span class="speech-draft-step__date"><CalendarOutlined /> {{ dateText }}</span>
-        <span class="speech-draft-step__badge">AI 已生成</span>
+        <AppButton v-else variant="primary" block @click="emit('generate')">生成晨会稿</AppButton>
       </div>
 
-      <div class="speech-draft-step__card">
-        <template v-if="!editing">
-          <p
-            v-for="(para, index) in paragraphs"
-            :key="index"
-            class="speech-draft-step__para"
-            :class="{ 'is-lead': index === 0 }"
-          >
-            {{ para }}
-          </p>
-        </template>
-        <a-textarea
-          v-else
-          v-model:value="content"
-          :rows="14"
-          class="speech-draft-step__editor"
-        />
-      </div>
+      <template v-else>
+        <div class="speech-draft-step__meta">
+          <span class="speech-draft-step__date"><CalendarOutlined /> {{ dateText }}</span>
+          <span class="speech-draft-step__badge">AI 已生成</span>
+        </div>
 
-      <div class="speech-draft-step__toolbar">
-        <SpeechPlayer :text="content" />
-      </div>
-      <div class="speech-draft-step__subbar">
-        <AppButton size="sm" variant="text" @click="onToggleEdit">
-          {{ editing ? '取消编辑' : '编辑' }}
+        <div class="speech-draft-step__card">
+          <template v-if="!editing">
+            <p
+              v-for="(para, index) in paragraphs"
+              :key="index"
+              class="speech-draft-step__para"
+              :class="{ 'is-lead': index === 0 }"
+            >
+              {{ para }}
+            </p>
+          </template>
+          <a-textarea
+            v-else
+            v-model:value="content"
+            :rows="14"
+            class="speech-draft-step__editor"
+          />
+        </div>
+
+        <div class="speech-draft-step__toolbar">
+          <SpeechPlayer :text="content" />
+        </div>
+        <div class="speech-draft-step__subbar">
+          <AppButton size="sm" variant="text" @click="onToggleEdit">
+            {{ editing ? '取消编辑' : '编辑' }}
+          </AppButton>
+          <AppButton size="sm" variant="text" :disabled="!editing" @click="onSave">
+            保存
+          </AppButton>
+          <span class="speech-draft-step__stat">{{ charCount }} 字 · 约 {{ minutes }} 分钟</span>
+        </div>
+
+        <AppButton variant="primary" size="lg" block :loading="loading" @click="emit('confirm')">
+          开始开会
         </AppButton>
-        <AppButton size="sm" variant="text" :disabled="!editing" @click="onSave">
-          保存
-        </AppButton>
-        <span class="speech-draft-step__stat">{{ charCount }} 字 · 约 {{ minutes }} 分钟</span>
-      </div>
-
-      <AppButton variant="primary" size="lg" block :loading="loading" @click="emit('confirm')">
-        开始开会
-      </AppButton>
-    </template>
+      </template>
+    </SectionCard>
   </div>
 </template>
 
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue'
 import { CalendarOutlined } from '@ant-design/icons-vue'
+import SectionCard from '@shared/web/components/SectionCard.vue'
 import AppButton from '@shared/web/components/AppButton.vue'
 import type { SpeechDraftDto } from '@/types'
 import SpeechPlayer from './SpeechPlayer.vue'
@@ -165,9 +168,6 @@ function onSave(): void {
 }
 
 .speech-draft-step__card {
-  background: @content-bg;
-  border-radius: @radius-xl;
-  padding: @spacing-xl @spacing-lg;
   margin-bottom: @spacing-md;
 }
 .speech-draft-step__para {

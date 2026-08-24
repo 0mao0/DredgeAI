@@ -1,58 +1,60 @@
 <template>
   <div class="meeting-info-step">
-    <div class="meeting-info-step__toolbar">
-      <AppButton size="sm" @click="uploadOpen = true">上传施组方案</AppButton>
-    </div>
-
-    <div class="meeting-info-step__mic-zone">
-      <button
-        class="meeting-info-step__mic"
-        :class="{ 'is-recording': recording }"
-        type="button"
-        @pointerdown="onPress"
-        @pointerup="onRelease"
-        @pointerleave="onRelease"
-        @pointercancel="onRelease"
-      >
-        <AudioOutlined />
-      </button>
-      <div class="meeting-info-step__caption">
-        {{ recording ? '松开结束录音' : '按住说话，说出今日计划' }}
+    <SectionCard flush>
+      <div class="meeting-info-step__toolbar">
+        <AppButton size="sm" @click="uploadOpen = true">上传施组方案</AppButton>
       </div>
-      <div v-if="asrLoading" class="meeting-info-step__hint">正在识别…首次识别需加载模型，请稍候</div>
-      <div v-else-if="asrError" class="meeting-info-step__hint is-error">{{ asrError }}</div>
-    </div>
 
-    <a-textarea
-      v-model:value="planText"
-      class="meeting-info-step__plan"
-      :rows="4"
-      placeholder="今日计划将在这里显示，可编辑"
-    />
+      <div class="meeting-info-step__mic-zone">
+        <button
+          class="meeting-info-step__mic"
+          :class="{ 'is-recording': recording }"
+          type="button"
+          @pointerdown="onPress"
+          @pointerup="onRelease"
+          @pointerleave="onRelease"
+          @pointercancel="onRelease"
+        >
+          <AudioOutlined />
+        </button>
+        <div class="meeting-info-step__caption">
+          {{ recording ? '松开结束录音' : '按住说话，说出今日计划' }}
+        </div>
+        <div v-if="asrLoading" class="meeting-info-step__hint">正在识别…首次识别需加载模型，请稍候</div>
+        <div v-else-if="asrError" class="meeting-info-step__hint is-error">{{ asrError }}</div>
+      </div>
 
-    <div class="meeting-info-step__tags">
-      <div class="meeting-info-step__tags-title">推荐示例</div>
-      <a-tag
-        v-for="item in recommendedCases"
-        :key="item.label"
-        class="meeting-info-step__tag"
-        color="blue"
-        @click="planText = item.plan"
+      <a-textarea
+        v-model:value="planText"
+        class="meeting-info-step__plan"
+        :rows="4"
+        placeholder="今日计划将在这里显示，可编辑"
+      />
+
+      <div class="meeting-info-step__tags">
+        <div class="meeting-info-step__tags-title">推荐示例</div>
+        <a-tag
+          v-for="item in recommendedCases"
+          :key="item.label"
+          class="meeting-info-step__tag"
+          color="blue"
+          @click="planText = item.plan"
+        >
+          {{ item.label }}
+        </a-tag>
+      </div>
+
+      <AppButton
+        variant="primary"
+        size="lg"
+        block
+        :loading="parsing"
+        :disabled="!planText.trim()"
+        @click="onParse"
       >
-        {{ item.label }}
-      </a-tag>
-    </div>
-
-    <AppButton
-      variant="primary"
-      size="lg"
-      block
-      :loading="parsing"
-      :disabled="!planText.trim()"
-      @click="onParse"
-    >
-      下一步，整理信息
-    </AppButton>
+        下一步，整理信息
+      </AppButton>
+    </SectionCard>
 
     <a-drawer
       v-model:open="historyOpen"
@@ -115,6 +117,7 @@
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue'
 import { AudioOutlined, InboxOutlined } from '@ant-design/icons-vue'
+import SectionCard from '@shared/web/components/SectionCard.vue'
 import AppButton from '@shared/web/components/AppButton.vue'
 import type { MeetingHistoryDto } from '@/types'
 import {
@@ -299,10 +302,6 @@ function statusColor(status: MeetingHistoryDto['status']): string {
 <style scoped lang="less">
 @import '@shared/web/styles/variables.less';
 
-.meeting-info-step {
-  // 与 SectionCard 内容区对齐，保证各步骤页宽度一致（以晨会稿页为准）
-  padding: 0 @spacing-xl;
-}
 .meeting-info-step__toolbar {
   display: flex;
   justify-content: flex-end;
