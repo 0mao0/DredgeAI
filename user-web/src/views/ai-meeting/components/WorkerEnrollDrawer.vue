@@ -313,6 +313,7 @@ function onClose(): void {
 
   :deep(.ant-upload-drag) {
     width: 100%;
+    height: auto;
     aspect-ratio: 1.7778;
     padding: 0 @spacing-md;
     display: flex;
