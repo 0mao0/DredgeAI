@@ -7,6 +7,7 @@
       :src-object="stream"
       autoplay
       playsinline
+      muted
     />
     <div v-else-if="starting" class="attendance-step__camera-hint">正在启用摄像头…</div>
     <a-result v-else-if="error" status="warning" title="无法访问摄像头" :sub-title="error">
@@ -22,8 +23,17 @@
       :message="scanning ? '正在自动识别…' : '摄像头已就绪'"
       :description="scanning ? `请旋转摄像头，覆盖所有在场人员（已识别 ${list.length} 人）` : '稍候将自动开始识别'"
     />
+    <div v-if="speechText" class="attendance-step__speech">
+      <SpeechPlayer :text="speechText" auto-play />
+    </div>
+    <div class="attendance-step__actions">
+      <AppButton variant="primary" :loading="loading" @click="onDone">
+        完成点名，进入会议
+      </AppButton>
+      <AppButton @click="enrollOpen = true">新人录入</AppButton>
+    </div>
     <div v-if="count !== null" class="attendance-step__count">
-      本次照片识别 {{ list.length }} 人 · YOLO 目测人数 {{ count }}
+      已识别 {{ list.length }} 人 · YOLO 目测人数 {{ count }}
     </div>
     <DataTable
       :columns="columns"
@@ -32,13 +42,6 @@
       :pagination="false"
       :card="false"
     />
-    <AppButton variant="primary" size="lg" block @click="onDone">
-      完成点名，进入会议
-    </AppButton>
-    <AppButton size="sm" block class="attendance-step__enroll" @click="enrollOpen = true">
-      新人录入（拍身份证 + 人脸）
-    </AppButton>
-
     <WorkerEnrollDrawer v-model:open="enrollOpen" />
   </SectionCard>
 </template>
@@ -52,11 +55,13 @@ import type { DataTableColumn } from '@shared/web'
 import type { AttendanceItemDto } from '@/types'
 import { useCamera } from '../composables/useCamera'
 import WorkerEnrollDrawer from './WorkerEnrollDrawer.vue'
+import SpeechPlayer from './SpeechPlayer.vue'
 
 defineProps<{
   loading: boolean
   list: AttendanceItemDto[]
   count: number | null
+  speechText: string
 }>()
 const emit = defineEmits<{ capture: [photo: Blob], done: [] }>()
 
@@ -85,6 +90,14 @@ onScopeDispose(() => {
 watch(stream, async (s) => {
   if (!s) return
   await nextTick()
+  if (videoRef.value) {
+    videoRef.value.srcObject = s
+    try {
+      await videoRef.value.play()
+    } catch {
+      // 自动播放被拦截时等待用户手势
+    }
+  }
   // 等待视频画面就绪后自动拍照识别一次
   for (let i = 0; i < 20; i++) {
     if (videoRef.value && videoRef.value.videoWidth > 0) break
@@ -137,6 +150,18 @@ function onDone(): void {
 .attendance-step__scan-tip {
   margin: @spacing-md 0;
 }
+.attendance-step__speech {
+  margin-bottom: @spacing-md;
+}
+.attendance-step__actions {
+  display: flex;
+  gap: @spacing-sm;
+  margin: @spacing-md 0;
+
+  > * {
+    flex: 1;
+  }
+}
 .attendance-step__count {
   text-align: center;
   font-size: @font-size-sm;
@@ -149,8 +174,5 @@ function onDone(): void {
   color: @text-secondary;
   background: @content-bg;
   border-radius: @radius-base;
-}
-.attendance-step__enroll {
-  margin-top: @spacing-md;
 }
 </style>

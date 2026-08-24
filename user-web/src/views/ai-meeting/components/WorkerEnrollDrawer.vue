@@ -18,6 +18,7 @@
       :src-object="stream"
       autoplay
       playsinline
+      muted
     />
     <a-result v-else-if="error" status="warning" title="无法访问摄像头" :sub-title="error" />
 
@@ -26,6 +27,20 @@
       <AppButton variant="primary" block :loading="idCardLoading" @click="onCaptureIdCard">
         拍照识别身份证
       </AppButton>
+      <div class="worker-enroll__divider">或</div>
+      <a-upload-dragger
+        accept="image/*"
+        :show-upload-list="false"
+        :before-upload="onUploadIdCard"
+        :disabled="idCardLoading"
+        class="worker-enroll__upload"
+      >
+        <p class="ant-upload-drag-icon">
+          <InboxOutlined />
+        </p>
+        <p class="ant-upload-text">上传身份证照片</p>
+        <p class="ant-upload-hint">点击或拖拽图片，自动识别信息</p>
+      </a-upload-dragger>
       <div v-if="idCard" class="worker-enroll__fields">
         <div><span>姓名</span>{{ idCard.name || '—' }}</div>
         <div><span>身份证号</span>{{ idCard.idCardNumber || '—' }}</div>
@@ -33,6 +48,13 @@
         <div><span>出生日期</span>{{ idCard.birthDate || '—' }}</div>
         <div><span>住址</span>{{ idCard.address || '—' }}</div>
       </div>
+      <a-alert
+        v-if="idCard?.name && idCard?.idCardNumber"
+        type="success"
+        show-icon
+        class="worker-enroll__id-ok"
+        message="识别成功，请核对上方信息"
+      />
       <AppButton
         v-if="idCard?.name && idCard?.idCardNumber"
         variant="primary"
@@ -80,7 +102,8 @@
 </template>
 
 <script setup lang="ts">
-import { onScopeDispose, ref, watch } from 'vue'
+import { nextTick, onScopeDispose, ref, watch } from 'vue'
+import { InboxOutlined } from '@ant-design/icons-vue'
 import AppButton from '@shared/web/components/AppButton.vue'
 import type { IdCardRecognitionDto, WorkerDto } from '@/types'
 import { createWorker, enrollWorkerFace, recognizeIdCard } from '@/api/modules/aiMeeting'
@@ -116,7 +139,32 @@ watch(
   },
   { immediate: true },
 )
+watch(stream, async (s) => {
+  if (!s) return
+  await nextTick()
+  if (videoRef.value) {
+    videoRef.value.srcObject = s
+    try {
+      await videoRef.value.play()
+    } catch {
+      // 自动播放被拦截时等待用户手势
+    }
+  }
+})
 onScopeDispose(() => stop())
+
+async function onUploadIdCard(file: File): Promise<boolean> {
+  idCardLoading.value = true
+  try {
+    idCard.value = await recognizeIdCard(file)
+    form.value.name = idCard.value.name
+  } catch {
+    idCard.value = { name: '', idCardNumber: '', gender: '', nation: '', birthDate: '', address: '', rawText: '' }
+  } finally {
+    idCardLoading.value = false
+  }
+  return false
+}
 
 async function onCaptureIdCard(): Promise<void> {
   if (!videoRef.value || !stream.value) return
@@ -193,6 +241,18 @@ function onClose(): void {
 }
 .worker-enroll__next {
   margin-top: @spacing-lg;
+}
+.worker-enroll__divider {
+  text-align: center;
+  color: @text-tertiary;
+  margin: @spacing-md 0;
+  font-size: @font-size-sm;
+}
+.worker-enroll__upload {
+  margin-bottom: @spacing-md;
+}
+.worker-enroll__id-ok {
+  margin-top: @spacing-md;
 }
 .worker-enroll__form {
   margin-top: @spacing-sm;

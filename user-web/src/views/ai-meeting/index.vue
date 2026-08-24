@@ -20,29 +20,24 @@
       v-else-if="current === 2"
       :draft="draft"
       :loading="loading"
-      :playing="playing"
-      :audio-loading="audioLoading"
       :date="meeting?.date"
       @generate="handleGenerateSpeech"
       @save="handleSaveDraft"
       @confirm="handleConfirmDraft"
-      @play-audio="handlePlaySpeech"
-      @stop-audio="handleStopSpeech"
     />
     <AttendanceStep
       v-else-if="current === 3"
       :loading="loading"
       :list="attendance"
       :count="peopleCount"
+      :speech-text="draft?.content ?? ''"
       @capture="handleCapture"
       @done="current = 4"
     />
     <MeetingStep
       v-else-if="current === 4"
       :loading="loading"
-      :qa-records="qaRecords"
-      @ask-text="handleAskText"
-      @ask-audio="handleAskAudio"
+      :speech-text="draft?.content ?? ''"
       @finish="handleMeetingFinish"
     />
     <ReportStep v-else-if="current === 5" :report="report" />
@@ -63,8 +58,6 @@ import type {
   SpeechDraftDto,
 } from '@/types'
 import {
-  askQa,
-  askQaAudio,
   completeMeeting,
   createMeeting,
   generateSpeech,
@@ -74,10 +67,8 @@ import {
   recognizeAttendance,
   saveSpeechDraft,
   startMeeting,
-  synthesizeSpeech,
   uploadMeetingRecording,
 } from '@/api/modules/aiMeeting'
-import { splitSpeechText } from '@/utils/speechText'
 import MeetingInfoStep from './components/MeetingInfoStep.vue'
 import PlanConfirmStep from './components/PlanConfirmStep.vue'
 import SpeechDraftStep from './components/SpeechDraftStep.vue'
@@ -85,7 +76,6 @@ import AttendanceStep from './components/AttendanceStep.vue'
 import MeetingStep from './components/MeetingStep.vue'
 import ReportStep from './components/ReportStep.vue'
 import MeetingSteps from './components/MeetingSteps.vue'
-import { useAudioPlayer } from './composables/useAudioPlayer'
 import { extractErrorMessage } from '@/utils/audioToWav'
 
 const steps = ['录入', '确认', '晨会稿', '点名', '会议', '报告']
@@ -100,9 +90,6 @@ const peopleCount = ref<number | null>(null)
 const planText = ref('')
 const planResult = ref<PlanParseResult | null>(null)
 const parsing = ref(false)
-const { playing, stop: stopAudio, playOnce } = useAudioPlayer()
-const audioLoading = ref(false)
-let speechSeq = 0
 
 async function handleParse(planText: string): Promise<void> {
   parsing.value = true
@@ -209,34 +196,6 @@ async function handleConfirmDraft(): Promise<void> {
   }
 }
 
-async function handlePlaySpeech(): Promise<void> {
-  if (!meeting.value || !draft.value) return
-  const segments = splitSpeechText(draft.value.content)
-  if (segments.length === 0) return
-  const seq = ++speechSeq
-  audioLoading.value = true
-  try {
-    let next = synthesizeSpeech(segments[0]!)
-    for (let i = 0; i < segments.length; i++) {
-      if (seq !== speechSeq) return
-      const blob = await next
-      if (i + 1 < segments.length) next = synthesizeSpeech(segments[i + 1]!)
-      if (i === 0) audioLoading.value = false
-      await playOnce(blob)
-    }
-  } catch (err) {
-    audioLoading.value = false
-    message.warning(`语音合成失败：${extractErrorMessage(err)}`)
-  } finally {
-    if (seq === speechSeq) audioLoading.value = false
-  }
-}
-
-function handleStopSpeech(): void {
-  speechSeq++
-  stopAudio()
-}
-
 async function handleCapture(photo: Blob): Promise<void> {
   if (!meeting.value) return
   loading.value = true
@@ -246,26 +205,6 @@ async function handleCapture(photo: Blob): Promise<void> {
     peopleCount.value = res.count
   } catch (err) {
     message.error(`识别失败：${extractErrorMessage(err)}`)
-  } finally {
-    loading.value = false
-  }
-}
-
-async function handleAskText(question: string): Promise<void> {
-  if (!meeting.value) return
-  loading.value = true
-  try {
-    qaRecords.value.push(await askQa(meeting.value.id, question))
-  } finally {
-    loading.value = false
-  }
-}
-
-async function handleAskAudio(audio: Blob): Promise<void> {
-  if (!meeting.value) return
-  loading.value = true
-  try {
-    qaRecords.value.push(await askQaAudio(meeting.value.id, audio))
   } finally {
     loading.value = false
   }

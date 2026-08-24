@@ -39,9 +39,9 @@
       </div>
 
       <div class="speech-draft-step__toolbar">
-        <AppButton size="sm" :loading="audioLoading" @click="onTogglePlay">
-          <SoundOutlined /> {{ playing ? '停止试听' : '试听语音' }}
-        </AppButton>
+        <SpeechPlayer :text="content" />
+      </div>
+      <div class="speech-draft-step__subbar">
         <AppButton size="sm" variant="text" @click="onToggleEdit">
           {{ editing ? '取消编辑' : '编辑' }}
         </AppButton>
@@ -60,23 +60,20 @@
 
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue'
-import { CalendarOutlined, SoundOutlined } from '@ant-design/icons-vue'
+import { CalendarOutlined } from '@ant-design/icons-vue'
 import AppButton from '@shared/web/components/AppButton.vue'
 import type { SpeechDraftDto } from '@/types'
+import SpeechPlayer from './SpeechPlayer.vue'
 
 const props = defineProps<{
   draft: SpeechDraftDto | null
   loading: boolean
-  playing: boolean
-  audioLoading: boolean
   date?: string
 }>()
 const emit = defineEmits<{
   generate: []
   save: [content: string]
   confirm: []
-  playAudio: []
-  stopAudio: []
 }>()
 
 const editing = ref(false)
@@ -99,14 +96,6 @@ const paragraphs = computed(() =>
 const charCount = computed(() => content.value.replace(/\s/g, '').length)
 const minutes = computed(() => Math.max(1, Math.ceil(charCount.value / 4 / 60)))
 const dateText = computed(() => props.date?.slice(0, 10) ?? '')
-
-function onTogglePlay(): void {
-  if (props.playing) {
-    emit('stopAudio')
-  } else {
-    emit('playAudio')
-  }
-}
 
 function onToggleEdit(): void {
   editing.value = !editing.value
@@ -203,16 +192,13 @@ function onSave(): void {
 }
 
 .speech-draft-step__toolbar {
+  margin-bottom: @spacing-lg;
+}
+.speech-draft-step__subbar {
   display: flex;
   align-items: center;
-  flex-wrap: wrap;
   gap: @spacing-sm;
   margin-bottom: @spacing-lg;
-
-  :deep(.app-btn) {
-    display: inline-flex;
-    align-items: center;
-  }
 }
 .speech-draft-step__stat {
   margin-left: auto;

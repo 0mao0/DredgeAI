@@ -14,13 +14,14 @@
       </div>
       <div class="report-step__block">
         <div class="label">转写稿</div>
-        <a-typography-paragraph>{{ report.transcript }}</a-typography-paragraph>
+        <div class="report-step__transcript">{{ report.transcript || '（暂无转写内容）' }}</div>
       </div>
       <div class="report-step__block">
         <div class="label">问答记录</div>
-        <div v-for="qa in report.qaRecords" :key="qa.id">
-          <b>问：</b>{{ qa.question }}<br>
-          <b>答：</b>{{ qa.answer }}
+        <div v-if="report.qaRecords.length === 0" class="report-step__empty">（无问答记录）</div>
+        <div v-for="qa in report.qaRecords" :key="qa.id" class="report-step__qa">
+          <div class="report-step__qa-q"><b>问</b>{{ qa.question }}</div>
+          <div class="report-step__qa-a"><b>答</b>{{ qa.answer }}</div>
         </div>
       </div>
     </template>
@@ -47,5 +48,44 @@ const columns: DataTableColumn[] = [
 
 .report-step__block {
   margin-bottom: @spacing-lg;
+}
+.report-step__transcript {
+  max-height: 320px;
+  overflow-y: auto;
+  background: @content-bg;
+  border-radius: @radius-base;
+  padding: @spacing-md;
+  white-space: pre-wrap;
+  word-break: break-word;
+  line-height: 1.7;
+  font-size: @font-size-sm;
+}
+.report-step__qa {
+  padding: @spacing-sm @spacing-md;
+  background: @content-bg;
+  border-radius: @radius-base;
+  margin-bottom: @spacing-sm;
+}
+.report-step__qa-q {
+  color: @text-primary;
+  margin-bottom: @spacing-xs;
+
+  b {
+    margin-right: @spacing-xs;
+    color: @brand-primary;
+  }
+}
+.report-step__qa-a {
+  color: @text-secondary;
+  line-height: 1.6;
+
+  b {
+    margin-right: @spacing-xs;
+    color: @text-tertiary;
+  }
+}
+.report-step__empty {
+  color: @text-tertiary;
+  font-size: @font-size-sm;
 }
 </style>
