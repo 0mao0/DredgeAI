@@ -1,8 +1,17 @@
 <template>
   <SectionCard title="晨会稿" flush>
-    <AppButton v-if="!draft" variant="primary" block :loading="loading" @click="emit('generate')">
-      {{ loading ? '正在生成晨会稿…' : '生成晨会稿' }}
-    </AppButton>
+    <div v-if="!draft" class="speech-draft-step__generate">
+      <div v-if="loading" class="speech-draft-step__loading">
+        <div class="speech-draft-step__spinner">
+          <span class="speech-draft-step__dot" />
+          <span class="speech-draft-step__dot" />
+          <span class="speech-draft-step__dot" />
+        </div>
+        <div class="speech-draft-step__loading-title">AI生成晨会稿中...</div>
+        <div class="speech-draft-step__loading-sub">正在结合今日计划与知识库组织语言，请稍候</div>
+      </div>
+      <AppButton v-else variant="primary" block @click="emit('generate')">生成晨会稿</AppButton>
+    </div>
     <template v-else>
       <a-textarea v-model:value="content" :disabled="!editing" :rows="10" />
       <div class="speech-draft-step__actions">
@@ -69,5 +78,50 @@ function onSave(): void {
   display: flex;
   gap: @spacing-sm;
   margin-top: @spacing-md;
+}
+.speech-draft-step__loading {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: @spacing-md;
+  padding: @spacing-2xl 0;
+}
+.speech-draft-step__spinner {
+  display: flex;
+  gap: @spacing-sm;
+}
+.speech-draft-step__dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: @brand-primary;
+  animation: speech-draft-bounce 1.2s infinite ease-in-out;
+
+  &:nth-child(2) {
+    animation-delay: 0.15s;
+  }
+  &:nth-child(3) {
+    animation-delay: 0.3s;
+  }
+}
+.speech-draft-step__loading-title {
+  font-size: @font-size-lg;
+  color: @text-primary;
+  font-weight: @font-weight-medium;
+}
+.speech-draft-step__loading-sub {
+  font-size: @font-size-sm;
+  color: @text-tertiary;
+}
+
+@keyframes speech-draft-bounce {
+  0%, 80%, 100% {
+    transform: translateY(0);
+    opacity: 0.45;
+  }
+  40% {
+    transform: translateY(-10px);
+    opacity: 1;
+  }
 }
 </style>
