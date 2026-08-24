@@ -5,9 +5,10 @@ ENV DEBIAN_FRONTEND=noninteractive \
     UV_LINK_MODE=copy \
     PATH="/root/.local/bin:/app/.venv/bin:$PATH"
 
-RUN apt-get update && apt-get install -y --no-install-recommends curl ca-certificates \
+RUN sed -i 's|deb.debian.org|mirrors.aliyun.com|g; s|security.debian.org|mirrors.aliyun.com|g' /etc/apt/sources.list.d/debian.sources \
+    && apt-get update && apt-get install -y --no-install-recommends curl ca-certificates \
     && rm -rf /var/lib/apt/lists/* \
-    && curl -LsSf https://astral.sh/uv/install.sh | sh
+    && pip install --no-cache-dir -i https://mirrors.aliyun.com/pypi/simple/ "uv==0.12.5"
 
 WORKDIR /app
 

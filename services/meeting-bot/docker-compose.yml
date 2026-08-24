@@ -15,7 +15,7 @@ services:
       - D:/AI/AImodles/models:/app/models
     restart: unless-stopped
     healthcheck:
-      test: ["CMD", "curl", "-fsS", "http://localhost:8102/health"]
+      test: ["CMD", "curl", "-fsS", "-H", "X-Meeting-Bot-Key: dev-key", "http://localhost:8102/health"]
       interval: 10s
       timeout: 5s
       retries: 12
@@ -30,6 +30,7 @@ services:
     environment:
       MEETING_BOT_KEY: dev-key
       COSYVOICE_DATA: /data
+      MODELSCOPE_CACHE: /data/modelscope
       TTS_VOICE_ID: zh-male-news
     volumes:
       - D:/AI/AImodles/cosyvoice:/data
@@ -42,7 +43,7 @@ services:
               capabilities: [gpu]
     restart: unless-stopped
     healthcheck:
-      test: ["CMD-SHELL", "curl -fsS http://localhost:8000/api/health | grep -q '\"model_loaded\":true'"]
+      test: ["CMD-SHELL", "curl -fsS -H 'X-Meeting-Bot-Key: dev-key' http://localhost:8000/api/health | grep -q '\"model_loaded\":true'"]
       interval: 10s
       timeout: 5s
       retries: 30
@@ -63,7 +64,7 @@ services:
       - D:/AI/AImodles/models:/app/models
     restart: unless-stopped
     healthcheck:
-      test: ["CMD", "curl", "-fsS", "http://localhost:8103/health"]
+      test: ["CMD", "curl", "-fsS", "-H", "X-Meeting-Bot-Key: dev-key", "http://localhost:8103/health"]
       interval: 10s
       timeout: 5s
       retries: 12
@@ -83,7 +84,7 @@ services:
       - D:/AI/AImodles/models:/app/models
     restart: unless-stopped
     healthcheck:
-      test: ["CMD", "curl", "-fsS", "http://localhost:8104/health"]
+      test: ["CMD", "curl", "-fsS", "-H", "X-Meeting-Bot-Key: dev-key", "http://localhost:8104/health"]
       interval: 10s
       timeout: 5s
       retries: 12

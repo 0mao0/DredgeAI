@@ -13,6 +13,11 @@ dependencies = [
     "opencv-python>=4.9",
 ]
 
+[[tool.uv.index]]
+name = "aliyun-pypi"
+url = "https://mirrors.aliyun.com/pypi/simple/"
+default = true
+
 [dependency-groups]
 dev = ["pytest>=8", "httpx>=0.27"]
 
