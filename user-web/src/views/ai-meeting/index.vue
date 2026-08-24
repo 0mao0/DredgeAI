@@ -1,10 +1,22 @@
 <template>
   <div class="ai-meeting-page">
-    <PageHeader title="AI晨会" />
+    <PageHeader title="AI晨会">
+      <template #extra>
+        <AppButton
+          v-if="current === 0"
+          size="sm"
+          variant="text"
+          @click="historyOpen = true"
+        >
+          <HistoryOutlined /> 历史记录
+        </AppButton>
+      </template>
+    </PageHeader>
     <MeetingSteps :items="steps" :current="current" @go="handleGoStep" />
     <MeetingInfoStep
       v-if="current === 0"
       v-model:plan="planText"
+      v-model:history-open="historyOpen"
       :parsing="parsing"
       @parse="handleParse"
       @load-history="handleLoadHistory"
@@ -47,7 +59,9 @@
 <script setup lang="ts">
 import { ref } from 'vue'
 import { message } from 'ant-design-vue'
+import { HistoryOutlined } from '@ant-design/icons-vue'
 import PageHeader from '@shared/web/components/PageHeader.vue'
+import AppButton from '@shared/web/components/AppButton.vue'
 import type {
   AttendanceItemDto,
   MeetingRecordDto,
@@ -80,6 +94,7 @@ import { extractErrorMessage } from '@/utils/audioToWav'
 
 const steps = ['录入', '确认', '晨会稿', '点名', '会议', '报告']
 const current = ref(0)
+const historyOpen = ref(false)
 const meeting = ref<MeetingRecordDto | null>(null)
 const loading = ref(false)
 const draft = ref<SpeechDraftDto | null>(null)

@@ -2,9 +2,6 @@
   <div class="meeting-info-step">
     <div class="meeting-info-step__toolbar">
       <AppButton size="sm" @click="uploadOpen = true">上传施组方案</AppButton>
-      <AppButton size="sm" variant="text" @click="historyOpen = true">
-        <HistoryOutlined /> 历史记录
-      </AppButton>
     </div>
 
     <div class="meeting-info-step__mic-zone">
@@ -116,8 +113,8 @@
 </template>
 
 <script setup lang="ts">
-import { ref, watch } from 'vue'
-import { AudioOutlined, HistoryOutlined, InboxOutlined } from '@ant-design/icons-vue'
+import { computed, ref, watch } from 'vue'
+import { AudioOutlined, InboxOutlined } from '@ant-design/icons-vue'
 import AppButton from '@shared/web/components/AppButton.vue'
 import type { MeetingHistoryDto } from '@/types'
 import {
@@ -132,10 +129,12 @@ import { useRecorder } from '../composables/useRecorder'
 const props = defineProps<{
   parsing: boolean
   plan: string
+  historyOpen: boolean
 }>()
 const emit = defineEmits<{
   'parse': [planText: string]
   'update:plan': [planText: string]
+  'update:historyOpen': [open: boolean]
   'loadHistory': [id: string]
 }>()
 
@@ -207,7 +206,10 @@ function onParse(): void {
   emit('parse', planText.value.trim())
 }
 
-const historyOpen = ref(false)
+const historyOpen = computed({
+  get: () => props.historyOpen,
+  set: (open: boolean) => emit('update:historyOpen', open),
+})
 const historyLoading = ref(false)
 const history = ref<MeetingHistoryDto[]>([])
 
