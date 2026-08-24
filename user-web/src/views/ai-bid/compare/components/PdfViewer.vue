@@ -33,6 +33,7 @@
         :pdf-page-range="pageRange?.length ? pageRange : undefined"
         :highlights="highlights"
         :active-highlight-id="activeHighlightId"
+        :center-active-highlight="centerActiveHighlight"
         :text-scroll-percent="0"
         :show-side-panel-toggle="showSidePanelToggle && hasSidePanelSlot"
         :side-panel-width="sidePanelWidth"
@@ -71,6 +72,8 @@ const props = withDefaults(defineProps<{
   high?: BlockRange[]
   scanning?: boolean
   activeHighlightId?: string | null
+  /** 切换 activeHighlightId（溯源/证据定位）时把对应高亮 bbox 纵向居中到视口（docs-ui ≥ v0.1.7）。 */
+  centerActiveHighlight?: boolean
   /** 只渲染指定绝对页码（docs-ui pdf-page-range），空/不传 = 整篇 */
   pageRange?: number[]
   /** 隐藏引用库 PDF_Viewer 标题栏左侧的「原文」标签（库源码不可改，经 CSS 覆盖） */
@@ -94,6 +97,7 @@ const props = withDefaults(defineProps<{
   high: () => [],
   scanning: false,
   activeHighlightId: null,
+  centerActiveHighlight: true,
   hideOriginalLabel: false,
   showSidePanelToggle: false,
   sidePanelWidth: 400,
