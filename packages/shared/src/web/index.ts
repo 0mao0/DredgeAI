@@ -3,6 +3,7 @@
 
 // 共享组件
 export { default as AppButton } from './components/AppButton.vue'
+export { default as AudioPlayer } from './components/AudioPlayer.vue'
 export { default as ChartContainer } from './components/ChartContainer.vue'
 export { default as DataSkeleton } from './components/DataSkeleton.vue'
 export { default as DataTable } from './components/DataTable.vue'
