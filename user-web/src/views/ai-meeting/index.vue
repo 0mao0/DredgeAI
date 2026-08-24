@@ -26,7 +26,7 @@
       @save="handleSaveDraft"
       @confirm="handleConfirmDraft"
       @play-audio="handlePlaySpeech"
-      @stop-audio="stopAudio"
+      @stop-audio="handleStopSpeech"
     />
     <AttendanceStep
       v-else-if="current === 3"
@@ -69,13 +69,14 @@ import {
   generateSpeech,
   getMeeting,
   getReport,
-  getSpeechAudio,
   parsePlan,
   recognizeAttendance,
   saveSpeechDraft,
   startMeeting,
+  synthesizeSpeech,
   uploadMeetingRecording,
 } from '@/api/modules/aiMeeting'
+import { splitSpeechText } from '@/utils/speechText'
 import MeetingInfoStep from './components/MeetingInfoStep.vue'
 import PlanConfirmStep from './components/PlanConfirmStep.vue'
 import SpeechDraftStep from './components/SpeechDraftStep.vue'
@@ -98,8 +99,9 @@ const peopleCount = ref<number | null>(null)
 const planText = ref('')
 const planResult = ref<PlanParseResult | null>(null)
 const parsing = ref(false)
-const { playing, play, stop: stopAudio } = useAudioPlayer()
+const { playing, stop: stopAudio, playOnce } = useAudioPlayer()
 const audioLoading = ref(false)
+let speechSeq = 0
 
 async function handleParse(planText: string): Promise<void> {
   parsing.value = true
@@ -207,14 +209,31 @@ async function handleConfirmDraft(): Promise<void> {
 }
 
 async function handlePlaySpeech(): Promise<void> {
-  if (!meeting.value) return
+  if (!meeting.value || !draft.value) return
+  const segments = splitSpeechText(draft.value.content)
+  if (segments.length === 0) return
+  const seq = ++speechSeq
   audioLoading.value = true
   try {
-    const blob = await getSpeechAudio(meeting.value.id)
-    play(blob)
-  } finally {
+    let next = synthesizeSpeech(segments[0]!)
+    for (let i = 0; i < segments.length; i++) {
+      if (seq !== speechSeq) return
+      const blob = await next
+      if (i + 1 < segments.length) next = synthesizeSpeech(segments[i + 1]!)
+      if (i === 0) audioLoading.value = false
+      await playOnce(blob)
+    }
+  } catch (err) {
     audioLoading.value = false
+    message.warning(`语音合成失败：${extractErrorMessage(err)}`)
+  } finally {
+    if (seq === speechSeq) audioLoading.value = false
   }
+}
+
+function handleStopSpeech(): void {
+  speechSeq++
+  stopAudio()
 }
 
 async function handleCapture(photo: Blob): Promise<void> {

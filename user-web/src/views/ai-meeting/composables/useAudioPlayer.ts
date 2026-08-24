@@ -4,6 +4,9 @@ export function useAudioPlayer() {
   const audio = new Audio()
   const playing = ref(false)
   let currentUrl: string | null = null
+  let currentAudio: HTMLAudioElement | null = null
+  let currentResolve: (() => void) | null = null
+  let seqToken = 0
 
   function play(blob: Blob): void {
     stop()
@@ -25,6 +28,11 @@ export function useAudioPlayer() {
   }
 
   function stop(): void {
+    seqToken++
+    currentAudio?.pause()
+    currentAudio = null
+    currentResolve?.()
+    currentResolve = null
     audio.pause()
     audio.currentTime = 0
     if (currentUrl) URL.revokeObjectURL(currentUrl)
@@ -32,5 +40,36 @@ export function useAudioPlayer() {
     playing.value = false
   }
 
-  return { playing, play, stop }
+  /**
+   * 顺序播放单个音频，结束后 resolve；stop() 会立即中断并 resolve。
+   * 供分段 TTS 边播边合成使用。
+   */
+  function playOnce(blob: Blob): Promise<void> {
+    const token = ++seqToken
+    stop()
+    return new Promise((resolve) => {
+      let settled = false
+      const finish = (): void => {
+        if (settled) return
+        settled = true
+        resolve()
+      }
+      const url = URL.createObjectURL(blob)
+      const player = new Audio(url)
+      currentAudio = player
+      currentResolve = finish
+      playing.value = true
+      const done = (): void => {
+        URL.revokeObjectURL(url)
+        if (token === seqToken) playing.value = false
+        finish()
+      }
+      player.onended = done
+      player.onerror = done
+      const result = player.play()
+      if (result && typeof result.catch === 'function') result.catch(done)
+    })
+  }
+
+  return { playing, play, stop, playOnce }
 }

@@ -48,6 +48,7 @@ if (-not (Test-Path "third_party\FireRedTTS\fireredtts")) {
     Copy-Item "$proj\README.md" "third_party\FireRedTTS\README.md" -Force
     Copy-Item "$proj\requirements.txt" "third_party\FireRedTTS\requirements.txt" -Force
     git apply --directory="third_party\FireRedTTS" "patches\fireredtts-windows.patch"
+    git apply --directory="third_party\FireRedTTS" "patches\fireredtts-speed.patch"
 }
 if (-not (Test-Path "third_party\FireRedTTS\fireredtts.egg-info")) {
     uv pip install --python .venv-tts -e "third_party\FireRedTTS"

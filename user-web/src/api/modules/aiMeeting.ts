@@ -58,6 +58,10 @@ export function transcribeAudio(audio: Blob): Promise<string> {
   return request.post<string>(urls.meetingAsr, form, { timeout: MediaTimeout })
 }
 
+export function synthesizeSpeech(text: string): Promise<Blob> {
+  return request.post<Blob>(urls.meetingTts, { text }, { responseType: 'blob', timeout: MediaTimeout })
+}
+
 export function startMeeting(id: string): Promise<MeetingRecordDto> {
   return request.post<MeetingRecordDto>(fillUrl(urls.meetingStart, { id }))
 }

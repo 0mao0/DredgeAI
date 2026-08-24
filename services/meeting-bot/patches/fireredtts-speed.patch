@@ -1,0 +1,13 @@
+--- a/fireredtts/fireredtts.py
++++ b/fireredtts/fireredtts.py
+@@ -93,9 +93,9 @@
+                 do_sample=True,
+                 top_p=0.85,
+                 top_k=30,
+                 temperature=0.75,
+-                num_return_sequences=7,
++                num_return_sequences=2,
+                 num_beams=1,
+                 length_penalty=1.0,
+                 repetition_penalty=2.0,
+                 output_attentions=False,

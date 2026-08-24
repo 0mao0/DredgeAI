@@ -103,6 +103,17 @@ public class MeetingRecordController : AbpControllerBase
         return await _bot.AsrAsync(ms.ToArray());
     }
 
+    [HttpPost("~/api/meeting/tts")]
+    public async Task<IActionResult> Tts([FromBody] TtsInput input)
+    {
+        if (string.IsNullOrWhiteSpace(input.Text))
+        {
+            return BadRequest();
+        }
+        var audio = await _bot.TtsAsync(input.Text);
+        return File(audio, "audio/wav");
+    }
+
     [HttpPost("{id:guid}/recording")]
     public async Task<MeetingRecordDto> SaveRecording(Guid id, [FromForm] IFormFile audio)
     {
@@ -124,5 +135,10 @@ public class MeetingRecordController : AbpControllerBase
         public List<AttendanceItemDto> Faces { get; set; } = new();
 
         public int Count { get; set; }
+    }
+
+    public class TtsInput
+    {
+        public string Text { get; set; } = "";
     }
 }
