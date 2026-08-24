@@ -38,8 +38,8 @@
         <p class="ant-upload-drag-icon">
           <InboxOutlined />
         </p>
-        <p class="ant-upload-text">上传身份证照片</p>
-        <p class="ant-upload-hint">点击或拖拽图片，自动识别信息</p>
+        <p class="ant-upload-text">上传身份证照片（点击或拖拽）</p>
+        <p class="ant-upload-hint" />
       </a-upload-dragger>
       <a-button type="link" block class="worker-enroll__camera-link" @click="onShowCamera">
         {{ showCameraIdCard ? '收起摄像头' : '使用摄像头拍摄身份证' }}
@@ -289,21 +289,25 @@ function onClose(): void {
   margin-bottom: @spacing-md;
 
   :deep(.ant-upload-drag) {
-    padding: @spacing-sm @spacing-md;
+    height: 56px;
+    padding: 0 @spacing-md;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: @spacing-sm;
   }
   :deep(.ant-upload-drag-icon) {
-    margin-bottom: @spacing-xs;
+    margin-bottom: 0;
 
     .anticon {
-      font-size: 26px;
+      font-size: 22px;
     }
   }
   :deep(.ant-upload-text) {
     font-size: @font-size-sm;
   }
   :deep(.ant-upload-hint) {
-    font-size: @font-size-xs;
-    margin-top: 2px;
+    display: none;
   }
 }
 .worker-enroll__camera-link {
