@@ -123,3 +123,6 @@ services/meeting-bot/.venv-tts/
 services/meeting-bot/third_party/
 services/meeting-bot/.scratch/
 services/meeting-bot/*.log
+
+# CosyVoice 第三方源码（本地复制，不入库）
+services/cosyvoice/third_party/
