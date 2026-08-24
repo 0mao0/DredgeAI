@@ -3,12 +3,22 @@ import { ref } from 'vue'
 export function useCamera() {
   const stream = ref<MediaStream | null>(null)
   const error = ref<string | null>(null)
+  const starting = ref(false)
 
-  async function start(): Promise<void> {
+  async function start(): Promise<boolean> {
+    if (stream.value) return true
+    starting.value = true
+    error.value = null
     try {
       stream.value = await navigator.mediaDevices.getUserMedia({ video: true, audio: false })
+      return true
     } catch (e) {
-      error.value = e instanceof Error ? e.message : '无法访问摄像头'
+      error.value = e instanceof DOMException
+        ? (e.name === 'NotAllowedError' ? '摄像头权限被拒绝，请在浏览器地址栏允许后重试' : e.message)
+        : (e instanceof Error ? e.message : '无法访问摄像头')
+      return false
+    } finally {
+      starting.value = false
     }
   }
 
@@ -29,5 +39,5 @@ export function useCamera() {
     )
   }
 
-  return { stream, error, start, stop, capturePhoto }
+  return { stream, error, starting, start, stop, capturePhoto }
 }

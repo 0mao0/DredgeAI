@@ -1,11 +1,22 @@
 <template>
   <SectionCard title="现场点名" flush>
     <video v-if="stream" ref="videoRef" class="attendance-step__video" autoplay playsinline />
-    <a-result v-else-if="error" status="warning" title="无法访问摄像头" :sub-title="error" />
+    <div v-else-if="starting" class="attendance-step__camera-hint">正在启用摄像头…</div>
+    <a-result v-else-if="error" status="warning" title="无法访问摄像头" :sub-title="error">
+      <template #extra>
+        <AppButton size="sm" @click="onRetryCamera">重新启用</AppButton>
+      </template>
+    </a-result>
     <div class="attendance-step__actions">
       <AppButton variant="primary" block :loading="loading" @click="onCapture">
         拍照识别（手动支架扫一圈，多拍几次自动去重）
       </AppButton>
+      <a-alert
+        v-if="!stream && !starting && !error"
+        type="warning"
+        show-icon
+        message="摄像头未启用，点击上方按钮前请先在浏览器中允许摄像头权限"
+      />
       <div v-if="count !== null" class="attendance-step__count">
         本次照片识别 {{ list.length }} 人 · YOLO 目测人数 {{ count }}
       </div>
@@ -52,7 +63,7 @@ const columns: DataTableColumn[] = [
 
 const videoRef = ref<HTMLVideoElement | null>(null)
 const enrollOpen = ref(false)
-const { stream, error, start, stop, capturePhoto } = useCamera()
+const { stream, error, starting, start, stop, capturePhoto } = useCamera()
 
 onMounted(() => {
   void start()
@@ -60,9 +71,17 @@ onMounted(() => {
 onScopeDispose(() => stop())
 
 async function onCapture(): Promise<void> {
-  if (!videoRef.value || !stream.value) return
+  if (!stream.value) {
+    const ok = await start()
+    if (!ok) return
+  }
+  if (!videoRef.value) return
   const photo = await capturePhoto(videoRef.value)
   emit('capture', photo)
+}
+
+async function onRetryCamera(): Promise<void> {
+  await start()
 }
 </script>
 
@@ -83,5 +102,12 @@ async function onCapture(): Promise<void> {
   text-align: center;
   font-size: @font-size-sm;
   color: @text-secondary;
+}
+.attendance-step__camera-hint {
+  text-align: center;
+  padding: @spacing-2xl 0;
+  color: @text-secondary;
+  background: @content-bg;
+  border-radius: @radius-base;
 }
 </style>

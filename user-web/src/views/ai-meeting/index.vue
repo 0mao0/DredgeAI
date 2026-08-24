@@ -244,6 +244,8 @@ async function handleCapture(photo: Blob): Promise<void> {
     const res = await recognizeAttendance(meeting.value.id, photo)
     attendance.value = res.faces
     peopleCount.value = res.count
+  } catch (err) {
+    message.error(`识别失败：${extractErrorMessage(err)}`)
   } finally {
     loading.value = false
   }
