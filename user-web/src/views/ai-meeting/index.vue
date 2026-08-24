@@ -245,6 +245,7 @@ async function handleMeetingFinish(recording: Blob): Promise<void> {
 @import '@shared/web/styles/variables.less';
 
 .ai-meeting-page {
+  width: 100%;
   max-width: 720px;
   margin: 0 auto;
   padding: @page-padding;
