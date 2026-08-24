@@ -116,6 +116,21 @@ export interface TenderReadingIrBlock {
   textLevel: number
   source?: string | null
   confidence?: number | null
-  table?: { html: string, imgPath: string } | null
+  table?: {
+    html: string
+    imgPath: string
+    cells?: TenderReadingIrTableCell[]
+  } | null
   imgPath?: string | null
+}
+
+/** docs-api 单元格级坐标：跨页按页归属，bbox 0~1 归一化，溯源优先命中。 */
+export interface TenderReadingIrTableCell {
+  row: number
+  col: number
+  rowspan: number
+  colspan: number
+  pageIdx: number
+  bbox: number[]
+  text: string
 }

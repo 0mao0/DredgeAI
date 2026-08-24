@@ -17,6 +17,7 @@ from app.schemas.ir import (
     IrOutlineNode,
     IrPage,
     IrTable,
+    IrTableCell,
 )
 
 # v2 §3 类型映射 + 实测补充：chart→image（v2 表遗漏，实测存在）；
@@ -57,7 +58,23 @@ def _adapt_block(block: RawBlock) -> IrBlock:
     table = None
     img_path = None
     if mapped_type == "table":
-        table = IrTable(html=block.table_html, imgPath=block.image_path or "")
+        table = IrTable(
+            html=block.table_html,
+            imgPath=block.image_path or "",
+            cells=[
+                IrTableCell(
+                    row=cell.row,
+                    col=cell.col,
+                    rowspan=cell.rowspan,
+                    colspan=cell.colspan,
+                    pageIdx=cell.page_idx,
+                    bbox=cell.bbox,
+                    text=cell.text,
+                )
+                for cell in (block.table_cells or [])
+                if cell.bbox is not None
+            ],
+        )
     elif mapped_type in ("image", "equation"):
         img_path = block.image_path
     text_level = 0

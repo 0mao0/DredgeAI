@@ -43,12 +43,34 @@ class IrOutlineNode(BaseModel):
     children: list["IrOutlineNode"] = Field(default_factory=list)
 
 
+class IrTableCell(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    row: int = Field(ge=0)
+    col: int = Field(ge=0)
+    rowspan: int = Field(default=1, ge=1)
+    colspan: int = Field(default=1, ge=1)
+    # 跨页表格单元格按页归属：高亮时用 cell.pageIdx 而非表格块主页面
+    pageIdx: int = Field(ge=0)
+    bbox: tuple[float, float, float, float]  # 0~1 归一化
+    text: str = ""
+
+    @field_validator("bbox")
+    @classmethod
+    def _check_bbox(cls, v):
+        x0, y0, x1, y1 = v
+        if x0 < 0 or y0 < 0 or x1 < x0 or y1 < y0 or max(v) > 1.0:
+            raise ValueError(f"单元格 bbox {list(v)} 非法（须 0~1 归一化且 x1>=x0, y1>=y0）")
+        return v
+
+
 class IrTable(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     # 实测 2/132 表格无 table_html（有整表截图）：html 可选，imgPath 必须
     html: Optional[str] = None
     imgPath: str
+    cells: list[IrTableCell] = Field(default_factory=list)
 
 
 class IrBlock(BaseModel):

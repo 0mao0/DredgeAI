@@ -24,6 +24,41 @@ _TABLE_SPAN_MAX = 200
 RawSource = Literal["text", "ocr", "table", "formula"]
 
 
+class RawTableCell(BaseModel):
+    """表格单元格级坐标（docs-api 富集产物 table_cells[]）：
+    row/col 为网格坐标（含 rowspan/colspan 展开后的可视列），
+    page_idx 归属单元格所在页（跨页表格按页拆分），bbox 为 0~1 归一化坐标。"""
+
+    model_config = ConfigDict(extra="ignore")
+
+    row: int = Field(ge=0)
+    col: int = Field(ge=0)
+    rowspan: int = Field(default=1, ge=1)
+    colspan: int = Field(default=1, ge=1)
+    page_idx: int = Field(ge=0)
+    bbox: Optional[tuple[float, float, float, float]] = None
+    text: str = ""
+
+    @field_validator("bbox", mode="before")
+    @classmethod
+    def _check_cell_bbox_length(cls, v):
+        if v is None:
+            return v
+        if not isinstance(v, (list, tuple)) or len(v) != 4:
+            raise ValueError(f"单元格 bbox 必须为 4 元素数组，收到 {v!r}")
+        return v
+
+    @field_validator("bbox")
+    @classmethod
+    def _check_cell_bbox(cls, v):
+        if v is None:
+            return v
+        x0, y0, x1, y1 = v
+        if x0 < 0 or y0 < 0 or x1 < x0 or y1 < y0 or max(v) > 1.0:
+            raise ValueError(f"单元格 bbox {list(v)} 非法（须 0~1 归一化且 x1>=x0, y1>=y0）")
+        return v
+
+
 class RawBlock(BaseModel):
     model_config = ConfigDict(extra="ignore")
 
@@ -40,6 +75,9 @@ class RawBlock(BaseModel):
     confidence: Optional[float] = Field(default=None, ge=0.0, le=1.0)
     image_path: Optional[str] = None
     table_html: Optional[str] = None
+    # docs-api 富集产物：单元格级坐标 + 坐标来源（native/ocr/estimated，透传不校验取值）
+    table_cells: list[RawTableCell] = Field(default_factory=list)
+    table_cells_source: Optional[str] = None
     math_content: Optional[str] = None
     formula_body: Optional[str] = None
     formula_number: Optional[str] = None

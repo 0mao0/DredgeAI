@@ -79,20 +79,12 @@ public class OutlineExtractor : IBaselineFieldExtractor, ITransientDependency
 
     private static List<SourceMapItemDraft> ToDraftList(JsonElement? block)
     {
-        var list = new List<SourceMapItemDraft>();
         if (block == null)
         {
-            return list;
+            return new List<SourceMapItemDraft>();
         }
 
-        list.Add(new SourceMapItemDraft
-        {
-            BlockId = GetString(block.Value, "blockId") ?? string.Empty,
-            PageIdx = GetInt(block.Value, "pageIdx"),
-            Bbox = GetBbox(block.Value),
-            Text = GetString(block.Value, "text") ?? string.Empty
-        });
-        return list;
+        return SourceRefBuilder.ExpandPageRects(block.Value, GetString(block.Value, "text") ?? string.Empty);
     }
 
     private static string? GetString(JsonElement element, string property)
@@ -100,27 +92,4 @@ public class OutlineExtractor : IBaselineFieldExtractor, ITransientDependency
             ? value.GetString()
             : null;
 
-    private static int GetInt(JsonElement element, string property)
-        => element.TryGetProperty(property, out var value) && value.ValueKind == JsonValueKind.Number
-            ? value.GetInt32()
-            : 0;
-
-    private static double[] GetBbox(JsonElement element)
-    {
-        if (!element.TryGetProperty("bbox", out var bbox)
-            || bbox.ValueKind != JsonValueKind.Array
-            || bbox.GetArrayLength() != 4)
-        {
-            return Array.Empty<double>();
-        }
-
-        var values = new double[4];
-        var i = 0;
-        foreach (var item in bbox.EnumerateArray())
-        {
-            values[i++] = item.ValueKind == JsonValueKind.Number ? item.GetDouble() : 0;
-        }
-
-        return values;
-    }
 }

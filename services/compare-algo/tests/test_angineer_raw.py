@@ -210,6 +210,54 @@ def test_empty_table_html_normalized_to_none():
     assert doc.blocks[0].table_html is None
 
 
+def test_table_cells_parsed():
+    # docs-api 富集产物 table_cells[]：单元格级坐标透传，不再被 extra=ignore 丢弃
+    data = _minimal_raw()
+    data["blocks"][0]["block_type"] = "table"
+    data["blocks"][0]["plain_text"] = ""
+    data["blocks"][0]["table_html"] = "<table><tr><td>总价</td></tr></table>"
+    data["blocks"][0]["image_path"] = "images/t.jpg"
+    data["blocks"][0]["table_cells"] = [
+        {
+            "row": 0,
+            "col": 0,
+            "rowspan": 1,
+            "colspan": 1,
+            "page_idx": 1,
+            "bbox": [0.0672, 0.1188, 0.5, 0.2],
+            "text": "总价",
+        }
+    ]
+    data["blocks"][0]["table_cells_source"] = "estimated"
+    doc = validate_raw_document(data)
+    cell = doc.blocks[0].table_cells[0]
+    assert cell.page_idx == 1
+    assert cell.text == "总价"
+    assert cell.bbox == (0.0672, 0.1188, 0.5, 0.2)
+    assert doc.blocks[0].table_cells_source == "estimated"
+
+
+def test_table_cell_invalid_bbox_rejected():
+    data = _minimal_raw()
+    data["blocks"][0]["block_type"] = "table"
+    data["blocks"][0]["plain_text"] = ""
+    data["blocks"][0]["table_html"] = "<table><tr><td>1</td></tr></table>"
+    data["blocks"][0]["image_path"] = "images/t.jpg"
+    data["blocks"][0]["table_cells"] = [
+        {
+            "row": 0,
+            "col": 0,
+            "rowspan": 1,
+            "colspan": 1,
+            "page_idx": 0,
+            "bbox": [0, 0, 1000, 1000],
+            "text": "1",
+        }
+    ]
+    with pytest.raises(ValidationError):
+        validate_raw_document(data)
+
+
 def test_table_html_with_img_accepted():
     # 实测 AnGIneer 表格单元格内嵌图片（src 指向产物 images/）
     data = _minimal_raw()

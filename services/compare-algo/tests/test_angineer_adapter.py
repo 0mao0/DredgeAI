@@ -68,6 +68,34 @@ class TestTypeMapping:
         assert table.table.html.startswith("<table>")
         assert table.table.imgPath == "images/price.jpg"
 
+    def test_table_cells_mapped_to_ir(self):
+        # docs-api 单元格级坐标 → IrTable.cells（page_idx → pageIdx，按页归属）
+        raw = make_raw_doc("d-tc", file_name="tc.pdf", author=None, created_at=None, blocks=[
+            make_raw_block("t1", "", block_type="table",
+                           table_html="<table><tr><td>总价</td></tr></table>",
+                           image_path="images/t.jpg"),
+        ])
+        raw["blocks"][0]["table_cells"] = [
+            {
+                "row": 0,
+                "col": 0,
+                "rowspan": 1,
+                "colspan": 1,
+                "page_idx": 2,
+                "bbox": [0.1, 0.2, 0.5, 0.4],
+                "text": "总价",
+            }
+        ]
+        doc = adapt(raw)
+        table = next(b for b in doc.blocks if b.type == "table")
+        assert len(table.table.cells) == 1
+        cell = table.table.cells[0]
+        assert cell.pageIdx == 2
+        assert cell.row == 0
+        assert cell.col == 0
+        assert cell.bbox == (0.1, 0.2, 0.5, 0.4)
+        assert cell.text == "总价"
+
     def test_equation_uses_math_content(self):
         raw = make_raw_doc("d-eq", file_name="e.pdf", author=None, created_at=None, blocks=[
             make_raw_block("e1", "", block_type="equation_interline",

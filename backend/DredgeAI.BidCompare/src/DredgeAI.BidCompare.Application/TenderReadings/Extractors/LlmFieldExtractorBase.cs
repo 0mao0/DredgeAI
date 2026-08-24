@@ -17,7 +17,7 @@ public abstract class LlmFieldExtractorBase
     private const int MaxDocumentChars = 100_000;
 
     /// <summary>单个字段最多落库的溯源锚点数；跨页块会按每页展开，需要上限防止锚点爆炸。</summary>
-    private const int MaxSourceRefsPerField = 6;
+    private const int MaxSourceRefsPerField = 20;
 
     protected LlmFieldExtractorBase(ILlmGateway llmGateway)
     {
@@ -139,7 +139,7 @@ public abstract class LlmFieldExtractorBase
         }
     }
 
-    private static List<SourceMapItemDraft> FindSourceRefs(JsonElement root, string rawText)
+    internal static List<SourceMapItemDraft> FindSourceRefs(JsonElement root, string rawText)
     {
         var result = new List<SourceMapItemDraft>();
         if (!root.TryGetProperty("blocks", out var blocks) || blocks.ValueKind != JsonValueKind.Array)
@@ -153,13 +153,15 @@ public abstract class LlmFieldExtractorBase
             return result;
         }
 
-        // 候选 needle：最长语义段优先，再按 40/30/24/18/14/10 逐步缩短前缀，
-        // 兼容 LLM 提炼文本与原文在空白、标点、截断上的差异。
-        var candidates = BuildNeedleCandidates(normalizedNeedle);
+        // 候选 needle：全文 → 按标点切出的语义片段 → 相邻片段合并 → 40 字前缀，
+        // 兼容 LLM 提炼文本与原文在空白、标点、截断上的差异，
+        // 并覆盖“一条条款被拆成多个块”（如 1、2、3 编号项各占一块）的情况。
+        var candidates = BuildNeedleCandidates(rawText, normalizedNeedle);
 
-        var scored = new List<(int Score, JsonElement Block, string Excerpt)>();
-        foreach (var block in blocks.EnumerateArray())
+        var scored = new List<(int Score, int Position, JsonElement Block, string Excerpt)>();
+        for (var position = 0; position < blocks.GetArrayLength(); position++)
         {
+            var block = blocks[position];
             var (searchable, excerpt) = BuildBlockSearchText(block);
             if (string.IsNullOrWhiteSpace(searchable))
             {
@@ -189,7 +191,7 @@ public abstract class LlmFieldExtractorBase
 
             if (score > 0)
             {
-                scored.Add((score, block, excerpt));
+                scored.Add((score, position, block, excerpt));
             }
         }
 
@@ -198,17 +200,56 @@ public abstract class LlmFieldExtractorBase
             return result;
         }
 
-        var bestScore = scored.Max(x => x.Score);
-        var threshold = Math.Max(12, bestScore * 3 / 4);
-        var selected = scored
-            .Where(x => x.Score >= threshold)
-            .OrderByDescending(x => x.Score)
-            .ThenBy(x => GetBlockInt(x.Block, "pageIdx"))
-            .Take(3);
-
-        foreach (var (_, block, excerpt) in selected)
+        // 整段命中优先：有块包含整条条款原文时，只取这些块，避免把别处相似片段误收进来。
+        var fullMatches = scored.Where(x => x.Score >= normalizedNeedle.Length).ToList();
+        if (fullMatches.Count > 0)
         {
-            result.AddRange(ExpandPageRects(block, excerpt));
+            foreach (var (_, _, block, excerpt) in fullMatches.OrderBy(x => GetBlockInt(x.Block, "pageIdx")))
+            {
+                result.AddRange(SourceRefBuilder.ExpandPageRects(block, excerpt));
+                if (result.Count >= MaxSourceRefsPerField)
+                {
+                    break;
+                }
+            }
+
+            return result;
+        }
+
+        // 无整段命中 → 条款被拆成多个块：
+        // 取所有命中足够长片段（≥10 字）的块，按文档顺序聚类成连续片段，
+        // 选“最优片段得分最高、总分最高”的一段，避免把别处相似短句误收进来。
+        const int minMatchLength = 10;
+        var matched = scored
+            .Where(x => x.Score >= minMatchLength)
+            .OrderBy(x => x.Position)
+            .ToList();
+        if (matched.Count == 0)
+        {
+            return result;
+        }
+
+        var runs = new List<List<(int Score, int Position, JsonElement Block, string Excerpt)>>();
+        foreach (var item in matched)
+        {
+            if (runs.Count > 0 && item.Position - runs[^1][^1].Position <= 2)
+            {
+                runs[^1].Add(item);
+            }
+            else
+            {
+                runs.Add(new List<(int, int, JsonElement, string)> { item });
+            }
+        }
+
+        var bestRun = runs
+            .OrderByDescending(run => run.Max(x => x.Score))
+            .ThenByDescending(run => run.Sum(x => x.Score))
+            .First();
+
+        foreach (var (_, _, block, excerpt) in bestRun)
+        {
+            result.AddRange(SourceRefBuilder.ExpandPageRects(block, excerpt));
             if (result.Count >= MaxSourceRefsPerField)
             {
                 break;
@@ -216,133 +257,6 @@ public abstract class LlmFieldExtractorBase
         }
 
         return result;
-    }
-
-    /// <summary>
-    /// 将命中块展开为溯源锚点：优先 pageBBoxes（跨页块每页一段），
-    /// 其次 mergedBBoxes（合并块，沿用所在页），最后回退单 bbox。
-    /// </summary>
-    private static List<SourceMapItemDraft> ExpandPageRects(JsonElement block, string excerpt)
-    {
-        var blockId = GetBlockString(block, "blockId") ?? string.Empty;
-        var drafts = new List<SourceMapItemDraft>();
-        var seen = new HashSet<string>();
-
-        void Add(int pageIdx, double[] bbox)
-        {
-            if (bbox.Length != 4 || !seen.Add($"{pageIdx}|{string.Join(",", bbox)}"))
-            {
-                return;
-            }
-
-            drafts.Add(new SourceMapItemDraft
-            {
-                BlockId = blockId,
-                PageIdx = pageIdx,
-                Bbox = bbox,
-                Text = excerpt
-            });
-        }
-
-        var pageBBoxes = ReadPageBBoxes(block);
-        if (pageBBoxes.Count > 0)
-        {
-            foreach (var (pageIdx, bbox) in pageBBoxes)
-            {
-                Add(pageIdx, bbox);
-            }
-
-            return drafts;
-        }
-
-        var mergedBBoxes = ReadMergedBBoxes(block);
-        if (mergedBBoxes.Count > 0)
-        {
-            var pageIdx = GetBlockInt(block, "pageIdx");
-            foreach (var bbox in mergedBBoxes)
-            {
-                Add(pageIdx, bbox);
-            }
-
-            return drafts;
-        }
-
-        Add(GetBlockInt(block, "pageIdx"), ReadBbox(block));
-        return drafts;
-    }
-
-    /// <summary>读取块 pageBBoxes：[{pageIdx, bbox}, ...]，跨页段落/表格每页一段。</summary>
-    private static List<(int PageIdx, double[] Bbox)> ReadPageBBoxes(JsonElement block)
-    {
-        var result = new List<(int, double[])>();
-        if (!block.TryGetProperty("pageBBoxes", out var pageBBoxes) || pageBBoxes.ValueKind != JsonValueKind.Array)
-        {
-            return result;
-        }
-
-        var fallbackPageIdx = GetBlockInt(block, "pageIdx");
-        foreach (var entry in pageBBoxes.EnumerateArray())
-        {
-            if (entry.ValueKind != JsonValueKind.Object)
-            {
-                continue;
-            }
-
-            var pageIdx = entry.TryGetProperty("pageIdx", out var pageIdxEl) && pageIdxEl.ValueKind == JsonValueKind.Number
-                ? pageIdxEl.GetInt32()
-                : fallbackPageIdx;
-            var bbox = ReadBbox(entry);
-            if (bbox.Length == 4)
-            {
-                result.Add((pageIdx, bbox));
-            }
-        }
-
-        return result;
-    }
-
-    /// <summary>读取块 mergedBBoxes（并表/合并块多个矩形），沿用块所在页。</summary>
-    private static List<double[]> ReadMergedBBoxes(JsonElement block)
-    {
-        var result = new List<double[]>();
-        if (!block.TryGetProperty("mergedBBoxes", out var merged) || merged.ValueKind != JsonValueKind.Array)
-        {
-            return result;
-        }
-
-        foreach (var item in merged.EnumerateArray())
-        {
-            var bbox = ReadRawBbox(item);
-            if (bbox.Length == 4)
-            {
-                result.Add(bbox);
-            }
-        }
-
-        return result;
-    }
-
-    /// <summary>读取裸 bbox 数组 [x0,y0,x1,y1]（mergedBBoxes 的每个元素），也兼容 {bbox:[...]} 对象。</summary>
-    private static double[] ReadRawBbox(JsonElement value)
-    {
-        if (value.ValueKind == JsonValueKind.Object && value.TryGetProperty("bbox", out var bboxProp))
-        {
-            return ReadBbox(value);
-        }
-
-        if (value.ValueKind != JsonValueKind.Array || value.GetArrayLength() != 4)
-        {
-            return Array.Empty<double>();
-        }
-
-        var values = new double[4];
-        var i = 0;
-        foreach (var item in value.EnumerateArray())
-        {
-            values[i++] = item.ValueKind == JsonValueKind.Number ? item.GetDouble() : 0;
-        }
-
-        return values;
     }
 
     /// <summary>块的可检索文本与摘录：正文优先；表格块（text 为空）回退到去标签后的单元格文本。</summary>
@@ -406,30 +320,51 @@ public abstract class LlmFieldExtractorBase
         return sb.ToString();
     }
 
-    /// <summary>生成由长到短的匹配候选：最长语义段 + 逐级缩短的前缀。</summary>
-    private static List<string> BuildNeedleCandidates(string normalized)
+    /// <summary>
+    /// 生成由长到短的匹配候选：
+    /// 全文（单块整体命中）、按中文标点切出的语义片段、相邻片段合并（跨标点断行的块）、40 字前缀兜底。
+    /// </summary>
+    private static List<string> BuildNeedleCandidates(string rawText, string normalized)
     {
         var candidates = new List<string>();
-        var longestSegment = normalized
-            .Split(new[] { '；', ';', '，', ',', '。', '.', '、', '：', ':' }, StringSplitOptions.RemoveEmptyEntries)
-            .OrderByDescending(segment => segment.Length)
-            .FirstOrDefault();
-        if (!string.IsNullOrWhiteSpace(longestSegment))
-        {
-            candidates.Add(longestSegment);
-        }
+        var normalizedSegments = SplitSemanticSegments(rawText)
+            .Select(NormalizeForMatch)
+            .Where(segment => segment.Length >= 4)
+            .ToList();
 
-        candidates.Add(normalized.Length > 40 ? normalized[..40] : normalized);
-        foreach (var length in new[] { 30, 24, 18, 14, 10 })
+        candidates.AddRange(normalizedSegments);
+        for (var span = 2; span <= 2 && span <= normalizedSegments.Count; span++)
         {
-            if (normalized.Length >= length)
+            for (var i = 0; i + span <= normalizedSegments.Count; i++)
             {
-                candidates.Add(normalized[..length]);
+                var combined = string.Concat(normalizedSegments.Skip(i).Take(span));
+                if (combined.Length >= 8)
+                {
+                    candidates.Add(combined);
+                }
             }
         }
 
-        return candidates.Distinct().ToList();
+        // 短原文（如表格单元格「增值税(6%)」）也保留全文候选，
+        // 只要某个块完整包含该文本即可溯源，避免短参数匹配不到。
+        if (normalized.Length >= 4)
+        {
+            candidates.Add(normalized);
+        }
+
+        if (normalized.Length > 40)
+        {
+            candidates.Add(normalized[..40]);
+        }
+
+        return candidates.Distinct().OrderByDescending(c => c.Length).ToList();
     }
+
+    /// <summary>按中英文标点把原文切成语义片段（保留原文再归一化，括号不切分）。</summary>
+    private static IEnumerable<string> SplitSemanticSegments(string rawText)
+        => rawText.Split(
+            new[] { '；', ';', '：', ':', ',', '，', '。', '.', '、', '！', '!', '？', '?' },
+            StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
 
     private static string? GetBlockString(JsonElement block, string property)
         => block.TryGetProperty(property, out var value) && value.ValueKind == JsonValueKind.String
@@ -441,24 +376,6 @@ public abstract class LlmFieldExtractorBase
             ? value.GetInt32()
             : 0;
 
-    private static double[] ReadBbox(JsonElement block)
-    {
-        if (!block.TryGetProperty("bbox", out var bbox)
-            || bbox.ValueKind != JsonValueKind.Array
-            || bbox.GetArrayLength() != 4)
-        {
-            return Array.Empty<double>();
-        }
-
-        var values = new double[4];
-        var i = 0;
-        foreach (var item in bbox.EnumerateArray())
-        {
-            values[i++] = item.ValueKind == JsonValueKind.Number ? item.GetDouble() : 0;
-        }
-
-        return values;
-    }
 
     private static string BuildDocumentText(JsonElement root)
     {

@@ -202,21 +202,26 @@
               :options="[{ label: '中文', value: 'zh' }, { label: 'English', value: 'en' }]"
               class="read-workspace__lang-toggle"
             />
-            <a-popconfirm
-              title="解析将覆盖该类别的现有字段（含已确认内容），确定继续吗？"
-              ok-text="确定"
-              cancel-text="取消"
-              :overlay-inner-style="{ width: '280px' }"
-              @confirm="reExtractCategory(activeCategory)"
+            <a-tooltip
+              :title="allCollapsed ? '全部展开' : '全部折叠'"
+              placement="bottom"
+              transition-name=""
             >
-              <AppButton size="sm" :loading="reExtracting" :disabled="!hasActiveCategory">
-                <ReloadOutlined />
+              <AppButton size="sm" variant="text" class="read-workspace__header-icon-btn" @click="toggleCollapseAll">
+                <MenuUnfoldOutlined v-if="allCollapsed" />
+                <MenuFoldOutlined v-else />
               </AppButton>
-            </a-popconfirm>
-            <AppButton size="sm" variant="primary" :loading="exporting" @click="exportBaseline">
-              <DownloadOutlined />
-              导出
-            </AppButton>
+            </a-tooltip>
+            <a-tooltip title="重新解析" placement="bottom" transition-name="">
+              <AppButton size="sm" variant="text" class="read-workspace__header-icon-btn" :loading="headerExtracting" @click="parseBaselineFromAngineer">
+                <ThunderboltOutlined v-if="!headerExtracting" />
+              </AppButton>
+            </a-tooltip>
+            <a-tooltip title="下载" placement="bottom" transition-name="">
+              <AppButton size="sm" variant="text" class="read-workspace__header-icon-btn" :loading="exporting" @click="exportBaseline">
+                <DownloadOutlined v-if="!exporting" />
+              </AppButton>
+            </a-tooltip>
           </template>
           <div v-if="extractInProgress" class="read-workspace__extract-progress">
             <div class="read-workspace__extract-progress-row">
@@ -413,9 +418,11 @@ import {
   ExclamationCircleOutlined,
   InboxOutlined,
   LoadingOutlined,
+  MenuFoldOutlined,
+  MenuUnfoldOutlined,
   PlusOutlined,
   RedoOutlined,
-  ReloadOutlined,
+  ThunderboltOutlined,
   WarningOutlined,
 } from '@ant-design/icons-vue'
 import { AppButton, DataSkeleton, SectionCard, UploadFileRow } from '@shared/web'
@@ -424,6 +431,12 @@ import { applyReadTaskStatus, isReadPollingStatus } from './readPolling'
 import PdfViewer from '../compare/components/PdfViewer.vue'
 import { PDFParsedViewerCombo } from '@angineer/docs-ui'
 import type { PreviewMode, StructuredIndexItem } from '@angineer/docs-ui'
+import {
+  estimateTableRowBbox,
+  findTextBbox,
+  matchTableCell,
+  stripTrailingSourceNumber,
+} from './pdfSourceLocator'
 import { useThemeStore } from '@shared/web/stores'
 import {
   createTenderReadTask,
@@ -470,10 +483,12 @@ const pdfHighlights = ref<BlockRange[]>([])
 const selectedFieldId = ref('')
 /** 点具体溯源圆圈时锁定到该条（跨页字段其余页仍高亮，但居中定位到所点页）；清空则回退到字段首条 */
 const activePdfHighlightId = ref<string | null>(null)
+/** 已做过「表格行级精确定位」的溯源 key（fieldId:refIdx），避免重复异步处理；须在顶部初始化，immediate watch 会同步触发 loadDetail */
+const refinedTableRefKeys = new Set<string>()
 /** 默认仅展开「项目信息」，其余分类折叠，保持基准库界面整洁 */
 const activeCategoryKeys = ref<BaselineCategory[]>(['project_info'])
-const activeCategory = computed(() => activeCategoryKeys.value[0] ?? 'project_info')
-const hasActiveCategory = computed(() => activeCategoryKeys.value.length > 0)
+/** 全部分类折叠时显示「展开」态图标 */
+const allCollapsed = computed(() => activeCategoryKeys.value.length === 0)
 
 const baselineCategoryOptions: { value: BaselineCategory, label: string }[] = [
   { value: 'project_info', label: '项目信息' },
@@ -517,9 +532,12 @@ const isEnglishDocument = computed(() => {
   const cjk = (all.match(/[\u4e00-\u9fff\u3400-\u4dbf]/g) || []).length
   return cjk / all.length < 0.1
 })
-const reExtracting = ref(false)
 const reparsing = ref(false)
 const fullReExtracting = ref(false)
+/** 基准库右上角「解析」按钮独立的 loading，避免与顶部「整体重解」共用状态导致按钮连带拉伸 */
+const headerExtracting = ref(false)
+/** 已提交全量重抽、等待后台终态：终态到达后再清空旧高亮并高亮新数据首字段，避免点击瞬间 PDF 高亮层被拆掉 */
+const baselineReExtractPending = ref(false)
 /** 解析完成但抽取长时间未启动（入队失败/后台任务崩溃）时给出可操作提示 */
 const PARSED_STUCK_MS = 90_000
 const parsedStuck = ref(false)
@@ -639,8 +657,17 @@ watch(() => task.value?.status, (status) => {
         if (finalId) void refreshDetail(finalId, pollGen)
       }
       // 后台重抽到达终态：复位按钮并刷新高亮（基准库已由终态补拉刷新）
-      if (reExtracting.value) {
-        reExtracting.value = false
+      if (fullReExtracting.value) {
+        fullReExtracting.value = false
+      }
+      if (headerExtracting.value) {
+        headerExtracting.value = false
+      }
+      if (baselineReExtractPending.value) {
+        baselineReExtractPending.value = false
+        selectedFieldId.value = ''
+        pdfHighlights.value = []
+        activePdfHighlightId.value = null
         autoHighlightFirstField()
       }
     },
@@ -808,6 +835,7 @@ async function loadDetail(id: string): Promise<void> {
   pdfHighlights.value = []
   selectedFieldId.value = ''
   activePdfHighlightId.value = null
+  refinedTableRefKeys.clear()
   try {
     const [taskDto, docList] = await Promise.all([
       getTenderReadTask(id, true),
@@ -850,6 +878,9 @@ async function loadParsedDocument(id: string, stale?: () => boolean): Promise<vo
     const data = await getTenderReadParsedDocument(id, true)
     if (stale?.()) return
     parsedDocument.value = data
+    // 初始自动高亮可能早于解析产物就绪：产物到达后再补做表格溯源精确定位
+    const selected = baseline.value.find((f) => f.id === selectedFieldId.value)
+    if (selected) void refineFieldSourceBboxes(selected)
   } catch {
     // 解析产物未就绪或读取失败时保留旧值，轮询下一轮再试
   }
@@ -1093,6 +1124,7 @@ function locateField(field: BaselineField): void {
   activeCategoryKeys.value = [...new Set([...activeCategoryKeys.value, field.category])]
   const first = field.sourceRefs[0]
   if (first) pdfPage.value = first.pageIdx + 1
+  void refineFieldSourceBboxes(field)
 }
 
 /**
@@ -1107,6 +1139,7 @@ function locateSource(source: SourceRef): void {
   const index = field.sourceRefs.findIndex((s) => s === source)
   activePdfHighlightId.value = index >= 0 ? `${field.id}-${index}` : null
   pdfPage.value = source.pageIdx + 1
+  void refineFieldSourceBboxes(field)
 }
 
 function autoHighlightFirstField(): void {
@@ -1119,6 +1152,7 @@ function autoHighlightFirstField(): void {
     pdfHighlights.value = field.sourceRefs.map(sourceRefToBlockRange)
     const first = field.sourceRefs[0]
     if (first) pdfPage.value = first.pageIdx + 1
+    void refineFieldSourceBboxes(field)
   }
 }
 
@@ -1141,6 +1175,96 @@ function sourceRefToBlockRange(ref: SourceRef): BlockRange {
     pairId: ref.fieldId,
     excerpt: ref.text,
   }
+}
+
+function isTableBlock(blockId: string): boolean {
+  return parsedDocument.value?.ir.blocks.some((b) => b.blockId === blockId && b.type === 'table') ?? false
+}
+
+/**
+ * 表格块溯源精确定位，顺序：
+ * 1) 原生 PDF：pdf.js 文本层精确反查（精确到字符，最准；末尾溯源页码会先剥离再试）；
+ * 2) docs-api 单元格级坐标 table.cells（扫描件/无文本层主路径，含跨页归属 pageIdx）；
+ * 3) 行文本长度加权估算（扫描件且无 cells 时至少到行，不再整表）。
+ */
+async function resolveTableRefBbox(
+  ref: SourceRef,
+  needle: string,
+): Promise<{ bbox: number[], pageIdx?: number } | null> {
+  if (!needle) return null
+  const searchNeedle = stripTrailingSourceNumber(needle)
+  const url = documentFileUrl.value
+  const block = parsedDocument.value?.ir.blocks.find((b) => b.blockId === ref.blockId)
+
+  // 1) 原生 PDF：pdf.js 文本层精确反查（先整段，页码后缀导致未命中时用剥离版）
+  if (url) {
+    try {
+      const exact
+        = (await findTextBbox(url, ref.pageIdx, needle))
+          ?? (searchNeedle !== needle ? await findTextBbox(url, ref.pageIdx, searchNeedle) : null)
+      if (exact) {
+        return { bbox: [exact.left, exact.top, exact.left + exact.width, exact.top + exact.height] }
+      }
+    } catch {
+      // pdf.js 加载失败时继续走 cells / 估算降级
+    }
+  }
+
+  // 2) docs-api 单元格级坐标（扫描件/无文本层主路径，含跨页归属）
+  if (block?.table?.cells?.length) {
+    try {
+      const hit = matchTableCell(block.table.cells, needle)
+      if (hit) return hit
+    } catch {
+      // 单元格坐标异常时继续走估算
+    }
+  }
+
+  // 3) 行文本长度加权估算（扫描件且无 cells 时至少到行）
+  if (!block?.table?.html) return null
+  try {
+    const est = estimateTableRowBbox(block.table.html, block.bbox, searchNeedle)
+    if (est) return { bbox: [est.left, est.top, est.left + est.width, est.top + est.height] }
+  } catch {
+    // 估算失败保留整表 bbox
+  }
+  return null
+}
+
+/** 异步把当前字段中表格块的溯源 bbox 精确定位，完成后替换高亮（仅当该字段仍处于选中态）。 */
+async function refineFieldSourceBboxes(field: BaselineField): Promise<void> {
+  const needle = field.rawText
+  if (!needle || !field.sourceRefs.length) return
+
+  const tableIdx: number[] = []
+  field.sourceRefs.forEach((_, i) => {
+    if (!refinedTableRefKeys.has(`${field.id}:${i}`) && isTableBlock(field.sourceRefs[i].blockId)) {
+      tableIdx.push(i)
+    }
+  })
+  if (tableIdx.length === 0) return
+
+  const resolved = new Map<number, { bbox: number[], pageIdx?: number }>()
+  for (const i of tableIdx) {
+    const bbox = await resolveTableRefBbox(field.sourceRefs[i], needle)
+    if (bbox) {
+      resolved.set(i, bbox)
+      refinedTableRefKeys.add(`${field.id}:${i}`)
+    }
+  }
+  if (resolved.size === 0 || disposed || selectedFieldId.value !== field.id) return
+
+  pdfHighlights.value = field.sourceRefs.map((ref, i): BlockRange => {
+    const range = sourceRefToBlockRange(ref)
+    const precise = resolved.get(i)
+    return precise
+      ? {
+          ...range,
+          bbox: [precise.bbox[0], precise.bbox[1], precise.bbox[2], precise.bbox[3]],
+          page: (precise.pageIdx ?? ref.pageIdx) + 1,
+        }
+      : range
+  })
 }
 
 /* —— 项目名（悬停进入编辑态，离开恢复标题） —— */
@@ -1249,33 +1373,53 @@ async function onReparseTask(): Promise<void> {
   }
 }
 
-async function reExtractCategory(category: BaselineCategory): Promise<void> {
-  if (!task.value || reExtracting.value) return
-  reExtracting.value = true
+/** 全部折叠 / 展开基准库分类（右上角折叠按钮） */
+function toggleCollapseAll(): void {
+  activeCategoryKeys.value = allCollapsed.value
+    ? baselineCategoryOptions.map((cat) => cat.value)
+    : []
+}
+
+/** 基准库列表滚动容器回到顶部（header 吸顶，进度提示渲染在 body 顶部）。 */
+function scrollBaselineToTop(): void {
+  document
+    .querySelector<HTMLElement>('.read-workspace__baseline .section-card-body')
+    ?.scrollTo({ top: 0 })
+}
+
+/** 右上角「解析」：基于 angineer 解析结果重新抽取基准库；无原始数据时提示报错 */
+async function parseBaselineFromAngineer(): Promise<void> {
+  if (!task.value || headerExtracting.value || fullReExtracting.value) return
+  const parsedDoc = documents.value.find((doc) => doc.parseStatus === 'parsed')
+  if (!parsedDoc) {
+    message.error('文档尚未解析，暂无原始数据可供抽取')
+    return
+  }
+
+  // 滚回顶部，让用户看到基准库顶部的「解析中」进度提示
+  scrollBaselineToTop()
+  headerExtracting.value = true
   try {
-    // 重抽为后台任务：返回抽取中的任务快照，状态 watch 自动起轮询，
-    // 到达终态后复位按钮并刷新基准库（轮询每 tick 都会重拉基准库）
-    task.value = await reExtractTenderReadBaseline(task.value.id, category)
-    selectedFieldId.value = ''
-    pdfHighlights.value = []
-    activePdfHighlightId.value = null
-    message.success('已提交重新抽取，完成后自动刷新')
+    task.value = await reExtractTenderReadBaseline(task.value.id)
+    parsedStuck.value = false
+    baselineReExtractPending.value = true
+    message.success('已提交解析，完成后自动刷新')
   } catch (error) {
-    reExtracting.value = false
-    message.error(error instanceof Error ? error.message : '重新抽取提交失败')
+    message.error(error instanceof Error ? error.message : '解析提交失败')
+  } finally {
+    headerExtracting.value = false
   }
 }
 
 /** 解析完成但抽取未自动启动时的兜底恢复：直接提交全量重抽 */
 async function onRecoverExtract(): Promise<void> {
-  if (!task.value || fullReExtracting.value) return
+  if (!task.value || fullReExtracting.value || headerExtracting.value) return
+  scrollBaselineToTop()
   fullReExtracting.value = true
   try {
     task.value = await reExtractTenderReadBaseline(task.value.id)
     parsedStuck.value = false
-    selectedFieldId.value = ''
-    pdfHighlights.value = []
-    activePdfHighlightId.value = null
+    baselineReExtractPending.value = true
     message.success('已提交整体重解，完成后自动刷新')
   } catch (error) {
     message.error(error instanceof Error ? error.message : '整体重解提交失败')
@@ -2002,7 +2146,37 @@ function extractorLabel(extractor: string): string {
 .read-workspace__baseline {
   min-height: 0;
   max-height: 100%;
-  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+
+  /* hover 时不再放大卡片阴影，避免鼠标扫过右侧栏引起阴影过渡动画（视觉上的“页面微动”） */
+  &:hover {
+    box-shadow: @shadow-sm;
+  }
+
+  /* 基准库 header 吸顶：列表在 body 内滚动，header 始终可见 */
+  :deep(.section-card-body) {
+    flex: 1;
+    min-height: 0;
+    overflow-y: auto;
+    /* 折叠/内容变化导致滚动条出现/消失时，预留滚动条宽度，避免内容横向跳动 */
+    scrollbar-gutter: stable;
+  }
+}
+
+/* 右上角 icon 按钮：固定宽度，loading 换 spinner / 折叠切换图标时不改变按钮宽度；
+   并去掉全局 .ant-btn:active 的按压缩放，避免点击时整个 header 微动 */
+.read-workspace__baseline {
+  :deep(.read-workspace__header-icon-btn) {
+    width: 28px;
+    min-width: 28px;
+    padding: 0;
+
+    &:active {
+      transform: none;
+    }
+  }
 }
 
 .read-workspace__lang-toggle {

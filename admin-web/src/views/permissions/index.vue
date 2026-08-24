@@ -8,7 +8,6 @@
 
     <div class="permissions-table-wrap">
       <DataTable
-        storage-key="admin-permissions-roles"
         :columns="columns"
         :data-source="roles"
         row-key="id"
@@ -133,9 +132,9 @@ const columns: DataTableColumn[] = [
   { title: '角色', dataIndex: 'name', key: 'name', width: 140, minWidth: 120, resizable: true },
   { title: '应用权限', key: 'appCount', width: 110, minWidth: 90, resizable: true },
   { title: '人员', key: 'users', width: 90, minWidth: 80, resizable: true },
-  { title: '创建时间', dataIndex: 'createdAt', key: 'createdAt', width: 130, minWidth: 110, resizable: true },
-  // 不固定右侧：fixed-right 浮层会盖住相邻可拖拽列（创建时间）的手柄
-  { title: '操作', key: 'action', width: 160, minWidth: 160, resizable: true },
+  { title: '创建时间', dataIndex: 'createdAt', key: 'createdAt', width: 130, minWidth: 110 },
+  // 操作列固定右侧；相邻“创建时间”列不参与拖拽（fixed-right 浮层会盖住其手柄）
+  { title: '操作', key: 'action', width: 160, minWidth: 160, fixed: 'right', resizable: true },
 ]
 
 async function fetchRoles(): Promise<void> {

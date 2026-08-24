@@ -99,4 +99,25 @@ public class IrTableDto
     public string Html { get; set; } = default!;
 
     public string ImgPath { get; set; } = default!;
+
+    /// <summary>docs-api 单元格级坐标（row/col/rowspan/colspan/pageIdx/bbox/text，bbox 0~1 归一化），前端溯源优先命中。</summary>
+    public List<IrTableCellDto> Cells { get; set; } = new();
+}
+
+public class IrTableCellDto
+{
+    public int Row { get; set; }
+
+    public int Col { get; set; }
+
+    public int Rowspan { get; set; }
+
+    public int Colspan { get; set; }
+
+    /// <summary>跨页表格单元格按页归属，高亮时优先于表格块 pageIdx。</summary>
+    public int PageIdx { get; set; }
+
+    public double[] Bbox { get; set; } = Array.Empty<double>();
+
+    public string Text { get; set; } = default!;
 }

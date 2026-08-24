@@ -2,7 +2,6 @@
   <div class="role-user-tab">
     <DataTable
       v-model:query="query"
-      storage-key="admin-role-user-tab"
       :columns="columns"
       :data-source="filteredUsers"
       row-key="id"
@@ -84,9 +83,9 @@ const filteredUsers = computed(() => {
 const columns: DataTableColumn[] = [
   { title: '姓名', dataIndex: 'name', key: 'name', width: 120, minWidth: 100, resizable: true },
   { title: '手机', dataIndex: 'phone', key: 'phone', width: 140, minWidth: 120, resizable: true },
-  { title: '部门', key: 'departments', width: 200, minWidth: 160, resizable: true },
-  // 不固定右侧：fixed-right 浮层会盖住相邻可拖拽列（部门）的手柄
-  { title: '操作', key: 'action', width: 90, minWidth: 90, resizable: true },
+  { title: '部门', key: 'departments', width: 200, minWidth: 160 },
+  // 操作列固定右侧；相邻“部门”列不参与拖拽（fixed-right 浮层会盖住其手柄）
+  { title: '操作', key: 'action', width: 90, minWidth: 90, fixed: 'right', resizable: true },
 ]
 
 const showAddModal = ref(false)

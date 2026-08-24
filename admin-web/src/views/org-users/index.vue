@@ -4,7 +4,6 @@
 
     <DataTable
       v-model:query="query"
-      storage-key="admin-org-users-v3"
       :columns="columns"
       :data-source="users"
       row-key="id"
@@ -91,9 +90,9 @@ const columns: DataTableColumn[] = [
   { title: '姓名', dataIndex: 'name', key: 'name', width: 120, minWidth: 100, resizable: true },
   { title: '手机', dataIndex: 'phone', key: 'phone', width: 140, minWidth: 120, resizable: true },
   { title: '部门', key: 'departments', width: 220, minWidth: 180, resizable: true },
-  { title: '角色', key: 'roles', width: 160, minWidth: 140, resizable: true, flex: true },
-  // 操作列不固定右侧：fixed-right 浮层会盖住相邻“角色”列的拖拽手柄
-  { title: '操作', key: 'action', width: 120, minWidth: 120, resizable: true },
+  // 操作列固定右侧；相邻“角色”列不参与拖拽（fixed-right 浮层会盖住其手柄）
+  { title: '角色', key: 'roles', width: 160, minWidth: 140 },
+  { title: '操作', key: 'action', width: 120, minWidth: 120, fixed: 'right', resizable: true },
 ]
 
 let filterTimer: ReturnType<typeof setTimeout> | undefined

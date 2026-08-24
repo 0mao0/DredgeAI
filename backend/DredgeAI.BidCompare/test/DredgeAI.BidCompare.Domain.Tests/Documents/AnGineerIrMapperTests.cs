@@ -29,6 +29,13 @@ public class AnGineerIrMapperTests
         // 表格：table_html/image_path → table.html/table.imgPath
         node["blocks"]![1]!["table"]!["html"]!.GetValue<string>().ShouldContain("<table>");
         node["blocks"]![1]!["table"]!["imgPath"]!.GetValue<string>().ShouldBe("images/t1.jpg");
+        // docs-api 单元格级坐标 → table.cells（含按页归属 pageIdx）
+        var cells = node["blocks"]![1]!["table"]!["cells"]!.AsArray();
+        cells.Count.ShouldBe(1);
+        cells[0]!["pageIdx"]!.GetValue<int>().ShouldBe(1);
+        cells[0]!["text"]!.GetValue<string>().ShouldBe("总价");
+        cells[0]!["bbox"]!.AsArray().Select(x => x!.GetValue<double>())
+            .ShouldBe(new double[] { 0.0672, 0.1188, 0.5, 0.2 });
     }
 
     [Fact]

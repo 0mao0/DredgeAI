@@ -74,11 +74,29 @@ public static class AnGineerIrMapper
             }
             if (type == "table")
             {
-                block["table"] = new Dictionary<string, object?>
+                var table = new Dictionary<string, object?>
                 {
                     ["html"] = node.TableHtml,
                     ["imgPath"] = node.ImagePath
                 };
+                if (node.TableCells is { Count: > 0 })
+                {
+                    // docs-api 单元格级坐标透传（bbox 0~1 归一化），供前端表格溯源命中具体单元格
+                    table["cells"] = node.TableCells
+                        .Where(c => c.Bbox is { Length: 4 })
+                        .Select(c => new Dictionary<string, object?>
+                        {
+                            ["row"] = c.Row,
+                            ["col"] = c.Col,
+                            ["rowspan"] = c.Rowspan,
+                            ["colspan"] = c.Colspan,
+                            ["pageIdx"] = c.PageIdx,
+                            ["bbox"] = c.Bbox,
+                            ["text"] = c.Text
+                        })
+                        .ToList();
+                }
+                block["table"] = table;
             }
             if (type is "image" or "equation" && node.ImagePath != null)
             {
@@ -180,6 +198,18 @@ public static class AnGineerIrMapper
         [JsonPropertyName("confidence")] public JsonElement? Confidence { get; set; }
         [JsonPropertyName("page_bboxes")] public List<PageBBox>? PageBBoxes { get; set; }
         [JsonPropertyName("merged_from")] public List<string>? MergedFrom { get; set; }
+        [JsonPropertyName("table_cells")] public List<GraphTableCell>? TableCells { get; set; }
+    }
+
+    private class GraphTableCell
+    {
+        [JsonPropertyName("row")] public int Row { get; set; }
+        [JsonPropertyName("col")] public int Col { get; set; }
+        [JsonPropertyName("rowspan")] public int Rowspan { get; set; }
+        [JsonPropertyName("colspan")] public int Colspan { get; set; }
+        [JsonPropertyName("page_idx")] public int PageIdx { get; set; }
+        [JsonPropertyName("bbox")] public double[]? Bbox { get; set; }
+        [JsonPropertyName("text")] public string Text { get; set; } = "";
     }
 
     private class PageBBox

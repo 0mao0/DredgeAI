@@ -55,16 +55,7 @@ public class DarkBidFormatRulesExtractor : IBaselineFieldExtractor, ITransientDe
                 Status = BaselineFieldStatus.Auto,
                 Extractor = "rule",
                 ExtractorVersion = "1.0",
-                SourceRefs = new List<SourceMapItemDraft>
-                {
-                    new()
-                    {
-                        BlockId = GetString(block, "blockId") ?? string.Empty,
-                        PageIdx = GetInt(block, "pageIdx"),
-                        Bbox = GetBbox(block),
-                        Text = raw
-                    }
-                }
+                SourceRefs = SourceRefBuilder.ExpandPageRects(block, raw)
             });
         }
 
@@ -89,27 +80,4 @@ public class DarkBidFormatRulesExtractor : IBaselineFieldExtractor, ITransientDe
             ? value.GetString()
             : null;
 
-    private static int GetInt(JsonElement element, string property)
-        => element.TryGetProperty(property, out var value) && value.ValueKind == JsonValueKind.Number
-            ? value.GetInt32()
-            : 0;
-
-    private static double[] GetBbox(JsonElement element)
-    {
-        if (!element.TryGetProperty("bbox", out var bbox)
-            || bbox.ValueKind != JsonValueKind.Array
-            || bbox.GetArrayLength() != 4)
-        {
-            return Array.Empty<double>();
-        }
-
-        var values = new double[4];
-        var i = 0;
-        foreach (var item in bbox.EnumerateArray())
-        {
-            values[i++] = item.ValueKind == JsonValueKind.Number ? item.GetDouble() : 0;
-        }
-
-        return values;
-    }
 }

@@ -79,4 +79,71 @@ public class EvaluationCriteriaExtractorTests : BidCompareApplicationTestBase<Bi
         draft.SourceRefs[1].PageIdx.ShouldBe(13);
         draft.SourceRefs[1].Bbox.ShouldBe(new[] { 0.142, 0.083, 0.855, 0.152 });
     }
+
+    [Fact]
+    public async Task Extract_Should_Attach_One_Ref_Per_Block_When_Clause_Splits_Across_Blocks()
+    {
+        // 回归：废标条款（如 6.4 无效标条款）整段被拆成“引导句 + 1、2、3 编号项”多个块，
+        // 修复前只按整句前缀匹配，只命中引导句所在块，编号项大段内容无法溯源；
+        // 修复后按标点切语义片段，每个块都生成一条溯源。
+        var llm = (FakeLlmGateway)GetRequiredService<ILlmGateway>();
+        var extractor = GetRequiredService<EvaluationCriteriaExtractor>();
+
+        const string irJson =
+            "{\"blocks\":[" +
+            "{\"blockId\":\"b1\",\"type\":\"para\",\"pageIdx\":14,\"bbox\":[0.1,0.1,0.9,0.12]," +
+            "\"text\":\"投标文件出现下列情况之一的，将作为无效投标文件处理：\"}," +
+            "{\"blockId\":\"b2\",\"type\":\"para\",\"pageIdx\":14,\"bbox\":[0.1,0.13,0.9,0.15]," +
+            "\"text\":\"1、投标文件中的投标承诺书未加盖投标人的公章；\"}," +
+            "{\"blockId\":\"b3\",\"type\":\"para\",\"pageIdx\":14,\"bbox\":[0.1,0.16,0.9,0.18]," +
+            "\"text\":\"2、投标文件中的投标承诺书未加盖企业法定代表人（或企业法定代表人委托代理人）印章（或签字）的；\"}," +
+            "{\"blockId\":\"b4\",\"type\":\"para\",\"pageIdx\":14,\"bbox\":[0.1,0.19,0.9,0.21]," +
+            "\"text\":\"3、如投标承诺书加盖企业法定代表人委托代理人印章（或签字）的，企业法定代表人委托代理人没有合法、有效的委托书（原件）的；\"}" +
+            "]}";
+        using var ir = JsonDocument.Parse(irJson);
+
+        llm.QueueResponse(
+            "[{\"fieldKey\":\"reject_clause\",\"value\":{\"text\":\"无效投标\"}," +
+            "\"rawText\":\"投标文件出现下列情况之一的，将作为无效投标文件处理：1、投标文件中的投标承诺书未加盖投标人的公章；" +
+            "2、投标文件中的投标承诺书未加盖企业法定代表人（或企业法定代表人委托代理人）印章（或签字）的；" +
+            "3、如投标承诺书加盖企业法定代表人委托代理人印章（或签字）的，企业法定代表人委托代理人没有合法、有效的委托书（原件）的；\"}]");
+
+        var drafts = await extractor.ExtractAsync(
+            new BaselineExtractionContext(Guid.NewGuid(), ir.RootElement));
+
+        var draft = drafts.ShouldHaveSingleItem();
+        draft.SourceRefs.Select(r => r.BlockId).OrderBy(x => x).ShouldBe(new[] { "b1", "b2", "b3", "b4" });
+        draft.SourceRefs.Select(r => r.PageIdx).Distinct().ShouldBe(new[] { 14 });
+    }
+
+    [Fact]
+    public async Task Extract_Should_Attach_Ref_For_Short_Table_Cell_RawText()
+    {
+        // 回归：技术参数如「增值税(6%)」这类短原文来自表格单元格，
+        // 修复前候选长度下限把短文本全部过滤，匹配不到任何块，溯源为空；
+        // 修复后保留全文候选，块内完整包含该文本即可溯源。
+        var llm = (FakeLlmGateway)GetRequiredService<ILlmGateway>();
+        var extractor = GetRequiredService<EvaluationCriteriaExtractor>();
+
+        const string irJson =
+            "{\"blocks\":[" +
+            "{\"blockId\":\"b1\",\"type\":\"table\",\"pageIdx\":34,\"bbox\":[0.1,0.1,0.9,0.6],\"text\":\"表2 分项报价表\"," +
+            "\"table\":{\"html\":\"<table><tr><td>序号</td><td>项目名称</td></tr><tr><td>3</td><td>增值税(6%)</td></tr></table>\",\"imgPath\":\"\"}}" +
+            "]}";
+        using var ir = JsonDocument.Parse(irJson);
+
+        llm.QueueResponse(
+            "[{\"fieldKey\":\"vat_rate\",\"value\":{\"name\":\"增值税税率\",\"requiredValue\":\"6%\",\"unit\":\"%\"}," +
+            "\"rawText\":\"增值税(6%)\"}]");
+
+        var drafts = await extractor.ExtractAsync(
+            new BaselineExtractionContext(Guid.NewGuid(), ir.RootElement));
+
+        var draft = drafts.ShouldHaveSingleItem();
+        draft.SourceRefs.ShouldNotBeEmpty();
+        var source = draft.SourceRefs[0];
+        source.BlockId.ShouldBe("b1");
+        source.PageIdx.ShouldBe(34);
+        source.Bbox.ShouldBe(new[] { 0.1, 0.1, 0.9, 0.6 });
+    }
 }
