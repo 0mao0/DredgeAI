@@ -7,7 +7,5 @@ public class TenderReadingBaselineDto
 {
     public Guid TaskId { get; set; }
 
-    public int BaselineVersion { get; set; }
-
     public List<BaselineFieldDto> Fields { get; set; } = new();
 }

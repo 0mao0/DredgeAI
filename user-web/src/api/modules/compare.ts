@@ -43,7 +43,6 @@ interface CompareTaskDto {
   docIds: string[]
   tenderDocId?: string | null
   tenderReadingTaskId?: string | null
-  tenderReadingBaselineVersion?: number | null
   clauseSnapshot?: ClauseDto[] | null
   clauseDrafts?: ClauseDto[] | null
   progress: {
@@ -200,7 +199,6 @@ function mapTask(dto: CompareTaskDto, documents: CompareDocMeta[]): CompareTask 
     documents,
     tenderDocId: dto.tenderDocId ?? null,
     tenderReadingTaskId: dto.tenderReadingTaskId ?? null,
-    tenderReadingBaselineVersion: dto.tenderReadingBaselineVersion ?? null,
     progress: {
       stage,
       ...progress,

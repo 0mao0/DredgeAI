@@ -50,8 +50,6 @@ export interface CompareTask {
   tenderDocId?: string | null
   /** 来源读标任务（P3） */
   tenderReadingTaskId?: string | null
-  /** 引用的读标基准库版本（P3） */
-  tenderReadingBaselineVersion?: number | null
   createdAt: string
   finishedAt?: string
   failReason?: string

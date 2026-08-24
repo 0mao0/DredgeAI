@@ -29,7 +29,6 @@ interface TenderReadingTaskDto {
   status: BackendTaskStatus
   progressStage: string
   progressPercent: number
-  baselineVersion: number
   failureReason?: string | null
   docIds: string[]
   createdAt: string
@@ -75,7 +74,6 @@ interface BaselineFieldDto {
 
 interface TenderReadingBaselineDto {
   taskId: string
-  baselineVersion: number
   fields: BaselineFieldDto[]
 }
 
@@ -92,7 +90,6 @@ function mapTask(dto: TenderReadingTaskDto): TenderReadingTask {
     status: dto.status,
     progressStage: dto.progressStage,
     progressPercent: dto.progressPercent,
-    baselineVersion: dto.baselineVersion,
     failureReason: dto.failureReason ?? null,
     docIds: dto.docIds,
     createdAt: dto.createdAt,
@@ -146,7 +143,6 @@ function mapField(dto: BaselineFieldDto): BaselineField {
 function mapBaseline(dto: TenderReadingBaselineDto): TenderReadingBaseline {
   return {
     taskId: dto.taskId,
-    baselineVersion: dto.baselineVersion,
     fields: dto.fields.map(mapField),
   }
 }

@@ -103,7 +103,7 @@ public class CompareTaskAppService : ApplicationService, ICompareTaskAppService
                     .WithData("reason", "读标基准库尚未 Ready，不能用于创建比标任务");
             }
 
-            var baseline = await _baselineStore.GetBaselineAsync(tenderTask.Id, tenderTask.BaselineVersion);
+            var baseline = await _baselineStore.GetBaselineAsync(tenderTask.Id);
             var clauseInputs = baseline.Fields
                 .Where(f => f.Category == BaselineCategory.RejectionClauses)
                 .Select(f => BuildClauseInputFromBaselineField(f))
@@ -116,7 +116,7 @@ public class CompareTaskAppService : ApplicationService, ICompareTaskAppService
                 task.LockClauseSnapshot(JsonSerializer.Serialize(snapshot, SnapshotJsonOptions));
             }
 
-            task.AttachTenderReadingBaseline(tenderTask.Id, tenderTask.BaselineVersion);
+            task.AttachTenderReadingBaseline(tenderTask.Id);
             await _taskRepository.UpdateAsync(task, autoSave: true);
         }
 
@@ -945,7 +945,6 @@ public class CompareTaskAppService : ApplicationService, ICompareTaskAppService
             DocIds = documents.OrderBy(d => d.CreationTime).Select(d => d.Id).ToList(),
             TenderDocId = task.TenderDocumentId,
             TenderReadingTaskId = task.TenderReadingTaskId,
-            TenderReadingBaselineVersion = task.TenderReadingBaselineVersion,
             ClauseSnapshot = task.ClauseSnapshotJson == null
                 ? null
                 : JsonSerializer.Deserialize<List<ClauseDto>>(task.ClauseSnapshotJson, SnapshotJsonOptions),

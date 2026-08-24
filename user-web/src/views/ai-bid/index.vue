@@ -197,7 +197,7 @@ watch(sessionDrawer, async (open) => {
       statusTone: readStatusMap[t.status]?.tone ?? 'session-status--run',
       time: formatDateTime(t.createdAt),
       sortTime: Date.parse(t.createdAt) || 0,
-      detail: `基线 v${t.baselineVersion}`,
+      detail: `${t.docIds.length} 份文档`,
       detailTone: 'session-badge--ok',
       raw: t,
     })),
@@ -214,7 +214,7 @@ function openHistory(item: HistoryItem): void {
     return
   }
   const raw = item.raw
-  if ('baselineVersion' in raw && 'docIds' in raw) {
+  if ('docIds' in raw) {
     router.push({ path: '/ai-bid/read', query: { task: raw.id } })
   } else {
     router.push('/ai-bid/read')

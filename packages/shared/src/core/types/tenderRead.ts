@@ -29,7 +29,6 @@ export interface TenderReadingTask {
   status: TenderReadingTaskStatus
   progressStage: string
   progressPercent: number
-  baselineVersion: number
   failureReason?: string | null
   docIds: string[]
   createdAt: string
@@ -76,7 +75,6 @@ export interface BaselineField {
 
 export interface TenderReadingBaseline {
   taskId: string
-  baselineVersion: number
   fields: BaselineField[]
 }
 

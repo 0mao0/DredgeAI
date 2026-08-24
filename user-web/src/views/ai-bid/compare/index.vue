@@ -11,7 +11,7 @@
           class="compare-read-select__select"
         >
           <a-select-option v-for="t in readTasks" :key="t.id" :value="t.id">
-            {{ t.name }}（v{{ t.baselineVersion }}）
+            {{ t.name }}
           </a-select-option>
         </a-select>
       </div>

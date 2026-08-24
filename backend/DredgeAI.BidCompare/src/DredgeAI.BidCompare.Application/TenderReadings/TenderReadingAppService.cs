@@ -122,7 +122,7 @@ public class TenderReadingAppService : ApplicationService, ITenderReadingAppServ
     public async Task DeleteAsync(Guid id)
     {
         var task = await _taskRepository.GetAsync(id);
-        await _baselineStore.RemoveBaselineAsync(id, task.BaselineVersion);
+        await _baselineStore.RemoveBaselineAsync(id);
         var documents = await GetTaskDocumentsAsync(id);
 
         // 存储按任务前缀整树清理（含 raw/ 原始产物、preview.pdf 等孤儿对象）
@@ -345,8 +345,8 @@ public class TenderReadingAppService : ApplicationService, ITenderReadingAppServ
 
     public async Task<TenderReadingBaselineDto> GetBaselineAsync(Guid id)
     {
-        var task = await _taskRepository.GetAsync(id);
-        return await _baselineStore.GetBaselineAsync(id, task.BaselineVersion);
+        await _taskRepository.GetAsync(id);
+        return await _baselineStore.GetBaselineAsync(id);
     }
 
     public async Task<List<BaselineFieldDto>> GetBaselineByCategoryAsync(Guid id, BaselineCategory category)
@@ -372,7 +372,7 @@ public class TenderReadingAppService : ApplicationService, ITenderReadingAppServ
 
     public async Task<BaselineFieldDto> UpdateFieldAsync(Guid id, Guid fieldId, UpdateBaselineFieldInput input)
     {
-        var task = await _taskRepository.GetAsync(id);
+        await _taskRepository.GetAsync(id);
         var field = await _fieldRepository.FirstOrDefaultAsync(f => f.TaskId == id && f.Id == fieldId);
         if (field == null)
         {
@@ -398,7 +398,7 @@ public class TenderReadingAppService : ApplicationService, ITenderReadingAppServ
         field.UpdateByHuman(input.ValueJson, input.RawText, confidence, input.Status);
         await _fieldRepository.UpdateAsync(field, autoSave: true);
 
-        await _baselineStore.RemoveBaselineAsync(id, task.BaselineVersion);
+        await _baselineStore.RemoveBaselineAsync(id);
 
         var sources = await _sourceRepository.GetListAsync(s => s.FieldId == fieldId);
         return MapFieldDto(field, sources);
@@ -595,7 +595,6 @@ public class TenderReadingAppService : ApplicationService, ITenderReadingAppServ
             Status = task.Status,
             ProgressStage = task.ProgressStage,
             ProgressPercent = task.ProgressPercent,
-            BaselineVersion = task.BaselineVersion,
             FailureReason = task.FailureReason,
             DocIds = documents.OrderBy(d => d.CreationTime).Select(d => d.Id).ToList(),
             CreatedAt = task.CreationTime

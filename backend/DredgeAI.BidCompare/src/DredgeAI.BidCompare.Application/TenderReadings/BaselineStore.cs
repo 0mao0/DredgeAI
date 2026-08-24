@@ -40,10 +40,9 @@ public class BaselineStore : ITransientDependency
 
     public async Task<TenderReadingBaselineDto> GetBaselineAsync(
         Guid taskId,
-        int baselineVersion,
         CancellationToken cancellationToken = default)
     {
-        var cacheKey = CacheKey(taskId, baselineVersion);
+        var cacheKey = CacheKey(taskId);
         var cached = await _cache.GetAsync(cacheKey, cancellationToken);
         if (cached != null)
         {
@@ -55,7 +54,7 @@ public class BaselineStore : ITransientDependency
             }
         }
 
-        var baseline = await BuildBaselineAsync(taskId, baselineVersion, cancellationToken);
+        var baseline = await BuildBaselineAsync(taskId, cancellationToken);
         // 不缓存空基准库：抽取过程中前端轮询可能读到空数据，缓存后会导致抽取完成仍看不到字段
         if (baseline.Fields.Count > 0)
         {
@@ -69,9 +68,9 @@ public class BaselineStore : ITransientDependency
         return baseline;
     }
 
-    public async Task RemoveBaselineAsync(Guid taskId, int baselineVersion, CancellationToken cancellationToken = default)
+    public async Task RemoveBaselineAsync(Guid taskId, CancellationToken cancellationToken = default)
     {
-        await _cache.RemoveAsync(CacheKey(taskId, baselineVersion), cancellationToken);
+        await _cache.RemoveAsync(CacheKey(taskId), cancellationToken);
     }
 
     public async Task<List<SourceRefDto>> GetSourceRefsAsync(
@@ -96,7 +95,6 @@ public class BaselineStore : ITransientDependency
 
     private async Task<TenderReadingBaselineDto> BuildBaselineAsync(
         Guid taskId,
-        int baselineVersion,
         CancellationToken cancellationToken)
     {
         var fields = await _fieldRepository.GetListAsync(
@@ -138,13 +136,12 @@ public class BaselineStore : ITransientDependency
         return new TenderReadingBaselineDto
         {
             TaskId = taskId,
-            BaselineVersion = baselineVersion,
             Fields = fieldDtos
         };
     }
 
-    private static string CacheKey(Guid taskId, int version)
-        => $"tender-read:{taskId}:baseline:{version}";
+    private static string CacheKey(Guid taskId)
+        => $"tender-read:{taskId}:baseline";
 
     private static double[] ParseBbox(string bboxJson)
     {

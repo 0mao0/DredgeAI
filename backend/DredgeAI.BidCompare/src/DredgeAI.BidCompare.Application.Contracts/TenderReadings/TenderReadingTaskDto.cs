@@ -16,8 +16,6 @@ public class TenderReadingTaskDto : EntityDto<Guid>
 
     public int ProgressPercent { get; set; }
 
-    public int BaselineVersion { get; set; }
-
     public string? FailureReason { get; set; }
 
     public List<Guid> DocIds { get; set; } = new();

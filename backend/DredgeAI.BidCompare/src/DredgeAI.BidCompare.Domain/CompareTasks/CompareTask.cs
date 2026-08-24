@@ -24,9 +24,6 @@ public class CompareTask : FullAuditedAggregateRoot<Guid>
     /// <summary>来源读标任务（P3：创建比标任务时引用读标基准库）。</summary>
     public Guid? TenderReadingTaskId { get; private set; }
 
-    /// <summary>引用读标基准库版本（锁定后比标过程不随读标变更）。</summary>
-    public int? TenderReadingBaselineVersion { get; private set; }
-
     /// <summary>条款清单快照（JSON 数组，元素见 ClauseSnapshotItem），锁定后不可变（spec §6.2）。</summary>
     public string? ClauseSnapshotJson { get; private set; }
 
@@ -101,10 +98,9 @@ public class CompareTask : FullAuditedAggregateRoot<Guid>
         TenderDocumentId = documentId;
     }
 
-    public void AttachTenderReadingBaseline(Guid tenderReadingTaskId, int baselineVersion)
+    public void AttachTenderReadingBaseline(Guid tenderReadingTaskId)
     {
         TenderReadingTaskId = tenderReadingTaskId;
-        TenderReadingBaselineVersion = baselineVersion;
     }
 
     public void UpdateProgress(string stage, int percent, string? message = null)

@@ -103,9 +103,7 @@ public class BaselineExtractionService : ITransientDependency
             cancellationToken: cancellationToken);
         if (oldFields.Count > 0)
         {
-            var oldVersion = task.BaselineVersion;
-            await _baselineStore.RemoveBaselineAsync(taskId, oldVersion, cancellationToken);
-            task.BumpBaselineVersion();
+            await _baselineStore.RemoveBaselineAsync(taskId, cancellationToken);
 
             var oldFieldIds = oldFields.Select(f => f.Id).ToList();
             var oldSources = await _sourceRepository.GetListAsync(
@@ -198,7 +196,7 @@ public class BaselineExtractionService : ITransientDependency
             task.MarkReady();
         }
 
-        await _baselineStore.RemoveBaselineAsync(taskId, task.BaselineVersion, cancellationToken);
+        await _baselineStore.RemoveBaselineAsync(taskId, cancellationToken);
         await _taskRepository.UpdateAsync(task, autoSave: true, cancellationToken: cancellationToken);
     }
 
@@ -245,11 +243,9 @@ public class BaselineExtractionService : ITransientDependency
         // CountAsync(predicate) 是扩展方法，后台 Job 无环境 UoW 时会拿到已释放 DbContext；
         // 先取字段列表，用内存计数替代（下面删旧重建也要这份列表）
         var oldFields = await _fieldRepository.GetListAsync(f => f.TaskId == taskId, cancellationToken: cancellationToken);
-        var oldVersion = task.BaselineVersion;
         if (oldFields.Count > 0)
         {
-            await _baselineStore.RemoveBaselineAsync(taskId, oldVersion, cancellationToken);
-            task.BumpBaselineVersion();
+            await _baselineStore.RemoveBaselineAsync(taskId, cancellationToken);
         }
 
         // 重抽时整体替换，避免残留旧字段/锚点
@@ -377,7 +373,7 @@ public class BaselineExtractionService : ITransientDependency
         }
 
         // 首次抽取不会 bump 版本，必须显式失效可能已缓存的空基准库
-        await _baselineStore.RemoveBaselineAsync(taskId, task.BaselineVersion, cancellationToken);
+        await _baselineStore.RemoveBaselineAsync(taskId, cancellationToken);
         await _taskRepository.UpdateAsync(task, autoSave: true, cancellationToken: cancellationToken);
     }
 

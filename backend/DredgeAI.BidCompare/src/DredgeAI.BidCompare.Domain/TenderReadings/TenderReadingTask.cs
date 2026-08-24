@@ -19,8 +19,6 @@ public class TenderReadingTask : FullAuditedAggregateRoot<Guid>
 
     public int ProgressPercent { get; private set; }
 
-    public int BaselineVersion { get; private set; }
-
     public string? FailureReason { get; private set; }
 
     protected TenderReadingTask()
@@ -33,7 +31,6 @@ public class TenderReadingTask : FullAuditedAggregateRoot<Guid>
         Status = TenderReadingTaskStatus.Uploading;
         ProgressStage = "uploading";
         ProgressPercent = 5;
-        BaselineVersion = 1;
     }
 
     public void SetName(string name)
@@ -137,11 +134,6 @@ public class TenderReadingTask : FullAuditedAggregateRoot<Guid>
         FailureReason = value.Length <= 2048 ? value : value[..2048];
         ProgressStage = "failed";
         ProgressPercent = 100;
-    }
-
-    public void BumpBaselineVersion()
-    {
-        BaselineVersion++;
     }
 
     private void EnsureStatus(string action, params TenderReadingTaskStatus[] allowed)

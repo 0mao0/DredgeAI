@@ -26,9 +26,6 @@ public class CompareTaskDto : EntityDto<Guid>
     /// <summary>来源读标任务（P3）。</summary>
     public Guid? TenderReadingTaskId { get; set; }
 
-    /// <summary>引用读标基准库版本（P3）。</summary>
-    public int? TenderReadingBaselineVersion { get; set; }
-
     public List<ClauseDto>? ClauseSnapshot { get; set; }
 
     /// <summary>条款提取草案（确认前可编辑，异步提取后由任务轮询返回）。</summary>

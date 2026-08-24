@@ -120,7 +120,6 @@ public class BidCompareDbContext :
             b.Property(x => x.PairsJson).HasColumnType("text");
             b.Property(x => x.AutoCompareOnParseComplete).HasDefaultValue(true);
             b.Property(x => x.TenderReadingTaskId);
-            b.Property(x => x.TenderReadingBaselineVersion);
             b.HasIndex(x => x.Status);
         });
 
