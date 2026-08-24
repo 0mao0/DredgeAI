@@ -90,7 +90,6 @@
             </template>
           </template>
           <a-tag v-if="task.status !== 'ready'" :color="statusColor(task.status)">{{ statusText(task.status) }}</a-tag>
-          <a-tag>基准库 v{{ task.baselineVersion }}</a-tag>
         </div>
         <a-popconfirm
           title="整体重解将覆盖所有类别的现有字段（含已确认内容），确定继续吗？"
@@ -238,7 +237,7 @@
             </div>
           </div>
           <div v-if="baseline.length === 0" class="read-workspace__baseline-empty">
-            <DataSkeleton v-if="baselineLoading || (task && isPollingStatus(task.status))" :rows="4" />
+            <DataSkeleton v-if="baselineLoading || (task && isReadPollingStatus(task.status))" :rows="4" />
             <a-empty v-else description="未抽取到任何基准库字段">
               <p class="read-workspace__baseline-empty-tip">
                 文档可能不含可抽取内容，可点击右上角「解析」重试，或新建读标重新上传。
@@ -421,6 +420,7 @@ import {
 } from '@ant-design/icons-vue'
 import { AppButton, DataSkeleton, SectionCard, UploadFileRow } from '@shared/web'
 import type { BaselineCategory, BaselineField, BlockRange, SourceRef, TenderReadingDocument, TenderReadingOutlineNode, TenderReadingParsedDocument, TenderReadingTask, UploadFileItem } from '@/types'
+import { applyReadTaskStatus, isReadPollingStatus } from './readPolling'
 import PdfViewer from '../compare/components/PdfViewer.vue'
 import { PDFParsedViewerCombo } from '@angineer/docs-ui'
 import type { PreviewMode, StructuredIndexItem } from '@angineer/docs-ui'
@@ -621,25 +621,28 @@ const canFullReExtract = computed(() => {
 })
 
 watch(() => task.value?.status, (status) => {
-  if (!status) {
-    clearParsedStuckTimer()
-    return
-  }
-  if (status === 'parsed') {
-    startParsedStuckTimer()
-  } else {
-    clearParsedStuckTimer()
-  }
-  if (isPollingStatus(status)) {
-    startPolling()
-  } else {
-    stopPolling()
-    // 后台重抽到达终态：复位按钮并刷新高亮（基准库已由最后一轮轮询刷新）
-    if (reExtracting.value) {
-      reExtracting.value = false
-      autoHighlightFirstField()
-    }
-  }
+  applyReadTaskStatus(status, {
+    onCleared: clearParsedStuckTimer,
+    onParsed: startParsedStuckTimer,
+    onLeftParsed: clearParsedStuckTimer,
+    onStartPolling: startPolling,
+    onTerminal: () => {
+      stopPolling()
+      // 终态补拉：stopPolling() 递增 pollGen，会让在途轮询后续的 baseline/parsed document
+      // 请求因 stale() 被跳过。若终态正是由在途轮询触达（pollInFlight 为 true），
+      // 必须用新 pollGen 补拉一轮完整数据，避免页面停留在“未抽取到任何基准库字段”
+      // 而后端字段其实已落库；非轮询路径（如 loadDetail 打开历史任务）数据已完整，无需补拉。
+      if (pollInFlight) {
+        const finalId = task.value?.id
+        if (finalId) void refreshDetail(finalId, pollGen)
+      }
+      // 后台重抽到达终态：复位按钮并刷新高亮（基准库已由终态补拉刷新）
+      if (reExtracting.value) {
+        reExtracting.value = false
+        autoHighlightFirstField()
+      }
+    },
+  })
 })
 
 onBeforeUnmount(() => {
@@ -917,7 +920,7 @@ async function runPoll(): Promise<void> {
     pollInFlight = false
   }
   if (disposed || gen !== pollGen || task.value?.id !== id) return
-  if (task.value && isPollingStatus(task.value.status)) schedulePoll(POLL_MS)
+  if (task.value && isReadPollingStatus(task.value.status)) schedulePoll(POLL_MS)
 }
 
 function stopPolling(): void {
@@ -926,10 +929,6 @@ function stopPolling(): void {
     window.clearTimeout(pollTimer)
     pollTimer = null
   }
-}
-
-function isPollingStatus(status: TenderReadingTask['status']): boolean {
-  return ['uploading', 'parsing', 'parsed', 'extracting', 'reviewing'].includes(status)
 }
 
 async function exportBaseline(): Promise<void> {
