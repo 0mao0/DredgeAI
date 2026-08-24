@@ -48,9 +48,10 @@ class SenseVoiceAsrEngine:
             try:
                 from funasr import AutoModel
 
+                # 直接传本地目录：funasr 1.4.x 的 model_dir 参数不重定向下载，
+                # 且 model_id 形式会把路径指到 modelscope 缓存（含中文用户名会乱码）。
                 self._model = AutoModel(
-                    model="iic/SenseVoiceSmall",
-                    model_dir=self._model_root,
+                    model=self._model_root,
                     device=self._device,
                     disable_update=True,
                     disable_pbar=True,

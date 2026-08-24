@@ -49,11 +49,11 @@ uv --version
 docker compose version
 Test-Path "D:\AI\AImodles\models\buffalo_l\w600k_r50.onnx"
 Test-Path "D:\AI\AImodles\models\yolov8n.pt"
-Test-Path "D:\AI\AImodles\cosyvoice\pretrained_models\Fun-CosyVoice3-0.5B\cosyvoice.yaml"
+Test-Path "D:\AI\AImodles\cosyvoice\pretrained_models\Fun-CosyVoice3-0.5B\cosyvoice3.yaml"
 Test-Path "D:\AI\AImodles\cosyvoice\CosyVoice\third_party\Matcha-TTS"
 ```
 
-Expected: uv 与 docker compose 有版本输出；四个模型路径全为 True。若 Matcha-TTS 缺失，在 `D:\AI\AImodles\cosyvoice\CosyVoice` 执行 `git submodule update --init --recursive` 后重查。
+Expected: uv 与 docker compose 有版本输出；四个模型路径全为 True（CosyVoice3 配置文件名为 `cosyvoice3.yaml`）。若 Matcha-TTS 缺失，在 `D:\AI\AImodles\cosyvoice\CosyVoice` 执行 `git submodule update --init --recursive` 后重查。
 
 - [ ] **Step 2: 记录当前 git 状态**
 
@@ -419,9 +419,10 @@ class SenseVoiceAsrEngine:
             try:
                 from funasr import AutoModel
 
+                # 直接传本地目录：funasr 1.4.x 的 model_dir 参数不重定向下载，
+                # 且 model_id 形式会把路径指到 modelscope 缓存（含中文用户名会乱码）。
                 self._model = AutoModel(
-                    model="iic/SenseVoiceSmall",
-                    model_dir=self._model_root,
+                    model=self._model_root,
                     device=self._device,
                     disable_update=True,
                     disable_pbar=True,
@@ -518,7 +519,7 @@ Run（工作目录 `services/sensevoice`）：
 ```powershell
 if (-not (Test-Path "D:\AI\AImodles\models\SenseVoiceSmall\model.pt")) {
     uv sync
-    uv run python -c "from funasr import AutoModel; AutoModel(model='iic/SenseVoiceSmall', model_dir=r'D:\AI\AImodles\models\SenseVoiceSmall', disable_update=True, disable_pbar=True)"
+    uv run python -c "from modelscope import snapshot_download; snapshot_download('iic/SenseVoiceSmall', local_dir=r'D:\AI\AImodles\models\SenseVoiceSmall')"
 }
 ```
 Expected: `D:\AI\AImodles\models\SenseVoiceSmall\model.pt` 存在（约 900MB，下载一次）。
@@ -1937,7 +1938,7 @@ if (-not $SkipModels) {
         New-Item -ItemType Directory -Force -Path $senseDir | Out-Null
         Push-Location (Join-Path $root "services\sensevoice")
         uv sync
-        uv run python -c "from funasr import AutoModel; AutoModel(model='iic/SenseVoiceSmall', model_dir=r'$senseDir', disable_update=True, disable_pbar=True)"
+        uv run python -c "from modelscope import snapshot_download; snapshot_download('iic/SenseVoiceSmall', local_dir=r'$senseDir')"
         Pop-Location
     } else {
         Write-Host "  已存在，跳过" -ForegroundColor Yellow
@@ -1945,7 +1946,7 @@ if (-not $SkipModels) {
 
     Write-Host "[2/5] CosyVoice3 权重（FunAudioLLM/Fun-CosyVoice3-0.5B-2512）" -ForegroundColor Cyan
     $cosyModel = Join-Path $CosyVoiceRoot "pretrained_models\Fun-CosyVoice3-0.5B"
-    if (-not (Test-Path (Join-Path $cosyModel "cosyvoice.yaml"))) {
+    if (-not (Test-Path (Join-Path $cosyModel "cosyvoice3.yaml"))) {
         New-Item -ItemType Directory -Force -Path $cosyModel | Out-Null
         Push-Location (Join-Path $root "services\sensevoice")
         uv run --with modelscope python -c "from modelscope import snapshot_download; snapshot_download('FunAudioLLM/Fun-CosyVoice3-0.5B-2512', local_dir=r'$cosyModel')"
