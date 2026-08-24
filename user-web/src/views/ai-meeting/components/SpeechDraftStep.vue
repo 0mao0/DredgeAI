@@ -15,46 +15,48 @@
       </div>
 
       <template v-else>
-        <div class="speech-draft-step__meta">
-          <span class="speech-draft-step__date"><CalendarOutlined /> {{ dateText }}</span>
-          <span class="speech-draft-step__badge">AI 已生成</span>
+        <div class="speech-draft-step__scroll">
+          <div class="speech-draft-step__meta">
+            <span class="speech-draft-step__date"><CalendarOutlined /> {{ dateText }}</span>
+            <span class="speech-draft-step__badge">AI 已生成</span>
+            <AppButton size="sm" variant="text" class="speech-draft-step__edit" @click="onToggleEdit">
+              {{ editing ? '取消编辑' : '编辑' }}
+            </AppButton>
+          </div>
+
+          <div class="speech-draft-step__card">
+            <template v-if="!editing">
+              <p
+                v-for="(para, index) in paragraphs"
+                :key="index"
+                class="speech-draft-step__para"
+                :class="{ 'is-lead': index === 0 }"
+              >
+                {{ para }}
+              </p>
+            </template>
+            <a-textarea
+              v-else
+              v-model:value="content"
+              :rows="14"
+              class="speech-draft-step__editor"
+            />
+          </div>
+
+          <div class="speech-draft-step__toolbar">
+            <SpeechPlayer :text="content" />
+          </div>
         </div>
 
-        <div class="speech-draft-step__card">
-          <template v-if="!editing">
-            <p
-              v-for="(para, index) in paragraphs"
-              :key="index"
-              class="speech-draft-step__para"
-              :class="{ 'is-lead': index === 0 }"
-            >
-              {{ para }}
-            </p>
-          </template>
-          <a-textarea
-            v-else
-            v-model:value="content"
-            :rows="14"
-            class="speech-draft-step__editor"
-          />
-        </div>
-
-        <div class="speech-draft-step__toolbar">
-          <SpeechPlayer :text="content" />
-        </div>
-        <div class="speech-draft-step__subbar">
-          <AppButton size="sm" variant="text" @click="onToggleEdit">
-            {{ editing ? '取消编辑' : '编辑' }}
-          </AppButton>
-          <AppButton size="sm" variant="text" :disabled="!editing" @click="onSave">
-            保存
-          </AppButton>
+        <div class="speech-draft-step__footer">
           <span class="speech-draft-step__stat">{{ charCount }} 字 · 约 {{ minutes }} 分钟</span>
+          <div class="speech-draft-step__actions">
+            <AppButton size="lg" :loading="loading" @click="onSave">保存草稿</AppButton>
+            <AppButton variant="primary" size="lg" :loading="loading" @click="emit('confirm')">
+              立刻开会
+            </AppButton>
+          </div>
         </div>
-
-        <AppButton variant="primary" size="lg" block :loading="loading" @click="emit('confirm')">
-          开始开会
-        </AppButton>
       </template>
     </SectionCard>
   </div>
@@ -113,6 +115,38 @@ function onSave(): void {
 <style scoped lang="less">
 @import '@shared/web/styles/variables.less';
 
+.speech-draft-step {
+  height: clamp(420px, calc(100vh - 190px), 760px);
+  min-height: 420px;
+
+  :deep(.section-card) {
+    height: 100%;
+    display: flex;
+    flex-direction: column;
+  }
+  :deep(.section-card-body) {
+    flex: 1;
+    min-height: 0;
+    display: flex;
+    flex-direction: column;
+  }
+}
+
+.speech-draft-step__scroll {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  padding-right: @spacing-xs;
+
+  &::-webkit-scrollbar {
+    width: 6px;
+  }
+  &::-webkit-scrollbar-thumb {
+    background: color-mix(in srgb, var(--color-text-tertiary) 24%, transparent);
+    border-radius: 999px;
+  }
+}
+
 .speech-draft-step__loading {
   display: flex;
   flex-direction: column;
@@ -154,6 +188,9 @@ function onSave(): void {
   gap: @spacing-sm;
   margin-bottom: @spacing-md;
 }
+.speech-draft-step__edit {
+  margin-left: auto;
+}
 .speech-draft-step__date {
   font-size: @font-size-sm;
   color: @text-secondary;
@@ -194,17 +231,28 @@ function onSave(): void {
 .speech-draft-step__toolbar {
   margin-bottom: @spacing-lg;
 }
-.speech-draft-step__subbar {
+.speech-draft-step__footer {
   display: flex;
   align-items: center;
   gap: @spacing-sm;
-  margin-bottom: @spacing-lg;
+  padding-top: @spacing-base;
+  border-top: 1px solid @divider-color;
 }
 .speech-draft-step__stat {
-  margin-left: auto;
   font-size: @font-size-sm;
   color: @text-tertiary;
   font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+.speech-draft-step__actions {
+  display: flex;
+  gap: @spacing-sm;
+  margin-left: auto;
+
+  > * {
+    flex: 1;
+    min-width: 108px;
+  }
 }
 
 @keyframes speech-draft-bounce {
@@ -215,6 +263,32 @@ function onSave(): void {
   40% {
     transform: translateY(-10px);
     opacity: 1;
+  }
+}
+
+@media (max-width: 520px) {
+  .speech-draft-step {
+    height: auto;
+    min-height: 0;
+
+    :deep(.section-card) {
+      height: auto;
+      display: block;
+    }
+    :deep(.section-card-body) {
+      display: block;
+    }
+  }
+  .speech-draft-step__scroll {
+    overflow: visible;
+    padding-right: 0;
+  }
+  .speech-draft-step__footer {
+    flex-wrap: wrap;
+  }
+  .speech-draft-step__actions {
+    width: 100%;
+    margin-left: 0;
   }
 }
 </style>

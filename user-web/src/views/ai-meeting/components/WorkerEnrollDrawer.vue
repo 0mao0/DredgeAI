@@ -3,122 +3,204 @@
     :open="open"
     title="新人录入"
     placement="right"
-    :width="360"
+    :width="560"
+    :body-style="{ padding: '20px' }"
     @close="onClose"
   >
-    <div class="worker-enroll__section">
-      <div class="worker-enroll__section-title">身份证识别</div>
-      <a-upload-dragger
-        v-if="cameraMode !== 'idcard' && !idCardPreview"
-        accept="image/*"
-        :show-upload-list="false"
-        :before-upload="onUploadIdCard"
-        :disabled="idCardLoading"
-        class="worker-enroll__upload"
-      >
-        <p class="ant-upload-drag-icon">
-          <InboxOutlined />
-        </p>
-        <p class="ant-upload-text">上传身份证照片（点击或拖拽）</p>
-        <p class="ant-upload-hint" />
-      </a-upload-dragger>
-      <div v-if="idCardPreview" class="worker-enroll__preview">
-        <img :src="idCardPreview" class="worker-enroll__preview-img" alt="身份证照片">
-        <AppButton size="sm" variant="text" @click="onResetIdCard">重新上传</AppButton>
+    <div class="worker-enroll">
+      <div class="worker-enroll__section">
+        <div class="worker-enroll__section-title">A · 现场采集</div>
+        <div class="worker-enroll__camera">
+          <video
+            v-if="stream"
+            ref="videoRef"
+            class="worker-enroll__video"
+            :src-object="stream"
+            autoplay
+            playsinline
+            muted
+          />
+          <div v-else-if="starting" class="worker-enroll__camera-hint">
+            正在启用摄像头...
+          </div>
+          <a-result
+            v-else-if="error"
+            status="warning"
+            title="无法访问摄像头"
+            :sub-title="error"
+          />
+          <div v-if="stream" class="worker-enroll__camera-actions">
+            <AppButton size="sm" :loading="idCardLoading" @click="captureIdCardFromCamera">
+              识别手持身份证
+            </AppButton>
+          </div>
+        </div>
       </div>
-      <a-button type="link" block class="worker-enroll__camera-link" @click="toggleCamera('idcard')">
-        {{ cameraMode === 'idcard' ? '收起摄像头' : '使用摄像头拍摄身份证' }}
-      </a-button>
-      <AppButton
-        v-if="cameraMode === 'idcard'"
-        variant="primary"
-        block
-        :loading="idCardLoading"
-        @click="onCaptureIdCard"
-      >
-        拍照识别身份证
-      </AppButton>
-      <div v-if="idCard" class="worker-enroll__fields">
-        <div><span>姓名</span>{{ idCard.name || '—' }}</div>
-        <div><span>身份证号</span>{{ idCard.idCardNumber || '—' }}</div>
-        <div><span>性别/民族</span>{{ idCard.gender || '—' }} / {{ idCard.nation || '—' }}</div>
+
+      <div class="worker-enroll__section">
+        <div class="worker-enroll__section-title">B · 身份证上传</div>
+        <a-upload-dragger
+          v-if="!idCardPreview"
+          accept="image/*"
+          :show-upload-list="false"
+          :before-upload="onUploadIdCard"
+          :disabled="idCardLoading"
+          class="worker-enroll__upload"
+        >
+          <p class="ant-upload-drag-icon">
+            <InboxOutlined />
+          </p>
+          <p class="ant-upload-text">上传身份证照片（点击或拖拽）</p>
+          <p class="ant-upload-hint">也可以回到上方摄像头，手持身份证点击“识别手持身份证”</p>
+        </a-upload-dragger>
+        <div v-else class="worker-enroll__id-preview">
+          <img :src="idCardPreview" class="worker-enroll__id-img" alt="身份证照片">
+          <div v-if="idCardLoading" class="worker-enroll__img-mask">
+            <LoadingOutlined spin />
+            <span>正在识别身份证...</span>
+          </div>
+          <AppButton
+            size="sm"
+            variant="text"
+            class="worker-enroll__reupload"
+            @click="onResetIdCard"
+          >
+            <ReloadOutlined /> 重新上传
+          </AppButton>
+        </div>
+      </div>
+
+      <div class="worker-enroll__section">
+        <div class="worker-enroll__section-title">C · 识别结果</div>
+        <div v-if="idCardLoading" class="worker-enroll__loading">
+          <LoadingOutlined spin />
+          <span>正在识别身份证，请稍候...</span>
+        </div>
+
+        <div class="worker-enroll__photos">
+          <div class="worker-enroll__photo">
+            <div class="worker-enroll__photo-label">身份证照片</div>
+            <img v-if="idCardPreview" :src="idCardPreview" class="worker-enroll__photo-img" alt="身份证照片">
+            <div v-else class="worker-enroll__photo-empty">尚未上传</div>
+          </div>
+          <div class="worker-enroll__photo worker-enroll__photo--face" @click="captureFace">
+            <div class="worker-enroll__photo-label">
+              人脸截图
+              <span v-if="facePreview" class="worker-enroll__retake-tip">点击重拍</span>
+            </div>
+            <img v-if="facePreview" :src="facePreview" class="worker-enroll__photo-img" alt="人脸照片">
+            <div v-else class="worker-enroll__photo-empty">
+              <CameraOutlined />
+              <span>点击拍照</span>
+            </div>
+            <div v-if="faceLoading" class="worker-enroll__img-mask">
+              <LoadingOutlined spin />
+            </div>
+          </div>
+        </div>
+
+        <a-form layout="vertical" class="worker-enroll__form">
+          <a-row :gutter="12">
+            <a-col :span="12">
+              <a-form-item label="姓名">
+                <a-input v-model:value="form.name" placeholder="请输入姓名" />
+              </a-form-item>
+            </a-col>
+            <a-col :span="12">
+              <a-form-item label="身份证号">
+                <a-input v-model:value="form.idCardNumber" placeholder="请输入身份证号" />
+              </a-form-item>
+            </a-col>
+            <a-col :span="12">
+              <a-form-item label="民族">
+                <a-input v-model:value="form.nation" placeholder="如：汉族" />
+              </a-form-item>
+            </a-col>
+            <a-col :span="12">
+              <a-form-item label="性别">
+                <a-input v-model:value="form.gender" placeholder="如：男" />
+              </a-form-item>
+            </a-col>
+            <a-col :span="24">
+              <a-form-item label="班组">
+                <a-input v-model:value="form.team" placeholder="如：钢筋班（可选）" />
+              </a-form-item>
+            </a-col>
+          </a-row>
+        </a-form>
+
+        <div class="worker-enroll__db-info">
+          <div class="worker-enroll__db-title">数据库信息</div>
+          <a-row :gutter="12">
+            <a-col :span="12">
+              <div class="worker-enroll__db-item"><span>单位</span>{{ form.unit || '暂无' }}</div>
+            </a-col>
+            <a-col :span="12">
+              <div class="worker-enroll__db-item"><span>工种</span>{{ form.job || '暂无' }}</div>
+            </a-col>
+          </a-row>
+        </div>
+      </div>
+
+      <div class="worker-enroll__section worker-enroll__section--footer">
+        <a-alert
+          v-if="duplicate"
+          type="warning"
+          show-icon
+          class="worker-enroll__alert"
+          message="该身份证号已存在"
+          :description="`已存在工人「${existingWorker?.name ?? ''}」，确认入库后将覆盖其面部信息。`"
+        />
+        <a-alert
+          v-if="submitError"
+          type="error"
+          show-icon
+          class="worker-enroll__alert"
+          message="入库失败"
+          :description="submitError"
+        />
+        <a-alert
+          v-if="enrolled"
+          type="success"
+          show-icon
+          class="worker-enroll__alert"
+          message="录入成功"
+          :description="`${enrolled.name} 已加入人脸库，点名时可直接识别。`"
+        />
+        <div class="worker-enroll__actions">
+          <AppButton size="lg" :disabled="submitting" @click="onClose">取消</AppButton>
+          <AppButton
+            variant="primary"
+            size="lg"
+            :loading="submitting"
+            :disabled="!canSubmit"
+            @click="onSubmit"
+          >
+            确认入库
+          </AppButton>
+        </div>
       </div>
     </div>
-
-    <div class="worker-enroll__section">
-      <div class="worker-enroll__section-title">人脸录入</div>
-      <a-form layout="vertical" class="worker-enroll__form">
-        <a-form-item label="姓名">
-          <a-input v-model:value="form.name" />
-        </a-form-item>
-        <a-form-item label="班组">
-          <a-input v-model:value="form.team" placeholder="如：钢筋班" />
-        </a-form-item>
-      </a-form>
-      <template v-if="cameraMode === 'face'">
-        <AppButton variant="primary" block :loading="faceLoading" @click="onCaptureFace">
-          拍照录入人脸
-        </AppButton>
-      </template>
-      <AppButton v-else block @click="toggleCamera('face')">打开摄像头拍人脸</AppButton>
-      <div v-if="facePreview" class="worker-enroll__preview">
-        <img :src="facePreview" class="worker-enroll__preview-img" alt="人脸照片">
-      </div>
-    </div>
-
-    <video
-      v-if="stream && cameraMode"
-      ref="videoRef"
-      class="worker-enroll__video"
-      :src-object="stream"
-      autoplay
-      playsinline
-      muted
-    />
-    <a-result
-      v-else-if="error && cameraMode"
-      status="warning"
-      title="无法访问摄像头"
-      :sub-title="error"
-    />
-
-    <AppButton
-      variant="primary"
-      size="lg"
-      block
-      :loading="submitting"
-      :disabled="!canSubmit"
-      class="worker-enroll__submit"
-      @click="onSubmit"
-    >
-      确认录入
-    </AppButton>
-    <a-alert
-      v-if="enrolled"
-      type="success"
-      show-icon
-      class="worker-enroll__done"
-      message="录入成功"
-      :description="`${enrolled.name} 已加入人脸库，点名时可直接识别`"
-    />
-    <AppButton
-      v-if="enrolled"
-      size="lg"
-      block
-      class="worker-enroll__next"
-      @click="onClose"
-    >
-      完成
-    </AppButton>
   </a-drawer>
 </template>
 
 <script setup lang="ts">
-import { computed, nextTick, onScopeDispose, ref, watch } from 'vue'
-import { InboxOutlined } from '@ant-design/icons-vue'
+import { computed, nextTick, onScopeDispose, reactive, ref, watch } from 'vue'
+import {
+  CameraOutlined,
+  InboxOutlined,
+  LoadingOutlined,
+  ReloadOutlined,
+} from '@ant-design/icons-vue'
 import AppButton from '@shared/web/components/AppButton.vue'
 import type { IdCardRecognitionDto, WorkerDto } from '@/types'
-import { createWorker, enrollWorkerFace, recognizeIdCard } from '@/api/modules/aiMeeting'
+import {
+  createWorker,
+  enrollWorkerFace,
+  getWorkers,
+  recognizeIdCard,
+} from '@/api/modules/aiMeeting'
+import { extractErrorMessage } from '@/utils/audioToWav'
 import { useCamera } from '../composables/useCamera'
 
 const props = defineProps<{ open: boolean }>()
@@ -127,36 +209,44 @@ const emit = defineEmits<{
   'enrolled': [worker: WorkerDto]
 }>()
 
-type CameraMode = 'idcard' | 'face' | null
-
-const cameraMode = ref<CameraMode>(null)
 const videoRef = ref<HTMLVideoElement | null>(null)
-const { stream, error, start, stop, capturePhoto } = useCamera()
+const { stream, error, starting, start, stop, capturePhoto } = useCamera()
+
 const idCardLoading = ref(false)
 const faceLoading = ref(false)
 const submitting = ref(false)
-const idCard = ref<IdCardRecognitionDto | null>(null)
 const idCardPreview = ref<string | null>(null)
 const facePreview = ref<string | null>(null)
 const facePhoto = ref<Blob | null>(null)
 const enrolled = ref<WorkerDto | null>(null)
-const form = ref({ name: '', team: '' })
+const duplicate = ref(false)
+const existingWorker = ref<WorkerDto | null>(null)
+const submitError = ref('')
+
+const form = reactive({
+  name: '',
+  idCardNumber: '',
+  nation: '',
+  gender: '',
+  team: '',
+  unit: '',
+  job: '',
+})
 
 const canSubmit = computed(() =>
-  Boolean(form.value.name.trim() && (idCard.value?.idCardNumber || idCardPreview.value) && facePhoto.value),
+  Boolean(
+    form.name.trim()
+    && form.idCardNumber.trim()
+    && facePhoto.value,
+  ),
 )
 
 watch(
   () => props.open,
   (open) => {
     if (open) {
-      cameraMode.value = null
-      idCard.value = null
-      idCardPreview.value = null
-      facePreview.value = null
-      facePhoto.value = null
-      enrolled.value = null
-      form.value = { name: '', team: '' }
+      reset()
+      void start()
     } else {
       stop()
     }
@@ -175,59 +265,25 @@ watch(stream, async (s) => {
       // 自动播放被拦截时等待用户手势
     }
   }
+  await waitForVideoReady()
+  await captureFace()
 })
 
 onScopeDispose(() => stop())
 
-async function toggleCamera(mode: Exclude<CameraMode, null>): Promise<void> {
-  if (cameraMode.value === mode) {
-    cameraMode.value = null
-    stop()
-    return
-  }
-  cameraMode.value = mode
-  if (!stream.value) {
-    await start()
+async function waitForVideoReady(): Promise<void> {
+  for (let i = 0; i < 20; i++) {
+    if (videoRef.value && videoRef.value.videoWidth > 0) return
+    await new Promise((resolve) => setTimeout(resolve, 200))
   }
 }
 
-async function onUploadIdCard(file: File): Promise<boolean> {
-  idCardLoading.value = true
-  try {
-    idCardPreview.value = await blobToDataUrl(file)
-    idCard.value = await recognizeIdCard(file)
-    form.value.name = idCard.value.name
-  } catch {
-    idCard.value = null
-  } finally {
-    idCardLoading.value = false
-  }
-  return false
-}
-
-async function onCaptureIdCard(): Promise<void> {
+async function captureFace(): Promise<void> {
   if (!stream.value) {
     const ok = await start()
     if (!ok) return
-  }
-  if (!videoRef.value) return
-  idCardLoading.value = true
-  try {
-    const photo = await capturePhoto(videoRef.value)
-    idCardPreview.value = await blobToDataUrl(photo)
-    idCard.value = await recognizeIdCard(photo)
-    form.value.name = idCard.value.name
-  } catch {
-    idCard.value = null
-  } finally {
-    idCardLoading.value = false
-  }
-}
-
-async function onCaptureFace(): Promise<void> {
-  if (!stream.value) {
-    const ok = await start()
-    if (!ok) return
+    await nextTick()
+    await waitForVideoReady()
   }
   if (!videoRef.value) return
   faceLoading.value = true
@@ -235,23 +291,88 @@ async function onCaptureFace(): Promise<void> {
     const photo = await capturePhoto(videoRef.value)
     facePhoto.value = photo
     facePreview.value = await blobToDataUrl(photo)
+  } catch (err) {
+    submitError.value = `截图失败：${extractErrorMessage(err)}`
   } finally {
     faceLoading.value = false
+  }
+}
+
+async function captureIdCardFromCamera(): Promise<void> {
+  if (!stream.value) {
+    const ok = await start()
+    if (!ok) return
+    await nextTick()
+    await waitForVideoReady()
+  }
+  if (!videoRef.value) return
+  idCardLoading.value = true
+  try {
+    const photo = await capturePhoto(videoRef.value)
+    idCardPreview.value = await blobToDataUrl(photo)
+    await recognizeAndFill(photo)
+  } catch (err) {
+    submitError.value = `身份证识别失败：${extractErrorMessage(err)}`
+  } finally {
+    idCardLoading.value = false
+  }
+}
+
+async function onUploadIdCard(file: File): Promise<boolean> {
+  idCardLoading.value = true
+  submitError.value = ''
+  try {
+    idCardPreview.value = await blobToDataUrl(file)
+    await recognizeAndFill(file)
+  } catch (err) {
+    idCardPreview.value = null
+    submitError.value = `身份证识别失败：${extractErrorMessage(err)}`
+  } finally {
+    idCardLoading.value = false
+  }
+  return false
+}
+
+async function recognizeAndFill(image: Blob): Promise<void> {
+  const dto: IdCardRecognitionDto = await recognizeIdCard(image)
+  form.name = dto.name || form.name
+  form.idCardNumber = dto.idCardNumber || form.idCardNumber
+  form.nation = dto.nation || form.nation
+  form.gender = dto.gender || form.gender
+  await checkDuplicate(form.idCardNumber)
+}
+
+async function checkDuplicate(employeeNo: string): Promise<void> {
+  duplicate.value = false
+  existingWorker.value = null
+  if (!employeeNo) return
+  try {
+    const workers = await getWorkers()
+    const found = workers.find((worker) => worker.employeeNo === employeeNo)
+    if (found) {
+      duplicate.value = true
+      existingWorker.value = found
+    }
+  } catch {
+    // 读取历史工人失败时不影响录入流程
   }
 }
 
 async function onSubmit(): Promise<void> {
   if (!canSubmit.value || !facePhoto.value) return
   submitting.value = true
+  submitError.value = ''
   try {
     const worker = await createWorker({
-      name: form.value.name.trim(),
-      employeeNo: idCard.value?.idCardNumber || `TMP-${Date.now()}`,
-      team: form.value.team.trim(),
+      name: form.name.trim(),
+      employeeNo: form.idCardNumber.trim(),
+      team: form.team.trim(),
     })
     await enrollWorkerFace(worker.id, facePhoto.value)
     enrolled.value = { ...worker, faceStatus: 'enrolled' }
     emit('enrolled', enrolled.value)
+  } catch (err) {
+    submitError.value = extractErrorMessage(err)
   } finally {
     submitting.value = false
   }
@@ -259,7 +380,31 @@ async function onSubmit(): Promise<void> {
 
 function onResetIdCard(): void {
   idCardPreview.value = null
-  idCard.value = null
+  form.name = ''
+  form.idCardNumber = ''
+  form.nation = ''
+  form.gender = ''
+  duplicate.value = false
+  existingWorker.value = null
+}
+
+function reset(): void {
+  idCardPreview.value = null
+  facePreview.value = null
+  facePhoto.value = null
+  enrolled.value = null
+  duplicate.value = false
+  existingWorker.value = null
+  submitError.value = ''
+  Object.assign(form, {
+    name: '',
+    idCardNumber: '',
+    nation: '',
+    gender: '',
+    team: '',
+    unit: '',
+    job: '',
+  })
 }
 
 function blobToDataUrl(blob: Blob): Promise<string> {
@@ -279,8 +424,17 @@ function onClose(): void {
 <style scoped lang="less">
 @import '@shared/web/styles/variables.less';
 
+:deep(.ant-drawer-content-wrapper) {
+  max-width: 100%;
+}
+
+.worker-enroll {
+  display: flex;
+  flex-direction: column;
+  gap: @spacing-lg;
+}
 .worker-enroll__section {
-  margin-bottom: @spacing-xl;
+  min-width: 0;
 }
 .worker-enroll__section-title {
   font-size: @font-size-sm;
@@ -288,34 +442,34 @@ function onClose(): void {
   color: @text-secondary;
   margin-bottom: @spacing-sm;
 }
+.worker-enroll__camera {
+  position: relative;
+  min-height: 220px;
+  background: #000;
+  border-radius: @radius-base;
+  overflow: hidden;
+}
 .worker-enroll__video {
   width: 100%;
-  border-radius: @radius-base;
-  margin-bottom: @spacing-md;
+  height: 260px;
+  object-fit: cover;
+  display: block;
 }
-.worker-enroll__fields {
-  margin-top: @spacing-md;
-  padding: @spacing-sm @spacing-md;
+.worker-enroll__camera-hint {
+  height: 260px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: @text-tertiary;
   background: @content-bg;
-  border-radius: @radius-base;
-
-  > div {
-    display: flex;
-    gap: @spacing-sm;
-    padding: @spacing-xs 0;
-    font-size: @font-size-sm;
-
-    span {
-      flex: 0 0 72px;
-      color: @text-secondary;
-    }
-  }
+}
+.worker-enroll__camera-actions {
+  position: absolute;
+  left: @spacing-sm;
+  bottom: @spacing-sm;
 }
 .worker-enroll__upload {
-  margin-bottom: @spacing-md;
-
   :deep(.ant-upload-drag) {
-    width: 100%;
     height: auto;
     aspect-ratio: 1.7778;
     padding: 0 @spacing-md;
@@ -335,35 +489,165 @@ function onClose(): void {
     font-size: @font-size-sm;
   }
   :deep(.ant-upload-hint) {
-    display: none;
+    font-size: @font-size-xs;
+    color: @text-tertiary;
+    white-space: normal;
   }
 }
-.worker-enroll__camera-link {
-  margin-bottom: @spacing-md;
+.worker-enroll__id-preview {
+  position: relative;
+  border-radius: @radius-base;
+  overflow: hidden;
+  background: @content-bg;
 }
-.worker-enroll__preview {
+.worker-enroll__id-img {
+  width: 100%;
+  height: 260px;
+  object-fit: contain;
+  display: block;
+  background: @content-bg;
+}
+.worker-enroll__reupload {
+  position: absolute;
+  top: @spacing-sm;
+  right: @spacing-sm;
+  color: #fff;
+  background: color-mix(in srgb, #000 45%, transparent);
+  border: none;
+  border-radius: @radius-sm;
+  padding: 2px @spacing-sm;
+  font-size: @font-size-xs;
+
+  &:hover {
+    background: color-mix(in srgb, #000 60%, transparent);
+  }
+}
+.worker-enroll__img-mask {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: @spacing-sm;
+  color: #fff;
+  background: color-mix(in srgb, #000 45%, transparent);
+  font-size: @font-size-sm;
+}
+.worker-enroll__loading {
   display: flex;
   align-items: center;
   gap: @spacing-sm;
+  color: @text-secondary;
+  font-size: @font-size-sm;
   margin-bottom: @spacing-md;
 }
-.worker-enroll__preview-img {
-  width: 96px;
-  height: 60px;
-  object-fit: cover;
+.worker-enroll__photos {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: @spacing-md;
+  margin-bottom: @spacing-md;
+}
+.worker-enroll__photo {
+  position: relative;
   border-radius: @radius-base;
-  border: 1px solid @border-color;
+  overflow: hidden;
+  background: @content-bg;
+  min-height: 130px;
+
+  &--face {
+    cursor: pointer;
+  }
+}
+.worker-enroll__photo-label {
+  display: flex;
+  align-items: center;
+  gap: @spacing-xs;
+  font-size: @font-size-xs;
+  color: @text-secondary;
+  padding: @spacing-xs @spacing-sm;
+  background: @bg-elevated;
+  border-bottom: 1px solid @divider-color;
+}
+.worker-enroll__retake-tip {
+  margin-left: auto;
+  color: @brand-primary;
+  font-weight: @font-weight-medium;
+}
+.worker-enroll__photo-img {
+  width: 100%;
+  height: 170px;
+  object-fit: cover;
+  display: block;
+}
+.worker-enroll__photo-empty {
+  height: 170px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: @spacing-xs;
+  color: @text-tertiary;
+  font-size: @font-size-xs;
+
+  .anticon {
+    font-size: 24px;
+  }
 }
 .worker-enroll__form {
-  margin-top: @spacing-sm;
+  margin-bottom: @spacing-sm;
+
+  :deep(.ant-form-item) {
+    margin-bottom: @spacing-sm;
+  }
 }
-.worker-enroll__submit {
-  margin-top: @spacing-sm;
+.worker-enroll__db-info {
+  padding: @spacing-md;
+  background: @content-bg;
+  border-radius: @radius-base;
 }
-.worker-enroll__done {
-  margin-top: @spacing-md;
+.worker-enroll__db-title {
+  font-size: @font-size-xs;
+  color: @text-secondary;
+  margin-bottom: @spacing-sm;
 }
-.worker-enroll__next {
-  margin-top: @spacing-md;
+.worker-enroll__db-item {
+  display: flex;
+  align-items: center;
+  gap: @spacing-sm;
+  font-size: @font-size-sm;
+  color: @text-primary;
+
+  span {
+    flex: 0 0 40px;
+    color: @text-secondary;
+  }
+}
+.worker-enroll__section--footer {
+  padding-top: @spacing-md;
+  border-top: 1px solid @divider-color;
+}
+.worker-enroll__alert {
+  margin-bottom: @spacing-md;
+}
+.worker-enroll__actions {
+  display: flex;
+  gap: @spacing-sm;
+
+  > * {
+    flex: 1;
+  }
+}
+
+@media (max-width: 520px) {
+  .worker-enroll__video,
+  .worker-enroll__camera-hint {
+    height: 200px;
+  }
+  .worker-enroll__id-img {
+    height: 200px;
+  }
+  .worker-enroll__photos {
+    grid-template-columns: 1fr;
+  }
 }
 </style>
