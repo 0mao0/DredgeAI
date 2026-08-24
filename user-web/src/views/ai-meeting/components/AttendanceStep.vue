@@ -96,7 +96,8 @@ watch(stream, async (s) => {
 async function startScanning(): Promise<void> {
   const token = ++scanToken
   scanning.value = true
-  while (scanning.value && token === scanToken) {
+  while (scanning.value) {
+    if (token !== scanToken) break
     if (!videoRef.value || !stream.value || !videoRef.value.videoWidth) {
       await new Promise((r) => setTimeout(r, 1000))
       continue
