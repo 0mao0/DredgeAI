@@ -28,10 +28,8 @@
       <SpeechPlayer :text="speechText" auto-play />
     </div>
     <div class="attendance-step__actions">
-      <AppButton variant="primary" :loading="loading" @click="onDone">
-        完成点名，进入会议
-      </AppButton>
       <AppButton @click="enrollOpen = true">新人录入</AppButton>
+      <AppButton variant="primary" @click="onDone">下一步</AppButton>
     </div>
     <div v-if="count !== null" class="attendance-step__count">
       已识别 {{ list.length }} 人 · YOLO 目测人数 {{ count }}
