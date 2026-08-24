@@ -76,9 +76,22 @@ public class IrBlockDto
     /// <summary>v2 §4：允许 null；存在时 native 恒 1.0。</summary>
     public double? Confidence { get; set; }
 
+    /// <summary>跨页块每页归一化 bbox（[pageIdx, bbox]），docs-ui 跨页并表/文字高亮与后端溯源展开用。</summary>
+    public List<IrPageBBoxDto>? PageBBoxes { get; set; }
+
+    /// <summary>合并进本块的续块 blockId（跨页段落/表格的后续部分）。</summary>
+    public List<string>? MergedFrom { get; set; }
+
     public IrTableDto? Table { get; set; }
 
     public string? ImgPath { get; set; }
+}
+
+public class IrPageBBoxDto
+{
+    public int PageIdx { get; set; }
+
+    public double[] Bbox { get; set; } = Array.Empty<double>();
 }
 
 public class IrTableDto

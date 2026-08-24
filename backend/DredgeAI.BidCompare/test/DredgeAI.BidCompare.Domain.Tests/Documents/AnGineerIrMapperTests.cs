@@ -1,4 +1,5 @@
 using System.Text.Json.Nodes;
+using System.Linq;
 using DredgeAI.BidCompare.Documents;
 using Shouldly;
 using Xunit;
@@ -62,5 +63,26 @@ public class AnGineerIrMapperTests
         node["blocks"]![2]!["source"]!.GetValue<string>().ShouldBe("ocr");
         node["blocks"]![3]!["source"]!.GetValue<string>().ShouldBe("native");
         node["blocks"]![4]!["source"]?.GetValue<string?>().ShouldBeNull();
+    }
+
+    [Fact]
+    public void Map_Should_Preserve_Cross_Page_BBoxes_And_Merged_From()
+    {
+        // 回归：跨页段落/表格在原始产物中有 page_bboxes + merged_from，
+        // 内部 IR 必须原样保留，否则溯源只能高亮主页面的一小条。
+        var irJson = AnGineerIrMapper.MapToIrJson(SampleIr.ValidGraphJsonl, SampleIr.ValidMetaJson, "doc-a");
+        var node = JsonNode.Parse(irJson)!;
+
+        var block = node["blocks"]![1]!;
+        var pageBBoxes = block["pageBBoxes"]!.AsArray();
+        pageBBoxes.Count.ShouldBe(2);
+        pageBBoxes[0]!["pageIdx"]!.GetValue<int>().ShouldBe(1);
+        pageBBoxes[0]!["bbox"]!.AsArray().Select(x => x!.GetValue<double>())
+            .ShouldBe(new double[] { 0.0672, 0.1188, 0.9244, 0.2969 });
+        pageBBoxes[1]!["pageIdx"]!.GetValue<int>().ShouldBe(2);
+        block["mergedFrom"]!.AsArray().Select(x => x!.GetValue<string>()).ShouldBe(new[] { "b0002-p2" });
+
+        // 无 page_bboxes 的块不应输出空数组，保持 IR 精简
+        node["blocks"]![0]!["pageBBoxes"]?.ShouldBeNull();
     }
 }

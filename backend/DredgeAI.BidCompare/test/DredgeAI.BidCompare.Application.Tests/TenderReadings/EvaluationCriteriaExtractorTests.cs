@@ -43,4 +43,40 @@ public class EvaluationCriteriaExtractorTests : BidCompareApplicationTestBase<Bi
         source.PageIdx.ShouldBe(3);
         source.Bbox.ShouldBe(new[] { 0.08, 0.2, 0.92, 0.7 });
     }
+
+    [Fact]
+    public async Task Extract_Should_Expand_Cross_Page_Block_Into_One_Ref_Per_Page()
+    {
+        // 回归：跨页段落（4.2 修改与撤回）原始产物带 pageBBoxes（第12页底部 + 第13页顶部），
+        // 修复前只取主 bbox，跨页部分无高亮；修复后按每页展开一条溯源。
+        var llm = (FakeLlmGateway)GetRequiredService<ILlmGateway>();
+        var extractor = GetRequiredService<EvaluationCriteriaExtractor>();
+
+        const string irJson =
+            "{\"blocks\":[" +
+            "{\"blockId\":\"b1\",\"type\":\"title\",\"pageIdx\":2,\"bbox\":[0.1,0.1,0.9,0.15],\"text\":\"投标文件\"}," +
+            "{\"blockId\":\"b2\",\"type\":\"para\",\"pageIdx\":12,\"bbox\":[0.179,0.897,0.853,0.913]," +
+            "\"text\":\"4.2 投标文件的修改与撤回：投标截止时间之前，投标人可对所递交的投标文件进行修改或撤回，但所递交的修改或撤回通知必须按招标文件的规定进行编制、密封、标志（在包封上标明修改或撤回字样，并注明修改或撤回的时间）和递交。投标截止时间之后，投标人不得修改或撤回投标文件。\"," +
+            "\"pageBBoxes\":[" +
+            "{\"pageIdx\":12,\"bbox\":[0.179,0.897,0.853,0.913]}," +
+            "{\"pageIdx\":13,\"bbox\":[0.142,0.083,0.855,0.152]}" +
+            "]}" +
+            "]}";
+        using var ir = JsonDocument.Parse(irJson);
+
+        llm.QueueResponse(
+            "[{\"fieldKey\":\"reject_4_2\",\"value\":{\"clause\":\"投标文件的修改与撤回\"}," +
+            "\"rawText\":\"4.2 投标文件的修改与撤回：投标截止时间之前，投标人可对所递交的投标文件进行修改或撤回\"}]");
+
+        var drafts = await extractor.ExtractAsync(
+            new BaselineExtractionContext(Guid.NewGuid(), ir.RootElement));
+
+        var draft = drafts.ShouldHaveSingleItem();
+        draft.SourceRefs.Count.ShouldBe(2);
+        draft.SourceRefs[0].BlockId.ShouldBe("b2");
+        draft.SourceRefs[0].PageIdx.ShouldBe(12);
+        draft.SourceRefs[0].Bbox.ShouldBe(new[] { 0.179, 0.897, 0.853, 0.913 });
+        draft.SourceRefs[1].PageIdx.ShouldBe(13);
+        draft.SourceRefs[1].Bbox.ShouldBe(new[] { 0.142, 0.083, 0.855, 0.152 });
+    }
 }

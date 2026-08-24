@@ -55,6 +55,23 @@ public static class AnGineerIrMapper
                 ["source"] = NormalizeSource(node.Source), // v2 §4：AnGIneer 原始取值归一化为 native|ocr（text→native、formula/table→对应识别途径）
                 ["confidence"] = node.Confidence
             };
+            // 跨页/合并块保留每页 bbox 与合并来源：docs-ui 靠 page_bboxes 做跨页并表/文字的完整高亮，
+            // 后端溯源按此展开为每页一条 SourceRef，否则跨页内容只能高亮主页面的一小条。
+            if (node.PageBBoxes is { Count: > 0 })
+            {
+                block["pageBBoxes"] = node.PageBBoxes
+                    .Where(p => p.Bbox is { Length: 4 })
+                    .Select(p => new Dictionary<string, object?>
+                    {
+                        ["pageIdx"] = p.PageIdx,
+                        ["bbox"] = p.Bbox
+                    })
+                    .ToList();
+            }
+            if (node.MergedFrom is { Count: > 0 })
+            {
+                block["mergedFrom"] = node.MergedFrom;
+            }
             if (type == "table")
             {
                 block["table"] = new Dictionary<string, object?>
@@ -161,6 +178,15 @@ public static class AnGineerIrMapper
         [JsonPropertyName("source")] public string? Source { get; set; }
         // 保留原始数字 token（1.0 不折叠成 1），与内部适配 IR 样例一致
         [JsonPropertyName("confidence")] public JsonElement? Confidence { get; set; }
+        [JsonPropertyName("page_bboxes")] public List<PageBBox>? PageBBoxes { get; set; }
+        [JsonPropertyName("merged_from")] public List<string>? MergedFrom { get; set; }
+    }
+
+    private class PageBBox
+    {
+        [JsonPropertyName("page_idx")] public int PageIdx { get; set; }
+
+        [JsonPropertyName("bbox")] public double[]? Bbox { get; set; }
     }
 
     private class OutlineNode

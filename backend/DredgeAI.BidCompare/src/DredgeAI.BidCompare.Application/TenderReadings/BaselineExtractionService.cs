@@ -3,6 +3,7 @@ using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
+using System.Text;
 using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
@@ -84,12 +85,7 @@ public class BaselineExtractionService : ITransientDependency
             return;
         }
 
-        string irJson;
-        await using (var stream = await _fileStorage.GetAsync(doc.IrStorageKey, cancellationToken))
-        using (var reader = new StreamReader(stream))
-        {
-            irJson = await reader.ReadToEndAsync(cancellationToken);
-        }
+        var irJson = await LoadIrWithPageBBoxesAsync(doc, cancellationToken);
 
         task.StartExtracting();
         await _taskRepository.UpdateAsync(task, autoSave: true, cancellationToken: cancellationToken);
@@ -225,12 +221,7 @@ public class BaselineExtractionService : ITransientDependency
             return;
         }
 
-        string irJson;
-        await using (var stream = await _fileStorage.GetAsync(doc.IrStorageKey, cancellationToken))
-        using (var reader = new StreamReader(stream))
-        {
-            irJson = await reader.ReadToEndAsync(cancellationToken);
-        }
+        var irJson = await LoadIrWithPageBBoxesAsync(doc, cancellationToken);
 
         task.StartExtracting();
         await _taskRepository.UpdateAsync(task, autoSave: true, cancellationToken: cancellationToken);
@@ -403,5 +394,126 @@ public class BaselineExtractionService : ITransientDependency
         {
             // 不影响字段落库
         }
+    }
+
+    /// <summary>
+    /// 读取文档 IR；若为旧版（块缺少 pageBBoxes）且留档了 AnGIneer 原始图数据，
+    /// 则用新映射重生成并写回，使跨页段落/表格的溯源能按每页展开。
+    /// </summary>
+    private async Task<string> LoadIrWithPageBBoxesAsync(
+        TenderReadingDocument doc,
+        CancellationToken cancellationToken)
+    {
+        string irJson;
+        await using (var stream = await _fileStorage.GetAsync(doc.IrStorageKey!, cancellationToken))
+        using (var reader = new StreamReader(stream))
+        {
+            irJson = await reader.ReadToEndAsync(cancellationToken);
+        }
+
+        if (!NeedsPageBBoxesBackfill(irJson) || !TryGetRawPrefix(doc.IrStorageKey!, out var prefix))
+        {
+            return irJson;
+        }
+
+        try
+        {
+            var upgraded = await TryUpgradeIrFromRawAsync(prefix, doc, cancellationToken);
+            if (upgraded != null)
+            {
+                await _fileStorage.UploadAsync(
+                    doc.IrStorageKey!,
+                    new MemoryStream(Encoding.UTF8.GetBytes(upgraded)),
+                    "application/json",
+                    cancellationToken);
+                return upgraded;
+            }
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            _logger.LogWarning(ex, "旧 IR 缺少跨页 bbox，回填失败，继续使用原 IR 提取（任务 {TaskId}）", doc.TaskId);
+        }
+
+        return irJson;
+    }
+
+    /// <summary>旧版 IR 的特征：blocks 里没有任何块带 pageBBoxes。</summary>
+    private static bool NeedsPageBBoxesBackfill(string irJson)
+    {
+        try
+        {
+            using var document = JsonDocument.Parse(irJson);
+            if (!document.RootElement.TryGetProperty("blocks", out var blocks)
+                || blocks.ValueKind != JsonValueKind.Array)
+            {
+                return false;
+            }
+
+            foreach (var block in blocks.EnumerateArray())
+            {
+                if (block.TryGetProperty("pageBBoxes", out var pageBBoxes)
+                    && pageBBoxes.ValueKind == JsonValueKind.Array)
+                {
+                    return false;
+                }
+            }
+
+            return true;
+        }
+        catch (JsonException)
+        {
+            return false;
+        }
+    }
+
+    private static bool TryGetRawPrefix(string irStorageKey, out string prefix)
+    {
+        const string suffix = "/ir.json";
+        if (irStorageKey.EndsWith(suffix, StringComparison.Ordinal) && irStorageKey.Length > suffix.Length)
+        {
+            prefix = irStorageKey[..^suffix.Length];
+            return true;
+        }
+
+        prefix = string.Empty;
+        return false;
+    }
+
+    private async Task<string?> TryUpgradeIrFromRawAsync(
+        string prefix,
+        TenderReadingDocument doc,
+        CancellationToken cancellationToken)
+    {
+        string graphJsonl;
+        try
+        {
+            await using (var stream = await _fileStorage.GetAsync($"{prefix}/raw/doc_blocks_graph.jsonl", cancellationToken))
+            using (var reader = new StreamReader(stream))
+            {
+                graphJsonl = await reader.ReadToEndAsync(cancellationToken);
+            }
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            _logger.LogInformation("旧 IR 回填跳过：缺少 doc_blocks_graph.jsonl（任务 {TaskId}）：{Message}", doc.TaskId, ex.Message);
+            return null;
+        }
+
+        string metaJson;
+        try
+        {
+            await using (var stream = await _fileStorage.GetAsync($"{prefix}/raw/doc_blocks_graph_meta.json", cancellationToken))
+            using (var reader = new StreamReader(stream))
+            {
+                metaJson = await reader.ReadToEndAsync(cancellationToken);
+            }
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            _logger.LogInformation("旧 IR 回填跳过：缺少 doc_blocks_graph_meta.json（任务 {TaskId}）：{Message}", doc.TaskId, ex.Message);
+            return null;
+        }
+
+        return AnGineerIrMapper.MapToIrJson(graphJsonl, metaJson, doc.Id.ToString());
     }
 }

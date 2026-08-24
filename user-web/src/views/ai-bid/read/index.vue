@@ -159,7 +159,7 @@
             header-title="招标文件"
             :page="pdfPage"
             :high="pdfHighlights"
-            :active-highlight-id="selectedFieldId || undefined"
+            :active-highlight-id="(activePdfHighlightId ?? selectedFieldId) || undefined"
             hide-original-label
             show-side-panel-toggle
             :side-panel-open="pdfSidePanelOpen"
@@ -468,6 +468,8 @@ const exporting = ref(false)
 const pdfPage = ref(1)
 const pdfHighlights = ref<BlockRange[]>([])
 const selectedFieldId = ref('')
+/** 点具体溯源圆圈时锁定到该条（跨页字段其余页仍高亮，但居中定位到所点页）；清空则回退到字段首条 */
+const activePdfHighlightId = ref<string | null>(null)
 /** 默认仅展开「项目信息」，其余分类折叠，保持基准库界面整洁 */
 const activeCategoryKeys = ref<BaselineCategory[]>(['project_info'])
 const activeCategory = computed(() => activeCategoryKeys.value[0] ?? 'project_info')
@@ -796,6 +798,7 @@ function backToUpload(): void {
   parsedDocument.value = null
   pdfHighlights.value = []
   selectedFieldId.value = ''
+  activePdfHighlightId.value = null
   void router.replace({ query: {} })
 }
 
@@ -804,6 +807,7 @@ async function loadDetail(id: string): Promise<void> {
   baselineLoading.value = true
   pdfHighlights.value = []
   selectedFieldId.value = ''
+  activePdfHighlightId.value = null
   try {
     const [taskDto, docList] = await Promise.all([
       getTenderReadTask(id, true),
@@ -1084,16 +1088,24 @@ function formatValue(value: unknown): string {
 
 function locateField(field: BaselineField): void {
   selectedFieldId.value = field.id
+  activePdfHighlightId.value = null
   pdfHighlights.value = field.sourceRefs.map(sourceRefToBlockRange)
   activeCategoryKeys.value = [...new Set([...activeCategoryKeys.value, field.category])]
   const first = field.sourceRefs[0]
   if (first) pdfPage.value = first.pageIdx + 1
 }
 
-/** 点击引用圆圈：只定位到该条溯源（页码 + 对应 bbox 高亮） */
+/**
+ * 点击引用圆圈：高亮该字段全部溯源（跨页段落每页一段都画框），
+ * 页码跳转到所点条目，并把居中定位锁定到该条，避免被字段首条抢走视口。
+ */
 function locateSource(source: SourceRef): void {
+  const field = baseline.value.find((f) => f.id === source.fieldId)
+  if (!field) return
   selectedFieldId.value = source.fieldId
-  pdfHighlights.value = [sourceRefToBlockRange(source)]
+  pdfHighlights.value = field.sourceRefs.map(sourceRefToBlockRange)
+  const index = field.sourceRefs.findIndex((s) => s === source)
+  activePdfHighlightId.value = index >= 0 ? `${field.id}-${index}` : null
   pdfPage.value = source.pageIdx + 1
 }
 
@@ -1103,6 +1115,7 @@ function autoHighlightFirstField(): void {
   if (field) {
     // 仅设置高亮与页码，不展开其所在分类（保持默认只展开「项目信息」）
     selectedFieldId.value = field.id
+    activePdfHighlightId.value = null
     pdfHighlights.value = field.sourceRefs.map(sourceRefToBlockRange)
     const first = field.sourceRefs[0]
     if (first) pdfPage.value = first.pageIdx + 1
@@ -1245,6 +1258,7 @@ async function reExtractCategory(category: BaselineCategory): Promise<void> {
     task.value = await reExtractTenderReadBaseline(task.value.id, category)
     selectedFieldId.value = ''
     pdfHighlights.value = []
+    activePdfHighlightId.value = null
     message.success('已提交重新抽取，完成后自动刷新')
   } catch (error) {
     reExtracting.value = false
@@ -1261,6 +1275,7 @@ async function onRecoverExtract(): Promise<void> {
     parsedStuck.value = false
     selectedFieldId.value = ''
     pdfHighlights.value = []
+    activePdfHighlightId.value = null
     message.success('已提交整体重解，完成后自动刷新')
   } catch (error) {
     message.error(error instanceof Error ? error.message : '整体重解提交失败')

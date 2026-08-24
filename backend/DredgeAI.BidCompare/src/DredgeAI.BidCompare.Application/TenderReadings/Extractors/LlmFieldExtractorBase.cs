@@ -16,6 +16,9 @@ public abstract class LlmFieldExtractorBase
 {
     private const int MaxDocumentChars = 100_000;
 
+    /// <summary>单个字段最多落库的溯源锚点数；跨页块会按每页展开，需要上限防止锚点爆炸。</summary>
+    private const int MaxSourceRefsPerField = 6;
+
     protected LlmFieldExtractorBase(ILlmGateway llmGateway)
     {
         LlmGateway = llmGateway;
@@ -197,19 +200,149 @@ public abstract class LlmFieldExtractorBase
 
         var bestScore = scored.Max(x => x.Score);
         var threshold = Math.Max(12, bestScore * 3 / 4);
-        return scored
+        var selected = scored
             .Where(x => x.Score >= threshold)
             .OrderByDescending(x => x.Score)
             .ThenBy(x => GetBlockInt(x.Block, "pageIdx"))
-            .Take(3)
-            .Select(x => new SourceMapItemDraft
+            .Take(3);
+
+        foreach (var (_, block, excerpt) in selected)
+        {
+            result.AddRange(ExpandPageRects(block, excerpt));
+            if (result.Count >= MaxSourceRefsPerField)
             {
-                BlockId = GetBlockString(x.Block, "blockId") ?? string.Empty,
-                PageIdx = GetBlockInt(x.Block, "pageIdx"),
-                Bbox = ReadBbox(x.Block),
-                Text = x.Excerpt
-            })
-            .ToList();
+                break;
+            }
+        }
+
+        return result;
+    }
+
+    /// <summary>
+    /// 将命中块展开为溯源锚点：优先 pageBBoxes（跨页块每页一段），
+    /// 其次 mergedBBoxes（合并块，沿用所在页），最后回退单 bbox。
+    /// </summary>
+    private static List<SourceMapItemDraft> ExpandPageRects(JsonElement block, string excerpt)
+    {
+        var blockId = GetBlockString(block, "blockId") ?? string.Empty;
+        var drafts = new List<SourceMapItemDraft>();
+        var seen = new HashSet<string>();
+
+        void Add(int pageIdx, double[] bbox)
+        {
+            if (bbox.Length != 4 || !seen.Add($"{pageIdx}|{string.Join(",", bbox)}"))
+            {
+                return;
+            }
+
+            drafts.Add(new SourceMapItemDraft
+            {
+                BlockId = blockId,
+                PageIdx = pageIdx,
+                Bbox = bbox,
+                Text = excerpt
+            });
+        }
+
+        var pageBBoxes = ReadPageBBoxes(block);
+        if (pageBBoxes.Count > 0)
+        {
+            foreach (var (pageIdx, bbox) in pageBBoxes)
+            {
+                Add(pageIdx, bbox);
+            }
+
+            return drafts;
+        }
+
+        var mergedBBoxes = ReadMergedBBoxes(block);
+        if (mergedBBoxes.Count > 0)
+        {
+            var pageIdx = GetBlockInt(block, "pageIdx");
+            foreach (var bbox in mergedBBoxes)
+            {
+                Add(pageIdx, bbox);
+            }
+
+            return drafts;
+        }
+
+        Add(GetBlockInt(block, "pageIdx"), ReadBbox(block));
+        return drafts;
+    }
+
+    /// <summary>读取块 pageBBoxes：[{pageIdx, bbox}, ...]，跨页段落/表格每页一段。</summary>
+    private static List<(int PageIdx, double[] Bbox)> ReadPageBBoxes(JsonElement block)
+    {
+        var result = new List<(int, double[])>();
+        if (!block.TryGetProperty("pageBBoxes", out var pageBBoxes) || pageBBoxes.ValueKind != JsonValueKind.Array)
+        {
+            return result;
+        }
+
+        var fallbackPageIdx = GetBlockInt(block, "pageIdx");
+        foreach (var entry in pageBBoxes.EnumerateArray())
+        {
+            if (entry.ValueKind != JsonValueKind.Object)
+            {
+                continue;
+            }
+
+            var pageIdx = entry.TryGetProperty("pageIdx", out var pageIdxEl) && pageIdxEl.ValueKind == JsonValueKind.Number
+                ? pageIdxEl.GetInt32()
+                : fallbackPageIdx;
+            var bbox = ReadBbox(entry);
+            if (bbox.Length == 4)
+            {
+                result.Add((pageIdx, bbox));
+            }
+        }
+
+        return result;
+    }
+
+    /// <summary>读取块 mergedBBoxes（并表/合并块多个矩形），沿用块所在页。</summary>
+    private static List<double[]> ReadMergedBBoxes(JsonElement block)
+    {
+        var result = new List<double[]>();
+        if (!block.TryGetProperty("mergedBBoxes", out var merged) || merged.ValueKind != JsonValueKind.Array)
+        {
+            return result;
+        }
+
+        foreach (var item in merged.EnumerateArray())
+        {
+            var bbox = ReadRawBbox(item);
+            if (bbox.Length == 4)
+            {
+                result.Add(bbox);
+            }
+        }
+
+        return result;
+    }
+
+    /// <summary>读取裸 bbox 数组 [x0,y0,x1,y1]（mergedBBoxes 的每个元素），也兼容 {bbox:[...]} 对象。</summary>
+    private static double[] ReadRawBbox(JsonElement value)
+    {
+        if (value.ValueKind == JsonValueKind.Object && value.TryGetProperty("bbox", out var bboxProp))
+        {
+            return ReadBbox(value);
+        }
+
+        if (value.ValueKind != JsonValueKind.Array || value.GetArrayLength() != 4)
+        {
+            return Array.Empty<double>();
+        }
+
+        var values = new double[4];
+        var i = 0;
+        foreach (var item in value.EnumerateArray())
+        {
+            values[i++] = item.ValueKind == JsonValueKind.Number ? item.GetDouble() : 0;
+        }
+
+        return values;
     }
 
     /// <summary>块的可检索文本与摘录：正文优先；表格块（text 为空）回退到去标签后的单元格文本。</summary>
