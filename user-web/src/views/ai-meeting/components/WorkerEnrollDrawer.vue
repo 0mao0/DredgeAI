@@ -247,6 +247,20 @@ async function onCaptureFace(): Promise<void> {
   }
 }
 
+function onResetIdCard(): void {
+  idCardPreview.value = null
+  idCard.value = null
+}
+
+function blobToDataUrl(blob: Blob): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader()
+    reader.onload = () => resolve(reader.result as string)
+    reader.onerror = () => reject(reader.error)
+    reader.readAsDataURL(blob)
+  })
+}
+
 function onClose(): void {
   emit('update:open', false)
 }
@@ -287,20 +301,6 @@ function onClose(): void {
 }
 .worker-enroll__next {
   margin-top: @spacing-lg;
-}
-
-function onResetIdCard(): void {
-  idCardPreview.value = null
-  idCard.value = null
-}
-
-function blobToDataUrl(blob: Blob): Promise<string> {
-  return new Promise((resolve, reject) => {
-    const reader = new FileReader()
-    reader.onload = () => resolve(reader.result as string)
-    reader.onerror = () => reject(reader.error)
-    reader.readAsDataURL(blob)
-  })
 }
 .worker-enroll__divider {
   text-align: center;
