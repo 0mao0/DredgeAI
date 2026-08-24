@@ -29,6 +29,7 @@
 
     <template v-if="step === 0">
       <a-upload-dragger
+        v-if="!showCameraIdCard"
         accept="image/*"
         :show-upload-list="false"
         :before-upload="onUploadIdCard"
