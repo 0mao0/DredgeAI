@@ -250,6 +250,24 @@ function onClose(): void {
 }
 .worker-enroll__upload {
   margin-bottom: @spacing-md;
+
+  :deep(.ant-upload-drag) {
+    padding: @spacing-sm @spacing-md;
+  }
+  :deep(.ant-upload-drag-icon) {
+    margin-bottom: @spacing-xs;
+
+    .anticon {
+      font-size: 26px;
+    }
+  }
+  :deep(.ant-upload-text) {
+    font-size: @font-size-sm;
+  }
+  :deep(.ant-upload-hint) {
+    font-size: @font-size-xs;
+    margin-top: 2px;
+  }
 }
 .worker-enroll__id-ok {
   margin-top: @spacing-md;
