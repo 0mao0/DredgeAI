@@ -6,8 +6,21 @@
                  top_k=30,
                  temperature=0.75,
 -                num_return_sequences=7,
-+                num_return_sequences=2,
++                num_return_sequences=1,
                  num_beams=1,
                  length_penalty=1.0,
                  repetition_penalty=2.0,
                  output_attentions=False,
+@@ -111,5 +111,5 @@
+         sorted_seqs = sorted(seqs, key=lambda i: len(i), reverse=False)
+-        gpt_codes = sorted_seqs[1].unsqueeze(0)  # [1, len]
++        gpt_codes = sorted_seqs[0].unsqueeze(0)  # [1, len]
+         # sorted_len = [len(l) for l in sorted_seqs]
+         # print("---sorted_len:", sorted_len)
+ 
+@@ -151,4 +151,4 @@
+         voc_start_time = time.time()
+-        rec_wavs = self.token2wav.inference(gpt_codes, prompt_mel, n_timesteps=10)
++        rec_wavs = self.token2wav.inference(gpt_codes, prompt_mel, n_timesteps=6)
+         voc_end_time = time.time()
+         voc_dur = voc_end_time - voc_start_time
