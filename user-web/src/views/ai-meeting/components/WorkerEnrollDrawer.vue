@@ -29,7 +29,7 @@
 
     <template v-if="step === 0">
       <a-upload-dragger
-        v-if="!showCameraIdCard"
+        v-if="!showCameraIdCard && !idCardPreview"
         accept="image/*"
         :show-upload-list="false"
         :before-upload="onUploadIdCard"
@@ -42,6 +42,10 @@
         <p class="ant-upload-text">上传身份证照片（点击或拖拽）</p>
         <p class="ant-upload-hint" />
       </a-upload-dragger>
+      <div v-if="idCardPreview" class="worker-enroll__id-preview">
+        <img :src="idCardPreview" class="worker-enroll__id-img" alt="身份证照片">
+        <AppButton size="sm" variant="text" @click="onResetIdCard">重新上传</AppButton>
+      </div>
       <a-button type="link" block class="worker-enroll__camera-link" @click="onShowCamera">
         {{ showCameraIdCard ? '收起摄像头' : '使用摄像头拍摄身份证' }}
       </a-button>
@@ -135,6 +139,7 @@ const { stream, error, start, stop, capturePhoto } = useCamera()
 const idCardLoading = ref(false)
 const faceLoading = ref(false)
 const idCard = ref<IdCardRecognitionDto | null>(null)
+const idCardPreview = ref<string | null>(null)
 const enrolled = ref<WorkerDto | null>(null)
 const form = ref({ name: '', team: '' })
 
@@ -145,6 +150,7 @@ watch(
       step.value = 0
       showCameraIdCard.value = false
       idCard.value = null
+      idCardPreview.value = null
       enrolled.value = null
       form.value = { name: '', team: '' }
     } else {
@@ -186,6 +192,7 @@ async function onShowCamera(): Promise<void> {
 async function onUploadIdCard(file: File): Promise<boolean> {
   idCardLoading.value = true
   try {
+    idCardPreview.value = await blobToDataUrl(file)
     idCard.value = await recognizeIdCard(file)
     form.value.name = idCard.value.name
   } catch {
@@ -205,6 +212,7 @@ async function onCaptureIdCard(): Promise<void> {
   idCardLoading.value = true
   try {
     const photo = await capturePhoto(videoRef.value)
+    idCardPreview.value = await blobToDataUrl(photo)
     idCard.value = await recognizeIdCard(photo)
     form.value.name = idCard.value.name
   } catch {
@@ -280,6 +288,20 @@ function onClose(): void {
 .worker-enroll__next {
   margin-top: @spacing-lg;
 }
+
+function onResetIdCard(): void {
+  idCardPreview.value = null
+  idCard.value = null
+}
+
+function blobToDataUrl(blob: Blob): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader()
+    reader.onload = () => resolve(reader.result as string)
+    reader.onerror = () => reject(reader.error)
+    reader.readAsDataURL(blob)
+  })
+}
 .worker-enroll__divider {
   text-align: center;
   color: @text-tertiary;
@@ -314,6 +336,19 @@ function onClose(): void {
 }
 .worker-enroll__camera-link {
   margin-bottom: @spacing-md;
+}
+.worker-enroll__id-preview {
+  display: flex;
+  align-items: center;
+  gap: @spacing-sm;
+  margin-bottom: @spacing-md;
+}
+.worker-enroll__id-img {
+  width: 96px;
+  height: 60px;
+  object-fit: cover;
+  border-radius: @radius-base;
+  border: 1px solid @border-color;
 }
 .worker-enroll__id-ok {
   margin-top: @spacing-md;
