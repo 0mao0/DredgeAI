@@ -299,6 +299,10 @@ function statusColor(status: MeetingHistoryDto['status']): string {
 <style scoped lang="less">
 @import '@shared/web/styles/variables.less';
 
+.meeting-info-step {
+  // 与 SectionCard 内容区对齐，保证各步骤页宽度一致（以晨会稿页为准）
+  padding: 0 @spacing-xl;
+}
 .meeting-info-step__toolbar {
   display: flex;
   justify-content: flex-end;
