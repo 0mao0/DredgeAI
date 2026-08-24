@@ -44,7 +44,7 @@ AI 晨会模块的模型服务 `services/meeting-bot` 目前是「四合一」�
 
 鉴权：
 
-- 四个模型服务共享 `MEETING_MODEL_KEY`（默认 dev-key），统一校验 `X-Meeting-Bot-Key` 请求头；CosyVoice 的 server.py 需补鉴权依赖。
+- 所有服务（含 meeting-bot 与四个模型服务）统一复用现有 `MEETING_BOT_KEY`（默认 dev-key），校验 `X-Meeting-Bot-Key` 请求头；CosyVoice 的 server.py 需补鉴权依赖。
 - meeting-bot 转发时带同一 key；其他应用带 key 可直接调任意模型服务。
 
 ## 4. 代码布局与组件
@@ -54,18 +54,20 @@ AI 晨会模块的模型服务 `services/meeting-bot` 目前是「四合一」�
 - FastAPI 服务，端口 8102，key 鉴权。
 - `app/engines/sensevoice_asr.py`：funasr `AutoModel(model="iic/SenseVoiceSmall", model_dir=<MODEL_DIR>/SenseVoiceSmall)`；`ASR_DEVICE` 默认 cpu，可切 cuda。
 - 音频工具从 meeting-bot 迁入：`to_wav_16k_mono`（ffmpeg）+ `split_wav_16k_mono`（>50s 切块）。
-- 后处理：剥离 `<|zh|><|NEUTRAL|><|Speech|><|nospeech|>` 等标签，保留正文；无语音返回空文本。
-- `POST /asr`：multipart `audio` → `{text}`；`GET /health` 上报模型加载状态。
+- 后处理：`AutoModel(..., disable_pbar=True)` 只取纯文本（不用时间戳/富输出），剥离 `<|zh|><|NEUTRAL|><|Speech|><|nospeech|>` 等标签；无语音返回空文本。
+- `POST /asr`：multipart `audio` → `{text}`；`GET /health` 上报模型加载状态；推理端点用同步 `def`（FastAPI 自动进线程池），避免阻塞事件循环。
+- 镜像基座：`nvidia/cuda:12.6.2-cudnn-runtime-ubuntu22.04`（本机 CPU、DGX 可切 GPU）。
 - 依赖：fastapi / uvicorn / pydantic-settings / python-multipart / funasr / torch / torchaudio / numpy；apt 装 ffmpeg。
 
 ### 4.2 services/cosyvoice（新建，代码从 AImodles 复制）
 
 - 把 `D:\AI\AImodles\cosyvoice\server.py`、`voices_config.json` 复制进仓库并改造：
   - 路径改为环境变量：`COSYVOICE_DATA`（资产根）、`MODEL_DIR`（权重）、`VOICES_CONFIG`。
+  - `voices_config.json` 中相对 `wav` 与 `CosyVoice/asset`（含 samples）统一以 `COSYVOICE_DATA` 为根重映射，数据卷挂载保持原相对布局。
   - 补 `X-Meeting-Bot-Key` 鉴权依赖。
   - 默认音色 `zh-male-news`（男声·播报），`TTS_VOICE_ID` 可配置。
 - 保留端点：`/api/tts`、`/api/voices`、`/api/samples/{id}.wav`、`/api/voices/upload`、`/api/health`。
-- CosyVoice 源码放 `services/cosyvoice/third_party/CosyVoice`（gitignore，本地已有 clone），镜像构建时 COPY；依赖按本地 venv 已验证集合裁剪（torch 2.3.1 cu121、torchaudio、transformers、diffusers、librosa、soundfile、numpy、fastapi、uvicorn 等），不装 deepspeed / tensorrt。
+- CosyVoice 源码放 `services/cosyvoice/third_party/CosyVoice`（gitignore，本地已有 clone），镜像构建时 COPY；依赖按本地 venv 已验证集合裁剪（torch 2.3.1 cu121、torchaudio、transformers、diffusers、librosa、soundfile、numpy、fastapi、uvicorn 等），不装 deepspeed / tensorrt；镜像基座 `nvidia/cuda:12.6.2-cudnn-runtime-ubuntu22.04`，apt 装 ffmpeg + libsndfile1（音色上传/试听转码与 loudnorm 依赖）。
 
 ### 4.3 services/insightface（新建，从 meeting-bot 迁移）
 
@@ -86,7 +88,7 @@ AI 晨会模块的模型服务 `services/meeting-bot` 目前是「四合一」�
 - 保留：`main.py`（路由 + 鉴权 + /health）、`settings.py`、`security.py`、`routes/transcribe.py`（后台任务）。
 - `routes/asr.py` → HTTP 客户端调 `http://sensevoice:8102/asr`。
 - `routes/tts.py` → HTTP 客户端调 `http://cosyvoice:8000/api/tts`（传 `text` + `voice_id=zh-male-news`）。
-- `routes/face.py`、`routes/count.py` → multipart 原样转发到 insightface / yolo。
+- `routes/face.py`、`routes/count.py` → multipart 转发到 insightface / yolo（httpx 重构造 files/data，保留 filename 与 Form 字段 worker_id/name）。
 - `routes/transcribe.py` → 后台任务调 sensevoice `/asr`（sensevoice 内部处理长音频切块）。
 - `settings.py` 新增服务 URL 配置：`SENSEVOICE_URL`、`COSYVOICE_URL`、`TTS_VOICE_ID`、`INSIGHTFACE_URL`、`YOLO_URL`；旧的引擎枚举（ASR_ENGINE 等）随引擎移除而废弃。
 - 引擎代码从 meeting-bot 移除（firered_*、insightface_engine、yolo_engine 等），git 历史保留可回滚；insightface/yolo 引擎进入各自新服务。
@@ -128,6 +130,7 @@ ABP / 其他应用 → meeting-bot:8101 ── HTTP（带 X-Meeting-Bot-Key）�
 
 新建 `scripts/deploy-model-services.ps1`：
 
+0. 停掉旧裸跑进程（meeting-bot :8101 / CosyVoice :8000），释放端口与显存（8GB 卡避免 OOM）。
 1. 下载 SenseVoice-Small：ModelScope `iic/SenseVoiceSmall` → `D:\AI\AImodles\models\SenseVoiceSmall`（约 900MB，funasr `AutoModel(model_dir=...)` 落盘）。
 2. 检查其余权重：CosyVoice3（`D:\AI\AImodles\cosyvoice\pretrained_models\Fun-CosyVoice3-0.5B`）、buffalo_l、yolov8n.pt，缺失则下载。
 3. `docker compose -f services/meeting-bot/docker-compose.yml up -d --build`。
@@ -138,6 +141,7 @@ ABP / 其他应用 → meeting-bot:8101 ── HTTP（带 X-Meeting-Bot-Key）�
 - `D:/AI/AImodles/models` → sensevoice / insightface / yolo 的 `/app/models`。
 - `D:/AI/AImodles/cosyvoice` → cosyvoice 容器的数据卷（权重 + 音色资产 + voices_config.json）。
 - GPU：cosyvoice 固定启用；sensevoice/insightface/yolo 本机 CPU，DGX 上按需切 GPU。
+- 每个新服务自带 `pyproject.toml` + `uv.lock` + `.dockerignore`；根 `.gitignore` 增加对 `services/{sensevoice,cosyvoice,insightface,yolo}/third_party`、`models`、`.venv` 的忽略。
 
 ## 9. DGX Spark 迁移
 
@@ -153,7 +157,7 @@ ABP / 其他应用 → meeting-bot:8101 ── HTTP（带 X-Meeting-Bot-Key）�
 | D2 | 默认音色 zh-male-news（男声·播报），环境变量可配置 | 用户确认 |
 | D3 | meeting-bot 保留为聚合层，ABP 与前端零改动 | 用户确认（ABP 主要是页面侧工作） |
 | D4 | SenseVoice 本机 CPU，DGX 可 GPU | 8GB 显存留给 CosyVoice；SenseVoice 小、CPU 足够快 |
-| D5 | 共享 `MEETING_MODEL_KEY` 鉴权（默认 dev-key） | 内部网络防误调用；CosyVoice 需补鉴权 |
+| D5 | 统一复用 `MEETING_BOT_KEY` 鉴权（默认 dev-key） | 内部网络防误调用；CosyVoice 需补鉴权 |
 | D6 | FireRed 代码保留于 git 历史，新镜像不装其依赖 | 镜像大幅瘦身；回滚 = 旧提交 / 旧镜像重建 |
 
 ## 11. 非目标
@@ -163,3 +167,14 @@ ABP / 其他应用 → meeting-bot:8101 ── HTTP（带 X-Meeting-Bot-Key）�
 - 不删 FireRed 旧权重（人工确认后再说）。
 - 不把 faces.json 迁到 PostgreSQL（后续单独设计）。
 - 不动 ai-gateway / compare-algo。
+
+## 12. 实施要点（计划阶段细化）
+
+以下在 writing-plans 阶段定死，避免实施时踩坑：
+
+- CosyVoice 数据卷挂载后，`voices_config.json` 的相对 wav 路径、`CosyVoice/asset`、`samples` 目录必须与 `COSYVOICE_DATA` 根一致；否则音色列表/试听/上传会 404 或写失败。
+- meeting-bot 代理 multipart 时保留 `filename`、`content_type` 与 Form 字段（enroll 的 worker_id/name），并用 httpx 重构造请求。
+- sensevoice 的 `/asr` 推理用同步端点（线程池），meeting-bot 的 `/transcribe` 后台任务需限并发/串行，避免长音频把 CPU 打满。
+- SenseVoice 输出固定为纯文本：关富输出/时间戳，`use_itn` 与语言检测取值明确，标签剥离用正则统一。
+- 各新服务 Dockerfile 用 `COPY pyproject.toml uv.lock` 保证可复现；`.dockerignore` 排除 venv/models/third_party。
+- 迁移时把 meeting-bot 现有引擎相关单测（test_face / test_count / test_engines_integration 等）随代码迁到对应新服务。
