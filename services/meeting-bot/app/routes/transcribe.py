@@ -1,12 +1,14 @@
 import asyncio
 import uuid
-from fastapi import APIRouter, UploadFile, File
+
+import httpx
+from fastapi import APIRouter, File, UploadFile
+
 from app.settings import settings
-from app.engines.asr import get_asr_engine
 
 router = APIRouter()
-_engine = get_asr_engine("firered" if settings.asr_engine == "firered" else "mock")
 _jobs: dict[str, dict] = {}
+_sem = asyncio.Semaphore(settings.transcribe_max_concurrency)
 
 
 @router.post("/transcribe")
@@ -17,8 +19,20 @@ async def start_transcribe(audio: UploadFile = File(...)):
 
     async def run():
         _jobs[job_id]["status"] = "running"
-        _jobs[job_id]["text"] = _engine.transcribe(data).text
-        _jobs[job_id]["status"] = "done"
+        try:
+            async with _sem:
+                async with httpx.AsyncClient(timeout=httpx.Timeout(600.0, connect=10.0)) as client:
+                    resp = await client.post(
+                        f"{settings.sensevoice_url}/asr",
+                        headers={"X-Meeting-Bot-Key": settings.meeting_bot_key},
+                        files={"audio": ("audio.wav", data, "audio/wav")},
+                    )
+            if resp.status_code >= 400:
+                _jobs[job_id] = {"status": "error", "text": f"转写失败: HTTP {resp.status_code}"}
+                return
+            _jobs[job_id] = {"status": "done", "text": resp.json()["text"]}
+        except Exception as exc:
+            _jobs[job_id] = {"status": "error", "text": f"转写失败: {exc}"}
 
     asyncio.create_task(run())
     return {"job_id": job_id}

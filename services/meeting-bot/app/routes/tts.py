@@ -1,11 +1,11 @@
-from fastapi import APIRouter
+import httpx
+from fastapi import APIRouter, HTTPException
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
+
 from app.settings import settings
-from app.engines.tts import get_tts_engine
 
 router = APIRouter()
-_engine = get_tts_engine(settings.tts_engine)
 
 
 class TtsRequest(BaseModel):
@@ -13,6 +13,16 @@ class TtsRequest(BaseModel):
 
 
 @router.post("/tts")
-def tts(req: TtsRequest):
-    audio = _engine.synthesize(req.text)
-    return StreamingResponse(iter([audio]), media_type="audio/wav")
+async def tts(req: TtsRequest):
+    try:
+        async with httpx.AsyncClient(timeout=httpx.Timeout(300.0, connect=10.0)) as client:
+            resp = await client.post(
+                f"{settings.cosyvoice_url}/api/tts",
+                headers={"X-Meeting-Bot-Key": settings.meeting_bot_key},
+                json={"text": req.text, "voice_id": settings.tts_voice_id, "speed": 1.0},
+            )
+    except httpx.HTTPError as exc:
+        raise HTTPException(status_code=502, detail=f"TTS 服务不可达: {exc}") from exc
+    if resp.status_code >= 400:
+        raise HTTPException(status_code=502, detail=f"TTS 服务错误: HTTP {resp.status_code}")
+    return StreamingResponse(iter([resp.content]), media_type=resp.headers.get("content-type", "audio/wav"))
