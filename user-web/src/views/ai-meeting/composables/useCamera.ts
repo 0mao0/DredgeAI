@@ -28,6 +28,9 @@ export function useCamera() {
   }
 
   async function capturePhoto(video: HTMLVideoElement): Promise<Blob> {
+    if (!video.videoWidth || !video.videoHeight) {
+      throw new Error('摄像头画面未就绪，请稍候重试')
+    }
     const canvas = document.createElement('canvas')
     canvas.width = video.videoWidth
     canvas.height = video.videoHeight

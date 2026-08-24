@@ -1,6 +1,13 @@
 <template>
   <SectionCard title="现场点名" flush>
-    <video v-if="stream" ref="videoRef" class="attendance-step__video" autoplay playsinline />
+    <video
+      v-if="stream"
+      ref="videoRef"
+      class="attendance-step__video"
+      :src-object="stream"
+      autoplay
+      playsinline
+    />
     <div v-else-if="starting" class="attendance-step__camera-hint">正在启用摄像头…</div>
     <a-result v-else-if="error" status="warning" title="无法访问摄像头" :sub-title="error">
       <template #extra>
@@ -8,15 +15,10 @@
       </template>
     </a-result>
     <div class="attendance-step__actions">
-      <AppButton variant="primary" block :loading="loading" @click="onCapture">
-        拍照识别（手动支架扫一圈，多拍几次自动去重）
+      <div v-if="loading" class="attendance-step__camera-hint">正在识别现场人员…</div>
+      <AppButton size="sm" block :loading="loading" @click="onCapture">
+        再扫一张（手动支架转一圈补漏检）
       </AppButton>
-      <a-alert
-        v-if="!stream && !starting && !error"
-        type="warning"
-        show-icon
-        message="摄像头未启用，点击上方按钮前请先在浏览器中允许摄像头权限"
-      />
       <div v-if="count !== null" class="attendance-step__count">
         本次照片识别 {{ list.length }} 人 · YOLO 目测人数 {{ count }}
       </div>
@@ -38,7 +40,7 @@
 </template>
 
 <script setup lang="ts">
-import { onMounted, onScopeDispose, ref } from 'vue'
+import { nextTick, onMounted, onScopeDispose, ref, watch } from 'vue'
 import SectionCard from '@shared/web/components/SectionCard.vue'
 import AppButton from '@shared/web/components/AppButton.vue'
 import { DataTable } from '@shared/web'
@@ -70,6 +72,27 @@ onMounted(() => {
 })
 onScopeDispose(() => stop())
 
+watch(stream, async (s) => {
+  if (!s) return
+  await nextTick()
+  // 等待视频画面就绪后自动拍照识别一次
+  for (let i = 0; i < 20; i++) {
+    if (videoRef.value && videoRef.value.videoWidth > 0) break
+    await new Promise((r) => setTimeout(r, 250))
+  }
+  await autoCapture()
+})
+
+async function autoCapture(): Promise<void> {
+  if (!videoRef.value) return
+  try {
+    const photo = await capturePhoto(videoRef.value)
+    emit('capture', photo)
+  } catch {
+    // 自动识别失败可手动补扫，不阻塞页面
+  }
+}
+
 async function onCapture(): Promise<void> {
   if (!stream.value) {
     const ok = await start()
@@ -81,7 +104,11 @@ async function onCapture(): Promise<void> {
 }
 
 async function onRetryCamera(): Promise<void> {
-  await start()
+  const ok = await start()
+  if (ok) {
+    await nextTick()
+    await autoCapture()
+  }
 }
 </script>
 

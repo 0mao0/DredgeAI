@@ -11,7 +11,14 @@
       <a-step title="拍人脸" />
     </a-steps>
 
-    <video v-if="stream" ref="videoRef" class="worker-enroll__video" autoplay playsinline />
+    <video
+      v-if="stream"
+      ref="videoRef"
+      class="worker-enroll__video"
+      :src-object="stream"
+      autoplay
+      playsinline
+    />
     <a-result v-else-if="error" status="warning" title="无法访问摄像头" :sub-title="error" />
 
     <template v-if="step === 0">

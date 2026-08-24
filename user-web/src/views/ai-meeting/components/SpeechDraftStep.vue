@@ -52,7 +52,7 @@
       </div>
 
       <AppButton variant="primary" size="lg" block :loading="loading" @click="emit('confirm')">
-        确认并开始点名
+        开始开会
       </AppButton>
     </template>
   </div>
