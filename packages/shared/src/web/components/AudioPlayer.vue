@@ -1,6 +1,7 @@
 <template>
   <div class="audio-player">
     <audio
+      v-if="!controlled"
       ref="audioRef"
       :src="src"
       preload="auto"
@@ -10,7 +11,13 @@
     />
 
     <div class="audio-player__progress">
-      <a-slider :value="currentTime" :max="duration || 1" :tooltip-visible="false" @update:value="seek" />
+      <a-slider
+        :value="controlled ? controlled.progress * 100 : currentTime"
+        :max="controlled ? 100 : duration || 1"
+        :disabled="Boolean(controlled)"
+        :tooltip-visible="false"
+        @update:value="controlled ? undefined : seek"
+      />
     </div>
 
     <div class="audio-player__controls">
@@ -18,13 +25,14 @@
         shape="circle"
         :icon="playIcon"
         size="lg"
+        :loading="controlled?.loading"
         class="audio-player__play"
         @click="togglePlay"
       />
       <div class="audio-player__time">
-        <span>{{ formatTime(currentTime) }}</span>
+        <span>{{ formatTime(controlled ? controlled.currentTime : currentTime) }}</span>
         <span class="audio-player__separator">/</span>
-        <span>{{ formatTime(duration) }}</span>
+        <span>{{ formatTime(controlled ? controlled.duration : duration) }}</span>
       </div>
       <div class="audio-player__speed-group">
         <span class="audio-player__speed-label">倍速</span>
@@ -45,9 +53,21 @@ import { computed, h, onBeforeUnmount, ref } from 'vue'
 import { PlayCircleFilled, PauseCircleFilled } from '@ant-design/icons-vue'
 import AppButton from './AppButton.vue'
 
-defineProps<{
+const props = defineProps<{
   /** 音频 URL（配音任务产物、TTS 整段音频等） */
   src?: string
+  /**
+   * 受控播放模式：由外部提供播放状态（分段流式 TTS 等无单一 URL 的场景）。
+   * 传入后组件只渲染播放 UI，不管理内部 <audio>。
+   */
+  controlled?: {
+    playing: boolean
+    loading?: boolean
+    progress: number
+    currentTime: number
+    duration: number
+    onToggle: () => void
+  }
 }>()
 
 const audioRef = ref<HTMLAudioElement | null>(null)
@@ -56,7 +76,13 @@ const currentTime = ref(0)
 const duration = ref(0)
 const playbackRate = ref(1)
 
-const playIcon = computed(() => h(isPlaying.value ? PauseCircleFilled : PlayCircleFilled))
+const playIcon = computed(() =>
+  h(
+    (props.controlled ? props.controlled.playing : isPlaying.value)
+      ? PauseCircleFilled
+      : PlayCircleFilled,
+  ),
+)
 
 function formatTime(sec: number): string {
   if (!sec || Number.isNaN(sec)) return '00:00'
@@ -95,6 +121,10 @@ function seek(val: number): void {
 }
 
 function togglePlay(): void {
+  if (props.controlled) {
+    props.controlled.onToggle()
+    return
+  }
   if (!audioRef.value) return
   if (isPlaying.value) {
     audioRef.value.pause()
