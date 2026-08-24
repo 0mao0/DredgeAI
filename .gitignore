@@ -126,3 +126,37 @@ services/meeting-bot/*.log
 
 # CosyVoice 第三方源码（本地复制，不入库）
 services/cosyvoice/third_party/
+
+# 一模型一容器服务（代码入库；权重/venv/第三方源码不入库）
+services/sensevoice/models/
+services/sensevoice/.venv/
+services/sensevoice/third_party/
+services/cosyvoice/.venv/
+services/insightface/models/
+services/insightface/.venv/
+services/insightface/third_party/
+services/yolo/models/
+services/yolo/.venv/
+services/yolo/third_party/
+
+# 新服务 pytest 用例入库（根 tests/ 规则是测试标书）
+!services/sensevoice/tests/
+!services/sensevoice/tests/**
+!services/cosyvoice/tests/
+!services/cosyvoice/tests/**
+!services/insightface/tests/
+!services/insightface/tests/**
+!services/yolo/tests/
+!services/yolo/tests/**
+services/sensevoice/tests/__pycache__/
+services/sensevoice/tests/**/__pycache__/
+services/cosyvoice/tests/__pycache__/
+services/cosyvoice/tests/**/__pycache__/
+services/insightface/tests/__pycache__/
+services/insightface/tests/**/__pycache__/
+services/yolo/tests/__pycache__/
+services/yolo/tests/**/__pycache__/
+services/sensevoice/tests/**/*.py[cod]
+services/cosyvoice/tests/**/*.py[cod]
+services/insightface/tests/**/*.py[cod]
+services/yolo/tests/**/*.py[cod]
