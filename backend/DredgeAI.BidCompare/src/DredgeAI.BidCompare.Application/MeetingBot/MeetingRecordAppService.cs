@@ -337,11 +337,15 @@ public class MeetingRecordAppService : ApplicationService, IMeetingRecordAppServ
             existingWorkerIds.Add(workerId);
         }
 
-        // 未命中的脸收集为“未识别”条目（仅当存在未识别脸）
+        // 未命中的脸收集为“未识别”条目；同一会议只保留一条，避免持续扫描不断堆积
         foreach (var face in faces)
         {
             // 未命中或低于阈值 → 收集为“未识别”；命中且已去过重 → 跳过
             if (face.WorkerId is not null && face.Confidence >= RecognizeThreshold)
+            {
+                continue;
+            }
+            if (existing.Any(a => a.WorkerId is null))
             {
                 continue;
             }

@@ -98,7 +98,8 @@ public class MeetingRecordAppServiceTests : BidCompareApplicationTestBase<BidCom
         // 第二次：张三去重，未识别新增一条
         var second = await _appService.RecognizeAttendanceAsync(meeting.Id, new byte[] { 1 });
         second.Count(a => a.Name == "张三").ShouldBe(1);
-        second.Count(a => a.Status == AttendanceStatus.Unrecognized).ShouldBe(4);
+        // 未识别条目已存在则不再新增，避免扫描过程堆积
+        second.Count(a => a.Status == AttendanceStatus.Unrecognized).ShouldBe(2);
 
         var fetched = await _appService.GetAsync(meeting.Id);
         fetched.Status.ShouldBe(MeetingStatus.Ongoing);
