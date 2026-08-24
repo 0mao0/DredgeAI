@@ -1,28 +1,29 @@
 <template>
   <SectionCard title="现场点名" flush>
-    <video
-      v-if="stream"
-      ref="videoRef"
-      class="attendance-step__video"
-      :src-object="stream"
-      autoplay
-      playsinline
-      muted
-    />
+    <div v-if="stream" class="attendance-step__video-wrap">
+      <video
+        ref="videoRef"
+        class="attendance-step__video"
+        :src-object="stream"
+        autoplay
+        playsinline
+        muted
+      />
+      <div class="attendance-step__scan-overlay">
+        <div class="attendance-step__scan-title">
+          <LoadingOutlined v-if="scanning" spin />
+          <span v-if="scanning">正在自动识别… 已识别 {{ list.length }} 人</span>
+          <span v-else>摄像头已就绪</span>
+        </div>
+        <div class="attendance-step__scan-guide">请旋转摄像头，覆盖所有在场人员</div>
+      </div>
+    </div>
     <div v-else-if="starting" class="attendance-step__camera-hint">正在启用摄像头…</div>
     <a-result v-else-if="error" status="warning" title="无法访问摄像头" :sub-title="error">
       <template #extra>
         <AppButton size="sm" @click="onRetryCamera">重新启用</AppButton>
       </template>
     </a-result>
-    <a-alert
-      v-if="stream"
-      type="info"
-      show-icon
-      class="attendance-step__scan-tip"
-      :message="scanning ? '正在自动识别…' : '摄像头已就绪'"
-      :description="scanning ? `请旋转摄像头，覆盖所有在场人员（已识别 ${list.length} 人）` : '稍候将自动开始识别'"
-    />
     <div v-if="speechText" class="attendance-step__speech">
       <SpeechPlayer :text="speechText" auto-play />
     </div>
@@ -48,6 +49,7 @@
 
 <script setup lang="ts">
 import { nextTick, onMounted, onScopeDispose, ref, watch } from 'vue'
+import { LoadingOutlined } from '@ant-design/icons-vue'
 import SectionCard from '@shared/web/components/SectionCard.vue'
 import AppButton from '@shared/web/components/AppButton.vue'
 import { DataTable } from '@shared/web'
@@ -147,8 +149,33 @@ function onDone(): void {
   width: 100%;
   border-radius: @radius-base;
 }
-.attendance-step__scan-tip {
-  margin: @spacing-md 0;
+.attendance-step__video-wrap {
+  position: relative;
+  border-radius: @radius-base;
+  overflow: hidden;
+}
+.attendance-step__scan-overlay {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  padding: @spacing-sm @spacing-md;
+  background: color-mix(in srgb, #000 55%, transparent);
+  color: #fff;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.attendance-step__scan-title {
+  display: flex;
+  align-items: center;
+  gap: @spacing-xs;
+  font-size: @font-size-sm;
+  font-weight: @font-weight-medium;
+}
+.attendance-step__scan-guide {
+  font-size: @font-size-xs;
+  opacity: 0.85;
 }
 .attendance-step__speech {
   margin-bottom: @spacing-md;
