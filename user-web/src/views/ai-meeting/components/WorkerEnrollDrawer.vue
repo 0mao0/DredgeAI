@@ -12,7 +12,7 @@
     </a-steps>
 
     <video
-      v-if="stream"
+      v-if="stream && (step === 1 || (step === 0 && showCameraIdCard))"
       ref="videoRef"
       class="worker-enroll__video"
       :src-object="stream"
@@ -20,14 +20,14 @@
       playsinline
       muted
     />
-    <a-result v-else-if="error" status="warning" title="无法访问摄像头" :sub-title="error" />
+    <a-result
+      v-else-if="error && (step === 1 || (step === 0 && showCameraIdCard))"
+      status="warning"
+      title="无法访问摄像头"
+      :sub-title="error"
+    />
 
     <template v-if="step === 0">
-      <p class="worker-enroll__hint">将身份证正面置于镜头前，点击拍照识别</p>
-      <AppButton variant="primary" block :loading="idCardLoading" @click="onCaptureIdCard">
-        拍照识别身份证
-      </AppButton>
-      <div class="worker-enroll__divider">或</div>
       <a-upload-dragger
         accept="image/*"
         :show-upload-list="false"
@@ -41,6 +41,18 @@
         <p class="ant-upload-text">上传身份证照片</p>
         <p class="ant-upload-hint">点击或拖拽图片，自动识别信息</p>
       </a-upload-dragger>
+      <a-button type="link" block class="worker-enroll__camera-link" @click="onShowCamera">
+        {{ showCameraIdCard ? '收起摄像头' : '使用摄像头拍摄身份证' }}
+      </a-button>
+      <AppButton
+        v-if="showCameraIdCard"
+        variant="primary"
+        block
+        :loading="idCardLoading"
+        @click="onCaptureIdCard"
+      >
+        拍照识别身份证
+      </AppButton>
       <div v-if="idCard" class="worker-enroll__fields">
         <div><span>姓名</span>{{ idCard.name || '—' }}</div>
         <div><span>身份证号</span>{{ idCard.idCardNumber || '—' }}</div>
@@ -116,6 +128,7 @@ const emit = defineEmits<{
 }>()
 
 const step = ref(0)
+const showCameraIdCard = ref(false)
 const videoRef = ref<HTMLVideoElement | null>(null)
 const { stream, error, start, stop, capturePhoto } = useCamera()
 const idCardLoading = ref(false)
@@ -129,10 +142,10 @@ watch(
   (open) => {
     if (open) {
       step.value = 0
+      showCameraIdCard.value = false
       idCard.value = null
       enrolled.value = null
       form.value = { name: '', team: '' }
-      void start()
     } else {
       stop()
     }
@@ -153,6 +166,22 @@ watch(stream, async (s) => {
 })
 onScopeDispose(() => stop())
 
+watch(step, (s) => {
+  // 第二步拍人脸需要摄像头；第一步默认以上传身份证为主
+  if (s === 1 && !stream.value) {
+    void start()
+  }
+})
+
+async function onShowCamera(): Promise<void> {
+  showCameraIdCard.value = !showCameraIdCard.value
+  if (showCameraIdCard.value && !stream.value) {
+    await start()
+  } else if (!showCameraIdCard.value) {
+    stop()
+  }
+}
+
 async function onUploadIdCard(file: File): Promise<boolean> {
   idCardLoading.value = true
   try {
@@ -167,7 +196,11 @@ async function onUploadIdCard(file: File): Promise<boolean> {
 }
 
 async function onCaptureIdCard(): Promise<void> {
-  if (!videoRef.value || !stream.value) return
+  if (!stream.value) {
+    const ok = await start()
+    if (!ok) return
+  }
+  if (!videoRef.value) return
   idCardLoading.value = true
   try {
     const photo = await capturePhoto(videoRef.value)
@@ -181,7 +214,11 @@ async function onCaptureIdCard(): Promise<void> {
 }
 
 async function onCaptureFace(): Promise<void> {
-  if (!videoRef.value || !stream.value) return
+  if (!stream.value) {
+    const ok = await start()
+    if (!ok) return
+  }
+  if (!videoRef.value) return
   if (!form.value.name.trim()) {
     return
   }
@@ -268,6 +305,9 @@ function onClose(): void {
     font-size: @font-size-xs;
     margin-top: 2px;
   }
+}
+.worker-enroll__camera-link {
+  margin-bottom: @spacing-md;
 }
 .worker-enroll__id-ok {
   margin-top: @spacing-md;
