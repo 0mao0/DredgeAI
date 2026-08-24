@@ -1,0 +1,9 @@
+.venv
+third_party/CosyVoice/.git
+third_party/CosyVoice/.github
+third_party/CosyVoice/runtime
+tests
+__pycache__
+*.pyc
+.pytest_cache
+.env

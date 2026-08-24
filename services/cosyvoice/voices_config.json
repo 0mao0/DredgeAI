@@ -1,0 +1,77 @@
+{
+  "version": "2.0",
+  "voices": {
+    "zh-male-wangfei": {
+      "name": "王飞·男声",
+      "category": "克隆",
+      "gender": "男声",
+      "style": "个人语音克隆",
+      "tags": [
+        "克隆",
+        "个人"
+      ],
+      "wav": "CosyVoice/asset/男声-用户声音_norm.wav",
+      "instruct": "You are a helpful assistant. 你是一个说话成熟稳重的男性，声音沉稳。<|endofprompt|>"
+    },
+    "zh-male-news": {
+      "name": "男声·播报",
+      "category": "播报",
+      "gender": "男声",
+      "style": "新闻播报",
+      "tags": [
+        "新闻",
+        "正式"
+      ],
+      "wav": "CosyVoice/asset/男声-播报_converted_norm.wav",
+      "instruct": "You are a helpful assistant. 你是一个声音沉稳大气的男播音员，字正腔圆。<|endofprompt|>"
+    },
+    "zh-female-news": {
+      "name": "女声·播报",
+      "category": "播报",
+      "gender": "女声",
+      "style": "新闻播报",
+      "tags": [
+        "新闻",
+        "正式"
+      ],
+      "wav": "CosyVoice/asset/女声-播报_converted_norm.wav",
+      "instruct": "You are a helpful assistant. 你是一个声音清晰流畅的女播音员，端庄大方。<|endofprompt|>"
+    },
+    "zh-male-general": {
+      "name": "男声·日常",
+      "category": "通用",
+      "gender": "男声",
+      "style": "日常沟通",
+      "tags": [
+        "日常",
+        "对话"
+      ],
+      "wav": "CosyVoice/asset/男声-日常沟通_converted_norm.wav",
+      "instruct": "You are a helpful assistant. 你是一个说话自然温和的男性，语气亲切。<|endofprompt|>"
+    },
+    "zh-male-narrator": {
+      "name": "男声·纪录片",
+      "category": "解说",
+      "gender": "男声",
+      "style": "纪录片解说",
+      "tags": [
+        "解说",
+        "纪录片"
+      ],
+      "wav": "CosyVoice/asset/男声-纪录片_converted_norm.wav",
+      "instruct": "You are a helpful assistant. 你是一个声音磁性浑厚的男解说员，适合纪录片旁白。<|endofprompt|>"
+    },
+    "voice_1c533b46": {
+      "name": "我的声音 16:44",
+      "category": "用户上传",
+      "gender": "",
+      "style": "",
+      "tags": [
+        "用户",
+        "自定义"
+      ],
+      "wav": "CosyVoice/asset/voice_1c533b46_norm.wav",
+      "instruct": "You are a helpful assistant. 请用自然的语气朗读。<|endofprompt|>"
+    }
+  }
+}
