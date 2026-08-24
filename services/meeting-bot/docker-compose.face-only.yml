@@ -1,0 +1,10 @@
+# 本机轻量模式：只加载人脸识别 + 人数统计两个模型（点名用）。
+# ASR/TTS 使用 mock 引擎，不加载 FireRedASR/FireRedTTS，内存占用大幅下降。
+# 用法：docker compose -f docker-compose.yml -f docker-compose.face-only.yml up -d meeting-bot
+services:
+  meeting-bot:
+    environment:
+      ASR_ENGINE: mock
+      TTS_ENGINE: mock
+      FACE_ENGINE: insightface
+      COUNT_ENGINE: yolo

@@ -15,7 +15,7 @@
         :value="controlled ? controlled.progress * 100 : currentTime"
         :max="controlled ? 100 : duration || 1"
         :disabled="Boolean(controlled)"
-        :tooltip-visible="false"
+        :tooltip-open="false"
         @update:value="controlled ? undefined : seek"
       />
     </div>
