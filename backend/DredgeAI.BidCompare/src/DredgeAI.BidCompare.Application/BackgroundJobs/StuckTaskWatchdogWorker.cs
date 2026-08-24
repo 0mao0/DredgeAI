@@ -26,19 +26,16 @@ public class StuckTaskWatchdogWorker : AsyncPeriodicBackgroundWorkerBase, ITrans
 {
     private readonly WatchdogOptions _options;
     private readonly IClock _clock;
-    private readonly IBackgroundJobManager _backgroundJobManager;
 
     public StuckTaskWatchdogWorker(
         AbpAsyncTimer timer,
         IServiceScopeFactory serviceScopeFactory,
         IOptions<WatchdogOptions> options,
-        IClock clock,
-        IBackgroundJobManager backgroundJobManager)
+        IClock clock)
         : base(timer, serviceScopeFactory)
     {
         _options = options.Value;
         _clock = clock;
-        _backgroundJobManager = backgroundJobManager;
         Timer.Period = (int)_options.Period.TotalMilliseconds;
     }
 
@@ -55,6 +52,10 @@ public class StuckTaskWatchdogWorker : AsyncPeriodicBackgroundWorkerBase, ITrans
         var documentRepository = serviceProvider.GetRequiredService<IRepository<CompareDocument, Guid>>();
         var taskRepository = serviceProvider.GetRequiredService<IRepository<CompareTask, Guid>>();
         var advancer = serviceProvider.GetRequiredService<ParseTaskStateAdvancer>();
+        // IBackgroundJobManager 是 scoped 服务：worker 实例在启动时创建、作用域随后被释放，
+        // 构造函数捕获的实例会抛 ObjectDisposedException（生产日志每 5/15 分钟复现）。
+        // 必须从每次 tick 的 serviceProvider 现取，与 repository/advancer 保持一致。
+        var backgroundJobManager = serviceProvider.GetRequiredService<IBackgroundJobManager>();
 
         var docDeadline = utcNow - _options.DocumentParsingTimeout;
         var stuckDocuments = await documentRepository.GetListAsync(d =>
@@ -74,7 +75,7 @@ public class StuckTaskWatchdogWorker : AsyncPeriodicBackgroundWorkerBase, ITrans
                 document.Id);
             document.MarkParsing();
             await documentRepository.UpdateAsync(document, autoSave: true);
-            await _backgroundJobManager.EnqueueAsync(new ParseDocumentArgs
+            await backgroundJobManager.EnqueueAsync(new ParseDocumentArgs
             {
                 TaskId = document.TaskId,
                 DocumentId = document.Id
@@ -120,6 +121,8 @@ public class StuckTaskWatchdogWorker : AsyncPeriodicBackgroundWorkerBase, ITrans
     {
         var documentRepository = serviceProvider.GetRequiredService<IRepository<TenderReadingDocument, Guid>>();
         var taskRepository = serviceProvider.GetRequiredService<IRepository<TenderReadingTask, Guid>>();
+        // 同上：每次 tick 现取 scoped 的 IBackgroundJobManager，避免使用启动作用域里已释放的实例。
+        var backgroundJobManager = serviceProvider.GetRequiredService<IBackgroundJobManager>();
 
         var docDeadline = utcNow - _options.DocumentParsingTimeout;
         var stuckDocuments = await documentRepository.GetListAsync(d =>
@@ -135,7 +138,7 @@ public class StuckTaskWatchdogWorker : AsyncPeriodicBackgroundWorkerBase, ITrans
                 Logger.LogWarning("读标文档 {DocumentId} 解析超时，但已有 AnGIneer doc_id，尝试恢复续跑", document.Id);
                 document.MarkParsing();
                 await documentRepository.UpdateAsync(document, autoSave: true);
-                await _backgroundJobManager.EnqueueAsync(new ParseTenderDocumentArgs
+                await backgroundJobManager.EnqueueAsync(new ParseTenderDocumentArgs
                 {
                     TaskId = document.TaskId,
                     DocumentId = document.Id
@@ -234,7 +237,7 @@ public class StuckTaskWatchdogWorker : AsyncPeriodicBackgroundWorkerBase, ITrans
                 Logger.LogWarning(ex, "读标任务 {TaskId} 恢复标记落库失败，仍尝试入队抽取", task.Id);
             }
 
-            await _backgroundJobManager.EnqueueAsync(new ExtractBaselineArgs
+            await backgroundJobManager.EnqueueAsync(new ExtractBaselineArgs
             {
                 TaskId = task.Id,
                 DocumentId = parsedDoc.Id

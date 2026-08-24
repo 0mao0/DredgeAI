@@ -35,7 +35,9 @@ public class BidCompareApplicationTestModule : AbpModule
     public override void ConfigureServices(ServiceConfigurationContext context)
     {
         context.Services.AddAlwaysDisableUnitOfWorkTransaction();
-        context.Services.Replace(ServiceDescriptor.Singleton<IBackgroundJobManager, RecordingBackgroundJobManager>());
+        // 生产环境 IBackgroundJobManager 按作用域注册（DefaultBackgroundJobManager 依赖作用域内 DbContext/ObjectMapper）；
+        // 看门狗曾因构造函数注入该服务、绑定到已释放作用域而崩溃，测试用 Scoped 复现该场景。
+        context.Services.Replace(ServiceDescriptor.Scoped<IBackgroundJobManager, RecordingBackgroundJobManager>());
         context.Services.Replace(ServiceDescriptor.Singleton<IFileStorage, InMemoryFileStorage>());
         context.Services.Replace(ServiceDescriptor.Singleton<IAnGineerClient, FakeAnGineerClient>());
         context.Services.Replace(ServiceDescriptor.Singleton<ICompareAlgoClient, FakeCompareAlgoClient>());
