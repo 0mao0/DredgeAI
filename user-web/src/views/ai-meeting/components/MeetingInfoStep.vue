@@ -1,8 +1,10 @@
 <template>
   <div class="meeting-info-step">
     <div class="meeting-info-step__toolbar">
-      <AppButton size="sm" @click="historyOpen = true">历史记录</AppButton>
       <AppButton size="sm" @click="uploadOpen = true">上传施组方案</AppButton>
+      <AppButton size="sm" variant="text" @click="historyOpen = true">
+        <HistoryOutlined /> 历史记录
+      </AppButton>
     </div>
 
     <div class="meeting-info-step__mic-zone">
@@ -115,7 +117,7 @@
 
 <script setup lang="ts">
 import { ref, watch } from 'vue'
-import { AudioOutlined, InboxOutlined } from '@ant-design/icons-vue'
+import { AudioOutlined, HistoryOutlined, InboxOutlined } from '@ant-design/icons-vue'
 import AppButton from '@shared/web/components/AppButton.vue'
 import type { MeetingHistoryDto } from '@/types'
 import {
@@ -297,7 +299,9 @@ function statusColor(status: MeetingHistoryDto['status']): string {
 
 .meeting-info-step__toolbar {
   display: flex;
-  justify-content: space-between;
+  justify-content: flex-end;
+  align-items: center;
+  gap: @spacing-sm;
   margin-bottom: @spacing-xl;
 }
 .meeting-info-step__mic-zone {

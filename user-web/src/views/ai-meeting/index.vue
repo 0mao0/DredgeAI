@@ -1,7 +1,6 @@
 <template>
   <div class="ai-meeting-page">
     <PageHeader title="AI晨会" description="录入 → 确认 → 晨会稿 → 点名 → 会议 → 报告" />
-    <MeetingSteps :items="steps" :current="current" @go="handleGoStep" />
     <MeetingInfoStep
       v-if="current === 0"
       v-model:plan="planText"
@@ -75,10 +74,8 @@ import SpeechDraftStep from './components/SpeechDraftStep.vue'
 import AttendanceStep from './components/AttendanceStep.vue'
 import MeetingStep from './components/MeetingStep.vue'
 import ReportStep from './components/ReportStep.vue'
-import MeetingSteps from './components/MeetingSteps.vue'
 import { extractErrorMessage } from '@/utils/audioToWav'
 
-const steps = ['录入', '确认', '晨会稿', '点名', '会议', '报告']
 const current = ref(0)
 const meeting = ref<MeetingRecordDto | null>(null)
 const loading = ref(false)
@@ -101,10 +98,6 @@ async function handleParse(planText: string): Promise<void> {
   } finally {
     parsing.value = false
   }
-}
-
-function handleGoStep(index: number): void {
-  if (index < current.value) current.value = index
 }
 
 async function handleCreate(preInfo: PreInfo): Promise<void> {
@@ -233,5 +226,11 @@ async function handleMeetingFinish(recording: Blob): Promise<void> {
   max-width: 720px;
   margin: 0 auto;
   padding: @page-padding;
+}
+
+@media (max-width: 520px) {
+  .ai-meeting-page {
+    padding: @spacing-base;
+  }
 }
 </style>
