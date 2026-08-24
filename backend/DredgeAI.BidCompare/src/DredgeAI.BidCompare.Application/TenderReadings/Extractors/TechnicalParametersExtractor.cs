@@ -18,7 +18,8 @@ public class TechnicalParametersExtractor : LlmFieldExtractorBase, IBaselineFiel
     private const string UserPromptTemplate =
         "以下是招标文件全文：\n\n{{DOCUMENT}}\n\n" +
         "请以 JSON 数组返回技术参数，每项格式：" +
-        "{\"fieldKey\":\"technical_parameter_序号\",\"value\":{\"name\":\"参数名\",\"requiredValue\":\"要求值\",\"unit\":\"单位\",\"substantive\":true},\"rawText\":\"原文摘要\"}。" +
+        "{\"fieldKey\":\"technical_parameter_序号\",\"value\":{\"name\":\"参数名\",\"requiredValue\":\"要求值\",\"unit\":\"单位\",\"substantive\":true},\"rawText\":\"命中原文的逐字引用\"}。" +
+        "rawText 必须是招标文件原文的逐字引用（不得转述或概括），可直接在原文中检索到；跨多行/多单元格时取其中最完整的一段，不超过 120 字。" +
         "fieldKey 一律使用 technical_parameter_序号（序号从 1 开始连续编号），不要发明其他 key。" +
         "只返回 JSON。";
 

@@ -1,8 +1,10 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Net;
 using System.Text;
 using System.Text.Json;
+using System.Text.RegularExpressions;
 using System.Threading;
 using System.Threading.Tasks;
 using DredgeAI.BidCompare.AI;
@@ -152,16 +154,16 @@ public abstract class LlmFieldExtractorBase
         // 兼容 LLM 提炼文本与原文在空白、标点、截断上的差异。
         var candidates = BuildNeedleCandidates(normalizedNeedle);
 
-        var scored = new List<(int Score, JsonElement Block)>();
+        var scored = new List<(int Score, JsonElement Block, string Excerpt)>();
         foreach (var block in blocks.EnumerateArray())
         {
-            var text = GetBlockString(block, "text");
-            if (string.IsNullOrWhiteSpace(text))
+            var (searchable, excerpt) = BuildBlockSearchText(block);
+            if (string.IsNullOrWhiteSpace(searchable))
             {
                 continue;
             }
 
-            var normalizedBlock = NormalizeForMatch(text);
+            var normalizedBlock = NormalizeForMatch(searchable);
             if (normalizedBlock.Length == 0)
             {
                 continue;
@@ -184,7 +186,7 @@ public abstract class LlmFieldExtractorBase
 
             if (score > 0)
             {
-                scored.Add((score, block));
+                scored.Add((score, block, excerpt));
             }
         }
 
@@ -205,10 +207,54 @@ public abstract class LlmFieldExtractorBase
                 BlockId = GetBlockString(x.Block, "blockId") ?? string.Empty,
                 PageIdx = GetBlockInt(x.Block, "pageIdx"),
                 Bbox = ReadBbox(x.Block),
-                Text = GetBlockString(x.Block, "text") ?? string.Empty
+                Text = x.Excerpt
             })
             .ToList();
     }
+
+    /// <summary>块的可检索文本与摘录：正文优先；表格块（text 为空）回退到去标签后的单元格文本。</summary>
+    private static (string Searchable, string Excerpt) BuildBlockSearchText(JsonElement block)
+    {
+        var text = GetBlockString(block, "text") ?? string.Empty;
+        var tableText = ExtractTableText(block);
+        if (string.IsNullOrWhiteSpace(text) && string.IsNullOrWhiteSpace(tableText))
+        {
+            return (string.Empty, string.Empty);
+        }
+
+        if (string.IsNullOrWhiteSpace(tableText))
+        {
+            return (text, text);
+        }
+
+        if (string.IsNullOrWhiteSpace(text))
+        {
+            return (tableText, Truncate(tableText, 200));
+        }
+
+        return ($"{text} {tableText}", text);
+    }
+
+    /// <summary>提取表格块 table.html 的纯文本（去标签 + HTML 反转义），用于溯源匹配。</summary>
+    private static string ExtractTableText(JsonElement block)
+    {
+        if (!block.TryGetProperty("table", out var table) || table.ValueKind != JsonValueKind.Object)
+        {
+            return string.Empty;
+        }
+
+        if (!table.TryGetProperty("html", out var html) || html.ValueKind != JsonValueKind.String)
+        {
+            return string.Empty;
+        }
+
+        var raw = html.GetString() ?? string.Empty;
+        var plain = Regex.Replace(raw, "<[^>]+>", " ");
+        return WebUtility.HtmlDecode(plain);
+    }
+
+    private static string Truncate(string value, int maxLength)
+        => value.Length <= maxLength ? value : value[..maxLength];
 
     /// <summary>去掉空白与标点、统一小写，用于容错匹配（忽略换行/空格/全半角差异）。</summary>
     private static string NormalizeForMatch(string input)
