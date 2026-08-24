@@ -22,6 +22,7 @@
       :loading="loading"
       :playing="playing"
       :audio-loading="audioLoading"
+      :date="meeting?.date"
       @generate="handleGenerateSpeech"
       @save="handleSaveDraft"
       @confirm="handleConfirmDraft"
