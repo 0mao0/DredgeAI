@@ -91,3 +91,13 @@ uv run pytest tests/test_engines_integration.py -v   # 需要 data/meeting-bot/s
 - 冒烟：`$env:MEETING_BOT_BASE_URL="http://localhost:8101"; uv run pytest tests/test_container_smoke.py -v`。
 - 实测（2026-08-23）：镜像 29.5GB；容器启动约 30s 就绪；全 API 冒烟 5/5 通过（首次合计约 3m50s，含 ASR 加载与 TTS worker 拉起）。
 - DGX 迁移：本机 x86_64 镜像不可直接运行于 ARM64 DGX Spark；届时用 `docker buildx --platform linux/arm64` 重建或改用 NVIDIA NIM。容器拓扑、环境变量、挂载结构在 DGX 上原样复用。
+
+## 九、一模型一容器（2026-08-24）
+
+- 四个模型各一容器：`sensevoice:8102`（SenseVoice-Small，CPU）、`cosyvoice:8000`（CosyVoice3-0.5B，GPU，默认音色 `zh-male-news`）、`insightface:8103`（buffalo_l + faces.json，CPU）、`yolo:8104`（YOLOv8n，CPU）；`meeting-bot:8101` 为轻量聚合层（HTTP 转发 + 长音频后台任务），对外 API 不变。
+- 权重位置：`D:\AI\AImodles\models\`（SenseVoiceSmall / buffalo_l / yolov8n.pt / faces.json）、`D:\AI\AImodles\cosyvoice\pretrained_models\Fun-CosyVoice3-0.5B`；CosyVoice 的 wetext FST 缓存持久化在 `D:\AI\AImodles\cosyvoice\modelscope`（容器内 `/data/modelscope`）。
+- 启动：`.\scripts\deploy-model-services.ps1`（停旧裸跑进程 → 下载缺失权重 → `docker compose up -d --build` → 冒烟）。
+- 冒烟：`$env:MEETING_BOT_BASE_URL="http://localhost:8101"; uv run pytest services\meeting-bot\tests\test_container_smoke.py -v`（10/10 通过，2026-08-24 实测）。
+- 构建网络：机器直连 GitHub 极慢，全部改为国内源——apt 用阿里云 Debian/Ubuntu 镜像，uv 由 `pip install uv` 从阿里云 PyPI 安装，Python 依赖走阿里云 PyPI（cosyvoice 的 torch 走阿里云 pytorch-wheels）；cosyvoice 额外运行时依赖见 `services/cosyvoice/requirements-extra.txt`。
+- 其他应用可直接调用四个模型服务（带 `X-Meeting-Bot-Key`）；DGX 迁移时 `docker buildx --platform linux/arm64` 重建镜像，compose 网络/挂载/环境变量原样复用。
+- FireRed 旧引擎代码保留在 git 历史（`services/meeting-bot/app/engines/`），回滚 = 旧提交 + 旧镜像重建；旧权重未删。
