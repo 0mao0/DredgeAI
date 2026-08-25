@@ -1,0 +1,22 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+    <Import Project="..\..\..\common.props" />
+    <PropertyGroup>
+        <TargetFramework>net10.0</TargetFramework>
+        <ImplicitUsings>enable</ImplicitUsings>
+        <Nullable>enable</Nullable>
+        <RootNamespace>DredgeAI</RootNamespace>
+    </PropertyGroup>
+
+    <ItemGroup>
+      <PackageReference Include="Shiw.Abp.BaseEntityFrameworkCore" />
+      <PackageReference Include="Shiw.Abp.Identity.EntityFrameworkCore" />
+      <PackageReference Include="Shiw.File.EntityFrameworkCore" />
+      <PackageReference Include="Volo.Abp.EntityFrameworkCore" />
+    </ItemGroup>
+
+    <ItemGroup>
+      <ProjectReference Include="..\DredgeAI.Base.Domain\DredgeAI.Base.Domain.csproj" />
+    </ItemGroup>
+
+</Project>

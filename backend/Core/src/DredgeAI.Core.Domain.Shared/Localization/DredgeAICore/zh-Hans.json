@@ -1,0 +1,6 @@
+{
+  "culture": "zh-Hans",
+  "texts": {
+    "DredgeAICore:UnknownDataProvider": "未注册数据提供者 '{0}' 对应的位置提供者"
+  }
+}

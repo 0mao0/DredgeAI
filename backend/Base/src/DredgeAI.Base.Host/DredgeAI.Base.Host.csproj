@@ -1,0 +1,67 @@
+<Project Sdk="Microsoft.NET.Sdk.Web">
+
+    <Import Project="..\..\..\common.props" />
+    <PropertyGroup>
+        <TargetFramework>net10.0</TargetFramework>
+        <Nullable>enable</Nullable>
+        <ImplicitUsings>enable</ImplicitUsings>
+        <RootNamespace>DredgeAI</RootNamespace>
+    </PropertyGroup>
+
+    <ItemGroup>
+        <PackageReference Include="Serilog.AspNetCore"/>
+        <PackageReference Include="Serilog.Sinks.Async"/>
+        <PackageReference Include="Serilog.Sinks.OpenTelemetry"/>
+        <PackageReference Include="Microsoft.EntityFrameworkCore.Tools">
+            <PrivateAssets>all</PrivateAssets>
+            <IncludeAssets>runtime; build; native; contentfiles; analyzers</IncludeAssets>
+        </PackageReference>
+        <PackageReference Include="Shiw.Abp.AuditLogging.EntityFrameworkCore" />
+        <PackageReference Include="Shiw.Abp.FeatureManagement.EntityFrameworkCore" />
+        <PackageReference Include="Shiw.Abp.Identity.EntityFrameworkCore" />
+        <PackageReference Include="Shiw.Abp.PermissionManagement.EntityFrameworkCore" />
+        <PackageReference Include="Shiw.Abp.SettingManagement.EntityFrameworkCore" />
+        <PackageReference Include="Shiw.Abp.TenantManagement.EntityFrameworkCore" />
+        <PackageReference Include="Shiw.File.Application" />
+        <PackageReference Include="Shiw.File.BlobStoring.Minio" />
+        <PackageReference Include="Volo.Abp.AspNetCore.Authentication.JwtBearer" />
+        <PackageReference Include="Volo.Abp.AspNetCore.Mvc" />
+        <PackageReference Include="Volo.Abp.AspNetCore.Mvc.UI.MultiTenancy" />
+        <PackageReference Include="Volo.Abp.Autofac" />
+        <PackageReference Include="Volo.Abp.EntityFrameworkCore.PostgreSql" />
+        <PackageReference Include="Volo.Abp.AspNetCore.Serilog" />
+        <PackageReference Include="Volo.Abp.Swashbuckle" />
+        <PackageReference Include="Volo.Abp.Account.Application" />
+        <PackageReference Include="Volo.Abp.Account.HttpApi" />
+        <PackageReference Include="Volo.Abp.SettingManagement.Application" />
+        <PackageReference Include="Volo.Abp.SettingManagement.HttpApi" />
+        <PackageReference Include="Volo.Abp.AuditLogging.EntityFrameworkCore" />
+        <PackageReference Include="Volo.Abp.PermissionManagement.Application" />
+        <PackageReference Include="Volo.Abp.PermissionManagement.HttpApi" />
+        <PackageReference Include="Volo.Abp.Identity.Application" />
+        <PackageReference Include="Volo.Abp.Identity.HttpApi" />
+        <PackageReference Include="Volo.Abp.PermissionManagement.Domain.Identity" />
+        <PackageReference Include="Volo.Abp.FeatureManagement.Application" />
+        <PackageReference Include="Volo.Abp.FeatureManagement.HttpApi" />
+        <PackageReference Include="Volo.Abp.TenantManagement.Application" />
+        <PackageReference Include="Volo.Abp.TenantManagement.HttpApi" />
+    </ItemGroup>
+
+    <ItemGroup>
+      <ProjectReference Include="..\..\..\DredgeAI.Host.Shared\DredgeAI.Host.Shared.csproj" />
+      <ProjectReference Include="..\..\..\DredgeAI.ServiceDefaults\DredgeAI.ServiceDefaults.csproj" />
+      <ProjectReference Include="..\DredgeAI.Base.Application.Contracts\DredgeAI.Base.Application.Contracts.csproj" />
+      <ProjectReference Include="..\DredgeAI.Base.Application\DredgeAI.Base.Application.csproj" />
+      <ProjectReference Include="..\DredgeAI.Base.EntityFrameworkCore\DredgeAI.Base.EntityFrameworkCore.csproj" />
+      <ProjectReference Include="..\DredgeAI.Base.HttpApi\DredgeAI.Base.HttpApi.csproj" />
+    </ItemGroup>
+
+    <Target Name="CopyShiwXmlDocs" AfterTargets="Build">
+        <ItemGroup>
+            <_ShiwXmlDocs Include="%(ReferenceCopyLocalPaths.RootDir)%(ReferenceCopyLocalPaths.Directory)%(ReferenceCopyLocalPaths.Filename).xml"
+                          Condition="'%(ReferenceCopyLocalPaths.Extension)' == '.dll' and $([System.String]::new('%(ReferenceCopyLocalPaths.Filename)').StartsWith('Shiw.')) and Exists('%(ReferenceCopyLocalPaths.RootDir)%(ReferenceCopyLocalPaths.Directory)%(ReferenceCopyLocalPaths.Filename).xml')" />
+        </ItemGroup>
+        <Copy SourceFiles="@(_ShiwXmlDocs)" DestinationFolder="$(TargetDir)" SkipUnchangedFiles="true" />
+    </Target>
+
+</Project>
