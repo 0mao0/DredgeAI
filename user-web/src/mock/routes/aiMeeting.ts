@@ -2,6 +2,34 @@ import type MockAdapter from 'axios-mock-adapter'
 import { mockWorkers, mockMeetings, createMockMeeting, generateMockSpeech } from '@shared/mock/data/aiMeeting'
 import type { QaRecordDto } from '@shared/types'
 
+function buildSilenceWav(): Blob {
+  // 1 秒静音 WAV（44 字节头 + 静音 PCM），让前端播放链路可跑通
+  const sampleRate = 8000
+  const seconds = 1
+  const dataSize = sampleRate * seconds
+  const buffer = new ArrayBuffer(44 + dataSize)
+  const view = new DataView(buffer)
+  const writeAscii = (offset: number, text: string): void => {
+    for (let i = 0; i < text.length; i++) view.setUint8(offset + i, text.charCodeAt(i))
+  }
+  writeAscii(0, 'RIFF')
+  view.setUint32(4, 36 + dataSize, true)
+  writeAscii(8, 'WAVE')
+  writeAscii(12, 'fmt ')
+  view.setUint32(16, 16, true)
+  view.setUint16(20, 1, true)
+  view.setUint16(22, 1, true)
+  view.setUint32(24, sampleRate, true)
+  view.setUint32(28, sampleRate, true)
+  view.setUint16(32, 1, true)
+  view.setUint16(34, 8, true)
+  writeAscii(36, 'data')
+  view.setUint32(40, dataSize, true)
+  return new Blob([buffer], { type: 'audio/wav' })
+}
+
+const silenceWav = buildSilenceWav()
+
 export function registerMeetingMock(
   mock: MockAdapter,
   wrap: (h: () => unknown) => () => Promise<[number, unknown]>,
@@ -40,30 +68,10 @@ export function registerMeetingMock(
     ]
   })
   mock.onGet(/\/api\/meeting\/records\/[^/]+\/speech\/audio$/).reply(() => {
-    // 1 秒静音 WAV（44 字节头 + 静音 PCM），让前端播放链路可跑通
-    const sampleRate = 8000
-    const seconds = 1
-    const dataSize = sampleRate * seconds
-    const buffer = new ArrayBuffer(44 + dataSize)
-    const view = new DataView(buffer)
-    const writeAscii = (offset: number, text: string): void => {
-      for (let i = 0; i < text.length; i++) view.setUint8(offset + i, text.charCodeAt(i))
-    }
-    writeAscii(0, 'RIFF')
-    view.setUint32(4, 36 + dataSize, true)
-    writeAscii(8, 'WAVE')
-    writeAscii(12, 'fmt ')
-    view.setUint32(16, 16, true)
-    view.setUint16(20, 1, true)
-    view.setUint16(22, 1, true)
-    view.setUint32(24, sampleRate, true)
-    view.setUint32(28, sampleRate, true)
-    view.setUint16(32, 1, true)
-    view.setUint16(34, 8, true)
-    writeAscii(36, 'data')
-    view.setUint32(40, dataSize, true)
-    return [200, new Blob([buffer], { type: 'audio/wav' })]
+    return [200, silenceWav]
   })
+  mock.onGet(/\/api\/meeting\/records\/[^/]+\/speech\/audio\/segment\/\d+$/).reply(() => [200, silenceWav])
+  mock.onPost('/api/meeting/tts').reply(() => [200, silenceWav])
   mock.onPost('/api/meeting/asr').reply(() => [
     200,
     '今日任务：基坑支护施工与临边防护检查，注意高处作业安全。',

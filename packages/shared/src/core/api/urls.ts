@@ -138,6 +138,7 @@ export const urls = {
   meetingSpeechAudio: '/meeting/records/:id/speech/audio',
   meetingSpeechAudioStatus: '/meeting/records/:id/speech/audio/status',
   meetingSpeechLeadAudio: '/meeting/records/:id/speech/audio/lead',
+  meetingSpeechSegmentAudio: '/meeting/records/:id/speech/audio/segment/:index',
   meetingSpeechAudioCache: '/meeting/records/:id/speech/audio/cache',
   meetingAsr: '/meeting/asr',
   meetingTts: '/meeting/tts',

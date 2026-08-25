@@ -76,6 +76,13 @@ public class MeetingRecordController : AbpControllerBase
         return audio is null ? NotFound() : File(audio, "audio/wav");
     }
 
+    [HttpGet("{id:guid}/speech/audio/segment/{index:int}")]
+    public async Task<IActionResult> SpeechSegmentAudio(Guid id, int index)
+    {
+        var audio = await _service.GetSpeechSegmentAudioAsync(id, index);
+        return audio is null ? NotFound() : File(audio, "audio/wav");
+    }
+
     [HttpPost("{id:guid}/speech/audio/cache")]
     public async Task SaveSpeechAudioCache(Guid id, [FromForm] IFormFile file)
     {
@@ -159,6 +166,18 @@ public class MeetingRecordController : AbpControllerBase
         }
         var audio = await _bot.TtsAsync(input.Text);
         return File(audio, "audio/wav");
+    }
+
+    [HttpPost("~/api/meeting/tts/stream")]
+    public async Task TtsStream([FromBody] TtsInput input)
+    {
+        if (string.IsNullOrWhiteSpace(input.Text))
+        {
+            Response.StatusCode = StatusCodes.Status400BadRequest;
+            return;
+        }
+        Response.ContentType = "application/octet-stream";
+        await _bot.StreamTtsAsync(input.Text, Response.Body, HttpContext.RequestAborted);
     }
 
     [HttpPost("{id:guid}/recording")]
