@@ -96,6 +96,10 @@ public static class AnGineerIrMapper
                         })
                         .ToList();
                 }
+                if (!string.IsNullOrEmpty(node.TableCellsSource))
+                {
+                    table["cellsSource"] = node.TableCellsSource;
+                }
                 block["table"] = table;
             }
             if (type is "image" or "equation" && node.ImagePath != null)
@@ -199,6 +203,7 @@ public static class AnGineerIrMapper
         [JsonPropertyName("page_bboxes")] public List<PageBBox>? PageBBoxes { get; set; }
         [JsonPropertyName("merged_from")] public List<string>? MergedFrom { get; set; }
         [JsonPropertyName("table_cells")] public List<GraphTableCell>? TableCells { get; set; }
+        [JsonPropertyName("table_cells_source")] public string? TableCellsSource { get; set; }
     }
 
     private class GraphTableCell

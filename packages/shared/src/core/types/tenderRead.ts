@@ -120,6 +120,8 @@ export interface TenderReadingIrBlock {
     html: string
     imgPath: string
     cells?: TenderReadingIrTableCell[]
+    /** docs-api 单元格坐标来源：native | ocr | estimated（estimated 为网格估算，非真实 bbox） */
+    cellsSource?: string | null
   } | null
   imgPath?: string | null
 }

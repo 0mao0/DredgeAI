@@ -61,6 +61,7 @@ def _adapt_block(block: RawBlock) -> IrBlock:
         table = IrTable(
             html=block.table_html,
             imgPath=block.image_path or "",
+            cellsSource=block.table_cells_source,
             cells=[
                 IrTableCell(
                     row=cell.row,

@@ -71,6 +71,7 @@ public static class SampleIr
           "table": {
             "html": "<table><tr><td>总价</td></tr></table>",
             "imgPath": "images/t1.jpg",
+            "cellsSource": "estimated",
             "cells": [
               { "row": 0, "col": 0, "rowspan": 1, "colspan": 1, "pageIdx": 1,
                 "bbox": [0.0672, 0.1188, 0.5, 0.2], "text": "总价" }

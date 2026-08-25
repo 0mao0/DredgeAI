@@ -101,6 +101,8 @@ public class IrTableDto
     public string ImgPath { get; set; } = default!;
 
     /// <summary>docs-api 单元格级坐标（row/col/rowspan/colspan/pageIdx/bbox/text，bbox 0~1 归一化），前端溯源优先命中。</summary>
+    public string? CellsSource { get; set; }
+
     public List<IrTableCellDto> Cells { get; set; } = new();
 }
 

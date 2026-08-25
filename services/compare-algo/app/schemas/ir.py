@@ -71,6 +71,9 @@ class IrTable(BaseModel):
     html: Optional[str] = None
     imgPath: str
     cells: list[IrTableCell] = Field(default_factory=list)
+    # docs-api cell coordinate source: native | ocr | estimated (grid-estimated, not real text-layer/OCR bbox).
+    # Used by the frontend to prefer pdf.js text layer over estimated cells when a native PDF is available.
+    cellsSource: Optional[str] = None
 
 
 class IrBlock(BaseModel):

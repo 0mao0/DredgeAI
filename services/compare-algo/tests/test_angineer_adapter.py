@@ -75,6 +75,7 @@ class TestTypeMapping:
                            table_html="<table><tr><td>总价</td></tr></table>",
                            image_path="images/t.jpg"),
         ])
+        raw["blocks"][0]["table_cells_source"] = "estimated"
         raw["blocks"][0]["table_cells"] = [
             {
                 "row": 0,
@@ -89,6 +90,7 @@ class TestTypeMapping:
         doc = adapt(raw)
         table = next(b for b in doc.blocks if b.type == "table")
         assert len(table.table.cells) == 1
+        assert table.table.cellsSource == "estimated"
         cell = table.table.cells[0]
         assert cell.pageIdx == 2
         assert cell.row == 0

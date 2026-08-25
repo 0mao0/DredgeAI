@@ -36,6 +36,8 @@ public class AnGineerIrMapperTests
         cells[0]!["text"]!.GetValue<string>().ShouldBe("总价");
         cells[0]!["bbox"]!.AsArray().Select(x => x!.GetValue<double>())
             .ShouldBe(new double[] { 0.0672, 0.1188, 0.5, 0.2 });
+        // docs-api 单元格坐标来源透传（native | ocr | estimated），供前端决定溯源降级顺序
+        node["blocks"]![1]!["table"]!["cellsSource"]!.GetValue<string>().ShouldBe("estimated");
     }
 
     [Fact]
