@@ -8,6 +8,9 @@ dist/
 build/
 **/build/
 *.local
+obj/
+bin/
+
 
 # 日志文件
 logs/

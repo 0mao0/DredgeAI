@@ -1,0 +1,109 @@
+<Project>
+  <PropertyGroup>
+    <ManagePackageVersionsCentrally>true</ManagePackageVersionsCentrally>
+  </PropertyGroup>
+  <ItemGroup>
+    <PackageVersion Include="Aspire.Hosting.Docker" Version="13.4.6" />
+    <PackageVersion Include="Microsoft.Extensions.Http.Resilience" Version="10.6.0" />
+    <PackageVersion Include="Microsoft.Extensions.ServiceDiscovery" Version="10.6.0" />
+    <PackageVersion Include="OpenTelemetry.Exporter.OpenTelemetryProtocol" Version="1.15.3" />
+    <PackageVersion Include="OpenTelemetry.Extensions.Hosting" Version="1.15.3" />
+    <PackageVersion Include="OpenTelemetry.Instrumentation.AspNetCore" Version="1.15.2" />
+    <PackageVersion Include="OpenTelemetry.Instrumentation.Http" Version="1.15.1" />
+    <PackageVersion Include="OpenTelemetry.Instrumentation.Runtime" Version="1.15.1" />
+    <PackageVersion Include="Shiw.Abp.BaseEntityFrameworkCore" Version="10.0.9" />
+    <PackageVersion Include="Shiw.File.Application" Version="10.0.5" />
+    <PackageVersion Include="Shiw.File.Application.Contracts" Version="10.0.5" />
+    <PackageVersion Include="Shiw.File.BlobStoring.Minio" Version="10.0.5" />
+    <PackageVersion Include="Shiw.File.EntityFrameworkCore" Version="10.0.5" />
+    <PackageVersion Include="Shiw.File.HttpApi" Version="10.0.5" />
+    <PackageVersion Include="Shiw.File.HttpApi.Client" Version="10.0.5" />
+    <PackageVersion Include="Shiw.File.Web" Version="10.0.5" />
+    <PackageVersion Include="Volo.Abp.AspNetCore.Authentication.JwtBearer" Version="10.5.0" />
+    <PackageVersion Include="Volo.Abp.AspNetCore.Mvc.Client" Version="10.5.0" />
+    <PackageVersion Include="Volo.Abp.Data" Version="10.5.0" />
+    <PackageVersion Include="Volo.Abp.Http.Client.IdentityModel.Web" Version="10.5.0" />
+    <PackageVersion Include="Volo.Abp.Http.Client.IdentityModel" Version="10.5.0" />
+    <PackageVersion Include="Volo.Abp.ObjectExtending" Version="10.5.0" />
+    <PackageVersion Include="Yarp.ReverseProxy" Version="2.3.0" />
+    <PackageVersion Include="Volo.Abp.Ddd.Application" Version="10.5.0" />
+    <PackageVersion Include="Volo.Abp.Identity.Domain" Version="10.5.0" />
+    <PackageVersion Include="Volo.Abp.Identity.Application.Contracts" Version="10.5.0" />
+    <PackageVersion Include="Volo.Abp.FeatureManagement.Domain" Version="10.5.0" />
+    <PackageVersion Include="Volo.Abp.FeatureManagement.Application.Contracts" Version="10.5.0" />
+    <PackageVersion Include="Volo.Abp.TenantManagement.Domain" Version="10.5.0" />
+    <PackageVersion Include="Volo.Abp.TenantManagement.Application.Contracts" Version="10.5.0" />
+    <PackageVersion Include="Volo.Abp.Mapperly" Version="10.5.0" />
+    <PackageVersion Include="Volo.Abp.Ddd.Domain" Version="10.5.0" />
+    <PackageVersion Include="Volo.Abp.Ddd.Domain.Shared" Version="10.5.0" />
+    <PackageVersion Include="Serilog.AspNetCore" Version="9.0.0" />
+    <PackageVersion Include="Serilog.Extensions.Hosting" Version="9.0.0" />
+    <PackageVersion Include="Serilog.Extensions.Logging" Version="9.0.2" />
+    <PackageVersion Include="Serilog.Settings.Configuration" Version="9.0.0" />
+    <PackageVersion Include="Serilog.Sinks.Async" Version="2.1.0" />
+    <PackageVersion Include="Serilog.Sinks.Console" Version="6.0.0" />
+    <PackageVersion Include="Serilog.Sinks.File" Version="7.0.0" />
+    <PackageVersion Include="Serilog.Sinks.OpenTelemetry" Version="4.2.0" />
+    <PackageVersion Include="Microsoft.EntityFrameworkCore.Tools" Version="10.0.9">
+      <PrivateAssets>all</PrivateAssets>
+      <IncludeAssets>runtime; build; native; contentfiles; analyzers</IncludeAssets>
+    </PackageVersion>
+    <PackageVersion Include="Microsoft.EntityFrameworkCore" Version="10.0.9" />
+    <PackageVersion Include="ConfigureAwait.Fody" Version="3.4.1" />
+    <PackageVersion Include="Fody" Version="6.9.3" />
+    <PackageVersion Include="Shiw.Abp.AuditLogging.EntityFrameworkCore" Version="10.0.9" />
+    <PackageVersion Include="Shiw.Abp.BackgroundJobs.EntityFrameworkCore" Version="10.0.9" />
+    <PackageVersion Include="Volo.Abp.BackgroundJobs.Abstractions" Version="10.5.0" />
+    <PackageVersion Include="Shiw.Abp.FeatureManagement.EntityFrameworkCore" Version="10.0.9" />
+    <PackageVersion Include="Shiw.Abp.Identity.EntityFrameworkCore" Version="10.0.9" />
+    <PackageVersion Include="Shiw.Abp.OpenIddict.EntityFrameworkCore" Version="10.0.9" />
+    <PackageVersion Include="Shiw.Abp.PermissionManagement.EntityFrameworkCore" Version="10.0.9" />
+    <PackageVersion Include="Shiw.Abp.SettingManagement.EntityFrameworkCore" Version="10.0.9" />
+    <PackageVersion Include="Shiw.Abp.TenantManagement.EntityFrameworkCore" Version="10.0.9" />
+    <PackageVersion Include="Volo.Abp.AspNetCore.Mvc.UI.Theme.Basic" Version="10.5.0" />
+    <PackageVersion Include="Volo.Abp.AspNetCore.Mvc" Version="10.5.0" />
+    <PackageVersion Include="Volo.Abp.AspNetCore.Mvc.UI.MultiTenancy" Version="10.5.0" />
+    <PackageVersion Include="Volo.Abp.Autofac" Version="10.5.0" />
+    <PackageVersion Include="Volo.Abp.EntityFrameworkCore.PostgreSql" Version="10.5.0" />
+    <PackageVersion Include="Volo.Abp.AspNetCore.Serilog" Version="10.5.0" />
+    <PackageVersion Include="Volo.Abp.Swashbuckle" Version="10.5.0" />
+    <PackageVersion Include="Volo.Abp.Account.Web.OpenIddict" Version="10.5.0" />
+    <PackageVersion Include="Volo.Abp.Account.Application" Version="10.5.0" />
+    <PackageVersion Include="Volo.Abp.Account.HttpApi" Version="10.5.0" />
+    <PackageVersion Include="Volo.Abp.SettingManagement.Application" Version="10.5.0" />
+    <PackageVersion Include="Volo.Abp.SettingManagement.Domain" Version="10.5.0" />
+    <PackageVersion Include="Volo.Abp.SettingManagement.HttpApi" Version="10.5.0" />
+    <PackageVersion Include="Volo.Abp.AuditLogging.Domain" Version="10.5.0" />
+    <PackageVersion Include="Volo.Abp.AuditLogging.EntityFrameworkCore" Version="10.5.0" />
+    <PackageVersion Include="Volo.Abp.PermissionManagement.Application" Version="10.5.0" />
+    <PackageVersion Include="Volo.Abp.PermissionManagement.Domain" Version="10.5.0" />
+    <PackageVersion Include="Volo.Abp.PermissionManagement.HttpApi" Version="10.5.0" />
+    <PackageVersion Include="Volo.Abp.Identity.Application" Version="10.5.0" />
+    <PackageVersion Include="Volo.Abp.Identity.HttpApi" Version="10.5.0" />
+    <PackageVersion Include="Volo.Abp.PermissionManagement.Domain.Identity" Version="10.5.0" />
+    <PackageVersion Include="Volo.Abp.FeatureManagement.Application" Version="10.5.0" />
+    <PackageVersion Include="Volo.Abp.FeatureManagement.HttpApi" Version="10.5.0" />
+    <PackageVersion Include="Volo.Abp.TenantManagement.Application" Version="10.5.0" />
+    <PackageVersion Include="Volo.Abp.TenantManagement.HttpApi" Version="10.5.0" />
+    <PackageVersion Include="Volo.Abp.Authorization" Version="10.5.0" />
+    <PackageVersion Include="Volo.Abp.Ddd.Application.Contracts" Version="10.5.0" />
+    <PackageVersion Include="Volo.Abp.Http.Client" Version="10.5.0" />
+    <PackageVersion Include="Volo.Abp.Core" Version="10.5.0" />
+    <PackageVersion Include="Volo.Abp.Timing" Version="10.5.0" />
+    <PackageVersion Include="Volo.Abp.Validation" Version="10.5.0" />
+    <PackageVersion Include="Microsoft.Extensions.FileProviders.Embedded" Version="10.0.7" />
+    <PackageVersion Include="Microsoft.Extensions.Hosting" Version="10.0.9" />
+    <PackageVersion Include="Microsoft.Extensions.Http" Version="10.0.9" />
+    <PackageVersion Include="Volo.Abp.EntityFrameworkCore" Version="10.5.0" />
+    <PackageVersion Include="Swashbuckle.AspNetCore" Version="10.0.1" />
+    <PackageVersion Include="TinyPinyin" Version="1.1.0" />
+    <PackageVersion Include="Microsoft.NET.Test.Sdk" Version="17.14.1" />
+    <PackageVersion Include="NSubstitute" Version="5.3.0" />
+    <PackageVersion Include="Shouldly" Version="4.3.0" />
+    <PackageVersion Include="xunit" Version="2.9.3" />
+    <PackageVersion Include="xunit.extensibility.execution" Version="2.9.3" />
+    <PackageVersion Include="xunit.runner.visualstudio" Version="3.1.4" />
+    <PackageVersion Include="Volo.Abp.TestBase" Version="10.5.0" />
+    <PackageVersion Include="Volo.Abp.EntityFrameworkCore.Sqlite" Version="10.5.0" />
+  </ItemGroup>
+</Project>

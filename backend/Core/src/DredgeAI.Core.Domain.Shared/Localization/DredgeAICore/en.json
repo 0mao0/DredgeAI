@@ -1,0 +1,6 @@
+{
+  "culture": "en",
+  "texts": {
+    "DredgeAICore:UnknownDataProvider": "No latest-position provider registered for data provider '{0}'"
+  }
+}

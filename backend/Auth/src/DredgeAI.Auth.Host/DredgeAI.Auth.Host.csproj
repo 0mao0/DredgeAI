@@ -1,0 +1,64 @@
+<Project Sdk="Microsoft.NET.Sdk.Web">
+
+    <Import Project="..\..\..\common.props" />
+    <PropertyGroup>
+        <TargetFramework>net10.0</TargetFramework>
+        <Nullable>enable</Nullable>
+        <ImplicitUsings>enable</ImplicitUsings>
+        <RootNamespace>DredgeAI</RootNamespace>
+    </PropertyGroup>
+
+    <ItemGroup>
+        <PackageReference Include="Serilog.AspNetCore"/>
+        <PackageReference Include="Serilog.Sinks.Async"/>
+        <PackageReference Include="Serilog.Sinks.OpenTelemetry"/>
+        <PackageReference Include="Microsoft.EntityFrameworkCore.Tools">
+            <PrivateAssets>all</PrivateAssets>
+            <IncludeAssets>runtime; build; native; contentfiles; analyzers</IncludeAssets>
+        </PackageReference>
+        <PackageReference Include="Shiw.Abp.AuditLogging.EntityFrameworkCore" />
+        <PackageReference Include="Shiw.Abp.FeatureManagement.EntityFrameworkCore" />
+        <PackageReference Include="Shiw.Abp.Identity.EntityFrameworkCore" />
+        <PackageReference Include="Shiw.Abp.OpenIddict.EntityFrameworkCore" />
+        <PackageReference Include="Shiw.Abp.PermissionManagement.EntityFrameworkCore" />
+        <PackageReference Include="Shiw.Abp.SettingManagement.EntityFrameworkCore" />
+        <PackageReference Include="Shiw.Abp.TenantManagement.EntityFrameworkCore" />
+        <PackageReference Include="Volo.Abp.AspNetCore.Mvc.UI.Theme.Basic"/>
+        <PackageReference Include="Volo.Abp.AspNetCore.Mvc" />
+        <PackageReference Include="Volo.Abp.AspNetCore.Mvc.UI.MultiTenancy" />
+        <PackageReference Include="Volo.Abp.Autofac" />
+        <PackageReference Include="Volo.Abp.EntityFrameworkCore.PostgreSql" />
+        <PackageReference Include="Volo.Abp.AspNetCore.Serilog" />
+        <PackageReference Include="Volo.Abp.Swashbuckle" />
+        <PackageReference Include="Volo.Abp.Account.Web.OpenIddict" />
+        <PackageReference Include="Volo.Abp.Account.Application" />
+        <PackageReference Include="Volo.Abp.SettingManagement.Application" />
+        <PackageReference Include="Volo.Abp.AuditLogging.EntityFrameworkCore" />
+        <PackageReference Include="Volo.Abp.PermissionManagement.Application" />
+        <PackageReference Include="Volo.Abp.Identity.Application" />
+        <PackageReference Include="Volo.Abp.PermissionManagement.Domain.Identity" />
+        <PackageReference Include="Volo.Abp.FeatureManagement.Application" />
+        <PackageReference Include="Volo.Abp.TenantManagement.Application" />
+    </ItemGroup>
+
+    <ItemGroup>
+      <ProjectReference Include="..\..\..\DredgeAI.Host.Shared\DredgeAI.Host.Shared.csproj" />
+      <ProjectReference Include="..\..\..\DredgeAI.ServiceDefaults\DredgeAI.ServiceDefaults.csproj" />
+      <ProjectReference Include="..\DredgeAI.Auth.Application.Contracts\DredgeAI.Auth.Application.Contracts.csproj" />
+      <ProjectReference Include="..\DredgeAI.Auth.Application\DredgeAI.Auth.Application.csproj" />
+      <ProjectReference Include="..\DredgeAI.Auth.EntityFrameworkCore\DredgeAI.Auth.EntityFrameworkCore.csproj" />
+      <ProjectReference Include="..\DredgeAI.Auth.HttpApi\DredgeAI.Auth.HttpApi.csproj" />
+    </ItemGroup>
+
+    <ItemGroup>
+      <Folder Include="wwwroot\libs\" />
+    </ItemGroup>
+
+    <ItemGroup>
+      <None Remove="openiddict.pfx" />
+      <Content Include="openiddict.pfx">
+        <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+      </Content>
+    </ItemGroup>
+
+</Project>

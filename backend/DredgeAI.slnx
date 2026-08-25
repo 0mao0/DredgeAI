@@ -1,0 +1,55 @@
+<Solution>
+  <Folder Name="/Hosts/">
+    <Project Path="DredgeAI.AppHost/DredgeAI.AppHost.csproj" />
+    <Project Path="DredgeAI.Host.Shared/DredgeAI.Host.Shared.csproj" />
+    <Project Path="DredgeAI.ServiceDefaults/DredgeAI.ServiceDefaults.csproj" />
+  </Folder>
+  <Folder Name="/Infrastructure/" />
+  <Folder Name="/Infrastructure/Core/" />
+  <Folder Name="/Infrastructure/Core/src/">
+    <Project Path="Core/src/DredgeAI.Core.Domain.Shared/DredgeAI.Core.Domain.Shared.csproj" />
+    <Project Path="Core/src/DredgeAI.Core.Domain/DredgeAI.Core.Domain.csproj" />
+  </Folder>
+  <Folder Name="/Infrastructure/Core/test/">
+    <Project Path="Core/test/DredgeAI.Core.TestBase/DredgeAI.Core.TestBase.csproj" />
+    <Project Path="Core/test/DredgeAI.Core.Domain.Tests/DredgeAI.Core.Domain.Tests.csproj" />
+  </Folder>
+  <Folder Name="/Services/" />
+  <Folder Name="/Services/Auth/" />
+  <Folder Name="/Services/Auth/src/">
+    <Project Path="Auth/src/DredgeAI.Auth.Application.Contracts/DredgeAI.Auth.Application.Contracts.csproj" />
+    <Project Path="Auth/src/DredgeAI.Auth.Application/DredgeAI.Auth.Application.csproj" />
+    <Project Path="Auth/src/DredgeAI.Auth.Domain.Shared/DredgeAI.Auth.Domain.Shared.csproj" />
+    <Project Path="Auth/src/DredgeAI.Auth.Domain/DredgeAI.Auth.Domain.csproj" />
+    <Project Path="Auth/src/DredgeAI.Auth.EntityFrameworkCore/DredgeAI.Auth.EntityFrameworkCore.csproj" />
+    <Project Path="Auth/src/DredgeAI.Auth.Host/DredgeAI.Auth.Host.csproj" />
+    <Project Path="Auth/src/DredgeAI.Auth.HttpApi.Client/DredgeAI.Auth.HttpApi.Client.csproj" />
+    <Project Path="Auth/src/DredgeAI.Auth.HttpApi/DredgeAI.Auth.HttpApi.csproj" />
+  </Folder>
+  <Folder Name="/Services/Auth/test/">
+    <Project Path="Auth/test/DredgeAI.Auth.Application.Tests/DredgeAI.Auth.Application.Tests.csproj" />
+    <Project Path="Auth/test/DredgeAI.Auth.Domain.Tests/DredgeAI.Auth.Domain.Tests.csproj" />
+    <Project Path="Auth/test/DredgeAI.Auth.EntityFrameworkCore.Tests/DredgeAI.Auth.EntityFrameworkCore.Tests.csproj" />
+    <Project Path="Auth/test/DredgeAI.Auth.TestBase/DredgeAI.Auth.TestBase.csproj" />
+  </Folder>
+  <Folder Name="/Services/Base/" />
+  <Folder Name="/Services/Base/src/">
+    <Project Path="Base/src/DredgeAI.Base.Application.Contracts/DredgeAI.Base.Application.Contracts.csproj" />
+    <Project Path="Base/src/DredgeAI.Base.Application/DredgeAI.Base.Application.csproj" />
+    <Project Path="Base/src/DredgeAI.Base.Domain.Shared/DredgeAI.Base.Domain.Shared.csproj" />
+    <Project Path="Base/src/DredgeAI.Base.Domain/DredgeAI.Base.Domain.csproj" />
+    <Project Path="Base/src/DredgeAI.Base.EntityFrameworkCore/DredgeAI.Base.EntityFrameworkCore.csproj" />
+    <Project Path="Base/src/DredgeAI.Base.Host/DredgeAI.Base.Host.csproj" />
+    <Project Path="Base/src/DredgeAI.Base.HttpApi.Client/DredgeAI.Base.HttpApi.Client.csproj" />
+    <Project Path="Base/src/DredgeAI.Base.HttpApi/DredgeAI.Base.HttpApi.csproj" />
+  </Folder>
+  <Folder Name="/Services/Base/test/">
+    <Project Path="Base/test/DredgeAI.Base.Application.Tests/DredgeAI.Base.Application.Tests.csproj" />
+    <Project Path="Base/test/DredgeAI.Base.Domain.Tests/DredgeAI.Base.Domain.Tests.csproj" />
+    <Project Path="Base/test/DredgeAI.Base.EntityFrameworkCore.Tests/DredgeAI.Base.EntityFrameworkCore.Tests.csproj" />
+    <Project Path="Base/test/DredgeAI.Base.TestBase/DredgeAI.Base.TestBase.csproj" />
+  </Folder>
+  <Folder Name="/Services/Gateway/">
+    <Project Path="Gateway/DredgeAI.Gateway.Host/DredgeAI.Gateway.Host.csproj" />
+  </Folder>
+</Solution>
