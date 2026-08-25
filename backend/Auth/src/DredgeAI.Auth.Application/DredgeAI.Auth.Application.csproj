@@ -1,0 +1,21 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  
+    <Import Project="..\..\..\common.props" />
+    <PropertyGroup>
+        <TargetFramework>net10.0</TargetFramework>
+        <ImplicitUsings>enable</ImplicitUsings>
+        <Nullable>enable</Nullable>
+        <RootNamespace>DredgeAI</RootNamespace>
+    </PropertyGroup>
+
+    <ItemGroup>
+      <PackageReference Include="Volo.Abp.Ddd.Application" />
+      <PackageReference Include="Volo.Abp.Mapperly" />
+    </ItemGroup>
+
+    <ItemGroup>
+      <ProjectReference Include="..\DredgeAI.Auth.Application.Contracts\DredgeAI.Auth.Application.Contracts.csproj" />
+      <ProjectReference Include="..\DredgeAI.Auth.Domain\DredgeAI.Auth.Domain.csproj" />
+    </ItemGroup>
+
+</Project>

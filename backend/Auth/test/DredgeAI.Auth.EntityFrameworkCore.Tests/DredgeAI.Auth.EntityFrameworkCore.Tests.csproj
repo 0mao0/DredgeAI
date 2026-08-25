@@ -1,0 +1,28 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <RootNamespace>DredgeAI</RootNamespace>
+    <IsPackable>false</IsPackable>
+    <GenerateRuntimeConfigurationFiles>true</GenerateRuntimeConfigurationFiles>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.NET.Test.Sdk" />
+    <PackageReference Include="Shouldly" />
+    <PackageReference Include="Shiw.Abp.BaseEntityFrameworkCore" />
+    <PackageReference Include="Shiw.Abp.OpenIddict.EntityFrameworkCore" />
+    <PackageReference Include="Volo.Abp.EntityFrameworkCore.Sqlite" />
+    <PackageReference Include="xunit" />
+    <PackageReference Include="xunit.extensibility.execution" />
+    <PackageReference Include="xunit.runner.visualstudio" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\DredgeAI.Auth.TestBase\DredgeAI.Auth.TestBase.csproj" />
+    <ProjectReference Include="..\..\src\DredgeAI.Auth.EntityFrameworkCore\DredgeAI.Auth.EntityFrameworkCore.csproj" />
+  </ItemGroup>
+
+</Project>
