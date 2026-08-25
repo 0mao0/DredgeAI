@@ -77,6 +77,10 @@ public class BidCompareDbContext :
     public DbSet<MeetingRecord> MeetingRecords { get; set; }
     public DbSet<SpeechDraft> SpeechDrafts { get; set; }
     public DbSet<AttendanceRecord> AttendanceRecords { get; set; }
+
+    public DbSet<MeetingProject> MeetingProjects { get; set; }
+
+    public DbSet<UnrecognizedFace> UnrecognizedFaces { get; set; }
     public DbSet<QaRecord> QaRecords { get; set; }
     public DbSet<WorkerProfile> WorkerProfiles { get; set; }
 
@@ -280,8 +284,32 @@ public class BidCompareDbContext :
             b.Property(x => x.Team).HasMaxLength(64);
             b.Property(x => x.Status).IsRequired();
             b.Property(x => x.Confidence).IsRequired();
+            b.Property(x => x.Bbox).IsRequired().HasColumnType("text");
             b.HasIndex(x => x.MeetingRecordId);
             b.HasIndex(x => new { x.MeetingRecordId, x.WorkerId });
+        });
+
+        builder.Entity<MeetingProject>(b =>
+        {
+            b.ToTable("BcMeetingProjects");
+            b.ConfigureByConvention();
+            b.Property(x => x.Name).IsRequired().HasMaxLength(128);
+            b.Property(x => x.AnGineerDocId).HasMaxLength(128);
+            b.Property(x => x.DocIdsJson).IsRequired().HasColumnType("text");
+            b.Property(x => x.DocNamesJson).IsRequired().HasColumnType("text");
+            b.Property(x => x.Status).IsRequired().HasMaxLength(16);
+            b.Property(x => x.ProjectInfoJson).IsRequired().HasColumnType("text");
+            b.Property(x => x.Summary).HasColumnType("text");
+        });
+
+        builder.Entity<UnrecognizedFace>(b =>
+        {
+            b.ToTable("BcUnrecognizedFaces");
+            b.ConfigureByConvention();
+            b.Property(x => x.PhotoKey).IsRequired().HasMaxLength(256);
+            b.Property(x => x.Confidence).IsRequired();
+            b.Property(x => x.BboxJson).IsRequired().HasColumnType("text");
+            b.HasIndex(x => x.MeetingRecordId);
         });
 
         builder.Entity<QaRecord>(b =>

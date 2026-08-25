@@ -51,14 +51,54 @@ public class WorkerProfileAppService : ApplicationService, IWorkerProfileAppServ
         {
             throw new BusinessException("MEETING_WORKER_REQUIRED", "姓名与工号/证件号不能为空");
         }
-        var existing = await _workers.GetListAsync(w => w.EmployeeNo == input.EmployeeNo);
+        var normalizedName = input.Name.Trim();
+        var normalizedEmployeeNo = input.EmployeeNo.Trim();
+        var existing = await _workers.GetListAsync(w => w.EmployeeNo == normalizedEmployeeNo);
         if (existing.Count > 0)
         {
             return Map(existing[0]);
         }
-        var worker = new WorkerProfile(GuidGenerator.Create(), input.Name.Trim(), input.EmployeeNo.Trim(), input.Team.Trim());
+        // 同名 + 身份证出生日期相同 → 视为同一人（避免同一人重复登记），复用已有档案
+        var birthday = BirthdayFromIdCard(normalizedEmployeeNo);
+        if (!string.IsNullOrEmpty(birthday))
+        {
+            var sameName = await _workers.GetListAsync(w => w.Name == normalizedName);
+            var matched = sameName.FirstOrDefault(w => BirthdayFromIdCard(w.EmployeeNo) == birthday);
+            if (matched != null)
+            {
+                return Map(matched);
+            }
+        }
+        var worker = new WorkerProfile(GuidGenerator.Create(), normalizedName, normalizedEmployeeNo, input.Team.Trim());
         await _workers.InsertAsync(worker);
         return Map(worker);
+    }
+
+    /// <summary>从 18 位身份证号取出生日期（YYYYMMDD）；非身份证号返回空。</summary>
+    internal static string BirthdayFromIdCard(string? employeeNo)
+    {
+        if (string.IsNullOrWhiteSpace(employeeNo))
+        {
+            return "";
+        }
+        var digits = employeeNo.Trim();
+        if (digits.Length != 18 || !char.IsDigit(digits[0]))
+        {
+            return "";
+        }
+        for (var i = 0; i < 17; i++)
+        {
+            if (!char.IsDigit(digits[i]))
+            {
+                return "";
+            }
+        }
+        var last = digits[17];
+        if (!char.IsDigit(last) && last != 'X' && last != 'x')
+        {
+            return "";
+        }
+        return digits.Substring(6, 8);
     }
 
     public async Task<IdCardRecognitionDto> RecognizeIdCardAsync(byte[] image)

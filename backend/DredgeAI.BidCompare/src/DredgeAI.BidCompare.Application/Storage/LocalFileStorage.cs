@@ -78,7 +78,7 @@ public class LocalFileStorage : IFileStorage
         var expires = DateTimeOffset.UtcNow.Add(expiry).ToUnixTimeSeconds();
         var signature = Sign(key, expires);
         return Task.FromResult(
-            $"{_options.PublicBaseUrl.TrimEnd('/')}/api/compare/storage/file" +
+            $"/api/compare/storage/file" +
             $"?key={Uri.EscapeDataString(key)}&expires={expires}&sig={signature}");
     }
 

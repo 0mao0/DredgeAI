@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.IO;
+using System.Linq;
 using System.Threading.Tasks;
 using DredgeAI.BidCompare.MeetingBot;
 using Microsoft.AspNetCore.Http;
@@ -57,6 +58,32 @@ public class MeetingRecordController : AbpControllerBase
         return File(audio, "audio/wav");
     }
 
+    [HttpGet("{id:guid}/speech/audio/status")]
+    public async Task<MeetingBot.SpeechAudioStatusDto> SpeechAudioStatus(Guid id)
+    {
+        return new MeetingBot.SpeechAudioStatusDto
+        {
+            Cached = await _service.IsSpeechAudioCachedAsync(id),
+            LeadCached = await _service.IsSpeechLeadAudioCachedAsync(id),
+            LeadText = await _service.GetSpeechLeadTextAsync(id)
+        };
+    }
+
+    [HttpGet("{id:guid}/speech/audio/lead")]
+    public async Task<IActionResult> SpeechLeadAudio(Guid id)
+    {
+        var audio = await _service.GetSpeechLeadAudioAsync(id);
+        return audio is null ? NotFound() : File(audio, "audio/wav");
+    }
+
+    [HttpPost("{id:guid}/speech/audio/cache")]
+    public async Task SaveSpeechAudioCache(Guid id, [FromForm] IFormFile file)
+    {
+        using var ms = new MemoryStream();
+        await file.CopyToAsync(ms);
+        await _service.SaveSpeechAudioCacheAsync(id, ms.ToArray());
+    }
+
     [HttpPost("{id:guid}/start")]
     public Task<MeetingRecordDto> Start(Guid id)
         => _service.StartAsync(id);
@@ -69,6 +96,26 @@ public class MeetingRecordController : AbpControllerBase
         var faces = await _service.RecognizeAttendanceAsync(id, ms.ToArray());
         var count = await _bot.CountAsync(ms.ToArray());
         return new AttendanceRecognizeResult { Faces = faces, Count = count };
+    }
+
+    [HttpPost("{id:guid}/unrecognized-faces")]
+    public async Task<int> SaveUnrecognizedFaces(Guid id, [FromForm] List<IFormFile> files, [FromForm] string? metadata)
+    {
+        var items = new List<(byte[] Data, double Confidence, double[] Bbox)>();
+        var parsed = ParseUnrecognizedMetadata(metadata);
+        for (var i = 0; i < files.Count; i++)
+        {
+            var file = files[i];
+            if (file.Length == 0)
+            {
+                continue;
+            }
+            using var ms = new MemoryStream();
+            await file.CopyToAsync(ms);
+            var meta = parsed.Count > i ? parsed[i] : (Confidence: 0, Bbox: Array.Empty<double>());
+            items.Add((ms.ToArray(), meta.Confidence, meta.Bbox));
+        }
+        return await _service.SaveUnrecognizedFacesAsync(id, items);
     }
 
     [HttpGet("{id:guid}/attendance")]
@@ -140,5 +187,33 @@ public class MeetingRecordController : AbpControllerBase
     public class TtsInput
     {
         public string Text { get; set; } = "";
+    }
+
+    private static List<(double Confidence, double[] Bbox)> ParseUnrecognizedMetadata(string? metadata)
+    {
+        if (string.IsNullOrWhiteSpace(metadata))
+        {
+            return [];
+        }
+        try
+        {
+            using var doc = System.Text.Json.JsonDocument.Parse(metadata);
+            var result = new List<(double Confidence, double[] Bbox)>();
+            foreach (var item in doc.RootElement.EnumerateArray())
+            {
+                var confidence = item.TryGetProperty("confidence", out var c) && c.ValueKind == System.Text.Json.JsonValueKind.Number
+                    ? c.GetDouble()
+                    : 0;
+                var bbox = item.TryGetProperty("bbox", out var b) && b.ValueKind == System.Text.Json.JsonValueKind.Array
+                    ? b.EnumerateArray().Select(x => x.GetDouble()).ToArray()
+                    : Array.Empty<double>();
+                result.Add((confidence, bbox));
+            }
+            return result;
+        }
+        catch (System.Text.Json.JsonException)
+        {
+            return [];
+        }
     }
 }

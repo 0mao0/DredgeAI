@@ -6,6 +6,30 @@ export interface PreInfo {
   weather: string
   tasks: string
   riskPoints: string
+  /** 所选施工项目名称（晨会稿生成引用项目上下文） */
+  projectName?: string
+  /** 所选项目施工方案提取的主要内容 */
+  projectSummary?: string
+}
+
+export interface MeetingProjectDto {
+  id: string
+  name: string
+  anGineerDocId?: string | null
+  docIds: string[]
+  /** 与 docIds 对齐的原始文件名 */
+  docNames: string[]
+  status: 'processing' | 'ready' | 'failed'
+  projectInfoJson: string
+  summary: string
+  createdAt: string
+}
+
+export interface CreateMeetingProjectInput {
+  name: string
+  docId: string
+  docIds?: string[]
+  docNames?: string[]
 }
 
 export interface PlanParseResult {
@@ -24,11 +48,17 @@ export interface SpeechDraftDto {
 }
 
 export interface AttendanceItemDto {
-  workerId: string
+  workerId?: string | null
   name: string
   team: string
   status: AttendanceStatus
   confidence: number
+  /** 人脸框 [x1, y1, x2, y2]，未识别人脸去重/后续人脸入库用 */
+  bbox?: number[]
+  /** 工人证件号（身份证号），同名时用于展示“姓名-生日后四位”区分 */
+  employeeNo?: string
+  /** 工人人脸照片访问地址 */
+  facePhotoUrl?: string
 }
 
 export interface AttendanceRecognizeResult {
@@ -58,6 +88,14 @@ export interface ReportDto {
   transcript: string
   attendance: AttendanceItemDto[]
   qaRecords: QaRecordDto[]
+  unrecognizedFaces: UnrecognizedFaceDto[]
+  createdAt: string
+}
+
+export interface UnrecognizedFaceDto {
+  id: string
+  photoUrl: string
+  confidence: number
   createdAt: string
 }
 

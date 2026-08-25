@@ -190,6 +190,43 @@ public class HttpAnGineerClient : IAnGineerClient, ITransientDependency
             _logger, $"AnGIneer 下载产物 {artifact.Name}", MaxAttempts, cancellationToken);
     }
 
+    public async Task<Stream> OpenPdfAsync(string docId, CancellationToken cancellationToken = default)
+    {
+        return await TransientHttpRetry.ExecuteAsync(
+            async ct =>
+            {
+                var client = CreateClient();
+                var response = await client.GetAsync(
+                    $"/api/v1/documents/{docId}/pdf",
+                    HttpCompletionOption.ResponseHeadersRead,
+                    ct);
+                response.EnsureSuccessStatusCode();
+                var stream = await response.Content.ReadAsStreamAsync(ct);
+                return (Stream)new OwnedStream(stream, response);
+            },
+            _logger, $"AnGIneer 下载 PDF {docId}", MaxAttempts, cancellationToken);
+    }
+
+    public async Task<string> GetContentAsync(string docId, CancellationToken cancellationToken = default)
+    {
+        var client = CreateClient();
+        var payload = await client.GetFromJsonAsync<ContentResponse>(
+            $"/api/v1/documents/{docId}/content",
+            cancellationToken);
+        return payload?.Markdown ?? "";
+    }
+
+    public async Task DeleteDocumentAsync(string docId, CancellationToken cancellationToken = default)
+    {
+        var client = CreateClient();
+        using var response = await client.DeleteAsync($"/api/v1/documents/{docId}", cancellationToken);
+        if (response.StatusCode == HttpStatusCode.NotFound)
+        {
+            return;
+        }
+        response.EnsureSuccessStatusCode();
+    }
+
     /// <summary>未识别状态归一为 Processing（不中断轮询），但记录 warning 便于发现契约漂移。</summary>
     private AnGineerJobState UnknownToProcessing(string status)
     {
@@ -265,6 +302,12 @@ public class HttpAnGineerClient : IAnGineerClient, ITransientDependency
 
         [JsonPropertyName("doc_id")]
         public string? DocId { get; set; }
+    }
+
+    private class ContentResponse
+    {
+        [JsonPropertyName("markdown")]
+        public string? Markdown { get; set; }
     }
 
     private class ArtifactItem

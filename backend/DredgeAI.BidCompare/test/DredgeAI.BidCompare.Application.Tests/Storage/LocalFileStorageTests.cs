@@ -45,7 +45,7 @@ public class LocalFileStorageTests
             content.ShouldBe("hello 标书");
 
             var url = await facade.GetPresignedUrlAsync("compare/task/doc/origin.pdf", TimeSpan.FromHours(1));
-            url.ShouldStartWith("https://localhost:44361/api/compare/storage/file?key=");
+            url.ShouldStartWith("/api/compare/storage/file?key=");
             url.ShouldContain("&sig=");
 
             await facade.DeleteAsync("compare/task/doc/origin.pdf");

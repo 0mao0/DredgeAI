@@ -26,6 +26,42 @@ export async function convertToWav16k(blob: Blob): Promise<Blob> {
   }
 }
 
+/**
+ * 把多段音频（WAV 等）按顺序拼接为一段 16kHz 单声道 WAV。
+ * 供“先生成完整晨会稿录音、再一次性播放”使用，避免分段播放的割裂感。
+ */
+export async function mergeAudioBlobs(blobs: Blob[]): Promise<Blob> {
+  if (blobs.length === 0) throw new Error('没有可合并的音频')
+  if (blobs.length === 1) return blobs[0]!
+  const AudioCtx = window.AudioContext
+    ?? (window as unknown as { webkitAudioContext?: typeof AudioContext }).webkitAudioContext
+  if (!AudioCtx) throw new Error('当前浏览器不支持 Web Audio')
+  const ctx = new AudioCtx()
+  try {
+    const sampleRate = 16000
+    const buffers: AudioBuffer[] = []
+    let totalSamples = 0
+    for (const blob of blobs) {
+      const audioBuffer = await ctx.decodeAudioData(await blob.arrayBuffer())
+      buffers.push(audioBuffer)
+      totalSamples += Math.max(1, Math.round(audioBuffer.duration * sampleRate))
+    }
+    const offline = new OfflineAudioContext(1, totalSamples, sampleRate)
+    let offset = 0
+    for (const buffer of buffers) {
+      const source = offline.createBufferSource()
+      source.buffer = buffer
+      source.connect(offline.destination)
+      source.start(offset)
+      offset += buffer.duration
+    }
+    const rendered = await offline.startRendering()
+    return encodeWav(rendered.getChannelData(0), sampleRate)
+  } finally {
+    void ctx.close()
+  }
+}
+
 const KNOWN_ERROR_MESSAGES: Record<string, string> = {
   MEETING_PLAN_EMPTY: '请先输入或说出今日计划',
   MEETING_PLAN_PARSE_FAILED: '未能从输入中识别出今日任务，请说得更完整一些',
@@ -55,7 +91,7 @@ export function extractErrorMessage(err: unknown): string {
   return '未知错误'
 }
 
-function encodeWav(samples: Float32Array, sampleRate: number): Blob {
+export function encodeWav(samples: Float32Array, sampleRate: number): Blob {
   const bytesPerSample = 2
   const dataSize = samples.length * bytesPerSample
   const buffer = new ArrayBuffer(44 + dataSize)

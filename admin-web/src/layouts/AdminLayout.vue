@@ -17,7 +17,7 @@
             <ShipAiLogo class="sider-brand__logo" />
             <div class="sider-brand__text">
               <div class="sider-brand__title">智浚 <span class="sider-brand__ai">AI</span></div>
-              <div class="sider-brand__sub">管理后台</div>
+              <div class="sider-brand__sub">v{{ appVersion }}</div>
             </div>
           </div>
         </div>
@@ -105,6 +105,7 @@ import { getCategoryColor, getCategoryAlphaBg } from '@shared/core/utils'
 import ThemeToggle from '@shared/web/components/ThemeToggle.vue'
 import { adminAppManifests, adminMenuGroups } from '@/router/manifests'
 import { manifestToMenu, collectMenuKeys } from '@shared/web/router/manifest'
+import { version as appVersion } from '../../package.json'
 import type { MenuNode } from '@shared/web/router/manifest'
 import type { Component, VNode } from 'vue'
 

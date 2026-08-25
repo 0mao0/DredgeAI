@@ -25,6 +25,7 @@ namespace DredgeAI.BidCompare.MeetingBot;
 public class MeetingRecordAppService : ApplicationService, IMeetingRecordAppService
 {
     private const double RecognizeThreshold = 0.6;
+    private const double UnrecognizedIoUThreshold = 0.35;
 
     private static readonly JsonSerializerOptions ReadableJsonOptions = new()
     {
@@ -53,6 +54,7 @@ public class MeetingRecordAppService : ApplicationService, IMeetingRecordAppServ
     private readonly IRepository<MeetingRecord, Guid> _meetings;
     private readonly IRepository<SpeechDraft, Guid> _drafts;
     private readonly IRepository<AttendanceRecord, Guid> _attendance;
+    private readonly IRepository<UnrecognizedFace, Guid> _unrecognizedFaces;
     private readonly IRepository<QaRecord, Guid> _qa;
     private readonly IRepository<WorkerProfile, Guid> _workers;
     private readonly IMeetingBotClient _bot;
@@ -66,6 +68,7 @@ public class MeetingRecordAppService : ApplicationService, IMeetingRecordAppServ
         IRepository<MeetingRecord, Guid> meetings,
         IRepository<SpeechDraft, Guid> drafts,
         IRepository<AttendanceRecord, Guid> attendance,
+        IRepository<UnrecognizedFace, Guid> unrecognizedFaces,
         IRepository<QaRecord, Guid> qa,
         IRepository<WorkerProfile, Guid> workers,
         IMeetingBotClient bot,
@@ -78,6 +81,7 @@ public class MeetingRecordAppService : ApplicationService, IMeetingRecordAppServ
         _meetings = meetings;
         _drafts = drafts;
         _attendance = attendance;
+        _unrecognizedFaces = unrecognizedFaces;
         _qa = qa;
         _workers = workers;
         _bot = bot;
@@ -95,7 +99,9 @@ public class MeetingRecordAppService : ApplicationService, IMeetingRecordAppServ
             input.Date,
             input.Weather,
             input.Tasks,
-            input.RiskPoints
+            input.RiskPoints,
+            input.ProjectName,
+            input.ProjectSummary
         };
         var meeting = new MeetingRecord(
             GuidGenerator.Create(),
@@ -213,7 +219,8 @@ public class MeetingRecordAppService : ApplicationService, IMeetingRecordAppServ
         var meeting = await _meetings.GetAsync(id);
         var preInfo = ParsePreInfo(meeting.PreInfoJson);
 
-        var query = $"晨会安全交底、今日任务：{preInfo.Tasks}；风险点：{preInfo.RiskPoints}";
+        var query = $"晨会安全交底、今日任务：{preInfo.Tasks}；风险点：{preInfo.RiskPoints}" +
+            (string.IsNullOrWhiteSpace(preInfo.ProjectName) ? "" : $"；项目：{preInfo.ProjectName}");
         IReadOnlyList<AnGineerHit> hits;
         try
         {
@@ -229,9 +236,17 @@ public class MeetingRecordAppService : ApplicationService, IMeetingRecordAppServ
             ? string.Join("\n", hits.Select(h => $"- [{h.Title}]({h.DocId}) {h.Text}"))
             : "（无知识库证据）";
 
+        var projectContext = string.IsNullOrWhiteSpace(preInfo.ProjectName)
+            ? ""
+            : $"当前项目：{preInfo.ProjectName}。" +
+              (string.IsNullOrWhiteSpace(preInfo.ProjectSummary)
+                  ? ""
+                  : $"施工方案要点：{preInfo.ProjectSummary}。") +
+              "\n";
         var userPrompt =
             $"前置信息：日期 {preInfo.Date:yyyy-MM-dd}，天气 {preInfo.Weather}，" +
             $"今日任务 {preInfo.Tasks}，风险点 {preInfo.RiskPoints}。\n\n" +
+            projectContext +
             $"<evidence>\n{evidence}\n</evidence>\n\n请生成晨会稿。";
 
         var content = await _llmGateway.CompleteAsync(SpeechSystemPrompt, userPrompt);
@@ -244,6 +259,8 @@ public class MeetingRecordAppService : ApplicationService, IMeetingRecordAppServ
             meeting.AttachSpeechDraft(draft.Id);
             meeting.MarkPrepared();
             await _meetings.UpdateAsync(meeting);
+            await InvalidateSpeechAudioCacheAsync(meeting.Id);
+            await _backgroundJobManager.EnqueueAsync(new WarmSpeechAudioArgs { MeetingRecordId = meeting.Id });
         }
         else
         {
@@ -252,6 +269,8 @@ public class MeetingRecordAppService : ApplicationService, IMeetingRecordAppServ
             await _drafts.UpdateAsync(draft);
             meeting.MarkPrepared();
             await _meetings.UpdateAsync(meeting);
+            await InvalidateSpeechAudioCacheAsync(meeting.Id);
+            await _backgroundJobManager.EnqueueAsync(new WarmSpeechAudioArgs { MeetingRecordId = meeting.Id });
         }
         return Map(draft);
     }
@@ -268,7 +287,35 @@ public class MeetingRecordAppService : ApplicationService, IMeetingRecordAppServ
         {
             throw new BusinessException("MEETING_SPEECH_AUDIO_EMPTY", "晨会稿为空，无法合成语音");
         }
-        return await _bot.TtsAsync(draft.Content);
+
+        // 服务端缓存整段语音：同一晨会稿只合成一次，重复打开/点名复用秒出
+        var cacheKey = $"{SpeechAudioCachePrefix}/{meeting.Id}.wav";
+        try
+        {
+            if (await _fileStorage.ExistsAsync(cacheKey))
+            {
+                await using var cached = await _fileStorage.GetAsync(cacheKey);
+                using var ms = new MemoryStream();
+                await cached.CopyToAsync(ms);
+                return ms.ToArray();
+            }
+        }
+        catch (Exception ex)
+        {
+            Logger.LogWarning(ex, "读取晨会稿语音缓存失败（{Key}），重新合成", cacheKey);
+        }
+
+        var bytes = await _bot.TtsAsync(draft.Content);
+        try
+        {
+            await using var output = new MemoryStream(bytes);
+            await _fileStorage.UploadAsync(cacheKey, output, "audio/wav");
+        }
+        catch (Exception ex)
+        {
+            Logger.LogWarning(ex, "写入晨会稿语音缓存失败（{Key}）", cacheKey);
+        }
+        return bytes;
     }
 
     public async Task<SpeechDraftDto> UpdateSpeechAsync(Guid id, string content)
@@ -281,7 +328,169 @@ public class MeetingRecordAppService : ApplicationService, IMeetingRecordAppServ
         var draft = await _drafts.GetAsync(meeting.SpeechDraftId.Value);
         draft.SetContent(content);
         await _drafts.UpdateAsync(draft);
+        await InvalidateSpeechAudioCacheAsync(meeting.Id);
+        await _backgroundJobManager.EnqueueAsync(new WarmSpeechAudioArgs { MeetingRecordId = meeting.Id });
         return Map(draft);
+    }
+
+    private const string SpeechAudioCachePrefix = "meeting/speech";
+
+    private static string SpeechLeadAudioKey(Guid meetingId)
+        => $"{SpeechAudioCachePrefix}/{meetingId}/lead.wav";
+
+    /// <summary>与前端 splitSpeechText 的首段规则保持一致：取第一个句尾且不超过 18 字。</summary>
+    private static string ExtractLeadSentence(string content)
+    {
+        var trimmed = content.Trim();
+        for (var i = 0; i < trimmed.Length; i++)
+        {
+            if (trimmed[i] is '。' or '！' or '？' or '；' or '\n')
+            {
+                return i + 1 <= 18 ? trimmed[..(i + 1)] : "";
+            }
+        }
+        return "";
+    }
+
+    public async Task<bool> IsSpeechAudioCachedAsync(Guid id)
+    {
+        var meeting = await _meetings.GetAsync(id);
+        if (meeting.SpeechDraftId is null)
+        {
+            return false;
+        }
+        try
+        {
+            return await _fileStorage.ExistsAsync($"{SpeechAudioCachePrefix}/{meeting.Id}.wav");
+        }
+        catch (Exception ex)
+        {
+            Logger.LogWarning(ex, "检查晨会稿语音缓存失败（{MeetingId}）", meeting.Id);
+            return false;
+        }
+    }
+
+    public async Task SaveSpeechAudioCacheAsync(Guid id, byte[] wav)
+    {
+        var meeting = await _meetings.GetAsync(id);
+        if (meeting.SpeechDraftId is null || wav.Length == 0)
+        {
+            return;
+        }
+        var key = $"{SpeechAudioCachePrefix}/{meeting.Id}.wav";
+        await using var stream = new MemoryStream(wav);
+        await _fileStorage.UploadAsync(key, stream, "audio/wav");
+    }
+
+    public async Task PreWarmSpeechLeadAsync(Guid id)
+    {
+        var meeting = await _meetings.GetAsync(id);
+        if (meeting.SpeechDraftId is null)
+        {
+            return;
+        }
+        var draft = await _drafts.GetAsync(meeting.SpeechDraftId.Value);
+        var lead = ExtractLeadSentence(draft.Content);
+        if (string.IsNullOrWhiteSpace(lead))
+        {
+            return;
+        }
+
+        var key = SpeechLeadAudioKey(meeting.Id);
+        try
+        {
+            if (await _fileStorage.ExistsAsync(key))
+            {
+                return;
+            }
+        }
+        catch (Exception ex)
+        {
+            Logger.LogWarning(ex, "检查开场句语音缓存失败（{Key}），重新合成", key);
+        }
+
+        var bytes = await _bot.TtsAsync(lead);
+        if (bytes.Length == 0)
+        {
+            return;
+        }
+        try
+        {
+            await using var output = new MemoryStream(bytes);
+            await _fileStorage.UploadAsync(key, output, "audio/wav");
+        }
+        catch (Exception ex)
+        {
+            Logger.LogWarning(ex, "写入开场句语音缓存失败（{Key}）", key);
+        }
+    }
+
+    public async Task<byte[]?> GetSpeechLeadAudioAsync(Guid id)
+    {
+        var meeting = await _meetings.GetAsync(id);
+        if (meeting.SpeechDraftId is null)
+        {
+            return null;
+        }
+        var key = SpeechLeadAudioKey(meeting.Id);
+        try
+        {
+            if (!await _fileStorage.ExistsAsync(key))
+            {
+                return null;
+            }
+            await using var cached = await _fileStorage.GetAsync(key);
+            using var ms = new MemoryStream();
+            await cached.CopyToAsync(ms);
+            return ms.ToArray();
+        }
+        catch (Exception ex)
+        {
+            Logger.LogWarning(ex, "读取开场句语音缓存失败（{Key}）", key);
+            return null;
+        }
+    }
+
+    public async Task<bool> IsSpeechLeadAudioCachedAsync(Guid id)
+    {
+        var meeting = await _meetings.GetAsync(id);
+        if (meeting.SpeechDraftId is null)
+        {
+            return false;
+        }
+        try
+        {
+            return await _fileStorage.ExistsAsync(SpeechLeadAudioKey(meeting.Id));
+        }
+        catch (Exception ex)
+        {
+            Logger.LogWarning(ex, "检查开场句语音缓存失败（{MeetingId}）", meeting.Id);
+            return false;
+        }
+    }
+
+    public async Task<string> GetSpeechLeadTextAsync(Guid id)
+    {
+        var meeting = await _meetings.GetAsync(id);
+        if (meeting.SpeechDraftId is null)
+        {
+            return "";
+        }
+        var draft = await _drafts.GetAsync(meeting.SpeechDraftId.Value);
+        return ExtractLeadSentence(draft.Content);
+    }
+
+    private async Task InvalidateSpeechAudioCacheAsync(Guid meetingId)
+    {
+        try
+        {
+            await _fileStorage.DeleteAsync($"{SpeechAudioCachePrefix}/{meetingId}.wav");
+            await _fileStorage.DeleteAsync(SpeechLeadAudioKey(meetingId));
+        }
+        catch (Exception ex)
+        {
+            Logger.LogWarning(ex, "清理晨会稿语音缓存失败（{MeetingId}）", meetingId);
+        }
     }
 
     public async Task<MeetingRecordDto> StartAsync(Guid id)
@@ -303,7 +512,6 @@ public class MeetingRecordAppService : ApplicationService, IMeetingRecordAppServ
             .Where(a => a.WorkerId.HasValue)
             .Select(a => a.WorkerId!.Value)
             .ToHashSet();
-
         var workerMap = (await _workers.GetListAsync())
             .ToDictionary(w => w.Id, w => w);
 
@@ -337,7 +545,13 @@ public class MeetingRecordAppService : ApplicationService, IMeetingRecordAppServ
             existingWorkerIds.Add(workerId);
         }
 
-        // 未命中的脸收集为“未识别”条目；同一会议只保留一条，避免持续扫描不断堆积
+        // 未命中的脸收集为“未识别”条目：带 bbox 的按交并比去重（同一人脸跨帧只留一条，
+        // 位置明显变化后允许再次入库，供后续人脸入库联动）；无 bbox 的沿用“每会议仅积累一条”策略。
+        var unrecognizedBboxes = existing
+            .Where(a => a.WorkerId is null && a.Bbox is not null and not "" and not "[]")
+            .Select(a => ParseBbox(a.Bbox!))
+            .Where(b => b.Length == 4)
+            .ToList();
         foreach (var face in faces)
         {
             // 未命中或低于阈值 → 收集为“未识别”；命中且已去过重 → 跳过
@@ -345,7 +559,15 @@ public class MeetingRecordAppService : ApplicationService, IMeetingRecordAppServ
             {
                 continue;
             }
-            if (existing.Any(a => a.WorkerId is null))
+            var bbox = face.Bbox;
+            if (bbox.Length == 4)
+            {
+                if (unrecognizedBboxes.Any(b => IoU(b, bbox) >= UnrecognizedIoUThreshold))
+                {
+                    continue;
+                }
+            }
+            else if (existing.Any(a => a.WorkerId is null && (a.Bbox is null or "" or "[]")))
             {
                 continue;
             }
@@ -356,7 +578,8 @@ public class MeetingRecordAppService : ApplicationService, IMeetingRecordAppServ
                 "未识别",
                 "",
                 AttendanceStatus.Unrecognized,
-                face.Confidence));
+                face.Confidence,
+                bbox.Length == 4 ? bbox : null));
             result.Add(new AttendanceRecord(
                 GuidGenerator.Create(),
                 id,
@@ -364,7 +587,12 @@ public class MeetingRecordAppService : ApplicationService, IMeetingRecordAppServ
                 "未识别",
                 "",
                 AttendanceStatus.Unrecognized,
-                face.Confidence));
+                face.Confidence,
+                bbox.Length == 4 ? bbox : null));
+            if (bbox.Length == 4)
+            {
+                unrecognizedBboxes.Add(bbox);
+            }
         }
 
         if (meeting.Status == MeetingStatus.Rollcall)
@@ -373,13 +601,95 @@ public class MeetingRecordAppService : ApplicationService, IMeetingRecordAppServ
             await _meetings.UpdateAsync(meeting);
         }
 
-        return result.OrderBy(a => a.CreationTime).Select(Map).ToList();
+        return await MapAttendanceAsync(result.OrderBy(a => a.CreationTime), workerMap);
     }
 
     public async Task<List<AttendanceItemDto>> GetAttendanceAsync(Guid id)
     {
         var records = await _attendance.GetListAsync(a => a.MeetingRecordId == id);
-        return records.OrderBy(a => a.CreationTime).Select(Map).ToList();
+        var workers = await _workers.GetListAsync();
+        var workerMap = workers.ToDictionary(w => w.Id, w => w);
+        return await MapAttendanceAsync(records.OrderBy(a => a.CreationTime), workerMap);
+    }
+
+    /// <summary>存储点名时未识别人脸的裁剪图（前端按 bbox 裁剪上传），供报告展示与后续人脸入库。</summary>
+    public async Task<int> SaveUnrecognizedFacesAsync(
+        Guid id,
+        IReadOnlyList<(byte[] Data, double Confidence, double[] Bbox)> faces)
+    {
+        var meeting = await _meetings.GetAsync(id);
+        var saved = 0;
+        foreach (var face in faces)
+        {
+            var key = $"meeting/unrecognized/{meeting.Id}/{GuidGenerator.Create():N}.jpg";
+            await using var stream = new MemoryStream(face.Data);
+            await _fileStorage.UploadAsync(key, stream, "image/jpeg");
+            await _unrecognizedFaces.InsertAsync(new UnrecognizedFace(
+                GuidGenerator.Create(),
+                meeting.Id,
+                key,
+                face.Confidence,
+                face.Bbox));
+            saved++;
+        }
+        return saved;
+    }
+
+    private static WorkerProfile? LookupWorker(AttendanceRecord record, Dictionary<Guid, WorkerProfile> workerMap)
+    {
+        return record.WorkerId.HasValue && workerMap.TryGetValue(record.WorkerId.Value, out var worker)
+            ? worker
+            : null;
+    }
+
+    private async Task<List<AttendanceItemDto>> MapAttendanceAsync(
+        IEnumerable<AttendanceRecord> records,
+        Dictionary<Guid, WorkerProfile> workerMap)
+    {
+        var result = new List<AttendanceItemDto>();
+        foreach (var record in records)
+        {
+            var worker = LookupWorker(record, workerMap);
+            result.Add(await MapAsync(record, worker));
+        }
+        return result;
+    }
+
+    private async Task<AttendanceItemDto> MapAsync(AttendanceRecord record, WorkerProfile? worker = null)
+    {
+        return new AttendanceItemDto
+        {
+            WorkerId = record.WorkerId,
+            Name = record.Name,
+            Team = record.Team,
+            Status = record.Status,
+            Confidence = record.Confidence,
+            Bbox = ParseBbox(record.Bbox),
+            EmployeeNo = worker?.EmployeeNo ?? "",
+            FacePhotoUrl = await FacePhotoUrlAsync(worker)
+        };
+    }
+
+    private async Task<string?> FacePhotoUrlAsync(WorkerProfile? worker)
+    {
+        if (worker is null || string.IsNullOrWhiteSpace(worker.FacePhotosJson))
+        {
+            return null;
+        }
+        try
+        {
+            var photos = JsonSerializer.Deserialize<List<string>>(worker.FacePhotosJson) ?? [];
+            var key = photos.FirstOrDefault(p => !string.IsNullOrWhiteSpace(p));
+            if (key is null)
+            {
+                return null;
+            }
+            return await _fileStorage.GetPresignedUrlAsync(key, TimeSpan.FromHours(1));
+        }
+        catch
+        {
+            return null;
+        }
     }
 
     public async Task<QaRecordDto> AskQaAsync(Guid id, string question)
@@ -514,6 +824,7 @@ public class MeetingRecordAppService : ApplicationService, IMeetingRecordAppServ
             Transcript = transcript,
             Attendance = attendance,
             QaRecords = qaRecords,
+            UnrecognizedFaces = await BuildUnrecognizedFacesAsync(meeting.Id),
             CreatedAt = meeting.EndedAt ?? meeting.LastModificationTime ?? meeting.CreationTime
         };
 
@@ -530,6 +841,32 @@ public class MeetingRecordAppService : ApplicationService, IMeetingRecordAppServ
             }
         }
         return report;
+    }
+
+    private async Task<List<UnrecognizedFaceDto>> BuildUnrecognizedFacesAsync(Guid meetingId)
+    {
+        var faces = await _unrecognizedFaces.GetListAsync(f => f.MeetingRecordId == meetingId);
+        var result = new List<UnrecognizedFaceDto>();
+        foreach (var face in faces.OrderBy(f => f.CreationTime))
+        {
+            string? photoUrl = null;
+            try
+            {
+                photoUrl = await _fileStorage.GetPresignedUrlAsync(face.PhotoKey, TimeSpan.FromHours(1));
+            }
+            catch
+            {
+                // 照片缺失时仅展示置信度
+            }
+            result.Add(new UnrecognizedFaceDto
+            {
+                Id = face.Id,
+                PhotoUrl = photoUrl ?? "",
+                Confidence = face.Confidence,
+                CreatedAt = face.CreationTime
+            });
+        }
+        return result;
     }
 
     private static PreInfoSnapshot ParsePreInfo(string json)
@@ -588,14 +925,34 @@ public class MeetingRecordAppService : ApplicationService, IMeetingRecordAppServ
         UpdatedAt = draft.UpdatedAt
     };
 
-    private static AttendanceItemDto Map(AttendanceRecord record) => new()
+    private static double[] ParseBbox(string json)
     {
-        WorkerId = record.WorkerId,
-        Name = record.Name,
-        Team = record.Team,
-        Status = record.Status,
-        Confidence = record.Confidence
-    };
+        if (string.IsNullOrWhiteSpace(json) || json == "[]")
+        {
+            return [];
+        }
+        try
+        {
+            return JsonSerializer.Deserialize<double[]>(json) ?? [];
+        }
+        catch (JsonException)
+        {
+            return [];
+        }
+    }
+
+    private static double IoU(double[] a, double[] b)
+    {
+        var x1 = Math.Max(a[0], b[0]);
+        var y1 = Math.Max(a[1], b[1]);
+        var x2 = Math.Min(a[2], b[2]);
+        var y2 = Math.Min(a[3], b[3]);
+        var intersection = Math.Max(0, x2 - x1) * Math.Max(0, y2 - y1);
+        var areaA = Math.Max(0, a[2] - a[0]) * Math.Max(0, a[3] - a[1]);
+        var areaB = Math.Max(0, b[2] - b[0]) * Math.Max(0, b[3] - b[1]);
+        var union = areaA + areaB - intersection;
+        return union <= 0 ? 0 : intersection / union;
+    }
 
     private static QaRecordDto Map(QaRecord record)
     {
@@ -628,6 +985,10 @@ public class MeetingRecordAppService : ApplicationService, IMeetingRecordAppServ
         public string Tasks { get; set; } = "";
 
         public string RiskPoints { get; set; } = "";
+
+        public string ProjectName { get; set; } = "";
+
+        public string ProjectSummary { get; set; } = "";
     }
 
     private class PlanParseSnapshot

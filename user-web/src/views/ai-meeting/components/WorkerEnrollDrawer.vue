@@ -148,7 +148,7 @@
           type="warning"
           show-icon
           class="worker-enroll__alert"
-          message="该身份证号已存在"
+          :message="duplicateByBirthday ? '该姓名与出生日期已存在（证件号有差异）' : '该身份证号已存在'"
           :description="`已存在工人「${existingWorker?.name ?? ''}」，确认入库后将覆盖其面部信息。`"
         />
         <a-alert
@@ -201,6 +201,7 @@ import {
   recognizeIdCard,
 } from '@/api/modules/aiMeeting'
 import { extractErrorMessage } from '@/utils/audioToWav'
+import { birthdayFromIdCard } from '@/utils/attendanceName'
 import { useCamera } from '../composables/useCamera'
 
 const props = defineProps<{ open: boolean }>()
@@ -220,6 +221,7 @@ const facePreview = ref<string | null>(null)
 const facePhoto = ref<Blob | null>(null)
 const enrolled = ref<WorkerDto | null>(null)
 const duplicate = ref(false)
+const duplicateByBirthday = ref(false)
 const existingWorker = ref<WorkerDto | null>(null)
 const submitError = ref('')
 
@@ -344,11 +346,20 @@ async function recognizeAndFill(image: Blob): Promise<void> {
 
 async function checkDuplicate(employeeNo: string): Promise<void> {
   duplicate.value = false
+  duplicateByBirthday.value = false
   existingWorker.value = null
   if (!employeeNo) return
   try {
     const workers = await getWorkers()
-    const found = workers.find((worker) => worker.employeeNo === employeeNo)
+    let found = workers.find((worker) => worker.employeeNo === employeeNo) ?? null
+    if (!found && form.name.trim()) {
+      const birthday = birthdayFromIdCard(employeeNo)
+      if (birthday) {
+        const sameName = workers.filter((worker) => worker.name === form.name.trim())
+        found = sameName.find((worker) => birthdayFromIdCard(worker.employeeNo) === birthday) ?? null
+        if (found) duplicateByBirthday.value = true
+      }
+    }
     if (found) {
       duplicate.value = true
       existingWorker.value = found
@@ -385,6 +396,7 @@ function onResetIdCard(): void {
   form.nation = ''
   form.gender = ''
   duplicate.value = false
+  duplicateByBirthday.value = false
   existingWorker.value = null
 }
 
@@ -394,6 +406,7 @@ function reset(): void {
   facePhoto.value = null
   enrolled.value = null
   duplicate.value = false
+  duplicateByBirthday.value = false
   existingWorker.value = null
   submitError.value = ''
   Object.assign(form, {

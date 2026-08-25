@@ -27,11 +27,27 @@ public interface IMeetingRecordAppService : IApplicationService
 
     Task<List<AttendanceItemDto>> GetAttendanceAsync(Guid id);
 
+    Task<int> SaveUnrecognizedFacesAsync(
+        Guid id,
+        IReadOnlyList<(byte[] Data, double Confidence, double[] Bbox)> faces);
+
     Task<QaRecordDto> AskQaAsync(Guid id, string question);
 
     Task<byte[]> GetQaAudioAsync(Guid qaId);
 
     Task<byte[]> GetSpeechAudioAsync(Guid id);
+
+    Task<bool> IsSpeechAudioCachedAsync(Guid id);
+
+    Task SaveSpeechAudioCacheAsync(Guid id, byte[] wav);
+
+    Task PreWarmSpeechLeadAsync(Guid id);
+
+    Task<byte[]?> GetSpeechLeadAudioAsync(Guid id);
+
+    Task<bool> IsSpeechLeadAudioCachedAsync(Guid id);
+
+    Task<string> GetSpeechLeadTextAsync(Guid id);
 
     Task<MeetingRecordDto> SaveRecordingAsync(Guid id, byte[] audio, string fileName);
 

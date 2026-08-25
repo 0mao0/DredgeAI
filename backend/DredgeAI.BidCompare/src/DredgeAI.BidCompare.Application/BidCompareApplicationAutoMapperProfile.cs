@@ -15,8 +15,25 @@ public class BidCompareApplicationAutoMapperProfile : Profile
 
         CreateMap<MeetingBot.MeetingRecord, MeetingBot.MeetingRecordDto>();
         CreateMap<MeetingBot.SpeechDraft, MeetingBot.SpeechDraftDto>();
-        CreateMap<MeetingBot.AttendanceRecord, MeetingBot.AttendanceItemDto>();
+        CreateMap<MeetingBot.AttendanceRecord, MeetingBot.AttendanceItemDto>()
+            .ForMember(d => d.Bbox, o => o.MapFrom(s => ParseBbox(s.Bbox)));
         CreateMap<MeetingBot.QaRecord, MeetingBot.QaRecordDto>();
         CreateMap<MeetingBot.WorkerProfile, MeetingBot.WorkerDto>();
+    }
+
+    private static double[] ParseBbox(string json)
+    {
+        if (string.IsNullOrWhiteSpace(json) || json == "[]")
+        {
+            return [];
+        }
+        try
+        {
+            return System.Text.Json.JsonSerializer.Deserialize<double[]>(json) ?? [];
+        }
+        catch (System.Text.Json.JsonException)
+        {
+            return [];
+        }
     }
 }

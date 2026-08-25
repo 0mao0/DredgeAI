@@ -67,6 +67,10 @@ public class StorageFileController : AbpController
         ".md" => "text/markdown",
         ".json" => "application/json",
         ".jsonl" => "application/x-ndjson",
+        ".jpg" or ".jpeg" => "image/jpeg",
+        ".png" => "image/png",
+        ".webp" => "image/webp",
+        ".gif" => "image/gif",
         _ => "application/octet-stream"
     };
 }

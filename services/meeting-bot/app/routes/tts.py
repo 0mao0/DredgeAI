@@ -19,7 +19,7 @@ async def tts(req: TtsRequest):
             resp = await client.post(
                 f"{settings.cosyvoice_url}/api/tts",
                 headers={"X-Meeting-Bot-Key": settings.meeting_bot_key},
-                json={"text": req.text, "voice_id": settings.tts_voice_id, "speed": 1.0},
+                json={"text": req.text, "voice_id": settings.tts_voice_id, "speed": settings.tts_speed},
             )
     except httpx.HTTPError as exc:
         raise HTTPException(status_code=502, detail=f"TTS 服务不可达: {exc}") from exc

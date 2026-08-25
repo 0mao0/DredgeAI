@@ -153,6 +153,33 @@ def _load_model():
         print('[startup] Model load FAILED:', e, flush=True)
 
 
+def _pin_local_wetext():
+    """Use the already-downloaded wetext files instead of re-checking ModelScope.
+
+    CosyVoiceFrontEnd imports ``wetext`` during model load, and wetext calls
+    ``modelscope.snapshot_download('pengzhendong/wetext')`` on every startup.
+    ModelScope can return 403 when no token is configured, which would make the
+    text frontend silently degrade to no normalization. The files are already
+    present in the shared volume, so pin that path for this model id only.
+    """
+    try:
+        import modelscope
+        from pathlib import Path
+
+        cache_root = Path(os.environ.get('MODELSCOPE_CACHE', '/data/modelscope'))
+        local = cache_root / 'hub' / 'pengzhendong' / 'wetext'
+        original = modelscope.snapshot_download
+
+        def pinned_snapshot_download(model_id, *args, **kwargs):
+            if model_id == 'pengzhendong/wetext' and local.exists():
+                return str(local)
+            return original(model_id, *args, **kwargs)
+
+        modelscope.snapshot_download = pinned_snapshot_download
+    except Exception as exc:
+        print('[startup] pin local wetext failed:', exc, flush=True)
+
+
 def _ensure_wav(path: str) -> str:
     """Convert m4a/mp3/ogg to wav on-the-fly if needed. Returns wav path."""
     ext = os.path.splitext(path)[1].lower()
@@ -220,6 +247,7 @@ def _pregen_samples():
 @app.on_event('startup')
 async def startup():
     # Blocking load on the main thread so the CUDA context is created there.
+    _pin_local_wetext()
     _load_model()
     _pregen_samples()
 

@@ -15,15 +15,19 @@
       </div>
 
       <template v-else>
-        <div class="speech-draft-step__scroll">
-          <div class="speech-draft-step__meta">
+        <div class="speech-draft-step__header">
+          <div class="speech-draft-step__header-left">
             <span class="speech-draft-step__date"><CalendarOutlined /> {{ dateText }}</span>
             <span class="speech-draft-step__badge">AI 已生成</span>
-            <AppButton size="sm" variant="text" class="speech-draft-step__edit" @click="onToggleEdit">
-              {{ editing ? '取消编辑' : '编辑' }}
-            </AppButton>
           </div>
+          <span class="speech-draft-step__stat">{{ charCount }} 字 · 约 {{ minutes }} 分钟</span>
+        </div>
 
+        <div class="speech-draft-step__player">
+          <SpeechPlayer ref="playerRef" :text="content" :meeting-id="meetingId" />
+        </div>
+
+        <div class="speech-draft-step__scroll">
           <div class="speech-draft-step__card">
             <template v-if="!editing">
               <p
@@ -42,20 +46,28 @@
               class="speech-draft-step__editor"
             />
           </div>
-
-          <div class="speech-draft-step__toolbar">
-            <SpeechPlayer :text="content" />
-          </div>
         </div>
 
         <div class="speech-draft-step__footer">
-          <span class="speech-draft-step__stat">{{ charCount }} 字 · 约 {{ minutes }} 分钟</span>
           <div class="speech-draft-step__actions">
-            <AppButton size="lg" :loading="loading" @click="onSave">保存草稿</AppButton>
-            <AppButton variant="primary" size="lg" :loading="loading" @click="emit('confirm')">
-              立刻开会
+            <AppButton v-if="!editing" size="sm" variant="text" @click="onToggleEdit">
+              编辑
             </AppButton>
+            <div class="speech-draft-step__actions-right">
+              <template v-if="editing">
+                <a-config-provider :auto-insert-space-in-button="false">
+                  <AppButton size="lg" @click="onCancelEdit">取消</AppButton>
+                  <AppButton variant="primary" size="lg" :loading="loading" @click="onSave">保存</AppButton>
+                </a-config-provider>
+              </template>
+              <template v-else>
+                <AppButton variant="primary" size="lg" :loading="loading" @click="onConfirm">
+                  立刻开会
+                </AppButton>
+              </template>
+            </div>
           </div>
+          <p v-if="noEvidenceNote" class="speech-draft-step__no-evidence">{{ noEvidenceNote }}</p>
         </div>
       </template>
     </SectionCard>
@@ -74,6 +86,7 @@ const props = defineProps<{
   draft: SpeechDraftDto | null
   loading: boolean
   date?: string
+  meetingId?: string
 }>()
 const emit = defineEmits<{
   generate: []
@@ -81,8 +94,12 @@ const emit = defineEmits<{
   confirm: []
 }>()
 
+const NO_EVIDENCE_NOTE = '本段依据无知识库证据'
+
 const editing = ref(false)
 const content = ref('')
+const snapshot = ref<string | null>(null)
+const playerRef = ref<InstanceType<typeof SpeechPlayer> | null>(null)
 
 watch(
   () => props.draft,
@@ -92,23 +109,49 @@ watch(
   { immediate: true },
 )
 
-const paragraphs = computed(() =>
-  content.value
-    .split('\n')
-    .map((s) => s.trim())
-    .filter(Boolean),
-)
+const parsed = computed(() => {
+  const lines: string[] = []
+  let note = ''
+  for (const raw of content.value.split('\n')) {
+    const line = raw.trim()
+    if (!line) continue
+    if (line.includes(NO_EVIDENCE_NOTE)) {
+      note = NO_EVIDENCE_NOTE
+      const rest = line.split(NO_EVIDENCE_NOTE).join('').replace(/[()（）【】[\]]/g, '').trim()
+      if (rest) lines.push(rest)
+      continue
+    }
+    lines.push(line)
+  }
+  return { lines, note }
+})
+const paragraphs = computed(() => parsed.value.lines)
+const noEvidenceNote = computed(() => parsed.value.note)
 const charCount = computed(() => content.value.replace(/\s/g, '').length)
 const minutes = computed(() => Math.max(1, Math.ceil(charCount.value / 4 / 60)))
 const dateText = computed(() => props.date?.slice(0, 10) ?? '')
 
 function onToggleEdit(): void {
   editing.value = !editing.value
+  if (editing.value) snapshot.value = content.value
+}
+
+function onCancelEdit(): void {
+  if (snapshot.value !== null) content.value = snapshot.value
+  snapshot.value = null
+  editing.value = false
 }
 
 function onSave(): void {
   emit('save', content.value)
+  snapshot.value = null
   editing.value = false
+}
+
+function onConfirm(): void {
+  // 点击“立刻开会”立即暂停试听，避免接口调用期间音频继续播放
+  playerRef.value?.stop()
+  emit('confirm')
 }
 </script>
 
@@ -132,6 +175,46 @@ function onSave(): void {
   }
 }
 
+.speech-draft-step__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: @spacing-sm;
+  padding: @spacing-lg 0 @spacing-base;
+  border-bottom: 1px solid @divider-color;
+  margin-bottom: @spacing-base;
+}
+.speech-draft-step__header-left {
+  display: flex;
+  align-items: center;
+  gap: @spacing-sm;
+  min-width: 0;
+}
+.speech-draft-step__date {
+  font-size: @font-size-sm;
+  color: @text-secondary;
+  white-space: nowrap;
+}
+.speech-draft-step__badge {
+  font-size: @font-size-xs;
+  color: @brand-primary;
+  background: color-mix(in srgb, var(--color-brand) 10%, transparent);
+  padding: 2px @spacing-sm;
+  border-radius: @radius-sm;
+  font-weight: @font-weight-medium;
+  white-space: nowrap;
+}
+.speech-draft-step__stat {
+  font-size: @font-size-sm;
+  color: @text-tertiary;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.speech-draft-step__player {
+  margin-bottom: @spacing-base;
+}
+
 .speech-draft-step__scroll {
   flex: 1;
   min-height: 0;
@@ -151,8 +234,15 @@ function onSave(): void {
   display: flex;
   flex-direction: column;
   align-items: center;
+  text-align: center;
   gap: @spacing-md;
   padding: @spacing-2xl 0;
+}
+.speech-draft-step__generate {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
 }
 .speech-draft-step__spinner {
   display: flex;
@@ -182,28 +272,6 @@ function onSave(): void {
   color: @text-tertiary;
 }
 
-.speech-draft-step__meta {
-  display: flex;
-  align-items: center;
-  gap: @spacing-sm;
-  margin-bottom: @spacing-md;
-}
-.speech-draft-step__edit {
-  margin-left: auto;
-}
-.speech-draft-step__date {
-  font-size: @font-size-sm;
-  color: @text-secondary;
-}
-.speech-draft-step__badge {
-  font-size: @font-size-xs;
-  color: @brand-primary;
-  background: color-mix(in srgb, var(--color-brand) 10%, transparent);
-  padding: 2px @spacing-sm;
-  border-radius: @radius-sm;
-  font-weight: @font-weight-medium;
-}
-
 .speech-draft-step__card {
   margin-bottom: @spacing-md;
 }
@@ -228,31 +296,36 @@ function onSave(): void {
   line-height: 1.8;
 }
 
-.speech-draft-step__toolbar {
-  margin-bottom: @spacing-lg;
-}
 .speech-draft-step__footer {
   display: flex;
-  align-items: center;
+  flex-direction: column;
+  align-items: flex-start;
   gap: @spacing-sm;
   padding-top: @spacing-base;
+  margin-top: @spacing-base;
   border-top: 1px solid @divider-color;
-}
-.speech-draft-step__stat {
-  font-size: @font-size-sm;
-  color: @text-tertiary;
-  font-variant-numeric: tabular-nums;
-  white-space: nowrap;
 }
 .speech-draft-step__actions {
   display: flex;
+  align-items: center;
+  justify-content: space-between;
   gap: @spacing-sm;
-  margin-left: auto;
+  width: 100%;
 
-  > * {
-    flex: 1;
+  .speech-draft-step__actions-right > * {
     min-width: 108px;
   }
+}
+.speech-draft-step__actions-right {
+  display: flex;
+  align-items: center;
+  gap: @spacing-sm;
+  margin-left: auto;
+}
+.speech-draft-step__no-evidence {
+  margin: 0;
+  font-size: @font-size-xs;
+  color: @text-tertiary;
 }
 
 @keyframes speech-draft-bounce {
@@ -282,13 +355,6 @@ function onSave(): void {
   .speech-draft-step__scroll {
     overflow: visible;
     padding-right: 0;
-  }
-  .speech-draft-step__footer {
-    flex-wrap: wrap;
-  }
-  .speech-draft-step__actions {
-    width: 100%;
-    margin-left: 0;
   }
 }
 </style>

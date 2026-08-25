@@ -15,6 +15,8 @@ import type {
   KnowledgeJobStatusDto,
   PlanParseResult,
   PreInfo,
+  MeetingProjectDto,
+  CreateMeetingProjectInput,
 } from '@/types'
 
 /** 媒体/模型请求耗时较长（ASR 首次加载模型、TTS 合成、长音频等），放宽 axios 默认 15s 超时。 */
@@ -52,14 +54,41 @@ export function getSpeechAudio(id: string): Promise<Blob> {
   return request.get<Blob>(fillUrl(urls.meetingSpeechAudio, { id }), { responseType: 'blob', timeout: MediaTimeout })
 }
 
+export interface SpeechAudioStatus {
+  cached: boolean
+  leadCached: boolean
+  leadText: string
+}
+
+export function getSpeechAudioStatus(id: string): Promise<SpeechAudioStatus> {
+  return request.get<SpeechAudioStatus>(fillUrl(urls.meetingSpeechAudioStatus, { id }))
+}
+
+export async function getSpeechLeadAudio(id: string): Promise<Blob | null> {
+  try {
+    return await request.get<Blob>(fillUrl(urls.meetingSpeechLeadAudio, { id }), {
+      responseType: 'blob',
+      timeout: MediaTimeout,
+    })
+  } catch {
+    return null
+  }
+}
+
+export function saveSpeechAudioCache(id: string, audio: Blob): Promise<void> {
+  const form = new FormData()
+  form.append('file', audio, 'speech.wav')
+  return request.post<void>(fillUrl(urls.meetingSpeechAudioCache, { id }), form, { timeout: MediaTimeout })
+}
+
 export function transcribeAudio(audio: Blob): Promise<string> {
   const form = new FormData()
   form.append('audio', audio, 'speech.wav')
   return request.post<string>(urls.meetingAsr, form, { timeout: MediaTimeout })
 }
 
-export function synthesizeSpeech(text: string): Promise<Blob> {
-  return request.post<Blob>(urls.meetingTts, { text }, { responseType: 'blob', timeout: MediaTimeout })
+export function synthesizeSpeech(text: string, timeout = MediaTimeout): Promise<Blob> {
+  return request.post<Blob>(urls.meetingTts, { text }, { responseType: 'blob', timeout })
 }
 
 export function startMeeting(id: string): Promise<MeetingRecordDto> {
@@ -128,12 +157,85 @@ export function enrollWorkerFace(id: string, photo: Blob): Promise<WorkerDto> {
   return request.post<WorkerDto>(fillUrl(urls.meetingWorkerFace, { id }), form)
 }
 
-export function uploadKnowledgeDocument(file: File): Promise<KnowledgeUploadResult> {
+export function uploadKnowledgeDocument(
+  file: File,
+  onProgress?: (percent: number) => void,
+): Promise<KnowledgeUploadResult> {
   const form = new FormData()
   form.append('file', file)
-  return request.post<KnowledgeUploadResult>(urls.meetingKnowledgeDocuments, form, { timeout: MediaTimeout })
+  return request.post<KnowledgeUploadResult>(urls.meetingKnowledgeDocuments, form, {
+    timeout: MediaTimeout,
+    onUploadProgress: (e) => {
+      if (onProgress && e.total) onProgress(Math.round((e.loaded / e.total) * 100))
+    },
+  })
 }
 
 export function getKnowledgeDocumentStatus(docId: string): Promise<KnowledgeJobStatusDto> {
   return request.get<KnowledgeJobStatusDto>(fillUrl(urls.meetingKnowledgeDocumentStatus, { docId }))
+}
+
+export function getMeetingProjects(): Promise<MeetingProjectDto[]> {
+  return request.get<MeetingProjectDto[]>(urls.meetingProjects)
+}
+
+export function createMeetingProject(input: CreateMeetingProjectInput): Promise<MeetingProjectDto> {
+  return request.post<MeetingProjectDto>(urls.meetingProjects, input)
+}
+
+export function updateMeetingProject(
+  id: string,
+  input: Pick<CreateMeetingProjectInput, 'name' | 'docIds' | 'docNames'>,
+): Promise<MeetingProjectDto> {
+  return request.put<MeetingProjectDto>(fillUrl(urls.meetingProject, { id }), input)
+}
+
+export function deleteMeetingProject(id: string): Promise<void> {
+  return request.delete<void>(fillUrl(urls.meetingProject, { id }))
+}
+
+export function getMeetingProject(id: string): Promise<MeetingProjectDto> {
+  return request.get<MeetingProjectDto>(fillUrl(urls.meetingProject, { id }))
+}
+
+export function meetingProjectDocumentFileUrl(id: string, docId: string): string {
+  return fillUrl(urls.meetingProjectDocumentFile, { id, docId })
+}
+
+export async function getMeetingProjectDocumentContent(id: string, docId: string): Promise<string> {
+  const data = await request.get<{ markdown: string }>(
+    fillUrl(urls.meetingProjectDocumentContent, { id, docId }),
+  )
+  return data.markdown
+}
+
+export function extractMeetingProject(id: string): Promise<MeetingProjectDto> {
+  return request.post<MeetingProjectDto>(fillUrl(urls.meetingProjectExtract, { id }), undefined, {
+    timeout: MediaTimeout,
+  })
+}
+
+export function suggestMeetingProjectName(docId: string): Promise<{ name: string }> {
+  return request.post<{ name: string }>(urls.meetingProjectSuggestName, { docId }, {
+    timeout: MediaTimeout,
+  })
+}
+
+export interface UnrecognizedFaceCrop {
+  blob: Blob
+  confidence: number
+  bbox: number[]
+}
+
+export function uploadUnrecognizedFaces(id: string, crops: UnrecognizedFaceCrop[]): Promise<number> {
+  const form = new FormData()
+  const metadata: Array<{ confidence: number, bbox: number[] }> = []
+  crops.forEach((crop, index) => {
+    form.append('files', crop.blob, `face-${index}.jpg`)
+    metadata.push({ confidence: crop.confidence, bbox: crop.bbox })
+  })
+  form.append('metadata', JSON.stringify(metadata))
+  return request.post<number>(fillUrl(urls.meetingUnrecognizedFaces, { id }), form, {
+    timeout: MediaTimeout,
+  })
 }

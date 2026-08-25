@@ -12,6 +12,12 @@ public class PreInfoInput
     public string Tasks { get; set; } = "";
 
     public string RiskPoints { get; set; } = "";
+
+    /// <summary>所选施工项目名称（晨会稿生成引用项目上下文）。</summary>
+    public string ProjectName { get; set; } = "";
+
+    /// <summary>所选项目施工方案提取的主要内容（晨会稿生成引用）。</summary>
+    public string ProjectSummary { get; set; } = "";
 }
 
 public class UpdateSpeechInput
@@ -40,6 +46,17 @@ public class PlanParseResult
     public string RiskPoints { get; set; } = "";
 
     public string City { get; set; } = "";
+}
+
+public class SpeechAudioStatusDto
+{
+    public bool Cached { get; set; }
+
+    /// <summary>开场句是否已预合成缓存（点播放时第一句秒出）。</summary>
+    public bool LeadCached { get; set; }
+
+    /// <summary>已缓存的开幕句文本，前端需与当前稿首段一致才复用。</summary>
+    public string LeadText { get; set; } = "";
 }
 
 public class MeetingRecordDto
@@ -102,6 +119,14 @@ public class AttendanceItemDto
     public AttendanceStatus Status { get; set; }
 
     public double Confidence { get; set; }
+
+    public double[] Bbox { get; set; } = [];
+
+    /// <summary>工人证件号（身份证号），前端可据此展示“姓名-生日后四位”以区分同名人员。</summary>
+    public string EmployeeNo { get; set; } = "";
+
+    /// <summary>工人人脸照片访问地址（可能为空）。</summary>
+    public string? FacePhotoUrl { get; set; }
 }
 
 public class QaRecordDto
@@ -129,9 +154,22 @@ public class ReportDto
 
     public List<QaRecordDto> QaRecords { get; set; } = new();
 
+    public List<UnrecognizedFaceDto> UnrecognizedFaces { get; set; } = new();
+
     public DateTime CreatedAt { get; set; }
 
     public string? ReportUrl { get; set; }
+}
+
+public class UnrecognizedFaceDto
+{
+    public Guid Id { get; set; }
+
+    public string PhotoUrl { get; set; } = "";
+
+    public double Confidence { get; set; }
+
+    public DateTime CreatedAt { get; set; }
 }
 
 public class WorkerDto

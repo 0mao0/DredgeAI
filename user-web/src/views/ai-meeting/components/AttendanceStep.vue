@@ -1,5 +1,11 @@
 <template>
-  <SectionCard title="现场点名" flush>
+  <SectionCard title="现场点名" flush class="attendance-step">
+    <template v-if="count !== null" #extra>
+      <span class="attendance-step__count">
+        已识别 {{ list.length }} 人 · 目测 {{ count }} 人
+      </span>
+    </template>
+
     <div v-if="stream" class="attendance-step__video-wrap">
       <video
         ref="videoRef"
@@ -9,13 +15,49 @@
         playsinline
         muted
       />
-      <div class="attendance-step__scan-overlay">
-        <div class="attendance-step__scan-title">
-          <LoadingOutlined v-if="scanning" spin />
-          <span v-if="scanning">正在自动识别… 已识别 {{ list.length }} 人</span>
-          <span v-else>摄像头已就绪</span>
+      <div v-if="currentSegment" class="attendance-step__subtitle">{{ currentSegment }}</div>
+      <div class="attendance-step__list-overlay">
+        <div class="attendance-step__list-header">
+          <span class="attendance-step__list-title">识别列表</span>
+          <span class="attendance-step__list-scan">
+            <LoadingOutlined v-if="scanning" spin />
+            <template v-if="scanning">正在自动识别… 已识别 {{ list.length }} 人</template>
+            <template v-else>摄像头已就绪</template>
+          </span>
+          <a-popover trigger="click" placement="bottomRight" :overlay-inner-style="{ padding: 0 }">
+            <template #content>
+              <div class="attendance-step__unknown-panel">
+                <div class="attendance-step__unknown-panel-title">未识别人脸（待入库）</div>
+                <div v-if="unrecognized.length === 0" class="attendance-step__unknown-empty">
+                  暂未识别到未录入人脸
+                </div>
+                <div
+                  v-for="(item, index) in unrecognized"
+                  :key="`${item.workerId}-${index}`"
+                  class="attendance-step__unknown-item"
+                >
+                  <span class="attendance-step__unknown-index">{{ index + 1 }}</span>
+                  <span class="attendance-step__unknown-name">未识别人脸</span>
+                  <span class="attendance-step__unknown-confidence">
+                    {{ Math.round((item.confidence ?? 0) * 100) }}%
+                  </span>
+                </div>
+              </div>
+            </template>
+            <AppButton size="sm" class="attendance-step__unknown-trigger">
+              <UserOutlined />
+              <span>未识别 {{ unrecognized.length }}</span>
+            </AppButton>
+          </a-popover>
         </div>
-        <div class="attendance-step__scan-guide">请旋转摄像头，覆盖所有在场人员</div>
+        <div v-if="list.length === 0" class="attendance-step__list-empty">等待识别…</div>
+        <div v-else class="attendance-step__list-body">
+          <div v-for="item in list" :key="item.workerId ?? item.name" class="attendance-step__person">
+            <span class="attendance-step__person-dot" :class="`is-${item.status}`" />
+            <span class="attendance-step__person-name">{{ personName(item) }}</span>
+            <span class="attendance-step__person-team">{{ item.team }}</span>
+          </div>
+        </div>
       </div>
     </div>
     <div v-else-if="starting" class="attendance-step__camera-hint">正在启用摄像头…</div>
@@ -24,57 +66,56 @@
         <AppButton size="sm" @click="onRetryCamera">重新启用</AppButton>
       </template>
     </a-result>
-    <div v-if="speechText" class="attendance-step__speech">
-      <SpeechPlayer :text="speechText" auto-play />
+
+    <div class="attendance-step__bottom">
+      <div v-if="speechText" class="attendance-step__speech">
+        <SpeechPlayer
+          :text="speechText"
+          auto-play
+          play-cached-only
+          :meeting-id="meetingId"
+          @current-segment="currentSegment = $event"
+        />
+      </div>
+      <div class="attendance-step__actions">
+        <AppButton @click="enrollOpen = true">新人录入</AppButton>
+        <AppButton variant="primary" @click="onDone">下一步</AppButton>
+      </div>
     </div>
-    <div class="attendance-step__actions">
-      <AppButton @click="enrollOpen = true">新人录入</AppButton>
-      <AppButton variant="primary" @click="onDone">下一步</AppButton>
-    </div>
-    <div v-if="count !== null" class="attendance-step__count">
-      已识别 {{ list.length }} 人 · YOLO 目测人数 {{ count }}
-    </div>
-    <DataTable
-      :columns="columns"
-      :data-source="list"
-      row-key="workerId"
-      :pagination="false"
-      :card="false"
-    />
+
     <WorkerEnrollDrawer v-model:open="enrollOpen" />
   </SectionCard>
 </template>
 
 <script setup lang="ts">
 import { nextTick, onMounted, onScopeDispose, ref, watch } from 'vue'
-import { LoadingOutlined } from '@ant-design/icons-vue'
+import { LoadingOutlined, UserOutlined } from '@ant-design/icons-vue'
 import SectionCard from '@shared/web/components/SectionCard.vue'
 import AppButton from '@shared/web/components/AppButton.vue'
-import { DataTable } from '@shared/web'
-import type { DataTableColumn } from '@shared/web'
 import type { AttendanceItemDto } from '@/types'
 import { useCamera } from '../composables/useCamera'
 import WorkerEnrollDrawer from './WorkerEnrollDrawer.vue'
 import SpeechPlayer from './SpeechPlayer.vue'
+import { displayAttendanceName } from '@/utils/attendanceName'
 
-defineProps<{
+const props = defineProps<{
   loading: boolean
   list: AttendanceItemDto[]
+  unrecognized: AttendanceItemDto[]
   count: number | null
   speechText: string
+  meetingId?: string
 }>()
 const emit = defineEmits<{ capture: [photo: Blob], done: [] }>()
 
-const columns: DataTableColumn[] = [
-  { title: '姓名', dataIndex: 'name', key: 'name', width: 120, minWidth: 100, resizable: true },
-  { title: '班组', dataIndex: 'team', key: 'team', width: 160, minWidth: 120, resizable: true },
-  { title: '状态', dataIndex: 'status', key: 'status', width: 110, minWidth: 90, resizable: true },
-  { title: '置信度', dataIndex: 'confidence', key: 'confidence', width: 100, minWidth: 80, resizable: true },
-]
+function personName(item: AttendanceItemDto): string {
+  return displayAttendanceName(item, props.list)
+}
 
 const videoRef = ref<HTMLVideoElement | null>(null)
 const enrollOpen = ref(false)
 const scanning = ref(false)
+const currentSegment = ref('')
 let scanToken = 0
 const { stream, error, starting, start, stop, capturePhoto } = useCamera()
 
@@ -143,37 +184,220 @@ function onDone(): void {
 <style scoped lang="less">
 @import '@shared/web/styles/variables.less';
 
-.attendance-step__video {
-  width: 100%;
-  border-radius: @radius-base;
+.attendance-step {
+  height: clamp(420px, calc(100vh - 190px), 760px);
+  min-height: 420px;
+  display: flex;
+  flex-direction: column;
+
+  :deep(.section-card-header) {
+    flex: none;
+  }
+  :deep(.section-card-body) {
+    flex: 1;
+    min-height: 0;
+    display: flex;
+    flex-direction: column;
+  }
 }
+.attendance-step__count {
+  font-size: @font-size-sm;
+  color: @text-secondary;
+  white-space: nowrap;
+}
+
 .attendance-step__video-wrap {
   position: relative;
+  flex: 1;
+  min-height: 0;
   border-radius: @radius-base;
   overflow: hidden;
 }
-.attendance-step__scan-overlay {
+.attendance-step__video {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+.attendance-step__subtitle {
   position: absolute;
-  left: 0;
-  right: 0;
-  bottom: 0;
+  top: @spacing-sm;
+  left: @spacing-sm;
+  right: @spacing-sm;
   padding: @spacing-sm @spacing-md;
+  border-radius: @radius-sm;
   background: color-mix(in srgb, #000 55%, transparent);
   color: #fff;
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
+  font-size: @font-size-2xl;
+  line-height: 1.35;
+  text-align: center;
+  white-space: nowrap;
+  overflow: hidden;
+  z-index: 2;
+  pointer-events: none;
+  box-shadow: @shadow-sm;
 }
-.attendance-step__scan-title {
+.attendance-step__unknown-panel {
+  min-width: 220px;
+  max-height: 260px;
+  overflow-y: auto;
+}
+.attendance-step__list-header {
+  display: flex;
+  align-items: center;
+  gap: @spacing-sm;
+  padding: @spacing-sm @spacing-md;
+  border-bottom: 1px solid @divider-color;
+}
+.attendance-step__unknown-panel-title {
+  padding: @spacing-sm @spacing-md;
+  font-size: @font-size-sm;
+  font-weight: @font-weight-medium;
+  color: @text-primary;
+  border-bottom: 1px solid @divider-color;
+}
+.attendance-step__list-scan {
+  flex: 1;
+  min-width: 0;
   display: flex;
   align-items: center;
   gap: @spacing-xs;
-  font-size: @font-size-sm;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  font-size: @font-size-xs;
+  color: @text-secondary;
   font-weight: @font-weight-medium;
 }
-.attendance-step__scan-guide {
+.attendance-step__unknown-trigger {
+  flex: none;
+  height: 24px;
+  padding: 0 @spacing-sm;
   font-size: @font-size-xs;
-  opacity: 0.85;
+  background: color-mix(in srgb, var(--color-card-bg) 65%, transparent);
+  border-color: @border-color;
+  color: @text-secondary;
+
+  &:hover,
+  &:focus {
+    background: var(--color-card-bg);
+    border-color: @text-tertiary;
+    color: @text-primary;
+  }
+}
+.attendance-step__unknown-item {
+  display: flex;
+  align-items: center;
+  gap: @spacing-sm;
+  padding: @spacing-sm @spacing-md;
+  font-size: @font-size-sm;
+  color: @text-secondary;
+
+  &:hover {
+    background: @surface-hover;
+  }
+}
+.attendance-step__unknown-index {
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: none;
+  font-size: @font-size-xs;
+  font-weight: @font-weight-medium;
+  color: @warning;
+  background: color-mix(in srgb, var(--color-warning) 15%, transparent);
+}
+.attendance-step__unknown-name {
+  min-width: 0;
+}
+.attendance-step__unknown-confidence {
+  margin-left: auto;
+  font-size: @font-size-xs;
+  color: @text-tertiary;
+  font-variant-numeric: tabular-nums;
+}
+.attendance-step__unknown-empty {
+  padding: @spacing-lg @spacing-md;
+  text-align: center;
+  font-size: @font-size-sm;
+  color: @text-tertiary;
+}
+.attendance-step__list-overlay {
+  position: absolute;
+  left: @spacing-sm;
+  right: @spacing-sm;
+  bottom: @spacing-sm;
+  max-height: min(40%, 220px);
+  display: flex;
+  flex-direction: column;
+  border-radius: @radius-base;
+  background: var(--glass-fill);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  box-shadow: @shadow-md;
+  overflow: hidden;
+}
+.attendance-step__list-title {
+  flex: none;
+  font-size: @font-size-xs;
+  font-weight: @font-weight-medium;
+  color: @text-secondary;
+}
+.attendance-step__list-body {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  display: flex;
+  flex-wrap: wrap;
+  gap: @spacing-xs;
+  padding: @spacing-sm @spacing-md;
+}
+.attendance-step__person {
+  display: inline-flex;
+  align-items: center;
+  gap: @spacing-xs;
+  padding: 2px @spacing-sm;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--color-card-bg) 45%, transparent);
+  font-size: @font-size-xs;
+  white-space: nowrap;
+}
+.attendance-step__person-name {
+  color: @text-primary;
+  font-weight: @font-weight-medium;
+}
+.attendance-step__person-team {
+  color: @text-tertiary;
+}
+.attendance-step__person-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  flex: none;
+  background: @text-tertiary;
+
+  &.is-present {
+    background: @success;
+  }
+  &.is-late {
+    background: @warning;
+  }
+  &.is-absent {
+    background: @danger;
+  }
+}
+.attendance-step__list-empty {
+  padding: @spacing-sm @spacing-md;
+  font-size: @font-size-xs;
+  color: @text-tertiary;
+}
+
+.attendance-step__bottom {
+  flex: none;
+  margin-top: @spacing-md;
 }
 .attendance-step__speech {
   margin-bottom: @spacing-md;
@@ -181,21 +405,16 @@ function onDone(): void {
 .attendance-step__actions {
   display: flex;
   gap: @spacing-sm;
-  margin: @spacing-md 0;
 
   > * {
     flex: 1;
   }
 }
-.attendance-step__count {
-  text-align: center;
-  font-size: @font-size-sm;
-  color: @text-secondary;
-  margin-bottom: @spacing-md;
-}
 .attendance-step__camera-hint {
-  text-align: center;
-  padding: @spacing-2xl 0;
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
   color: @text-secondary;
   background: @content-bg;
   border-radius: @radius-base;

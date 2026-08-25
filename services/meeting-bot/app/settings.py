@@ -11,6 +11,8 @@ class Settings(BaseSettings):
     insightface_url: str = "http://insightface:8103"
     yolo_url: str = "http://yolo:8104"
     tts_voice_id: str = "zh-male-news"
+    # 晨会稿朗读语速（1.0 常速；略快可缩短合成与播放时长）
+    tts_speed: float = 1.15
     transcribe_max_concurrency: int = 1
 
 

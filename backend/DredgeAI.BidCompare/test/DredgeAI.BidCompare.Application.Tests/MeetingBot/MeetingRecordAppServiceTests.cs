@@ -106,6 +106,42 @@ public class MeetingRecordAppServiceTests : BidCompareApplicationTestBase<BidCom
     }
 
     [Fact]
+    public async Task GenerateSpeech_Should_Include_Project_Context()
+    {
+        var llm = (FakeLlmGateway)GetRequiredService<ILlmGateway>();
+        llm.QueueResponse("生成的晨会稿内容");
+        var created = await _appService.CreateAsync(new PreInfoInput
+        {
+            Tasks = "基坑施工",
+            ProjectName = "基坑支护项目",
+            ProjectSummary = "含降水与钢支撑监测"
+        });
+
+        await _appService.GenerateSpeechAsync(created.Id);
+
+        llm.Requests.ShouldContain(r =>
+            r.User.Contains("基坑支护项目") && r.User.Contains("含降水与钢支撑监测"));
+    }
+
+    [Fact]
+    public async Task Recognize_Should_Keep_Same_Name_Different_Workers()
+    {
+        var meeting = await _appService.CreateAsync(new PreInfoInput());
+        await _appService.StartAsync(meeting.Id);
+        _bot.RecognizedFaces =
+        [
+            new FaceMatchDto { WorkerId = Guid.NewGuid().ToString(), Name = "王飞", Confidence = 0.9 },
+            // 同名但不同 workerId：视为两个人，识别阶段不按姓名合并（前端用“姓名-生日后四位”区分）
+            new FaceMatchDto { WorkerId = Guid.NewGuid().ToString(), Name = "王飞", Confidence = 0.85 },
+            new FaceMatchDto { WorkerId = Guid.NewGuid().ToString(), Name = "李四", Confidence = 0.88 },
+        ];
+
+        var result = await _appService.RecognizeAttendanceAsync(meeting.Id, new byte[] { 1 });
+        result.Count(a => a.Status == AttendanceStatus.Present).ShouldBe(3);
+        result.Count(a => a.Name == "王飞").ShouldBe(2);
+    }
+
+    [Fact]
     public async Task AskQa_Should_Classify_Knowledge_And_Chitchat()
     {
         var anGineer = GetRequiredService<IAnGineerClient>();
@@ -228,6 +264,24 @@ public class MeetingRecordAppServiceTests : BidCompareApplicationTestBase<BidCom
             () => _appService.GetSpeechAudioAsync(meeting.Id));
 
         ex.Code.ShouldBe("MEETING_SPEECH_NOT_GENERATED");
+    }
+
+    [Fact]
+    public async Task PreWarmSpeechLead_Should_Cache_Opening_Sentence()
+    {
+        var meeting = await _appService.CreateAsync(new PreInfoInput { Tasks = "临边防护检查" });
+        _llm.QueueResponse("各位工友，大家早上好！今天的主要任务是临边防护检查……");
+        await _appService.GenerateSpeechAsync(meeting.Id);
+
+        await _appService.PreWarmSpeechLeadAsync(meeting.Id);
+
+        (await _appService.IsSpeechLeadAudioCachedAsync(meeting.Id)).ShouldBeTrue();
+        (await _appService.GetSpeechLeadTextAsync(meeting.Id)).ShouldBe("各位工友，大家早上好！");
+
+        var audio = await _appService.GetSpeechLeadAudioAsync(meeting.Id);
+        audio.ShouldNotBeNull();
+        audio![0].ShouldBe((byte)'R');
+        _bot.TtsTexts.ShouldContain("各位工友，大家早上好！");
     }
 
     [Fact]

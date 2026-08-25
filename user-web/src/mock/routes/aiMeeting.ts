@@ -7,7 +7,7 @@ export function registerMeetingMock(
   wrap: (h: () => unknown) => () => Promise<[number, unknown]>,
 ): void {
   const meetingId = (url: string | undefined): string =>
-    url?.match(/\/api\/meeting\/records\/([^/]+)\//)?.[1] ?? ''
+    url?.match(/\/meeting\/records\/([^/]+)\//)?.[1] ?? ''
 
   mock.onPost('/api/meeting/records').reply((config) => [200, createMockMeeting(JSON.parse(config.data))])
   mock.onPost('/api/meeting/parse-plan').reply((config) => {
@@ -148,6 +148,7 @@ export function registerMeetingMock(
         transcript: '（转写稿）各位工友早上好……',
         attendance: meeting.attendance,
         qaRecords: meeting.qaRecords,
+        unrecognizedFaces: [],
         createdAt: new Date().toISOString(),
       }
     }

@@ -69,6 +69,15 @@ public class FakeAnGineerClient : IAnGineerClient
         ContentMd: System.Text.Encoding.UTF8.GetBytes(SampleIr.ValidContentMd),
         Images: new Dictionary<string, byte[]> { ["images/t1.jpg"] = new byte[] { 0xFF, 0xD8 } });
 
+    /// <summary>PDF 原文字节（OpenPdfAsync 返回）。</summary>
+    public byte[] PdfBytes { get; set; } = [0x25, 0x50, 0x44, 0x46];
+
+    /// <summary>解析后的 Markdown 正文（GetContentAsync 返回）。</summary>
+    public string ContentMarkdown { get; set; } = SampleIr.ValidContentMd;
+
+    /// <summary>已删除的 AnGIneer 文档 id（DeleteDocumentAsync 记录）。</summary>
+    public HashSet<string> DeletedDocs { get; } = new();
+
     /// <summary>知识检索命中（SearchAsync 返回）；空列表 = 模拟检索失败降级。</summary>
     // 注意：不能用接口类型（IReadOnlyList<...>），否则 Autofac PropertiesAutowired 会注入空列表
     private List<AnGineerHit> _searchResults = new List<AnGineerHit>
@@ -213,6 +222,18 @@ public class FakeAnGineerClient : IAnGineerClient
             _ => throw new FileNotFoundException(artifact.Name)
         };
         return Task.FromResult<Stream>(new MemoryStream(bytes, writable: false));
+    }
+
+    public Task<Stream> OpenPdfAsync(string docId, CancellationToken cancellationToken = default)
+        => Task.FromResult<Stream>(new MemoryStream(PdfBytes, writable: false));
+
+    public Task<string> GetContentAsync(string docId, CancellationToken cancellationToken = default)
+        => Task.FromResult(ContentMarkdown);
+
+    public Task DeleteDocumentAsync(string docId, CancellationToken cancellationToken = default)
+    {
+        DeletedDocs.Add(docId);
+        return Task.CompletedTask;
     }
 
     private HttpRequestException BuildTransientException()

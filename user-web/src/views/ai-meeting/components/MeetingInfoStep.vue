@@ -1,10 +1,6 @@
 <template>
   <div class="meeting-info-step">
     <SectionCard flush>
-      <div class="meeting-info-step__toolbar">
-        <AppButton size="sm" @click="uploadOpen = true">上传施组方案</AppButton>
-      </div>
-
       <div class="meeting-info-step__mic-zone">
         <button
           class="meeting-info-step__mic"
@@ -44,22 +40,38 @@
         </a-tag>
       </div>
 
-      <AppButton
-        variant="primary"
-        size="lg"
-        block
-        :loading="parsing"
-        :disabled="!planText.trim()"
-        @click="onParse"
-      >
-        下一步，整理信息
-      </AppButton>
+      <div class="meeting-info-step__bottom">
+        <a-select
+          :value="selectedProjectId"
+          class="meeting-info-step__project-select"
+          placeholder="选择项目"
+          @change="onProjectChange"
+        >
+          <a-select-option value="__new__">新建项目</a-select-option>
+          <a-select-option v-for="p in projects" :key="p.id" :value="p.id" :title="p.name">
+            <div class="meeting-info-step__project-option">
+              <span class="meeting-info-step__project-option-name">{{ shortProjectName(p.name) }}</span>
+              <EditOutlined class="meeting-info-step__project-edit" @click.stop="onEditProject(p)" />
+            </div>
+          </a-select-option>
+        </a-select>
+        <AppButton
+          class="meeting-info-step__next"
+          variant="primary"
+          size="lg"
+          :loading="parsing"
+          :disabled="!planText.trim()"
+          @click="onParse"
+        >
+          下一步，整理信息
+        </AppButton>
+      </div>
     </SectionCard>
 
     <a-drawer
       v-model:open="historyOpen"
       title="历史晨会"
-      placement="left"
+      placement="right"
       :width="320"
     >
       <a-spin :spinning="historyLoading">
@@ -76,69 +88,46 @@
       </a-spin>
     </a-drawer>
 
-    <a-drawer
-      v-model:open="uploadOpen"
-      title="上传施组方案（进知识库）"
-      placement="right"
-      :width="340"
-    >
-      <a-upload-dragger
-        accept=".pdf,.doc,.docx"
-        :show-upload-list="false"
-        :before-upload="onBeforeUpload"
-        :disabled="uploading"
-      >
-        <p class="ant-upload-drag-icon">
-          <InboxOutlined />
-        </p>
-        <p class="ant-upload-text">点击或拖拽 PDF/Word 到此处</p>
-        <p class="ant-upload-hint">上传后自动解析入库，晨会稿生成与问答即可引用</p>
-      </a-upload-dragger>
-      <div v-if="uploading" class="meeting-info-step__upload-status">
-        <a-spin />
-        <span>正在解析「{{ uploadingName }}」… {{ uploadProgress }}%</span>
-      </div>
-      <a-alert
-        v-else-if="uploadDone"
-        type="success"
-        show-icon
-        message="解析完成，已进入知识库"
-      />
-      <a-alert
-        v-else-if="uploadError"
-        type="error"
-        show-icon
-        :message="uploadError"
-      />
-    </a-drawer>
+    <ProjectCreateDrawer
+      :open="projectDrawerOpen"
+      :project="editProject"
+      @update:open="onDrawerOpenChange"
+      @created="onProjectCreated"
+      @deleted="onProjectDeleted"
+    />
   </div>
 </template>
 
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue'
-import { AudioOutlined, InboxOutlined } from '@ant-design/icons-vue'
+import { AudioOutlined, EditOutlined } from '@ant-design/icons-vue'
 import SectionCard from '@shared/web/components/SectionCard.vue'
 import AppButton from '@shared/web/components/AppButton.vue'
-import type { MeetingHistoryDto } from '@/types'
+import type { MeetingHistoryDto, MeetingProjectDto } from '@/types'
 import {
   getMeetingHistory,
-  getKnowledgeDocumentStatus,
   transcribeAudio,
-  uploadKnowledgeDocument,
 } from '@/api/modules/aiMeeting'
 import { convertToWav16k, extractErrorMessage } from '@/utils/audioToWav'
+import { shortProjectName } from '@/utils/projectName'
 import { useRecorder } from '../composables/useRecorder'
+import ProjectCreateDrawer from './ProjectCreateDrawer.vue'
 
 const props = defineProps<{
   parsing: boolean
   plan: string
   historyOpen: boolean
+  projects: MeetingProjectDto[]
+  selectedProjectId?: string
 }>()
 const emit = defineEmits<{
   'parse': [planText: string]
   'update:plan': [planText: string]
   'update:historyOpen': [open: boolean]
   'loadHistory': [id: string]
+  'update:selectedProjectId': [id: string | undefined]
+  'projectCreated': [project: MeetingProjectDto]
+  'projectDeleted': [id: string]
 }>()
 
 const recommendedCases = [
@@ -177,6 +166,9 @@ watch(planText, (value) => emit('update:plan', value))
 const { recording, start: startRecording, stop: stopRecording } = useRecorder()
 const asrLoading = ref(false)
 const asrError = ref('')
+const projectDrawerOpen = ref(false)
+const editProject = ref<MeetingProjectDto | null>(null)
+let previousProjectId: string | undefined
 
 async function onPress(): Promise<void> {
   asrError.value = ''
@@ -209,6 +201,39 @@ function onParse(): void {
   emit('parse', planText.value.trim())
 }
 
+function onProjectChange(value: string): void {
+  if (value === '__new__') {
+    projectDrawerOpen.value = true
+    // 恢复为上一次选择的项目，避免下拉停留在“新建项目”
+    emit('update:selectedProjectId', previousProjectId)
+    return
+  }
+  previousProjectId = value
+  emit('update:selectedProjectId', value)
+}
+
+function onProjectCreated(project: MeetingProjectDto): void {
+  previousProjectId = project.id
+  editProject.value = null
+  emit('projectCreated', project)
+}
+
+function onProjectDeleted(id: string): void {
+  editProject.value = null
+  projectDrawerOpen.value = false
+  emit('projectDeleted', id)
+}
+
+function onEditProject(project: MeetingProjectDto): void {
+  editProject.value = project
+  projectDrawerOpen.value = true
+}
+
+function onDrawerOpenChange(open: boolean): void {
+  projectDrawerOpen.value = open
+  if (!open) editProject.value = null
+}
+
 const historyOpen = computed({
   get: () => props.historyOpen,
   set: (open: boolean) => emit('update:historyOpen', open),
@@ -229,53 +254,6 @@ watch(historyOpen, async (open) => {
 function onPickHistory(item: MeetingHistoryDto): void {
   historyOpen.value = false
   emit('loadHistory', item.id)
-}
-
-const uploadOpen = ref(false)
-const uploading = ref(false)
-const uploadingName = ref('')
-const uploadProgress = ref(0)
-const uploadDone = ref(false)
-const uploadError = ref('')
-
-async function onBeforeUpload(file: File): Promise<boolean> {
-  uploading.value = true
-  uploadingName.value = file.name
-  uploadProgress.value = 0
-  uploadDone.value = false
-  uploadError.value = ''
-  try {
-    const result = await uploadKnowledgeDocument(file)
-    if (result.status?.state === 'succeeded') {
-      uploadDone.value = true
-      return false
-    }
-    await pollKnowledgeStatus(result.docId)
-  } catch {
-    uploadError.value = '上传失败，请稍后重试'
-  } finally {
-    uploading.value = false
-  }
-  return false
-}
-
-async function pollKnowledgeStatus(docId: string, tries = 60): Promise<void> {
-  const status = await getKnowledgeDocumentStatus(docId)
-  uploadProgress.value = status.progress ?? uploadProgress.value
-  if (status.state === 'succeeded') {
-    uploadDone.value = true
-    return
-  }
-  if (status.state === 'failed' || status.state === 'partial') {
-    uploadError.value = status.stageMessage ?? '解析失败，请重新上传'
-    return
-  }
-  if (tries <= 0) {
-    uploadError.value = '解析超时，请稍后查看知识库'
-    return
-  }
-  await new Promise((r) => setTimeout(r, 2000))
-  await pollKnowledgeStatus(docId, tries - 1)
 }
 
 function statusText(status: MeetingHistoryDto['status']): string {
@@ -302,17 +280,11 @@ function statusColor(status: MeetingHistoryDto['status']): string {
 <style scoped lang="less">
 @import '@shared/web/styles/variables.less';
 
-.meeting-info-step__toolbar {
-  display: flex;
-  justify-content: flex-end;
-  align-items: center;
-  gap: @spacing-sm;
-  margin-bottom: @spacing-xl;
-}
 .meeting-info-step__mic-zone {
   display: flex;
   flex-direction: column;
   align-items: center;
+  margin-top: @spacing-xl;
   margin-bottom: @spacing-xl;
 }
 .meeting-info-step__mic {
@@ -339,7 +311,7 @@ function statusColor(status: MeetingHistoryDto['status']): string {
 .meeting-info-step__caption {
   margin-top: @spacing-md;
   font-size: @font-size-base;
-  color: @text-primary;
+  color: @text-tertiary;
 }
 .meeting-info-step__hint {
   margin-top: @spacing-xs;
@@ -367,6 +339,42 @@ function statusColor(status: MeetingHistoryDto['status']): string {
 .meeting-info-step__tag {
   cursor: pointer;
 }
+.meeting-info-step__bottom {
+  display: flex;
+  align-items: center;
+  gap: @spacing-sm;
+}
+.meeting-info-step__project-select {
+  flex: 1;
+  min-width: 0;
+}
+.meeting-info-step__project-option {
+  display: flex;
+  align-items: center;
+  gap: @spacing-xs;
+  min-width: 0;
+}
+.meeting-info-step__project-option-name {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.meeting-info-step__project-edit {
+  flex: none;
+  color: @text-tertiary;
+  cursor: pointer;
+  transition: color @transition-fast;
+
+  &:hover {
+    color: @brand-primary;
+  }
+}
+.meeting-info-step__next {
+  flex: 1;
+  min-width: 0;
+}
 .meeting-info-step__history-item {
   display: flex;
   align-items: center;
@@ -385,14 +393,6 @@ function statusColor(status: MeetingHistoryDto['status']): string {
   text-overflow: ellipsis;
   white-space: nowrap;
 }
-.meeting-info-step__upload-status {
-  display: flex;
-  align-items: center;
-  gap: @spacing-sm;
-  margin-top: @spacing-md;
-  color: @text-secondary;
-}
-
 @keyframes meeting-mic-pulse {
   0%, 100% { box-shadow: @shadow-brand; }
   50% { box-shadow: 0 0 0 10px color-mix(in srgb, var(--color-brand) 20%, transparent); }

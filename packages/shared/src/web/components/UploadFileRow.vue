@@ -29,7 +29,7 @@
       size="sm"
       class="upload-row__retry"
       :disabled="disabled"
-      @click="emit('retry')"
+      @click.stop="emit('retry')"
     >
       重试
     </AppButton>
@@ -38,7 +38,7 @@
       size="sm"
       class="upload-row__remove"
       :disabled="disabled || item.status === 'uploading'"
-      @click="emit('remove')"
+      @click.stop="emit('remove')"
     >
       <DeleteOutlined />
     </AppButton>

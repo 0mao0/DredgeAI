@@ -1,0 +1,23 @@
+name: Release Notify
+
+on:
+  push:
+    branches: [master]
+    tags: ['v*']
+  workflow_dispatch:
+
+jobs:
+  notify:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Notify WeCom group
+        env:
+          WEBHOOK: ${{ secrets.WECOM_WEBHOOK_URL }}
+          PREV_SHA: ${{ github.event.before }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: python3 .github/scripts/webhook_notify.py

@@ -65,6 +65,15 @@ public interface IAnGineerClient
 
     /// <summary>流式打开单个产物（调用方负责 Dispose 返回的流），大产物不整份驻留内存。</summary>
     Task<Stream> OpenArtifactAsync(string jobId, AnGineerArtifact artifact, CancellationToken cancellationToken = default);
+
+    /// <summary>流式打开 AnGIneer 转换后的 PDF 原文（PDF_Viewer 预览用）。</summary>
+    Task<Stream> OpenPdfAsync(string docId, CancellationToken cancellationToken = default);
+
+    /// <summary>读取 AnGIneer 解析后的 Markdown 正文（content 接口）。</summary>
+    Task<string> GetContentAsync(string docId, CancellationToken cancellationToken = default);
+
+    /// <summary>删除 AnGIneer 文档及其产物（项目删除时清理旗下施工方案）。</summary>
+    Task DeleteDocumentAsync(string docId, CancellationToken cancellationToken = default);
 }
 
 /// <summary>知识检索命中项（AnGIneer internal/retrieve items 的轻量投影）。</summary>
