@@ -1,0 +1,20 @@
+{
+	"servers": {
+		"vue-language-server": {
+			"initOptions": {
+				"typescript": { "tsdk": "node_modules/typescript/lib" },
+				"vue": { "hybridMode": false }
+			}
+		},
+		"csharp-ls": {
+			"command": "csharp-ls",
+			"fileTypes": [".cs"],
+			"languageId": "csharp",
+			"rootMarkers": [".git", "*.slnx", "*.sln"],
+			"warmupTimeoutMs": 120000
+		},
+		"omnisharp": {
+			"disabled": true
+		}
+	}
+}
