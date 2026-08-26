@@ -1,6 +1,6 @@
 # YOLOv8n 人数统计模型服务（CPU 推理）
 # 权重挂载 D:/AI/AImodles/models -> /app/models
-FROM python:3.12-slim
+FROM registry.cn-shanghai.aliyuncs.com/cyf7950/python:3.12-slim
 
 ENV DEBIAN_FRONTEND=noninteractive \
     UV_LINK_MODE=copy \
@@ -19,6 +19,10 @@ COPY pyproject.toml uv.lock .python-version ./
 RUN uv sync --frozen --no-dev
 
 COPY app ./app
+COPY scripts ./scripts
+
+# 预下载 yolov8n.pt 到 /app/models，与 app/engines/yolo_engine.py 加载路径一致
+RUN chmod +x scripts/download_models.sh && ./scripts/download_models.sh
 
 ENV MODEL_DIR=/app/models \
     COUNT_DEVICE=cpu \
