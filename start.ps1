@@ -1,4 +1,4 @@
-﻿param(
+param(
     [switch]$TailLogs,
     [switch]$NoBrowser,
     [switch]$OpenBrowser
@@ -51,7 +51,7 @@ $compareAlgoDir = Join-Path $rootDir "services\compare-algo"
 $compareAlgoPython = Join-Path $compareAlgoDir ".venv\Scripts\python.exe"
 $aiGatewayDir = Join-Path $rootDir "services\ai-gateway"
 $aiGatewayPython = Join-Path $aiGatewayDir ".venv\Scripts\python.exe"
-$backendProject = Join-Path $rootDir "backend\DredgeAI.BidCompare\src\DredgeAI.BidCompare.HttpApi.Host"
+$backendProject = Join-Path $rootDir "backend\BidCompare\src\DredgeAI.BidCompare.Host"
 $frontendDir = Join-Path $rootDir "user-web"
 $adminDir = Join-Path $rootDir "admin-web"
 $postgresContainer = "bidcompare-postgres"
@@ -384,7 +384,7 @@ $aiGatewayCommand = "Set-Location '$escapedAiGatewayDir'; & '$escapedAiGatewayPy
 $aiGatewayProcess = Start-ServiceProcess -ServiceName "ai-gateway" -ServiceCommand $aiGatewayCommand -LogPath $aiGatewayLogPath -PidPath $aiGatewayPidPath
 
 $escapedProject = $backendProject.Replace("'", "''")
-$backendCommand = "`$env:PATH=`"`$env:LOCALAPPDATA\Microsoft\dotnet;`$env:PATH`"; dotnet run --project '$escapedProject' --launch-profile 'DredgeAI.BidCompare.HttpApi.Host'"
+$backendCommand = "`$env:PATH=`"`$env:LOCALAPPDATA\Microsoft\dotnet;`$env:PATH`"; dotnet run --project '$escapedProject' --launch-profile 'DredgeAI.BidCompare.Host'"
 $backendProcess = Start-ServiceProcess -ServiceName "Backend" -ServiceCommand $backendCommand -LogPath $backendLogPath -PidPath $backendPidPath
 
 $escapedFrontendDir = $frontendDir.Replace("'", "''")

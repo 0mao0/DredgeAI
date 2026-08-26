@@ -9,6 +9,7 @@ using DredgeAI.AppHost;
 //   PublishCommonExtensions.cs  — 公共：后端服务发布环境变量（CORS + HTTP_PORTS）+ compose 服务节点助手（EnableComposeReplicas）
 //   AuthServiceBuilder.cs       — Auth 模块（服务定义 + 发布环境变量）
 //   BaseServiceBuilder.cs       — Base 模块
+//   BidCompareServiceBuilder.cs — BidCompare 模块
 //   GatewayServiceBuilder.cs    — Gateway 网关模块（YARP 统一入口）
 //
 // 本地运行（dotnet run）：
@@ -27,6 +28,7 @@ var builder = DistributedApplication.CreateBuilder(args);
 // ============================================================================
 var auth = builder.AddAuthService();
 var baseSvc = builder.AddBaseService();
+var bidCompare = builder.AddBidCompareService();
 var gateway = builder.AddGatewayService();
 
 // ============================================================================
@@ -37,8 +39,10 @@ var gateway = builder.AddGatewayService();
 // Auth 是根服务，无上游依赖
 // Base 依赖 Auth（JWT 元数据 + 令牌验证）
 baseSvc.WithReference(auth).WaitFor(auth);
-// Gateway 依赖 Auth + Base（YARP 路由目标全部就绪后才启动）
-gateway.WithReference(auth).WithReference(baseSvc).WaitFor(auth).WaitFor(baseSvc);
+// BidCompare 依赖 Auth（JWT 令牌验证）
+bidCompare.WithReference(auth).WaitFor(auth);
+// Gateway 依赖 Auth + Base + BidCompare（YARP 路由目标全部就绪后才启动）
+gateway.WithReference(auth).WithReference(baseSvc).WithReference(bidCompare).WaitFor(auth).WaitFor(baseSvc).WaitFor(bidCompare);
 
 // ============================================================================
 // 发布模式：后端环境变量注入 + Docker Compose 发布配置
@@ -55,6 +59,7 @@ if (builder.ExecutionContext.IsPublishMode)
     // 各后端服务发布环境变量（公共 CORS/HTTP_PORTS + 服务独立配置 + Docker Compose 发布配置）
     auth.WithAuthPublishEnvironment(parameters);
     baseSvc.WithBasePublishEnvironment(parameters);
+    bidCompare.WithBidComparePublishEnvironment(parameters);
     gateway.WithGatewayPublishEnvironment(parameters);
 }
 
