@@ -1,6 +1,0 @@
-<Project>
-  <PropertyGroup>
-    <!-- BidCompare 为既有独立应用（net8 + 显式包版本），退出根目录 DredgeAI.slnx 的中央包管理，保持其独立构建不受影响。 -->
-    <ManagePackageVersionsCentrally>false</ManagePackageVersionsCentrally>
-  </PropertyGroup>
-</Project>

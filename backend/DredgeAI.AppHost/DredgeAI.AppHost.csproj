@@ -11,6 +11,7 @@
     <ItemGroup>
       <ProjectReference Include="..\Auth\src\DredgeAI.Auth.Host\DredgeAI.Auth.Host.csproj" />
       <ProjectReference Include="..\Base\src\DredgeAI.Base.Host\DredgeAI.Base.Host.csproj" />
+      <ProjectReference Include="..\BidCompare\src\DredgeAI.BidCompare.Host\DredgeAI.BidCompare.Host.csproj" />
       <ProjectReference Include="..\Gateway\DredgeAI.Gateway.Host\DredgeAI.Gateway.Host.csproj" />
     </ItemGroup>
 
