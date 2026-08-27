@@ -145,7 +145,7 @@ def _load_model():
     try:
         from cosyvoice.cli.cosyvoice import AutoModel
         print(f'[startup] Loading CosyVoice3 from {MODEL_DIR} ...', flush=True)
-        cosyvoice = AutoModel(model_dir=MODEL_DIR)
+        cosyvoice = AutoModel(model_dir=MODEL_DIR, fp16=True)
         _model_loaded = True
         print('[startup] Model loaded OK', flush=True)
     except Exception as e:

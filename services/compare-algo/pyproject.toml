@@ -22,3 +22,8 @@ dev = [
 [tool.pytest.ini_options]
 pythonpath = ["."]
 testpaths = ["tests"]
+
+[[tool.uv.index]]
+name = "aliyun-pypi"
+url = "https://mirrors.aliyun.com/pypi/simple/"
+default = true
