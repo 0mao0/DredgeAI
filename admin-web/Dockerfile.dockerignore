@@ -1,0 +1,52 @@
+# 按构建专用 ignore 文件：docker build -f admin-web/Dockerfile . 时生效
+#（按 Dockerfile 文件名匹配，不影响 services/* 等以自身目录为上下文的构建）
+#
+# 仓库根作为构建上下文时裁剪无关内容。注意勿排除：
+#   - pnpm-lock.yaml / pnpm-workspace.yaml / .npmrc / tsconfig.base.json
+#   - vendor/（submodule 源码，file: 本地包安装来源）
+#   - packages/（@shared 源码）
+#   - user-web/package.json（pnpm workspace 解析需要全部成员清单）
+#   - admin-web/.env.production（构建时配置注入）
+
+# VCS / IDE / 工具链
+.git
+.github
+.husky
+.vscode
+.idea
+.trae
+.opencode
+.omp
+
+# 与前端镜像无关的仓库内容
+backend
+services
+docs
+scripts
+patches
+data
+logs
+tests
+start.ps1
+AGENTS.md
+README.md
+eslint.config.mjs
+
+# 依赖与构建产物（容器内重新安装/构建）
+**/node_modules
+**/dist
+**/.vite
+**/coverage
+**/*.tsbuildinfo
+.pnpm-store
+
+# 敏感/本地环境文件：根 .env 含密钥必须排除；
+# .env.production / .env.development 不匹配以下任何模式，会正常参与构建
+.env
+**/.env
+**/.env.local
+**/.env.*.local
+
+# 日志与临时文件
+*.log
+**/*.log
