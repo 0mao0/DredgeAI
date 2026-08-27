@@ -1,5 +1,5 @@
 # AI 晨会聚合层：只做 HTTP 转发，不装模型
-FROM python:3.12-slim
+FROM registry.cn-shanghai.aliyuncs.com/cyf7950/python:3.12-slim
 
 ENV DEBIAN_FRONTEND=noninteractive \
     UV_LINK_MODE=copy \
