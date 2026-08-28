@@ -44,6 +44,19 @@ public sealed class ServiceParameters
     public IResourceBuilder<ParameterResource> MinioAccessKey { get; }
     public IResourceBuilder<ParameterResource> MinioSecretKey { get; }
 
+    // ============================================================================
+    // Python 服务
+    // ============================================================================
+
+    /// <summary>模型服务（5 个）共享鉴权头 X-Meeting-Bot-Key 的密钥；默认 dev-key 与本地/各 .env.example 一致</summary>
+    public IResourceBuilder<ParameterResource> MeetingBotKey { get; }
+    /// <summary>ai-gateway 入站校验令牌（空 = 关闭鉴权，本地默认）；BidCompare AiGateway:ApiToken 需一致</summary>
+    public IResourceBuilder<ParameterResource> AiGatewayApiToken { get; }
+    /// <summary>ai-gateway 用量上报 ingest 令牌；BidCompare AiGateway:IngestToken 需一致</summary>
+    public IResourceBuilder<ParameterResource> AiGatewayIngestToken { get; }
+    /// <summary>LLM 配置 JSON（angineer-ai-inference LLM_CONFIGS）；本地运行由 ai-gateway 自动读仓库根 .env，仅发布容器注入</summary>
+    public IResourceBuilder<ParameterResource> LlmConfigs { get; }
+
     public ServiceParameters(IDistributedApplicationBuilder builder)
     {
         DashboardBrowserToken = builder.AddParameter("dashboard-browser-token", secret: true);
@@ -58,6 +71,11 @@ public sealed class ServiceParameters
         MinioBucket = builder.AddParameter("minio-bucket");
         MinioAccessKey = builder.AddParameter("minio-access-key", secret: true);
         MinioSecretKey = builder.AddParameter("minio-secret-key", secret: true);
+
+        MeetingBotKey = builder.AddParameter("meeting-bot-key", "dev-key", secret: true);
+        AiGatewayApiToken = builder.AddParameter("ai-gateway-api-token", secret: true);
+        AiGatewayIngestToken = builder.AddParameter("ai-gateway-ingest-token", secret: true);
+        LlmConfigs = builder.AddParameter("llm-configs", secret: true);
 
     }
 }

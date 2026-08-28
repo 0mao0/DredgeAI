@@ -10,7 +10,7 @@
 // 参照 mucktarcing/Jenkinsfile 流程：版本配置 → 构建镜像 → 推送镜像 → 部署 → 打Git标签。
 // 构建上下文为 backend/（各 Host Dockerfile 内 COPY 均为 backend 相对路径）。
 //
-// 部署产物：aspire-output/dotnet/docker-compose.yaml（publish.ps1 dotnet 生成，已提交仓库）。
+// 部署产物：.cicd/aspire-output/dotnet/docker-compose.yaml（pnpm publish-dotnet 生成，已提交仓库）。
 // 三层（frontend/python/dotnet）共用同一 compose project（dredge-ai-<branch>），
 // 共享硬编码网络 dredge-ai-net（bidcompare→compare-algo/ai-gateway/meeting-bot 依赖此）。
 //
@@ -253,8 +253,8 @@ ENV_EOF
                 remoteDirectory: "${DEPLOY_REMOTE_DIR}",
                 remoteDirectorySDF: false,
                 // 上传 Aspire 生成的 docker-compose.yaml，去除路径前缀使文件落在部署目录根
-                removePrefix: 'aspire-output/dotnet/',
-                sourceFiles: 'aspire-output/dotnet/docker-compose.yaml')],
+                removePrefix: '.cicd/aspire-output/dotnet/',
+                sourceFiles: '.cicd/aspire-output/dotnet/docker-compose.yaml')],
             usePromotionTimestamp: false,
             useWorkspaceInPromotion: false,
             verbose: true)])

@@ -7,12 +7,11 @@
 // 构建上下文为仓库根（两个前端 Dockerfile 头部注释明确要求：pnpm workspace +
 // vendor 子模块 + @shared 源码别名均依赖仓库根）；前置：vendor 子模块已检出。
 //
-// 部署产物：aspire-output/frontend/docker-compose.yaml（publish.ps1 frontend 生成，已提交仓库）。
+// 部署产物：.cicd/aspire-output/frontend/docker-compose.yaml（pnpm publish-frontend 生成，已提交仓库）。
 // 三层（frontend/python/dotnet）共用同一 compose project（dredge-ai-<branch>）：
 // 三份 compose 的 network 名均硬编码 dredge-ai-net，python/dotnet 服务靠同一网络
 // 互访；各层 down/up 只影响本层 compose 文件中列出的服务。
-//
-// 敏感配置（DASHBOARD_BROWSER_TOKEN）通过 Jenkins 凭据注入。
+// Aspire Dashboard 仅由 dotnet 层部署（frontend/python 以 -NoDashboard 发布）。
 //
 // 域名访问规划（反向代理由服务器侧配置）：
 //   正式 dredge-ai.bim-ace.com        测试 test-dredge-ai.bim-ace.com
@@ -132,67 +131,59 @@ pipeline {
         }
       }
       steps {
-        // 敏感配置通过 Jenkins 凭据注入（Secret text 类型）：
-        //   DASHBOARD_BROWSER_TOKEN — Aspire Dashboard 固定登录 token
-        withCredentials([
-          string(credentialsId: 'DASHBOARD_BROWSER_TOKEN', variable: 'DASHBOARD_BROWSER_TOKEN')
-        ]) {
-          sshPublisher(publishers: [
-            sshPublisherDesc(
-              configName: "${SSH_CONFIG_NAME}",
-              transfers: [
-                sshTransfer(
-                  cleanRemote: false,
-                  excludes: '',
-                  execCommand: """
-                set -e
-                # 部署目录（与 sourceFiles 上传的 remoteDirectory 对应，位于 SSH 用户 home 下）
-                DEPLOY_DIR="\$HOME/${DEPLOY_REMOTE_DIR}"
-                mkdir -p "\$DEPLOY_DIR"
-                cd "\$DEPLOY_DIR"
+        sshPublisher(publishers: [
+          sshPublisherDesc(
+            configName: "${SSH_CONFIG_NAME}",
+            transfers: [
+              sshTransfer(
+                cleanRemote: false,
+                excludes: '',
+                execCommand: """
+              set -e
+              # 部署目录（与 sourceFiles 上传的 remoteDirectory 对应，位于 SSH 用户 home 下）
+              DEPLOY_DIR="\$HOME/${DEPLOY_REMOTE_DIR}"
+              mkdir -p "\$DEPLOY_DIR"
+              cd "\$DEPLOY_DIR"
 
-                # 1. 写入带版本号的 .env 文件
-                #    所有 \${VAR} 由 Jenkins/Groovy 在发送前展开为实际值；
-                #    <<'ENV_EOF' 单引号 heredoc 防止远程 shell 二次展开
-                #    注意：必须先生成 .env 再执行 docker compose，否则 yaml 中的 \${VAR}
-                #    在 down/up 时无法解析，全部回退为空字符串触发 warning
-                cat > "${ENV_FILE}" <<'ENV_EOF'
+              # 1. 写入带版本号的 .env 文件
+              #    所有 \${VAR} 由 Jenkins/Groovy 在发送前展开为实际值；
+              #    <<'ENV_EOF' 单引号 heredoc 防止远程 shell 二次展开
+              #    注意：必须先生成 .env 再执行 docker compose，否则 yaml 中的 \${VAR}
+              #    在 down/up 时无法解析，全部回退为空字符串触发 warning
+              cat > "${ENV_FILE}" <<'ENV_EOF'
 # 镜像名
 USER_WEB_IMAGE=${USER_WEB_TAG}
 ADMIN_WEB_IMAGE=${ADMIN_WEB_TAG}
 # 服务宿主机端口
 USER_WEB_PORT=${USER_WEB_PORT}
 ADMIN_WEB_PORT=${ADMIN_WEB_PORT}
-# Aspire Dashboard 固定登录 token
-DASHBOARD_BROWSER_TOKEN=${DASHBOARD_BROWSER_TOKEN}
 ENV_EOF
 
-                # 2. 停止并移除本层旧容器（首次部署时忽略错误；共享网络的
-                #    移除可能因其他层容器在线而报错，|| true 吞掉不影响本层重启）
-                docker compose -p ${COMPOSE_PROJECT_NAME} -f docker-compose.yaml --env-file "${ENV_FILE}" down || true
+              # 2. 停止并移除本层旧容器（首次部署时忽略错误；共享网络的
+              #    移除可能因其他层容器在线而报错，|| true 吞掉不影响本层重启）
+              docker compose -p ${COMPOSE_PROJECT_NAME} -f docker-compose.yaml --env-file "${ENV_FILE}" down || true
 
-                # 3. 启动本层服务
-                docker compose -p ${COMPOSE_PROJECT_NAME} -f docker-compose.yaml --env-file "${ENV_FILE}" up -d
+              # 3. 启动本层服务
+              docker compose -p ${COMPOSE_PROJECT_NAME} -f docker-compose.yaml --env-file "${ENV_FILE}" up -d
 
-                # 4. 清理悬空镜像
-                docker image prune -f || true
+              # 4. 清理悬空镜像
+              docker image prune -f || true
 
-                echo "部署完成：${env.IMAGE_VERSION}"
-                """,
-                execTimeout: 180000,
-                flatten: false,
-                makeEmptyDirs: false,
-                noDefaultExcludes: false,
-                patternSeparator: '[, ]+',
-                remoteDirectory: "${DEPLOY_REMOTE_DIR}",
-                remoteDirectorySDF: false,
-                // 上传 Aspire 生成的 docker-compose.yaml，去除路径前缀使文件落在部署目录根
-                removePrefix: 'aspire-output/frontend/',
-                sourceFiles: 'aspire-output/frontend/docker-compose.yaml')],
-            usePromotionTimestamp: false,
-            useWorkspaceInPromotion: false,
-            verbose: true)])
-        }
+              echo "部署完成：${env.IMAGE_VERSION}"
+              """,
+              execTimeout: 180000,
+              flatten: false,
+              makeEmptyDirs: false,
+              noDefaultExcludes: false,
+              patternSeparator: '[, ]+',
+              remoteDirectory: "${DEPLOY_REMOTE_DIR}",
+              remoteDirectorySDF: false,
+              // 上传 Aspire 生成的 docker-compose.yaml，去除路径前缀使文件落在部署目录根
+              removePrefix: '.cicd/aspire-output/frontend/',
+              sourceFiles: '.cicd/aspire-output/frontend/docker-compose.yaml')],
+          usePromotionTimestamp: false,
+          useWorkspaceInPromotion: false,
+          verbose: true)])
       }
     }
 

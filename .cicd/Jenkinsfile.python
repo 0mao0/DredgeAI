@@ -13,12 +13,12 @@
 // 参照 mucktarcing/Jenkinsfile 流程：版本配置 → 构建镜像 → 推送镜像 → 部署 → 打Git标签。
 // 构建上下文为各服务目录（Dockerfile 内 COPY 均为服务目录相对路径）。
 //
-// 部署产物：aspire-output/python/docker-compose.yaml（publish.ps1 python 生成，已提交仓库）。
+// 部署产物：.cicd/aspire-output/python/docker-compose.yaml（pnpm publish-python 生成，已提交仓库）。
 // 三层（frontend/python/dotnet）共用同一 compose project（dredge-ai-<branch>），
 // 共享硬编码网络 dredge-ai-net（bidcompare→compare-algo/ai-gateway/meeting-bot 依赖此）。
+// Aspire Dashboard 仅由 dotnet 层部署（frontend/python 以 -NoDashboard 发布）。
 //
 // 敏感配置通过 Jenkins 凭据注入（Secret text）：
-//   DASHBOARD_BROWSER_TOKEN   Aspire Dashboard 固定登录 token
 //   MEETING_BOT_KEY           meeting-bot ↔ 模型服务内部校验令牌
 //   AI_GATEWAY_API_TOKEN      ai-gateway 调用方令牌（ABP 侧同值）
 //   AI_GATEWAY_INGEST_TOKEN   ai-gateway 用量上报令牌
@@ -195,7 +195,6 @@ pipeline {
       }
       steps {
         withCredentials([
-          string(credentialsId: 'DASHBOARD_BROWSER_TOKEN', variable: 'DASHBOARD_BROWSER_TOKEN'),
           string(credentialsId: 'MEETING_BOT_KEY', variable: 'MEETING_BOT_KEY'),
           string(credentialsId: 'AI_GATEWAY_API_TOKEN', variable: 'AI_GATEWAY_API_TOKEN'),
           string(credentialsId: 'AI_GATEWAY_INGEST_TOKEN', variable: 'AI_GATEWAY_INGEST_TOKEN'),
@@ -233,8 +232,6 @@ AI_GATEWAY_INGEST_TOKEN=${AI_GATEWAY_INGEST_TOKEN}
 LLM_CONFIGS=${LLM_CONFIGS}
 # meeting-bot 内部校验令牌
 MEETING_BOT_KEY=${MEETING_BOT_KEY}
-# Aspire Dashboard 固定登录 token
-DASHBOARD_BROWSER_TOKEN=${DASHBOARD_BROWSER_TOKEN}
 ENV_EOF
 
                 # 2. MODEL_WEIGHTS_DIR 单独追加：compose env 文件不展开 ~，
@@ -263,8 +260,8 @@ ENV_EOF
                 remoteDirectory: "${DEPLOY_REMOTE_DIR}",
                 remoteDirectorySDF: false,
                 // 上传 Aspire 生成的 docker-compose.yaml，去除路径前缀使文件落在部署目录根
-                removePrefix: 'aspire-output/python/',
-                sourceFiles: 'aspire-output/python/docker-compose.yaml')],
+                removePrefix: '.cicd/aspire-output/python/',
+                sourceFiles: '.cicd/aspire-output/python/docker-compose.yaml')],
             usePromotionTimestamp: false,
             useWorkspaceInPromotion: false,
             verbose: true)])

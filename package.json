@@ -15,7 +15,11 @@
     "typecheck": "pnpm --filter user-web typecheck && pnpm --filter admin-web typecheck",
     "lint": "eslint .",
     "lint:fix": "eslint . --fix",
-    "prepare": "husky"
+    "prepare": "husky",
+    "publish-all": "pwsh publish.ps1 all .cicd/aspire-output",
+    "publish-frontend": "pwsh publish.ps1 frontend .cicd/aspire-output -NoDashboard",
+    "publish-python": "pwsh publish.ps1 python .cicd/aspire-output -NoDashboard",
+    "publish-dotnet": "pwsh publish.ps1 dotnet .cicd/aspire-output"
   },
   "lint-staged": {
     "*.{ts,vue,mts}": "node node_modules/eslint/bin/eslint.js --fix"
