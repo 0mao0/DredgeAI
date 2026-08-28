@@ -1,0 +1,180 @@
+services:
+  docker-compose-dashboard:
+    image: "mcr.microsoft.com/dotnet/nightly/aspire-dashboard:13.5"
+    container_name: "dashboard"
+    environment:
+      Dashboard__Frontend__BrowserToken: "${DASHBOARD_BROWSER_TOKEN}"
+    ports:
+      - "51329:18888"
+    expose:
+      - "18889"
+      - "18890"
+    networks:
+      - "dredge-ai-net"
+    restart: "always"
+  compare-algo:
+    image: "${COMPARE_ALGO_IMAGE}"
+    expose:
+      - "8100"
+    networks:
+      - "dredge-ai-net"
+    restart: "unless-stopped"
+    healthcheck:
+      test:
+        - "CMD-SHELL"
+        - "curl -f http://localhost:8100/healthz || exit 1"
+      interval: "30s"
+      timeout: "5s"
+      retries: 3
+      start_period: "40s"
+  ai-gateway:
+    image: "${AI_GATEWAY_IMAGE}"
+    environment:
+      AI_GATEWAY_API_TOKEN: "${AI_GATEWAY_API_TOKEN}"
+      AI_GATEWAY_INGEST_TOKEN: "${AI_GATEWAY_INGEST_TOKEN}"
+      LLM_CONFIGS: "${LLM_CONFIGS}"
+      AI_GATEWAY_USAGE_REPORT_URL: "http://bidcompare-service:8080/api/ai-gateway/usage-records"
+    expose:
+      - "8200"
+    networks:
+      - "dredge-ai-net"
+    restart: "unless-stopped"
+    healthcheck:
+      test:
+        - "CMD-SHELL"
+        - "curl -f http://localhost:8200/healthz || exit 1"
+      interval: "30s"
+      timeout: "5s"
+      retries: 3
+      start_period: "40s"
+  sensevoice:
+    image: "${SENSEVOICE_IMAGE}"
+    environment:
+      MEETING_BOT_KEY: "${MEETING_BOT_KEY}"
+      MODEL_DIR: "/app/models"
+      ASR_DEVICE: "cpu"
+    expose:
+      - "8102"
+    volumes:
+      - type: "bind"
+        target: "/app/models"
+        source: "${MODEL_WEIGHTS_DIR}/models"
+        read_only: true
+    networks:
+      - "dredge-ai-net"
+    restart: "unless-stopped"
+    healthcheck:
+      test:
+        - "CMD-SHELL"
+        - "curl -fsS -H \"X-Meeting-Bot-Key: $${MEETING_BOT_KEY}\" http://localhost:8102/health || exit 1"
+      interval: "10s"
+      timeout: "5s"
+      retries: 12
+      start_period: "30s"
+  insightface:
+    image: "${INSIGHTFACE_IMAGE}"
+    environment:
+      MEETING_BOT_KEY: "${MEETING_BOT_KEY}"
+      MODEL_DIR: "/app/models"
+      FACE_PROVIDERS: "cpu"
+      FACE_RECOGNIZE_THRESHOLD: "0.55"
+    expose:
+      - "8103"
+    volumes:
+      - type: "bind"
+        target: "/app/models"
+        source: "${MODEL_WEIGHTS_DIR}/models"
+        read_only: true
+    networks:
+      - "dredge-ai-net"
+    restart: "unless-stopped"
+    healthcheck:
+      test:
+        - "CMD-SHELL"
+        - "curl -fsS -H \"X-Meeting-Bot-Key: $${MEETING_BOT_KEY}\" http://localhost:8103/health || exit 1"
+      interval: "10s"
+      timeout: "5s"
+      retries: 12
+      start_period: "30s"
+  yolo:
+    image: "${YOLO_IMAGE}"
+    environment:
+      MEETING_BOT_KEY: "${MEETING_BOT_KEY}"
+      MODEL_DIR: "/app/models"
+      COUNT_DEVICE: "cpu"
+    expose:
+      - "8104"
+    volumes:
+      - type: "bind"
+        target: "/app/models"
+        source: "${MODEL_WEIGHTS_DIR}/models"
+        read_only: true
+    networks:
+      - "dredge-ai-net"
+    restart: "unless-stopped"
+    healthcheck:
+      test:
+        - "CMD-SHELL"
+        - "curl -fsS -H \"X-Meeting-Bot-Key: $${MEETING_BOT_KEY}\" http://localhost:8104/health || exit 1"
+      interval: "10s"
+      timeout: "5s"
+      retries: 12
+      start_period: "30s"
+  cosyvoice:
+    image: "${COSYVOICE_IMAGE}"
+    environment:
+      MEETING_BOT_KEY: "${MEETING_BOT_KEY}"
+      COSYVOICE_DATA: "/data"
+      MODELSCOPE_CACHE: "/data/modelscope"
+      TTS_VOICE_ID: "zh-male-news"
+    expose:
+      - "8000"
+    volumes:
+      - type: "bind"
+        target: "/data"
+        source: "${MODEL_WEIGHTS_DIR}/cosyvoice"
+    networks:
+      - "dredge-ai-net"
+    restart: "unless-stopped"
+    healthcheck:
+      test:
+        - "CMD-SHELL"
+        - "curl -fsS -H \"X-Meeting-Bot-Key: $${MEETING_BOT_KEY}\" http://localhost:8000/api/health | grep -q '\"model_loaded\":true'"
+      interval: "10s"
+      timeout: "5s"
+      retries: 30
+      start_period: "120s"
+  meeting-bot:
+    image: "${MEETING_BOT_IMAGE}"
+    environment:
+      MEETING_BOT_KEY: "${MEETING_BOT_KEY}"
+      SENSEVOICE_URL: "http://sensevoice:8102"
+      COSYVOICE_URL: "http://cosyvoice:8000"
+      INSIGHTFACE_URL: "http://insightface:8103"
+      YOLO_URL: "http://yolo:8104"
+      TTS_VOICE_ID: "zh-male-news"
+    expose:
+      - "8101"
+    depends_on:
+      sensevoice:
+        condition: "service_healthy"
+      cosyvoice:
+        condition: "service_healthy"
+      insightface:
+        condition: "service_healthy"
+      yolo:
+        condition: "service_healthy"
+    networks:
+      - "dredge-ai-net"
+    restart: "unless-stopped"
+    healthcheck:
+      test:
+        - "CMD-SHELL"
+        - "curl -fsS -H \"X-Meeting-Bot-Key: $${MEETING_BOT_KEY}\" http://localhost:8101/health || exit 1"
+      interval: "10s"
+      timeout: "5s"
+      retries: 12
+      start_period: "30s"
+networks:
+  dredge-ai-net:
+    driver: "bridge"

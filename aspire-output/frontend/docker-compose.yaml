@@ -1,0 +1,31 @@
+services:
+  docker-compose-dashboard:
+    image: "mcr.microsoft.com/dotnet/nightly/aspire-dashboard:13.5"
+    container_name: "dashboard"
+    environment:
+      Dashboard__Frontend__BrowserToken: "${DASHBOARD_BROWSER_TOKEN}"
+    ports:
+      - "51329:18888"
+    expose:
+      - "18889"
+      - "18890"
+    networks:
+      - "dredge-ai-net"
+    restart: "always"
+  user-web:
+    image: "${USER_WEB_IMAGE}"
+    ports:
+      - "${USER_WEB_PORT}:80"
+    networks:
+      - "dredge-ai-net"
+    restart: "unless-stopped"
+  admin-web:
+    image: "${ADMIN_WEB_IMAGE}"
+    ports:
+      - "${ADMIN_WEB_PORT}:80"
+    networks:
+      - "dredge-ai-net"
+    restart: "unless-stopped"
+networks:
+  dredge-ai-net:
+    driver: "bridge"
