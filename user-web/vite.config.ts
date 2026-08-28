@@ -36,7 +36,7 @@ export default defineConfig(({ mode }) => {
         },
         // OpenIddict 令牌端点（登录密码流，不在 /api 前缀下）
         '/connect/token': {
-          target: env.VITE_API_TARGET || 'https://localhost:44361',
+          target: env.VITE_API_TARGET || 'https://localhost:7233',
           changeOrigin: true,
           secure: false,
         },

@@ -11,7 +11,7 @@
     <PackageVersion Include="OpenTelemetry.Instrumentation.AspNetCore" Version="1.15.2" />
     <PackageVersion Include="OpenTelemetry.Instrumentation.Http" Version="1.15.1" />
     <PackageVersion Include="OpenTelemetry.Instrumentation.Runtime" Version="1.15.1" />
-    <PackageVersion Include="Shiw.Abp.BaseEntityFrameworkCore" Version="10.0.9" />
+    <PackageVersion Include="Shiw.Abp.BaseEntityFrameworkCore" Version="10.0.12" />
     <PackageVersion Include="Shiw.File.Application" Version="10.0.5" />
     <PackageVersion Include="Shiw.File.Application.Contracts" Version="10.0.5" />
     <PackageVersion Include="Shiw.File.BlobStoring.Minio" Version="10.0.5" />
@@ -51,15 +51,15 @@
     <PackageVersion Include="Microsoft.EntityFrameworkCore" Version="10.0.9" />
     <PackageVersion Include="ConfigureAwait.Fody" Version="3.4.1" />
     <PackageVersion Include="Fody" Version="6.9.3" />
-    <PackageVersion Include="Shiw.Abp.AuditLogging.EntityFrameworkCore" Version="10.0.9" />
+    <PackageVersion Include="Shiw.Abp.AuditLogging.EntityFrameworkCore" Version="10.0.12" />
     <PackageVersion Include="Shiw.Abp.BackgroundJobs.EntityFrameworkCore" Version="10.0.9" />
     <PackageVersion Include="Volo.Abp.BackgroundJobs.Abstractions" Version="10.5.0" />
-    <PackageVersion Include="Shiw.Abp.FeatureManagement.EntityFrameworkCore" Version="10.0.9" />
-    <PackageVersion Include="Shiw.Abp.Identity.EntityFrameworkCore" Version="10.0.9" />
-    <PackageVersion Include="Shiw.Abp.OpenIddict.EntityFrameworkCore" Version="10.0.9" />
-    <PackageVersion Include="Shiw.Abp.PermissionManagement.EntityFrameworkCore" Version="10.0.9" />
-    <PackageVersion Include="Shiw.Abp.SettingManagement.EntityFrameworkCore" Version="10.0.9" />
-    <PackageVersion Include="Shiw.Abp.TenantManagement.EntityFrameworkCore" Version="10.0.9" />
+    <PackageVersion Include="Shiw.Abp.FeatureManagement.EntityFrameworkCore" Version="10.0.12" />
+    <PackageVersion Include="Shiw.Abp.Identity.EntityFrameworkCore" Version="10.0.12" />
+    <PackageVersion Include="Shiw.Abp.OpenIddict.EntityFrameworkCore" Version="10.0.12" />
+    <PackageVersion Include="Shiw.Abp.PermissionManagement.EntityFrameworkCore" Version="10.0.12" />
+    <PackageVersion Include="Shiw.Abp.SettingManagement.EntityFrameworkCore" Version="10.0.12" />
+    <PackageVersion Include="Shiw.Abp.TenantManagement.EntityFrameworkCore" Version="10.0.12" />
     <PackageVersion Include="Volo.Abp.AspNetCore.Mvc.UI.Theme.Basic" Version="10.5.0" />
     <PackageVersion Include="Volo.Abp.AspNetCore.Mvc" Version="10.5.0" />
     <PackageVersion Include="Volo.Abp.AspNetCore.Mvc.UI.MultiTenancy" Version="10.5.0" />
@@ -105,5 +105,13 @@
     <PackageVersion Include="xunit.runner.visualstudio" Version="3.1.4" />
     <PackageVersion Include="Volo.Abp.TestBase" Version="10.5.0" />
     <PackageVersion Include="Volo.Abp.EntityFrameworkCore.Sqlite" Version="10.5.0" />
+    <PackageVersion Include="AWSSDK.S3" Version="4.0.102" />
+    <PackageVersion Include="DocumentFormat.OpenXml" Version="3.5.1" />
+    <PackageVersion Include="Volo.Abp.AutoMapper" Version="10.5.0" />
+    <PackageVersion Include="Volo.Abp.BackgroundWorkers" Version="10.5.0" />
+    <PackageVersion Include="Volo.Abp.BackgroundJobs.Domain" Version="10.5.0" />
+    <PackageVersion Include="Volo.Abp.BackgroundJobs.Domain.Shared" Version="10.5.0" />
+    <PackageVersion Include="Volo.Abp.BackgroundJobs.EntityFrameworkCore" Version="10.5.0" />
+    <PackageVersion Include="Volo.Abp.AuditLogging.Domain.Shared" Version="10.5.0" />
   </ItemGroup>
 </Project>

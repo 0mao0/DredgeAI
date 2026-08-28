@@ -49,6 +49,22 @@
     <Project Path="Base/test/DredgeAI.Base.EntityFrameworkCore.Tests/DredgeAI.Base.EntityFrameworkCore.Tests.csproj" />
     <Project Path="Base/test/DredgeAI.Base.TestBase/DredgeAI.Base.TestBase.csproj" />
   </Folder>
+  <Folder Name="/Services/BidCompare/" />
+  <Folder Name="/Services/BidCompare/src/">
+    <Project Path="BidCompare/src/DredgeAI.BidCompare.Domain.Shared/DredgeAI.BidCompare.Domain.Shared.csproj" />
+    <Project Path="BidCompare/src/DredgeAI.BidCompare.Domain/DredgeAI.BidCompare.Domain.csproj" />
+    <Project Path="BidCompare/src/DredgeAI.BidCompare.Application.Contracts/DredgeAI.BidCompare.Application.Contracts.csproj" />
+    <Project Path="BidCompare/src/DredgeAI.BidCompare.Application/DredgeAI.BidCompare.Application.csproj" />
+    <Project Path="BidCompare/src/DredgeAI.BidCompare.EntityFrameworkCore/DredgeAI.BidCompare.EntityFrameworkCore.csproj" />
+    <Project Path="BidCompare/src/DredgeAI.BidCompare.HttpApi/DredgeAI.BidCompare.HttpApi.csproj" />
+    <Project Path="BidCompare/src/DredgeAI.BidCompare.Host/DredgeAI.BidCompare.Host.csproj" />
+  </Folder>
+  <Folder Name="/Services/BidCompare/test/">
+    <Project Path="BidCompare/test/DredgeAI.BidCompare.TestBase/DredgeAI.BidCompare.TestBase.csproj" />
+    <Project Path="BidCompare/test/DredgeAI.BidCompare.Domain.Tests/DredgeAI.BidCompare.Domain.Tests.csproj" />
+    <Project Path="BidCompare/test/DredgeAI.BidCompare.Application.Tests/DredgeAI.BidCompare.Application.Tests.csproj" />
+    <Project Path="BidCompare/test/DredgeAI.BidCompare.EntityFrameworkCore.Tests/DredgeAI.BidCompare.EntityFrameworkCore.Tests.csproj" />
+  </Folder>
   <Folder Name="/Services/Gateway/">
     <Project Path="Gateway/DredgeAI.Gateway.Host/DredgeAI.Gateway.Host.csproj" />
   </Folder>
