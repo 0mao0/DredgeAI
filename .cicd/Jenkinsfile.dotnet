@@ -285,7 +285,7 @@ ENV_EOF
   post {
     always {
       script {
-        withCredentials([string(credentialsId: 'qyweixin-notification-key', variable: 'WECHAT_KEY')]) {
+        withCredentials([string(credentialsId: 'qyweixin-dredge-ai-notification-key', variable: 'WECHAT_KEY')]) {
           qyWechatNotification mentionedId: '',
             mentionedMobile: '',
             webhookUrl: "https://qyapi.weixin.qq.com/cgi-bin/webhook/send?key=${WECHAT_KEY}"
