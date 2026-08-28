@@ -45,6 +45,10 @@ public interface IMeetingRecordAppService : IApplicationService
 
     Task<byte[]?> GetSpeechLeadAudioAsync(Guid id);
 
+    Task<byte[]?> GetSpeechSegmentAudioAsync(Guid id, int index);
+
+    Task WarmSpeechSegmentsAsync(Guid id);
+
     Task<bool> IsSpeechLeadAudioCachedAsync(Guid id);
 
     Task<string> GetSpeechLeadTextAsync(Guid id);

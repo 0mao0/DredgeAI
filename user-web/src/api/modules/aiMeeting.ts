@@ -1,4 +1,5 @@
 import request from '@/api/request'
+import { API_BASE_URL, STORAGE_TOKEN_KEY } from '@/utils/constants'
 import { urls, fillUrl } from '@shared/core/api'
 import type {
   MeetingRecordDto,
@@ -75,6 +76,14 @@ export async function getSpeechLeadAudio(id: string): Promise<Blob | null> {
   }
 }
 
+/** 拉取服务端按断句预热的单段语音；未缓存时返回 404（调用方回退即时合成）。 */
+export function getSpeechSegmentAudio(id: string, index: number): Promise<Blob> {
+  return request.get<Blob>(fillUrl(urls.meetingSpeechSegmentAudio, { id, index: String(index) }), {
+    responseType: 'blob',
+    timeout: MediaTimeout,
+  })
+}
+
 export function saveSpeechAudioCache(id: string, audio: Blob): Promise<void> {
   const form = new FormData()
   form.append('file', audio, 'speech.wav')
@@ -89,6 +98,46 @@ export function transcribeAudio(audio: Blob): Promise<string> {
 
 export function synthesizeSpeech(text: string, timeout = MediaTimeout): Promise<Blob> {
   return request.post<Blob>(urls.meetingTts, { text }, { responseType: 'blob', timeout })
+}
+
+/**
+ * 流式 TTS：整段文本一次请求，服务端按句吐音频帧。
+ * 帧格式：4 字节大端长度 + WAV；length=0 表示结束。
+ */
+export async function* streamSpeechAudio(text: string): AsyncGenerator<Blob> {
+  const token = typeof localStorage !== 'undefined' ? localStorage.getItem(STORAGE_TOKEN_KEY) : null
+  const res = await fetch(`${API_BASE_URL}meeting/tts/stream`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
+    },
+    body: JSON.stringify({ text }),
+  })
+  if (!res.ok || !res.body) {
+    throw new Error(`TTS 流式接口不可用（HTTP ${res.status}）`)
+  }
+  const reader = res.body.getReader()
+  let pending = new Uint8Array(0)
+  const concat = (a: Uint8Array, b: Uint8Array): Uint8Array => {
+    const out = new Uint8Array(a.length + b.length)
+    out.set(a, 0)
+    out.set(b, a.length)
+    return out
+  }
+  for (;;) {
+    const { done, value } = await reader.read()
+    if (done) break
+    if (value) pending = concat(pending, value)
+    while (pending.length >= 4) {
+      const len = (pending[0]! << 24) | (pending[1]! << 16) | (pending[2]! << 8) | pending[3]!
+      if (pending.length < 4 + len) break
+      const frame = pending.slice(4, 4 + len)
+      pending = pending.slice(4 + len)
+      if (len === 0) return
+      yield new Blob([frame], { type: 'audio/wav' })
+    }
+  }
 }
 
 export function startMeeting(id: string): Promise<MeetingRecordDto> {

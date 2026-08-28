@@ -128,6 +128,11 @@ public class Program
         MapEnv(overrides, "AI_GATEWAY_BASE_URL", "AiGateway:BaseUrl");
         MapEnv(overrides, "AI_GATEWAY_API_TOKEN", "AiGateway:ApiToken");
         MapEnv(overrides, "AI_GATEWAY_INGEST_TOKEN", "AiGateway:IngestToken");
+        MapEnv(overrides, "TENCENT_TTS_SECRET_ID", "MeetingBot:CloudTts:SecretId");
+        MapEnv(overrides, "TENCENT_TTS_SECRET_KEY", "MeetingBot:CloudTts:SecretKey");
+        MapEnv(overrides, "TENCENT_TTS_REGION", "MeetingBot:CloudTts:Region");
+        MapEnv(overrides, "TENCENT_TTS_VOICE_TYPE", "MeetingBot:CloudTts:VoiceType");
+        MapEnv(overrides, "TENCENT_TTS_SPEED", "MeetingBot:CloudTts:Speed");
         MapEnv(overrides, "BIDCOMPARE_DB_CONNECTION", "ConnectionStrings:Default");
         MapEnv(overrides, "STORAGE_S3_ACCESSKEY", "Storage:S3:AccessKey");
         MapEnv(overrides, "STORAGE_S3_SECRETKEY", "Storage:S3:SecretKey");

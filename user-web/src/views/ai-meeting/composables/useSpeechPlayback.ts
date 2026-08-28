@@ -3,7 +3,9 @@ import {
   getSpeechAudio,
   getSpeechLeadAudio,
   getSpeechAudioStatus,
+  getSpeechSegmentAudio,
   saveSpeechAudioCache,
+  streamSpeechAudio,
   synthesizeSpeech,
 } from '@/api/modules/aiMeeting'
 import { splitSpeechText } from '@/utils/speechText'
@@ -17,6 +19,11 @@ function estimateSeconds(text: string): number {
 
 /** 跨实例共享已生成语音：晨会稿页生成后，点名页直接复用，避免重复合成 */
 const sharedPrepared = new Map<string, Blob>()
+
+/** 并行预取深度：边播边合成时同时开工的断句数 */
+const PREFETCH_CONCURRENCY = 3
+/** 单句合成/拉取超时 */
+const SEGMENT_FETCH_TIMEOUT = 30_000
 
 /**
  * 晨会稿播放：
@@ -67,12 +74,98 @@ export function useSpeechPlayback() {
   }
 
   /**
-   * 流水线流式播放：合成好第 1 段立即开播，后续段落边播边合成并预取，
-   * 用 Web Audio 精确调度做到段与段零间隙。
+   * 流式播放（整稿一次请求、按句吐帧）：
+   * - 开场句有缓存先秒出，流式只合成剩余部分；
+   * - 服务端按句生成一帧推一帧，客户端边收边播，没有逐段固定开销；
+   * - 流式不可用时回退到“分段缓存优先 + 逐段合成”流水线。
+   * 结束后返回合并好的整段音频（供写入服务端缓存），失败返回 null。
    */
-  /** 流水线流式播放，结束后返回合并好的整段音频（供写入服务端缓存），失败返回 null。 */
+  async function tryStreamPlay(
+    text: string,
+    leadBlob: Blob | null | undefined,
+    leadText: string,
+    token: number,
+  ): Promise<{ ok: boolean, merged: Blob | null }> {
+    const ac = getAudioCtx()
+    const lead = leadBlob && leadText && text.startsWith(leadText) ? leadText : ''
+    const tailText = lead ? text.slice(lead.length).trim() : text
+    const frames: Blob[] = []
+    let lastScheduled = -1
+    let scheduledAny = false
+    let tailFrames = 0
+    let completed = false
+
+    const schedule = async (blob: Blob, index: number): Promise<void> => {
+      const buffer = await ac.decodeAudioData(await blob.arrayBuffer())
+      if (token !== seq) return
+      const source = ac.createBufferSource()
+      source.buffer = buffer
+      source.connect(ac.destination)
+      const startAt = Math.max(streamNextStart, ac.currentTime + 0.02)
+      source.start(startAt)
+      streamNextStart = startAt + buffer.duration
+      streamSources.push(source)
+      lastScheduled = index
+      source.onended = () => {
+        if (index === lastScheduled) streamResolve?.()
+      }
+    }
+
+    try {
+      if (lead && leadBlob) {
+        frames.push(leadBlob)
+        await schedule(leadBlob, 0)
+        scheduledAny = true
+        synthesizing.value = false
+      }
+      if (tailText) {
+        let index = frames.length
+        for await (const frame of streamSpeechAudio(tailText)) {
+          if (token !== seq) return { ok: true, merged: null }
+          frames.push(frame)
+          tailFrames++
+          if (!scheduledAny) {
+            scheduledAny = true
+            synthesizing.value = false
+            preparingMore.value = false
+            synthesisProgress.value = ''
+          }
+          await schedule(frame, index++)
+        }
+      }
+      completed = true
+    } catch {
+      // 流式接口不可用或中途中断
+    }
+
+    // 一句都没播出来（或剩余部分一句都没收到）→ 交给分段回退
+    if (!scheduledAny || (tailText.length > 0 && tailFrames === 0)) {
+      return { ok: false, merged: null }
+    }
+    // 中途中断：保留已播内容，不写回缓存（避免缓存半截音频）
+    if (!completed) {
+      return { ok: true, merged: null }
+    }
+    if (frames.length === 0) {
+      return { ok: true, merged: null }
+    }
+    try {
+      const merged = await mergeAudioBlobs(frames)
+      sharedPrepared.set(text, merged)
+      if (sharedPrepared.size > 10) {
+        const oldest = sharedPrepared.keys().next().value
+        if (oldest !== undefined) sharedPrepared.delete(oldest)
+      }
+      streamMergedBlob = merged
+      return { ok: true, merged }
+    } catch {
+      return { ok: true, merged: null }
+    }
+  }
+
   async function playStreamed(
     text: string,
+    meetingId?: string,
     leadBlob?: Blob | null,
     leadText = '',
   ): Promise<Blob | null> {
@@ -99,44 +192,120 @@ export function useSpeechPlayback() {
     streamSources = []
     streamNextStart = ac.currentTime + 0.1
     streamMergedBlob = null
+
     let finished = false
-    const allDone = new Promise<void>((resolve) => {
-      streamResolve = () => {
-        if (!finished) {
-          finished = true
-          resolve()
+    let allDone = Promise.resolve()
+    const makeAllDone = (): void => {
+      finished = false
+      allDone = new Promise<void>((resolve) => {
+        streamResolve = () => {
+          if (!finished) {
+            finished = true
+            resolve()
+          }
         }
-      }
-    })
+      })
+    }
+    makeAllDone()
     timer = window.setInterval(() => {
       if (token !== seq) return
       currentTime.value = Math.min(currentTime.value + 1, duration.value)
       progress.value = duration.value > 0 ? currentTime.value / duration.value : 0
     }, 1000)
 
+    // 流式优先：整稿一次请求、按句吐帧，零逐段固定开销
+    const streamResult = await tryStreamPlay(text, leadBlob, leadText, token)
+    if (streamResult.ok) {
+      await allDone
+      if (token === seq) {
+        playing.value = false
+        synthesizing.value = false
+        preparingMore.value = false
+        synthesisProgress.value = ''
+        currentTime.value = duration.value
+        progress.value = 1
+        if (timer) window.clearInterval(timer)
+      }
+      return streamResult.merged
+    }
+
+    // —— 回退：分段缓存优先 + 并行预取逐段合成 ——
+    stopAudio()
+    cancelStreaming()
+    streamSources = []
+    streamNextStart = ac.currentTime + 0.1
+    streamMergedBlob = null
+    synthesizing.value = true
+    makeAllDone()
+
+    function isLead(i: number): boolean {
+      return i === 0 && !!leadBlob && !!leadText && segments[0] === leadText
+    }
+
+    async function fetchCached(index: number): Promise<Blob | null> {
+      if (!meetingId) return null
+      for (let attempt = 0; attempt < 2; attempt++) {
+        if (token !== seq) return null
+        try {
+          const blob = await getSpeechSegmentAudio(meetingId, index)
+          if (blob && blob.size > 0) return blob
+        } catch {
+          // 未缓存 → 稍后重试或回退合成
+        }
+        if (attempt === 0) await new Promise((r) => setTimeout(r, 1200))
+      }
+      return null
+    }
+
+    async function produceOne(i: number): Promise<Blob | null> {
+      if (isLead(i)) return leadBlob!
+      const cached = await fetchCached(i)
+      if (cached) return cached
+      for (let attempt = 0; attempt < 3; attempt++) {
+        if (token !== seq) return null
+        try {
+          return await synthesizeSpeech(segments[i]!, SEGMENT_FETCH_TIMEOUT)
+        } catch {
+          // 重试
+        }
+      }
+      return null
+    }
+
+    const results = Array.from<Blob | null>({ length: total }).fill(null)
+    const pending = Array.from<Promise<void>>({ length: total }).fill(Promise.resolve())
+    let nextToStart = 0
+    let inFlight = 0
+
+    function kick(): void {
+      while (nextToStart < total && inFlight < PREFETCH_CONCURRENCY) {
+        const i = nextToStart++
+        inFlight++
+        pending[i] = produceOne(i)
+          .then((blob) => {
+            results[i] = blob
+            if (token === seq) {
+              synthesisProgress.value = `${Math.min(nextToStart, total)}/${total}`
+            }
+          })
+          .finally(() => {
+            inFlight--
+            if (token === seq) kick()
+          })
+      }
+    }
+    kick()
+
     const pipeline = (async () => {
       const produced: Blob[] = []
       let lastScheduled = -1
-      for (let i = 0; i < segments.length; i++) {
+      for (let i = 0; i < total; i++) {
         if (token !== seq) return
-        // 首段若已由服务端预合成缓存，直接复用，点击播放即可秒出
-        let blob: Blob | null = null
-        if (i === 0 && leadBlob && leadText && segments[0] === leadText) {
-          blob = leadBlob
-        } else {
-          // 每段失败自动重试；仍失败则跳过该段，不中断整段播放
-          for (let attempt = 0; attempt < 3 && blob === null; attempt++) {
-            if (token !== seq) return
-            try {
-              blob = await synthesizeSpeech(segments[i]!, 30_000)
-            } catch {
-              blob = null
-            }
-          }
-        }
+        await pending[i]!
+        if (token !== seq) return
+        const blob = results[i]
         synthesisProgress.value = `${Math.min(i + 1, total)}/${total}`
         if (!blob) continue
-        if (token !== seq) return
         produced.push(blob)
         if (i === 0) {
           synthesizing.value = false
@@ -281,8 +450,7 @@ export function useSpeechPlayback() {
     return generate(text)
   }
 
-  async function playPreparedBlob(text: string): Promise<void> {
-    const blob = preparedBlob
+  async function playPreparedBlob(text: string, blob = preparedBlob): Promise<void> {
     if (!blob) return
     const token = ++seq
     duration.value = estimateSeconds(text)
@@ -345,7 +513,7 @@ export function useSpeechPlayback() {
         }
         if (preparedText !== text || !preparedBlob) {
           // 缓存未命中 → 流水线流式播放（首段即出、无缝衔接），播完写回服务端缓存
-          const merged = await playStreamed(text, leadBlob, leadText)
+          const merged = await playStreamed(text, meetingId, leadBlob, leadText)
           if (merged && meetingId) {
             void saveSpeechAudioCache(meetingId, merged).catch(() => {})
           }
@@ -382,6 +550,36 @@ export function useSpeechPlayback() {
             currentTime.value = 0
             progress.value = 0
             ready.value = true
+          } else if (status.leadCached) {
+            // 整段未缓存：服务端已按断句逐段预热，用分段缓存拼接播放（不触发任何合成）。
+            // 预热按序进行，取“已缓存的最长前缀”先播，避免因缺后续段而整段不播。
+            const segments = splitSpeechText(text)
+            const blobs: Blob[] = []
+            for (let i = 0; i < segments.length; i++) {
+              try {
+                const blob = await getSpeechSegmentAudio(meetingId, i)
+                if (!blob || blob.size === 0) break
+                blobs.push(blob)
+              } catch {
+                break
+              }
+            }
+            if (blobs.length > 0) {
+              const merged = await mergeAudioBlobs(blobs)
+              if (blobs.length === segments.length) {
+                // 全量分段齐了：固化为 prepared，下次重播直接命中
+                preparedText = text
+                preparedBlob = merged
+                sharedPrepared.set(text, merged)
+                duration.value = estimateSeconds(text)
+                currentTime.value = 0
+                progress.value = 0
+                ready.value = true
+              }
+              // 前缀不完整：直接播当前已缓存前缀，不固化，下次重播会拿到更长的前缀
+              await playPreparedBlob(text, merged)
+              return true
+            }
           }
         } catch {
           // 状态查询失败视为无缓存

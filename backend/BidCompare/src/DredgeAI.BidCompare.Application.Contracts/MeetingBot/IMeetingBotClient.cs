@@ -1,4 +1,5 @@
 using System.Collections.Generic;
+using System.IO;
 using System.Threading;
 using System.Threading.Tasks;
 
@@ -10,6 +11,8 @@ public interface IMeetingBotClient
     Task<string> AsrAsync(byte[] audio, CancellationToken ct = default);
 
     Task<byte[]> TtsAsync(string text, CancellationToken ct = default);
+
+    Task StreamTtsAsync(string text, Stream destination, CancellationToken ct = default);
 
     Task<List<FaceMatchDto>> RecognizeAsync(byte[] image, CancellationToken ct = default);
 

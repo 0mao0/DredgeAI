@@ -1,18 +1,21 @@
 /**
- * 晨会稿分段：首段提前到第一个句尾，后续按 <=maxChars 字合并，供逐段 TTS 边播边合成。
+ * 晨会稿按“断句”拆分（不再按 60 字合并）：
+ * - 首段仍是开场句（<=18 字，与服务端开场句缓存一致，命中后秒出）；
+ * - 后续按句号/感叹号/问号/分号断句，长句再按逗号类标点切开；
+ * - 单段越短，TTS 单次请求越快，配合并行预取做到边播边生成。
  */
-export function splitSpeechText(text: string, maxChars = 60): string[] {
+export function splitSpeechText(text: string): string[] {
   const normalized = text.replace(/\s+/g, ' ').trim()
   if (!normalized) return []
 
   const lead = extractLeadSegment(normalized)
   if (lead) {
     const rest = normalized.slice(lead.length).trim()
-    const tail = splitIntoMax(rest, maxChars)
+    const tail = splitBySentence(rest)
     return rest ? [lead, ...tail] : [lead]
   }
 
-  return splitIntoMax(normalized, maxChars)
+  return splitBySentence(normalized)
 }
 
 /** 字幕单行最大字数：22px 字号下一行放 14 个字符不会出省略号。 */
@@ -100,22 +103,61 @@ function extractLeadSegment(text: string): string | null {
   return text.slice(0, end)
 }
 
-function splitIntoMax(text: string, maxChars: number): string[] {
-  const parts = text
-    .split(/(?<=[。；;！？!?\n])/)
+/** 断句拆分：句末（。！？；\n）必断；超过 30 字的长句再按逗号类标点切开。 */
+const SEGMENT_MAX_CHARS = 30
+
+function splitBySentence(text: string, maxChars = SEGMENT_MAX_CHARS): string[] {
+  const sentenceParts = text
+    .split(/(?<=[。！？；;\n])/)
     .map((s) => s.trim())
     .filter(Boolean)
 
   const segments: string[] = []
-  let buffer = ''
-  for (const part of parts) {
-    if (buffer && buffer.length + part.length > maxChars) {
-      segments.push(buffer)
-      buffer = part
+  for (const part of sentenceParts) {
+    if (part.length <= maxChars) {
+      segments.push(part)
+      continue
+    }
+    const clauses = part
+      .split(/(?<=[，,、：:])/)
+      .map((s) => s.trim())
+      .filter(Boolean)
+    let buffer = ''
+    for (const clause of clauses) {
+      // 无标点的超长片段兜底按 maxChars 硬拆
+      if (clause.length > maxChars) {
+        if (buffer) {
+          segments.push(buffer)
+          buffer = ''
+        }
+        for (let i = 0; i < clause.length; i += maxChars) {
+          segments.push(clause.slice(i, i + maxChars))
+        }
+        continue
+      }
+      if (buffer && buffer.length + clause.length > maxChars) {
+        segments.push(buffer)
+        buffer = clause
+      } else {
+        buffer += clause
+      }
+    }
+    if (buffer) segments.push(buffer)
+  }
+  return mergeShortSegments(segments)
+}
+
+/** 过短碎片（如“第一、”）并入下一段，避免孤零零的碎句；首段保持独立以命中开场句缓存。 */
+function mergeShortSegments(segments: string[]): string[] {
+  const merged: string[] = []
+  for (const segment of segments) {
+    const last = merged[merged.length - 1]
+    const lastLen = last ? last.replace(/\s/g, '').length : 0
+    if (last && lastLen < 4) {
+      merged[merged.length - 1] = last + segment
     } else {
-      buffer += part
+      merged.push(segment)
     }
   }
-  if (buffer) segments.push(buffer)
-  return segments
+  return merged
 }

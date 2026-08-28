@@ -27,9 +27,9 @@ public class WarmSpeechAudioJob : AsyncBackgroundJob<WarmSpeechAudioArgs>, ITran
     {
         try
         {
-            // 先只合成开场句，用户点播放时第一句能秒出；随后再合成整段写缓存
+            // 只预热开场句：用户点播放第一句能秒出；
+            // 后续由前端“流式合成”一次请求按句生成，避免后台任务与实时流抢占同一个 TTS worker
             await _service.PreWarmSpeechLeadAsync(args.MeetingRecordId);
-            await _service.GetSpeechAudioAsync(args.MeetingRecordId);
         }
         catch (Exception ex)
         {

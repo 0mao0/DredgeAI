@@ -224,9 +224,6 @@ function onDone(): void {
   top: @spacing-sm;
   left: @spacing-sm;
   right: @spacing-sm;
-  padding: @spacing-sm @spacing-md;
-  border-radius: @radius-sm;
-  background: color-mix(in srgb, #000 55%, transparent);
   color: #fff;
   font-size: @font-size-2xl;
   line-height: 1.35;
@@ -235,7 +232,7 @@ function onDone(): void {
   overflow: hidden;
   z-index: 2;
   pointer-events: none;
-  box-shadow: @shadow-sm;
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.65);
 }
 .attendance-step__unknown-panel {
   min-width: 220px;

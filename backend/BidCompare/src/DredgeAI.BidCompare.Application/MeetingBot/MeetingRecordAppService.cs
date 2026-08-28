@@ -2,8 +2,10 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
+using System.Text;
 using System.Text.Encodings.Web;
 using System.Text.Json;
+using System.Text.RegularExpressions;
 using System.Threading.Tasks;
 using DredgeAI.BidCompare.AI;
 using DredgeAI.BidCompare.AnGineer;
@@ -338,6 +340,12 @@ public class MeetingRecordAppService : ApplicationService, IMeetingRecordAppServ
     private static string SpeechLeadAudioKey(Guid meetingId)
         => $"{SpeechAudioCachePrefix}/{meetingId}/lead.wav";
 
+    private static string SpeechSegmentAudioKey(Guid meetingId, int index)
+        => $"{SpeechAudioCachePrefix}/{meetingId}/seg/{index}.wav";
+
+    private static string SpeechSegmentCachePrefix(Guid meetingId)
+        => $"{SpeechAudioCachePrefix}/{meetingId}/seg/";
+
     /// <summary>与前端 splitSpeechText 的首段规则保持一致：取第一个句尾且不超过 18 字。</summary>
     private static string ExtractLeadSentence(string content)
     {
@@ -350,6 +358,97 @@ public class MeetingRecordAppService : ApplicationService, IMeetingRecordAppServ
             }
         }
         return "";
+    }
+
+    /// <summary>
+    /// 按断句拆分晨会稿（与前端 splitSpeechText 对齐）：
+    /// 首段为开场句；后续按句末标点断句，超过 30 字的长句再按逗号类标点切开。
+    /// </summary>
+    public static List<string> SplitSpeechSegments(string content)
+    {
+        var normalized = string.Join(' ', content.Split((char[]?)null, StringSplitOptions.RemoveEmptyEntries)).Trim();
+        if (string.IsNullOrEmpty(normalized))
+        {
+            return [];
+        }
+
+        var segments = new List<string>();
+        var lead = ExtractLeadSentence(normalized);
+        if (lead.Length > 0)
+        {
+            segments.Add(lead);
+            normalized = normalized[lead.Length..].Trim();
+        }
+        if (normalized.Length > 0)
+        {
+            segments.AddRange(SplitBySentence(normalized));
+        }
+        return segments;
+    }
+
+    private static List<string> SplitBySentence(string text, int maxChars = 30)
+    {
+        var sentenceParts = Regex.Split(text, @"(?<=[。！？；;！？\n])")
+            .Select(s => s.Trim())
+            .Where(s => s.Length > 0)
+            .ToList();
+
+        var segments = new List<string>();
+        foreach (var part in sentenceParts)
+        {
+            if (part.Length <= maxChars)
+            {
+                segments.Add(part);
+                continue;
+            }
+
+            var clauses = Regex.Split(part, @"(?<=[，,、：:])")
+                .Select(s => s.Trim())
+                .Where(s => s.Length > 0)
+                .ToList();
+            var buffer = new StringBuilder();
+            foreach (var clause in clauses)
+            {
+                if (clause.Length > maxChars)
+                {
+                    if (buffer.Length > 0)
+                    {
+                        segments.Add(buffer.ToString());
+                        buffer.Clear();
+                    }
+                    for (var i = 0; i < clause.Length; i += maxChars)
+                    {
+                        segments.Add(clause.Substring(i, Math.Min(maxChars, clause.Length - i)));
+                    }
+                    continue;
+                }
+                if (buffer.Length > 0 && buffer.Length + clause.Length > maxChars)
+                {
+                    segments.Add(buffer.ToString());
+                    buffer.Clear();
+                }
+                buffer.Append(clause);
+            }
+            if (buffer.Length > 0)
+            {
+                segments.Add(buffer.ToString());
+            }
+        }
+
+        // 过短碎片并入下一段；首段保持独立以命中开场句缓存
+        var merged = new List<string>();
+        foreach (var segment in segments)
+        {
+            if (merged.Count > 0 && merged[^1].Replace(" ", "").Length < 4)
+            {
+                merged[^1] = merged[^1] + segment;
+            }
+            else
+            {
+                merged.Add(segment);
+            }
+        }
+        return merged;
     }
 
     public async Task<bool> IsSpeechAudioCachedAsync(Guid id)
@@ -480,12 +579,234 @@ public class MeetingRecordAppService : ApplicationService, IMeetingRecordAppServ
         return ExtractLeadSentence(draft.Content);
     }
 
+    /// <summary>读取按断句预热的单段语音；未缓存返回 null（前端回退即时合成）。</summary>
+    public async Task<byte[]?> GetSpeechSegmentAudioAsync(Guid id, int index)
+    {
+        var meeting = await _meetings.GetAsync(id);
+        if (meeting.SpeechDraftId is null)
+        {
+            return null;
+        }
+        if (index == 0)
+        {
+            return await GetSpeechLeadAudioAsync(id);
+        }
+        var key = SpeechSegmentAudioKey(meeting.Id, index);
+        try
+        {
+            if (!await _fileStorage.ExistsAsync(key))
+            {
+                return null;
+            }
+            await using var cached = await _fileStorage.GetAsync(key);
+            using var ms = new MemoryStream();
+            await cached.CopyToAsync(ms);
+            return ms.ToArray();
+        }
+        catch (Exception ex)
+        {
+            Logger.LogWarning(ex, "读取晨会稿分段语音缓存失败（{Key}）", key);
+            return null;
+        }
+    }
+
+    /// <summary>
+    /// 后台按断句逐段预热（不再用整段单请求独占 TTS 服务）：
+    /// 每段一个短请求写分段缓存，全部完成后在服务端拼回整段 wav，
+    /// 这样点名页/再次播放命中整段秒出，行为与旧版一致。
+    /// </summary>
+    public async Task WarmSpeechSegmentsAsync(Guid id)
+    {
+        var meeting = await _meetings.GetAsync(id);
+        if (meeting.SpeechDraftId is null)
+        {
+            return;
+        }
+        var draft = await _drafts.GetAsync(meeting.SpeechDraftId.Value);
+        if (string.IsNullOrWhiteSpace(draft.Content))
+        {
+            return;
+        }
+
+        var segments = SplitSpeechSegments(draft.Content);
+        var contentHash = ContentHash(draft.Content);
+        var produced = new List<byte[]>();
+        var allSucceeded = true;
+
+        // 逐段新合成并写缓存；合并整段用本次任务自己的字节，
+        // 避免与旧任务（草稿被编辑）的缓存互相污染
+        for (var i = 1; i < segments.Count; i++)
+        {
+            byte[] bytes;
+            try
+            {
+                bytes = await _bot.TtsAsync(segments[i]);
+            }
+            catch (Exception ex)
+            {
+                // 单段合成失败不阻塞后续段预热，前端仍可回退即时合成
+                Logger.LogWarning(ex, "晨会稿分段语音预热失败（{MeetingId}/{Index}）", meeting.Id, i);
+                allSucceeded = false;
+                continue;
+            }
+            if (bytes.Length == 0)
+            {
+                allSucceeded = false;
+                continue;
+            }
+            produced.Add(bytes);
+            try
+            {
+                await using var output = new MemoryStream(bytes);
+                await _fileStorage.UploadAsync(SpeechSegmentAudioKey(meeting.Id, i), output, "audio/wav");
+            }
+            catch (Exception ex)
+            {
+                Logger.LogWarning(ex, "写入晨会稿分段语音缓存失败（{Key}）", SpeechSegmentAudioKey(meeting.Id, i));
+            }
+        }
+
+        // 合并前校验草稿内容未变：旧任务（内容已被编辑）不写整段缓存
+        var latest = await _drafts.GetAsync(meeting.SpeechDraftId.Value);
+        if (!allSucceeded || latest.Content != draft.Content || ContentHash(latest.Content) != contentHash)
+        {
+            return;
+        }
+
+        // 重新合成当前开场句（覆盖可能的旧缓存），并入整段
+        byte[] leadBytes;
+        try
+        {
+            leadBytes = await _bot.TtsAsync(segments[0]);
+        }
+        catch (Exception ex)
+        {
+            Logger.LogWarning(ex, "晨会稿开场句预热失败（{MeetingId}）", meeting.Id);
+            return;
+        }
+        if (leadBytes.Length == 0)
+        {
+            return;
+        }
+        try
+        {
+            await using var leadOutput = new MemoryStream(leadBytes);
+            await _fileStorage.UploadAsync(SpeechLeadAudioKey(meeting.Id), leadOutput, "audio/wav");
+        }
+        catch (Exception ex)
+        {
+            Logger.LogWarning(ex, "写入开场句语音缓存失败（{MeetingId}）", meeting.Id);
+        }
+        produced.Insert(0, leadBytes);
+
+        if (produced.Count != segments.Count)
+        {
+            return;
+        }
+        try
+        {
+            var merged = ConcatWavs(produced);
+            await using var output = new MemoryStream(merged);
+            await _fileStorage.UploadAsync($"{SpeechAudioCachePrefix}/{meeting.Id}.wav", output, "audio/wav");
+        }
+        catch (Exception ex)
+        {
+            Logger.LogWarning(ex, "拼接晨会稿整段语音缓存失败（{MeetingId}）", meeting.Id);
+        }
+    }
+
+    private static string ContentHash(string content)
+    {
+        var bytes = System.Security.Cryptography.SHA256.HashData(System.Text.Encoding.UTF8.GetBytes(content));
+        return Convert.ToHexString(bytes);
+    }
+
+    /// <summary>把多个 PCM WAV（同音色/语速，格式一致）按顺序拼接成一个 WAV。</summary>
+    internal static byte[] ConcatWavs(IReadOnlyList<byte[]> wavs)
+    {
+        if (wavs.Count == 0)
+        {
+            throw new InvalidDataException("没有可拼接的 WAV");
+        }
+        if (wavs.Count == 1)
+        {
+            return wavs[0];
+        }
+
+        ushort channels = 1;
+        uint sampleRate = 24000;
+        ushort bitsPerSample = 16;
+        using var data = new MemoryStream();
+        foreach (var wav in wavs)
+        {
+            if (wav is null || wav.Length < 44 ||
+                wav[0] != (byte)'R' || wav[1] != (byte)'I' || wav[2] != (byte)'F' || wav[3] != (byte)'F')
+            {
+                throw new InvalidDataException("无效的 WAV 分段");
+            }
+            var offset = 12;
+            var foundData = false;
+            while (offset + 8 <= wav.Length)
+            {
+                var id = Encoding.ASCII.GetString(wav, offset, 4);
+                var size = BitConverter.ToUInt32(wav, offset + 4);
+                var payloadStart = offset + 8;
+                if (id == "fmt ")
+                {
+                    if (payloadStart + 16 <= wav.Length)
+                    {
+                        channels = BitConverter.ToUInt16(wav, payloadStart + 2);
+                        sampleRate = BitConverter.ToUInt32(wav, payloadStart + 4);
+                        bitsPerSample = BitConverter.ToUInt16(wav, payloadStart + 14);
+                    }
+                }
+                else if (id == "data")
+                {
+                    var copyLen = (int)Math.Min(size, (uint)(wav.Length - payloadStart));
+                    data.Write(wav, payloadStart, copyLen);
+                    foundData = true;
+                }
+                offset = payloadStart + (int)size + (int)(size % 2);
+            }
+            if (!foundData)
+            {
+                throw new InvalidDataException("WAV 缺少 data 块");
+            }
+        }
+
+        var dataBytes = data.ToArray();
+        var byteRate = sampleRate * channels * bitsPerSample / 8;
+        var blockAlign = (ushort)(channels * bitsPerSample / 8);
+        using var output = new MemoryStream();
+        void WriteAscii(string text)
+        {
+            var bytes = Encoding.ASCII.GetBytes(text);
+            output.Write(bytes, 0, bytes.Length);
+        }
+        WriteAscii("RIFF");
+        output.Write(BitConverter.GetBytes(36u + (uint)dataBytes.Length));
+        WriteAscii("WAVE");
+        WriteAscii("fmt ");
+        output.Write(BitConverter.GetBytes(16u));
+        output.Write(BitConverter.GetBytes((ushort)1));
+        output.Write(BitConverter.GetBytes(channels));
+        output.Write(BitConverter.GetBytes(sampleRate));
+        output.Write(BitConverter.GetBytes(byteRate));
+        output.Write(BitConverter.GetBytes(blockAlign));
+        output.Write(BitConverter.GetBytes(bitsPerSample));
+        WriteAscii("data");
+        output.Write(BitConverter.GetBytes((uint)dataBytes.Length));
+        output.Write(dataBytes);
+        return output.ToArray();
+    }
+
     private async Task InvalidateSpeechAudioCacheAsync(Guid meetingId)
     {
         try
         {
             await _fileStorage.DeleteAsync($"{SpeechAudioCachePrefix}/{meetingId}.wav");
             await _fileStorage.DeleteAsync(SpeechLeadAudioKey(meetingId));
+            await _fileStorage.DeleteByPrefixAsync(SpeechSegmentCachePrefix(meetingId));
         }
         catch (Exception ex)
         {

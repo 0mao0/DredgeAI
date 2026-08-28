@@ -9,6 +9,8 @@ Endpoints:
 import os
 import sys
 import io
+import struct
+import re
 import wave
 import logging
 
@@ -34,7 +36,7 @@ sys.path.insert(0, os.path.join(SRC_DIR, 'third_party', 'Matcha-TTS'))
 import torch
 from fastapi import Depends, FastAPI, HTTPException, Request, UploadFile, File, Form
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import Response, JSONResponse
+from fastapi.responses import Response, JSONResponse, StreamingResponse
 from pydantic import BaseModel, Field
 import uvicorn
 import numpy as np
@@ -145,9 +147,12 @@ def _load_model():
     try:
         from cosyvoice.cli.cosyvoice import AutoModel
         print(f'[startup] Loading CosyVoice3 from {MODEL_DIR} ...', flush=True)
-        cosyvoice = AutoModel(model_dir=MODEL_DIR, fp16=True)
+        # FP16（autocast）在本地 4070 Laptop 上无实质提速且短句偶发空输出，
+        # 默认保持 FP32；如需实验可设 COSYVOICE_FP16=1。
+        fp16 = os.environ.get('COSYVOICE_FP16', '0') != '0'
+        cosyvoice = AutoModel(model_dir=MODEL_DIR, fp16=fp16)
         _model_loaded = True
-        print('[startup] Model loaded OK', flush=True)
+        print(f'[startup] Model loaded OK (fp16={fp16})', flush=True)
     except Exception as e:
         _model_error = repr(e)
         print('[startup] Model load FAILED:', e, flush=True)
@@ -194,28 +199,10 @@ def _ensure_wav(path: str) -> str:
     return wav_path
 
 
-def _run_inference(text: str, instruct: str, voice_id: str = '', speed: float = 1.0):
-    """Runs on the calling thread. Returns (wav_bytes, duration_sec)."""
-    if voice_id in VOICE_WAVS:
-        prompt_wav = _ensure_wav(VOICE_WAVS[voice_id])
-    else:
-        prompt_wav = PROMPT_WAV_PATH
-    all_audio = []
-    import time as _t
-    print(f'[debug] _run_inference calling inference_instruct2 text_len={len(text)} prompt={prompt_wav}', flush=True)
-    gen = cosyvoice.inference_instruct2(text, instruct, prompt_wav, stream=False, speed=speed)
-    chunk_count = 0
-    for chunk in gen:
-        chunk_count += 1
-        ts = chunk['tts_speech']
-        print(f'[debug]  chunk {chunk_count} shape={ts.shape} device={ts.device}', flush=True)
-        tts = ts.squeeze().cpu().numpy()
-        all_audio.append(tts)
-    print(f'[debug] _run_inference done chunks={chunk_count}', flush=True)
-    if not all_audio:
-        raise RuntimeError('TTS produced no audio (empty result)')
-    audio_data = np.concatenate(all_audio)
-    audio_i16 = (audio_data * 32767).clip(-32768, 32767).astype(np.int16)
+def _tensor_to_wav(ts):
+    """单个音频 tensor -> 16bit PCM WAV 字节。"""
+    tts = ts.squeeze().cpu().numpy()
+    audio_i16 = (tts * 32767).clip(-32768, 32767).astype(np.int16)
     buf = io.BytesIO()
     with wave.open(buf, 'wb') as wf:
         wf.setnchannels(1)
@@ -223,6 +210,124 @@ def _run_inference(text: str, instruct: str, voice_id: str = '', speed: float = 
         wf.setframerate(cosyvoice.sample_rate)
         wf.writeframes(audio_i16.tobytes())
     return buf.getvalue(), len(audio_i16) / cosyvoice.sample_rate
+
+
+def _iter_inference(text: str, instruct: str, voice_id: str = '', speed: float = 1.0):
+    """逐句推理，按句 yield (wav_bytes, duration_sec)，供流式端点使用。"""
+    if voice_id in VOICE_WAVS:
+        prompt_wav = _ensure_wav(VOICE_WAVS[voice_id])
+    else:
+        prompt_wav = PROMPT_WAV_PATH
+    gen = cosyvoice.inference_instruct2(text, instruct, prompt_wav, stream=False, speed=speed)
+    for chunk in gen:
+        yield _tensor_to_wav(chunk['tts_speech'])
+
+
+def _split_sentences(text: str, max_chars: int = 30):
+    """按断句切分：句末（。！？；\n）必断；长句再按逗号类标点切开；过短碎片并入下一段。"""
+    parts = [p.strip() for p in re.split(r'(?<=[。！？；;\n])', text) if p.strip()]
+    segments = []
+    for part in parts:
+        if len(part) <= max_chars:
+            segments.append(part)
+            continue
+        clauses = [c.strip() for c in re.split(r'(?<=[，,、：:])', part) if c.strip()]
+        buffer = ''
+        for clause in clauses:
+            if len(clause) > max_chars:
+                if buffer:
+                    segments.append(buffer)
+                    buffer = ''
+                for i in range(0, len(clause), max_chars):
+                    segments.append(clause[i:i + max_chars])
+                continue
+            if buffer and len(buffer) + len(clause) > max_chars:
+                segments.append(buffer)
+                buffer = clause
+            else:
+                buffer += clause
+        if buffer:
+            segments.append(buffer)
+    merged = []
+    for segment in segments:
+        if merged and len(merged[-1].replace(' ', '')) < 4:
+            merged[-1] = merged[-1] + segment
+        else:
+            merged.append(segment)
+    return merged
+
+
+# 提示文本/提示音频/音色编码只跟音色有关，按音色缓存，避免每次请求重复走 CPU ONNX
+_PREPROMPT_CACHE: dict = {}
+
+
+def _prompt_parts(voice_id: str, prompt_wav: str, instruct: str):
+    key = (voice_id or '', prompt_wav, instruct)
+    if key not in _PREPROMPT_CACHE:
+        prompt_text_token, prompt_text_token_len = cosyvoice.frontend._extract_text_token(instruct)
+        speech_feat, speech_feat_len = cosyvoice.frontend._extract_speech_feat(prompt_wav)
+        speech_token, speech_token_len = cosyvoice.frontend._extract_speech_token(prompt_wav)
+        embedding = cosyvoice.frontend._extract_spk_embedding(prompt_wav)
+        _PREPROMPT_CACHE[key] = (
+            prompt_text_token, prompt_text_token_len,
+            speech_feat, speech_feat_len,
+            speech_token, speech_token_len,
+            embedding,
+        )
+    return _PREPROMPT_CACHE[key]
+
+
+def _iter_sentence_frames(text: str, instruct: str, prompt_wav: str, voice_id: str = '', speed: float = 1.0):
+    """按断句逐句合成：提示编码跨句/跨请求复用，帧小、出得快。"""
+    prompt_text_token, _prompt_text_token_len, speech_feat, _speech_feat_len, speech_token, _speech_token_len, embedding = \
+        _prompt_parts(voice_id, prompt_wav, instruct)
+    # 截断到匹配长度（用切片生成新张量，不修改缓存）
+    token_len = min(int(speech_feat.shape[1] / 2), speech_token.shape[1])
+    prompt_feat = speech_feat[:, :2 * token_len]
+    prompt_speech_token = speech_token[:, :token_len]
+    for sentence in _split_sentences(text):
+        tts_text_token, tts_text_token_len = cosyvoice.frontend._extract_text_token(sentence)
+        model_input = {
+            'prompt_text': prompt_text_token,
+            'prompt_text_len': torch.tensor([prompt_text_token.shape[1]], dtype=torch.int32),
+            'flow_prompt_speech_token': prompt_speech_token,
+            'flow_prompt_speech_token_len': torch.tensor([prompt_speech_token.shape[1]], dtype=torch.int32),
+            'prompt_speech_feat': prompt_feat,
+            'prompt_speech_feat_len': torch.tensor([prompt_feat.shape[1]], dtype=torch.int32),
+            'flow_embedding': embedding,
+            'llm_embedding': embedding,
+            'text': tts_text_token,
+            'text_len': tts_text_token_len,
+        }
+        try:
+            for out in cosyvoice.model.tts(**model_input, stream=False, speed=speed):
+                yield _tensor_to_wav(out['tts_speech'])
+        except Exception as exc:
+            # 单句失败跳过，不中断整段流式
+            print(f'[stream] 句子合成失败，跳过: {sentence[:16]}... {exc}', flush=True)
+
+
+def _run_inference(text: str, instruct: str, voice_id: str = '', speed: float = 1.0):
+    """Runs on the calling thread. Returns (wav_bytes, duration_sec)."""
+    all_audio = []
+    total_duration = 0.0
+    print(f'[debug] _run_inference calling inference_instruct2 text_len={len(text)} prompt=voice:{voice_id}', flush=True)
+    for wav_bytes, duration in _iter_inference(text, instruct, voice_id, speed):
+        all_audio.append(wav_bytes)
+        total_duration += duration
+    if not all_audio:
+        raise RuntimeError('TTS produced no audio (empty result)')
+    # 每句是独立 WAV，需先剥离 44 字节头、拼接 PCM 后重写一个 WAV
+    pcm = b''.join(b[44:] for b in all_audio if len(b) > 44)
+    if not pcm:
+        raise RuntimeError('TTS produced no audio (empty result)')
+    buf = io.BytesIO()
+    with wave.open(buf, 'wb') as wf:
+        wf.setnchannels(1)
+        wf.setsampwidth(2)
+        wf.setframerate(cosyvoice.sample_rate)
+        wf.writeframes(pcm)
+    return buf.getvalue(), total_duration
 
 
 def _pregen_samples():
@@ -286,6 +391,39 @@ async def generate_tts(req: TTSRequest):
 
     return Response(content=wav_bytes, media_type='audio/wav',
                     headers={'X-Duration-Sec': f'{duration:.2f}'})
+
+
+@app.post('/api/tts/stream')
+def generate_tts_stream(req: TTSRequest):
+    """流式 TTS：整段文本一次请求，按句 yield 音频帧。
+
+    帧格式：4 字节大端长度 + WAV 字节；length=0 表示结束。
+    同步 def 让 FastAPI 在线程池中跑推理，避免阻塞事件循环。
+    """
+    if not _model_loaded:
+        if _model_error:
+            raise HTTPException(status_code=503, detail=f'Model load failed: {_model_error}')
+        raise HTTPException(status_code=503, detail='Model not loaded yet')
+
+    valid_ids = set(VOICE_PROMPTS.keys())
+    voice_id = _resolve_voice_id(valid_ids, req.voice_id)
+    instruct = VOICE_PROMPTS.get(voice_id, '')
+    if voice_id in VOICE_WAVS:
+        prompt_wav = _ensure_wav(VOICE_WAVS[voice_id])
+    else:
+        prompt_wav = PROMPT_WAV_PATH
+
+    def frame_stream():
+        try:
+            for wav_bytes, _duration in _iter_sentence_frames(req.text, instruct, prompt_wav, voice_id, req.speed):
+                yield struct.pack('>I', len(wav_bytes)) + wav_bytes
+            yield struct.pack('>I', 0)
+        except Exception as e:
+            import traceback
+            traceback.print_exc()
+            raise
+
+    return StreamingResponse(frame_stream(), media_type='application/octet-stream')
 
 
 @app.get('/api/samples/{voice_id}.wav')
