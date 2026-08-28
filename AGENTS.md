@@ -83,3 +83,4 @@ ECharts 样式先读 `chart-conventions.md`。
 
 - **禁止执行 SQL**：不得直接对数据库执行任何 SQL（含 DDL/DML、schema 重建、docker psql 等）；数据库变更一律交付迁移脚本或交用户执行。
 - **禁止自动启动项目**：不得自行启动后端/前端/依赖服务进程（含 dotnet run、启动 exe、docker 起服务等）；运行时验证依赖用户已启动的环境，未运行时报告给用户而非代劳。
+- **脚本按平台执行**：macOS/Linux 下执行 `.sh`（bash）脚本，Windows 下执行 `.ps1`（pwsh）脚本；禁止在 Windows 下跑 `.sh`（Git Bash/WSL 的 PATH 与路径解析不可靠）。

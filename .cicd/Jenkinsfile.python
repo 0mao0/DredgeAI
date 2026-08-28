@@ -1,0 +1,309 @@
+// ============================================================
+// Jenkinsfile.python — dredge-ai Python 算法/推理层 CI/CD Pipeline
+//
+// 服务（共 7 个镜像，全部为内部 HTTP 服务，由 ABP 主服务在 compose 网络内调用）：
+//   compare-algo(:8100)   确定性比标算法
+//   ai-gateway(:8200)     平台唯一 LLM 入口
+//   sensevoice(:8102)     ASR      ┐
+//   insightface(:8103)    人脸识别  │ meeting-bot 依赖的 4 个模型服务，
+//   yolo(:8104)           人头计数  │ 挂载宿主机模型权重（MODEL_WEIGHTS_DIR）
+//   cosyvoice(:8000)      TTS      ┘
+//   meeting-bot(:8101)    AI 晨会编排（depends_on 上述 4 个模型服务 healthy）
+//
+// 参照 mucktarcing/Jenkinsfile 流程：版本配置 → 构建镜像 → 推送镜像 → 部署 → 打Git标签。
+// 构建上下文为各服务目录（Dockerfile 内 COPY 均为服务目录相对路径）。
+//
+// 部署产物：.cicd/aspire-output/python/docker-compose.yaml（pnpm publish-python 生成，已提交仓库）。
+// 三层（frontend/python/dotnet）共用同一 compose project（dredge-ai-<branch>），
+// 共享硬编码网络 dredge-ai-net（bidcompare→compare-algo/ai-gateway/meeting-bot 依赖此）。
+// Aspire Dashboard 仅由 dotnet 层部署（frontend/python 以 -NoDashboard 发布）。
+//
+// 敏感配置通过 Jenkins 凭据注入（Secret text）：
+//   MEETING_BOT_KEY           meeting-bot ↔ 模型服务内部校验令牌
+//   AI_GATEWAY_API_TOKEN      ai-gateway 调用方令牌（ABP 侧同值）
+//   AI_GATEWAY_INGEST_TOKEN   ai-gateway 用量上报令牌
+//   LLM_CONFIGS               LLM 模型配置，单行 JSON 数组（格式同仓库根 .env）
+//
+// 模型权重：compose 将 ${MODEL_WEIGHTS_DIR}/models 只读挂载进 sensevoice/
+// insightface/yolo，${MODEL_WEIGHTS_DIR}/cosyvoice 挂载进 cosyvoice；
+// 运维需预先将权重放至部署机 ~/dredge-ai/model-weights/{models,cosyvoice}。
+// ============================================================
+
+pipeline {
+  agent any
+  options {
+    disableConcurrentBuilds abortPrevious: true
+    timeout(time: 60, unit: 'MINUTES')
+  }
+  environment {
+    SSH_CONFIG_NAME = "${env.BRANCH_NAME == 'develop' ? 'test-server-ssh' : 'datalink-cloud'}"
+    ROOT = "${WORKSPACE}"
+
+    DOCKER_PUSH_REPOSITORY = 'repository.bim-ace.com/repository/docker-hosted/'
+    DOCKER_BUILDKIT = '1'
+
+    // 镜像名（按分支隔离）
+    COMPARE_ALGO_IMAGE_NAME = "${BRANCH_NAME}_dredge_ai_compare_algo"
+    AI_GATEWAY_IMAGE_NAME = "${BRANCH_NAME}_dredge_ai_ai_gateway"
+    SENSEVOICE_IMAGE_NAME = "${BRANCH_NAME}_dredge_ai_sensevoice"
+    INSIGHTFACE_IMAGE_NAME = "${BRANCH_NAME}_dredge_ai_insightface"
+    YOLO_IMAGE_NAME = "${BRANCH_NAME}_dredge_ai_yolo"
+    COSYVOICE_IMAGE_NAME = "${BRANCH_NAME}_dredge_ai_cosyvoice"
+    MEETING_BOT_IMAGE_NAME = "${BRANCH_NAME}_dredge_ai_meeting_bot"
+
+    // 远程部署目录（相对于 SSH 用户 home），docker-compose.yaml + .env 上传至此
+    DEPLOY_REMOTE_DIR = "dredge-ai/${BRANCH_NAME}/deploy/python"
+
+    // Docker Compose project 名：三层统一，共享 dredge-ai-net 网络
+    COMPOSE_PROJECT_NAME = "dredge-ai-${BRANCH_NAME}"
+
+    // 运行环境标识：master 为 production，其余为 staging
+    APP_ENV = "${env.BRANCH_NAME == 'master' ? 'production' : 'staging'}"
+
+    // 部署主机域名
+    DEPLOY_HOST = "${env.BRANCH_NAME == 'master' ? 'dredge-ai.bim-ace.com' : 'test-dredge-ai.bim-ace.com'}"
+    DEPLOY_PROTOCOL = 'https'
+  }
+
+  stages {
+    stage('版本配置') {
+      steps {
+        script {
+          // Python 服务无独立版本源，统一取仓库根 package.json 版本
+          def pkg = readFile "${WORKSPACE}/package.json"
+          def matcher = (pkg =~ /"version"\s*:\s*"([^"]+)"/)
+          env.VERSION = matcher[0][1]
+          env.IMAGE_VERSION = "${BRANCH_NAME}-${VERSION}.${BUILD_NUMBER}"
+          env.ENV_FILE = ".env.${env.IMAGE_VERSION}"
+
+          env.COMPARE_ALGO_TAG = "${DOCKER_PUSH_REPOSITORY}${COMPARE_ALGO_IMAGE_NAME}:${env.IMAGE_VERSION}"
+          env.AI_GATEWAY_TAG = "${DOCKER_PUSH_REPOSITORY}${AI_GATEWAY_IMAGE_NAME}:${env.IMAGE_VERSION}"
+          env.SENSEVOICE_TAG = "${DOCKER_PUSH_REPOSITORY}${SENSEVOICE_IMAGE_NAME}:${env.IMAGE_VERSION}"
+          env.INSIGHTFACE_TAG = "${DOCKER_PUSH_REPOSITORY}${INSIGHTFACE_IMAGE_NAME}:${env.IMAGE_VERSION}"
+          env.YOLO_TAG = "${DOCKER_PUSH_REPOSITORY}${YOLO_IMAGE_NAME}:${env.IMAGE_VERSION}"
+          env.COSYVOICE_TAG = "${DOCKER_PUSH_REPOSITORY}${COSYVOICE_IMAGE_NAME}:${env.IMAGE_VERSION}"
+          env.MEETING_BOT_TAG = "${DOCKER_PUSH_REPOSITORY}${MEETING_BOT_IMAGE_NAME}:${env.IMAGE_VERSION}"
+          env.GIT_TAG = "v${env.VERSION}.${BUILD_NUMBER}-${BRANCH_NAME}-python"
+
+          echo "版本: ${env.VERSION} | 镜像版本: ${env.IMAGE_VERSION}"
+          echo "运行环境: ${env.APP_ENV} | 部署主机: ${env.DEPLOY_HOST}"
+          echo "Compare-Algo: ${env.COMPARE_ALGO_TAG}"
+          echo "AI-Gateway:   ${env.AI_GATEWAY_TAG}"
+          echo "SenseVoice:   ${env.SENSEVOICE_TAG}"
+          echo "InsightFace:  ${env.INSIGHTFACE_TAG}"
+          echo "Yolo:         ${env.YOLO_TAG}"
+          echo "CosyVoice:    ${env.COSYVOICE_TAG}"
+          echo "Meeting-Bot:  ${env.MEETING_BOT_TAG}"
+        }
+      }
+    }
+
+    stage('构建镜像') {
+      when {
+        anyOf {
+          expression { env.BRANCH_NAME == 'develop' }
+          expression { env.BRANCH_NAME == 'master' }
+        }
+      }
+      // 全串行构建（模型服务镜像体积大，逐个构建，首个失败即停）
+      stages {
+        stage('构建 compare-algo') {
+          steps {
+            sh """
+            cd ${WORKSPACE}
+            docker build -t ${env.COMPARE_ALGO_TAG} -f services/compare-algo/Dockerfile services/compare-algo
+            """
+          }
+        }
+        stage('构建 ai-gateway') {
+          steps {
+            sh """
+            cd ${WORKSPACE}
+            docker build -t ${env.AI_GATEWAY_TAG} -f services/ai-gateway/Dockerfile services/ai-gateway
+            """
+          }
+        }
+        stage('构建 sensevoice') {
+          steps {
+            sh """
+            cd ${WORKSPACE}
+            docker build -t ${env.SENSEVOICE_TAG} -f services/sensevoice/Dockerfile services/sensevoice
+            """
+          }
+        }
+        stage('构建 insightface') {
+          steps {
+            sh """
+            cd ${WORKSPACE}
+            docker build -t ${env.INSIGHTFACE_TAG} -f services/insightface/Dockerfile services/insightface
+            """
+          }
+        }
+        stage('构建 yolo') {
+          steps {
+            sh """
+            cd ${WORKSPACE}
+            docker build -t ${env.YOLO_TAG} -f services/yolo/Dockerfile services/yolo
+            """
+          }
+        }
+        stage('构建 cosyvoice') {
+          steps {
+            sh """
+            cd ${WORKSPACE}
+            docker build -t ${env.COSYVOICE_TAG} -f services/cosyvoice/Dockerfile services/cosyvoice
+            """
+          }
+        }
+        stage('构建 meeting-bot') {
+          steps {
+            sh """
+            cd ${WORKSPACE}
+            docker build -t ${env.MEETING_BOT_TAG} -f services/meeting-bot/Dockerfile services/meeting-bot
+            """
+          }
+        }
+      }
+    }
+
+    stage('推送镜像') {
+      when {
+        anyOf {
+          expression { env.BRANCH_NAME == 'develop' }
+          expression { env.BRANCH_NAME == 'master' }
+        }
+      }
+      steps {
+        withCredentials([string(credentialsId: 'dockerpush_pwd', variable: 'dockerpush_password')]) {
+          sh "docker push ${env.COMPARE_ALGO_TAG}"
+          sh "docker push ${env.AI_GATEWAY_TAG}"
+          sh "docker push ${env.SENSEVOICE_TAG}"
+          sh "docker push ${env.INSIGHTFACE_TAG}"
+          sh "docker push ${env.YOLO_TAG}"
+          sh "docker push ${env.COSYVOICE_TAG}"
+          sh "docker push ${env.MEETING_BOT_TAG}"
+        }
+      }
+    }
+
+    stage('部署') {
+      when {
+        anyOf {
+          expression { env.BRANCH_NAME == 'develop' }
+          expression { env.BRANCH_NAME == 'master' }
+        }
+      }
+      steps {
+        withCredentials([
+          string(credentialsId: 'MEETING_BOT_KEY', variable: 'MEETING_BOT_KEY'),
+          string(credentialsId: 'AI_GATEWAY_API_TOKEN', variable: 'AI_GATEWAY_API_TOKEN'),
+          string(credentialsId: 'AI_GATEWAY_INGEST_TOKEN', variable: 'AI_GATEWAY_INGEST_TOKEN'),
+          string(credentialsId: 'LLM_CONFIGS', variable: 'LLM_CONFIGS')
+        ]) {
+          sshPublisher(publishers: [
+            sshPublisherDesc(
+              configName: "${SSH_CONFIG_NAME}",
+              transfers: [
+                sshTransfer(
+                  cleanRemote: false,
+                  excludes: '',
+                  execCommand: """
+                set -e
+                # 部署目录（与 sourceFiles 上传的 remoteDirectory 对应，位于 SSH 用户 home 下）
+                DEPLOY_DIR="\$HOME/${DEPLOY_REMOTE_DIR}"
+                mkdir -p "\$DEPLOY_DIR"
+                cd "\$DEPLOY_DIR"
+
+                # 1. 写入带版本号的 .env 文件
+                #    所有 \${VAR} 由 Jenkins/Groovy 在发送前展开为实际值；
+                #    <<'ENV_EOF' 单引号 heredoc 防止远程 shell 二次展开（保护 JSON 特殊字符）
+                cat > "${ENV_FILE}" <<'ENV_EOF'
+# 镜像名
+COMPARE_ALGO_IMAGE=${COMPARE_ALGO_TAG}
+AI_GATEWAY_IMAGE=${AI_GATEWAY_TAG}
+SENSEVOICE_IMAGE=${SENSEVOICE_TAG}
+INSIGHTFACE_IMAGE=${INSIGHTFACE_TAG}
+YOLO_IMAGE=${YOLO_TAG}
+COSYVOICE_IMAGE=${COSYVOICE_TAG}
+MEETING_BOT_IMAGE=${MEETING_BOT_TAG}
+# ai-gateway（LLM_CONFIGS 为单行 JSON 数组，compose 按字面解析）
+AI_GATEWAY_API_TOKEN=${AI_GATEWAY_API_TOKEN}
+AI_GATEWAY_INGEST_TOKEN=${AI_GATEWAY_INGEST_TOKEN}
+LLM_CONFIGS=${LLM_CONFIGS}
+# meeting-bot 内部校验令牌
+MEETING_BOT_KEY=${MEETING_BOT_KEY}
+ENV_EOF
+
+                # 2. MODEL_WEIGHTS_DIR 单独追加：compose env 文件不展开 ~，
+                #    此 heredoc 故意不带引号，由远程 shell 展开 \$HOME 为绝对路径
+                cat >> "${ENV_FILE}" <<ENV_EOF
+MODEL_WEIGHTS_DIR=\$HOME/dredge-ai/model-weights
+ENV_EOF
+
+                # 3. 停止并移除本层旧容器（首次部署时忽略错误；共享网络的
+                #    移除可能因其他层容器在线而报错，|| true 吞掉不影响本层重启）
+                docker compose -p ${COMPOSE_PROJECT_NAME} -f docker-compose.yaml --env-file "${ENV_FILE}" down || true
+
+                # 4. 启动本层服务
+                docker compose -p ${COMPOSE_PROJECT_NAME} -f docker-compose.yaml --env-file "${ENV_FILE}" up -d
+
+                # 5. 清理悬空镜像
+                docker image prune -f || true
+
+                echo "部署完成：${env.IMAGE_VERSION}"
+                """,
+                execTimeout: 180000,
+                flatten: false,
+                makeEmptyDirs: false,
+                noDefaultExcludes: false,
+                patternSeparator: '[, ]+',
+                remoteDirectory: "${DEPLOY_REMOTE_DIR}",
+                remoteDirectorySDF: false,
+                // 上传 Aspire 生成的 docker-compose.yaml，去除路径前缀使文件落在部署目录根
+                removePrefix: '.cicd/aspire-output/python/',
+                sourceFiles: '.cicd/aspire-output/python/docker-compose.yaml')],
+            usePromotionTimestamp: false,
+            useWorkspaceInPromotion: false,
+            verbose: true)])
+        }
+      }
+    }
+
+    stage('打Git标签') {
+      when {
+        anyOf {
+          expression { env.BRANCH_NAME == 'develop' }
+          expression { env.BRANCH_NAME == 'master' }
+        }
+      }
+      steps {
+        script {
+          echo "开始创建并推送Git标签：${env.GIT_TAG}"
+          sh """
+          echo "创建Git标签：${env.GIT_TAG}"
+          git tag -a ${env.GIT_TAG} -m "Jenkins Build: ${BUILD_NUMBER} - ${env.GIT_TAG}"
+          """
+        }
+        gitPush(gitScm: scm, targetBranch: env.BRANCH_NAME, targetRepo: 'origin')
+      }
+    }
+  }
+
+  post {
+    always {
+      script {
+        withCredentials([string(credentialsId: 'qyweixin-notification-key', variable: 'WECHAT_KEY')]) {
+          qyWechatNotification mentionedId: '',
+            mentionedMobile: '',
+            webhookUrl: "https://qyapi.weixin.qq.com/cgi-bin/webhook/send?key=${WECHAT_KEY}"
+        }
+      }
+    }
+    success {
+      echo '构建成功'
+    }
+    failure {
+      echo '构建失败'
+    }
+  }
+}

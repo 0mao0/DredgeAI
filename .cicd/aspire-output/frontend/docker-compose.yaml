@@ -1,0 +1,18 @@
+services:
+  user-web:
+    image: "${USER_WEB_IMAGE}"
+    ports:
+      - "${USER_WEB_PORT}:80"
+    networks:
+      - "dredge-ai-net"
+    restart: "unless-stopped"
+  admin-web:
+    image: "${ADMIN_WEB_IMAGE}"
+    ports:
+      - "${ADMIN_WEB_PORT}:80"
+    networks:
+      - "dredge-ai-net"
+    restart: "unless-stopped"
+networks:
+  dredge-ai-net:
+    driver: "bridge"

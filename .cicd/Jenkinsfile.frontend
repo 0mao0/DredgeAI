@@ -1,0 +1,227 @@
+// ============================================================
+// Jenkinsfile.frontend — dredge-ai 前端层 CI/CD Pipeline
+//
+// 服务：user-web（用户端）+ admin-web（管理端），共 2 个镜像。
+// 参照 mucktarcing/Jenkinsfile 流程：版本配置 → 构建镜像 → 推送镜像 → 部署 → 打Git标签。
+//
+// 构建上下文为仓库根（两个前端 Dockerfile 头部注释明确要求：pnpm workspace +
+// vendor 子模块 + @shared 源码别名均依赖仓库根）；前置：vendor 子模块已检出。
+//
+// 部署产物：.cicd/aspire-output/frontend/docker-compose.yaml（pnpm publish-frontend 生成，已提交仓库）。
+// 三层（frontend/python/dotnet）共用同一 compose project（dredge-ai-<branch>）：
+// 三份 compose 的 network 名均硬编码 dredge-ai-net，python/dotnet 服务靠同一网络
+// 互访；各层 down/up 只影响本层 compose 文件中列出的服务。
+// Aspire Dashboard 仅由 dotnet 层部署（frontend/python 以 -NoDashboard 发布）。
+//
+// 域名访问规划（反向代理由服务器侧配置）：
+//   正式 dredge-ai.bim-ace.com        测试 test-dredge-ai.bim-ace.com
+//   user-web / admin-web 无宿主机域名子路径约定，按端口直连（50251/50252）
+// ============================================================
+
+pipeline {
+  agent any
+  options {
+    disableConcurrentBuilds abortPrevious: true
+    timeout(time: 60, unit: 'MINUTES')
+  }
+  environment {
+    SSH_CONFIG_NAME = "${env.BRANCH_NAME == 'develop' ? 'test-server-ssh' : 'datalink-cloud'}"
+    ROOT = "${WORKSPACE}"
+
+    DOCKER_PUSH_REPOSITORY = 'repository.bim-ace.com/repository/docker-hosted/'
+    DOCKER_BUILDKIT = '1'
+
+    // 镜像名（按分支隔离）
+    USER_WEB_IMAGE_NAME = "${BRANCH_NAME}_dredge_ai_user_web"
+    ADMIN_WEB_IMAGE_NAME = "${BRANCH_NAME}_dredge_ai_admin_web"
+
+    // 服务宿主机端口（容器内 nginx 80）
+    // 注意：aspire 生成的 .env 模板不含这两项，但 compose 引用，必须在此注入
+    USER_WEB_PORT = 50251
+    ADMIN_WEB_PORT = 50252
+
+    // 远程部署目录（相对于 SSH 用户 home），docker-compose.yaml + .env 上传至此
+    // 三层各占独立子目录，避免同名 docker-compose.yaml 互相覆盖
+    DEPLOY_REMOTE_DIR = "dredge-ai/${BRANCH_NAME}/deploy/frontend"
+
+    // Docker Compose project 名：三层统一，共享 dredge-ai-net 网络
+    COMPOSE_PROJECT_NAME = "dredge-ai-${BRANCH_NAME}"
+
+    // 运行环境标识：master 为 production，其余为 staging
+    APP_ENV = "${env.BRANCH_NAME == 'master' ? 'production' : 'staging'}"
+
+    // 部署主机域名
+    // 正式：dredge-ai.bim-ace.com  测试：test-dredge-ai.bim-ace.com
+    DEPLOY_HOST = "${env.BRANCH_NAME == 'master' ? 'dredge-ai.bim-ace.com' : 'test-dredge-ai.bim-ace.com'}"
+    DEPLOY_PROTOCOL = 'https'
+  }
+
+  stages {
+    stage('版本配置') {
+      steps {
+        script {
+          // 从仓库根 package.json 读取前端版本（"version": "0.2.1"）
+          def pkg = readFile "${WORKSPACE}/package.json"
+          def matcher = (pkg =~ /"version"\s*:\s*"([^"]+)"/)
+          env.VERSION = matcher[0][1]
+          env.IMAGE_VERSION = "${BRANCH_NAME}-${VERSION}.${BUILD_NUMBER}"
+          env.ENV_FILE = ".env.${env.IMAGE_VERSION}"
+
+          env.USER_WEB_TAG = "${DOCKER_PUSH_REPOSITORY}${USER_WEB_IMAGE_NAME}:${env.IMAGE_VERSION}"
+          env.ADMIN_WEB_TAG = "${DOCKER_PUSH_REPOSITORY}${ADMIN_WEB_IMAGE_NAME}:${env.IMAGE_VERSION}"
+          // tier 后缀：三份 pipeline 同仓库构建，避免 tag 冲突
+          env.GIT_TAG = "v${env.VERSION}.${BUILD_NUMBER}-${BRANCH_NAME}-frontend"
+
+          echo "版本: ${env.VERSION} | 镜像版本: ${env.IMAGE_VERSION}"
+          echo "运行环境: ${env.APP_ENV} | 部署主机: ${env.DEPLOY_HOST}"
+          echo "User-Web:  ${env.USER_WEB_TAG}"
+          echo "Admin-Web: ${env.ADMIN_WEB_TAG}"
+        }
+      }
+    }
+
+    stage('构建镜像') {
+      when {
+        anyOf {
+          expression { env.BRANCH_NAME == 'develop' }
+          expression { env.BRANCH_NAME == 'master' }
+        }
+      }
+      // 全串行构建（内存峰值 = 1 个构建，首个失败即停）
+      stages {
+        stage('构建 user-web') {
+          steps {
+            sh """
+            cd ${WORKSPACE}
+            docker build -t ${env.USER_WEB_TAG} -f user-web/Dockerfile .
+            """
+          }
+        }
+        stage('构建 admin-web') {
+          steps {
+            sh """
+            cd ${WORKSPACE}
+            docker build -t ${env.ADMIN_WEB_TAG} -f admin-web/Dockerfile .
+            """
+          }
+        }
+      }
+    }
+
+    stage('推送镜像') {
+      when {
+        anyOf {
+          expression { env.BRANCH_NAME == 'develop' }
+          expression { env.BRANCH_NAME == 'master' }
+        }
+      }
+      steps {
+        withCredentials([string(credentialsId: 'dockerpush_pwd', variable: 'dockerpush_password')]) {
+          sh "docker push ${env.USER_WEB_TAG}"
+          sh "docker push ${env.ADMIN_WEB_TAG}"
+        }
+      }
+    }
+
+    stage('部署') {
+      when {
+        anyOf {
+          expression { env.BRANCH_NAME == 'develop' }
+          expression { env.BRANCH_NAME == 'master' }
+        }
+      }
+      steps {
+        sshPublisher(publishers: [
+          sshPublisherDesc(
+            configName: "${SSH_CONFIG_NAME}",
+            transfers: [
+              sshTransfer(
+                cleanRemote: false,
+                excludes: '',
+                execCommand: """
+              set -e
+              # 部署目录（与 sourceFiles 上传的 remoteDirectory 对应，位于 SSH 用户 home 下）
+              DEPLOY_DIR="\$HOME/${DEPLOY_REMOTE_DIR}"
+              mkdir -p "\$DEPLOY_DIR"
+              cd "\$DEPLOY_DIR"
+
+              # 1. 写入带版本号的 .env 文件
+              #    所有 \${VAR} 由 Jenkins/Groovy 在发送前展开为实际值；
+              #    <<'ENV_EOF' 单引号 heredoc 防止远程 shell 二次展开
+              #    注意：必须先生成 .env 再执行 docker compose，否则 yaml 中的 \${VAR}
+              #    在 down/up 时无法解析，全部回退为空字符串触发 warning
+              cat > "${ENV_FILE}" <<'ENV_EOF'
+# 镜像名
+USER_WEB_IMAGE=${USER_WEB_TAG}
+ADMIN_WEB_IMAGE=${ADMIN_WEB_TAG}
+# 服务宿主机端口
+USER_WEB_PORT=${USER_WEB_PORT}
+ADMIN_WEB_PORT=${ADMIN_WEB_PORT}
+ENV_EOF
+
+              # 2. 停止并移除本层旧容器（首次部署时忽略错误；共享网络的
+              #    移除可能因其他层容器在线而报错，|| true 吞掉不影响本层重启）
+              docker compose -p ${COMPOSE_PROJECT_NAME} -f docker-compose.yaml --env-file "${ENV_FILE}" down || true
+
+              # 3. 启动本层服务
+              docker compose -p ${COMPOSE_PROJECT_NAME} -f docker-compose.yaml --env-file "${ENV_FILE}" up -d
+
+              # 4. 清理悬空镜像
+              docker image prune -f || true
+
+              echo "部署完成：${env.IMAGE_VERSION}"
+              """,
+              execTimeout: 180000,
+              flatten: false,
+              makeEmptyDirs: false,
+              noDefaultExcludes: false,
+              patternSeparator: '[, ]+',
+              remoteDirectory: "${DEPLOY_REMOTE_DIR}",
+              remoteDirectorySDF: false,
+              // 上传 Aspire 生成的 docker-compose.yaml，去除路径前缀使文件落在部署目录根
+              removePrefix: '.cicd/aspire-output/frontend/',
+              sourceFiles: '.cicd/aspire-output/frontend/docker-compose.yaml')],
+          usePromotionTimestamp: false,
+          useWorkspaceInPromotion: false,
+          verbose: true)])
+      }
+    }
+
+    stage('打Git标签') {
+      when {
+        anyOf {
+          expression { env.BRANCH_NAME == 'develop' }
+          expression { env.BRANCH_NAME == 'master' }
+        }
+      }
+      steps {
+        script {
+          echo "开始创建并推送Git标签：${env.GIT_TAG}"
+          sh """
+          echo "创建Git标签：${env.GIT_TAG}"
+          git tag -a ${env.GIT_TAG} -m "Jenkins Build: ${BUILD_NUMBER} - ${env.GIT_TAG}"
+          """
+        }
+        gitPush(gitScm: scm, targetBranch: env.BRANCH_NAME, targetRepo: 'origin')
+      }
+    }
+  }
+
+  post {
+    always {
+      script {
+        withCredentials([string(credentialsId: 'qyweixin-notification-key', variable: 'WECHAT_KEY')]) {
+          qyWechatNotification mentionedId: '',
+            mentionedMobile: '',
+            webhookUrl: "https://qyapi.weixin.qq.com/cgi-bin/webhook/send?key=${WECHAT_KEY}"
+        }
+      }
+    }
+    success {
+      echo '构建成功'
+    }
+    failure {
+      echo '构建失败'
+    }
+  }
+}

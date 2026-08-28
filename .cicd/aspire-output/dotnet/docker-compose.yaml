@@ -1,0 +1,149 @@
+services:
+  docker-compose-dashboard:
+    image: "mcr.microsoft.com/dotnet/nightly/aspire-dashboard:13.5"
+    container_name: "dashboard"
+    environment:
+      Dashboard__Frontend__BrowserToken: "${DASHBOARD_BROWSER_TOKEN}"
+    ports:
+      - "51329:18888"
+    expose:
+      - "18889"
+      - "18890"
+    networks:
+      - "dredge-ai-net"
+    restart: "always"
+  auth-service:
+    image: "${AUTH_SERVICE_IMAGE}"
+    environment:
+      OTEL_DOTNET_EXPERIMENTAL_OTLP_RETRY: "in_memory"
+      ASPNETCORE_FORWARDEDHEADERS_ENABLED: "true"
+      HTTP_PORTS: "8080"
+      App__CorsOrigins: "${CORS_ORIGINS}"
+      OpenIddict__IssuerUri: "${OPENIDDICT_ISSUER_URI}"
+      OpenIddict__Applications__DredgeAI_Web__RootUrl: "${OPENIDDICT_ROOT_URL}"
+      OpenIddict__Applications__DredgeAI_App__RootUrl: "${OPENIDDICT_ROOT_URL}"
+      OpenIddict__Applications__DredgeAI_Swagger__RootUrl: "${OPENIDDICT_ROOT_URL}"
+      OTEL_EXPORTER_OTLP_ENDPOINT: "http://docker-compose-dashboard:18889"
+      OTEL_EXPORTER_OTLP_PROTOCOL: "grpc"
+      OTEL_SERVICE_NAME: "auth-service"
+    expose:
+      - "8080"
+    networks:
+      - "dredge-ai-net"
+    restart: "unless-stopped"
+    healthcheck:
+      test:
+        - "CMD-SHELL"
+        - "curl -f http://localhost:8080/health || exit 1"
+      interval: "30s"
+      timeout: "5s"
+      retries: 3
+      start_period: "40s"
+  base-service:
+    image: "${BASE_SERVICE_IMAGE}"
+    environment:
+      OTEL_DOTNET_EXPERIMENTAL_OTLP_RETRY: "in_memory"
+      ASPNETCORE_FORWARDEDHEADERS_ENABLED: "true"
+      HTTP_PORTS: "8080"
+      App__CorsOrigins: "${CORS_ORIGINS}"
+      AuthServer__Authority: "http://auth-service:8080"
+      App__FileWebSiteUrl: "${BASE_FILE_WEB_SITE_URL}"
+      Minio__EndPoint: "${MINIO_ENDPOINT}"
+      Minio__BucketName: "${MINIO_BUCKET}"
+      Minio__AccessKey: "${MINIO_ACCESS_KEY}"
+      Minio__SecretKey: "${MINIO_SECRET_KEY}"
+      OTEL_EXPORTER_OTLP_ENDPOINT: "http://docker-compose-dashboard:18889"
+      OTEL_EXPORTER_OTLP_PROTOCOL: "grpc"
+      OTEL_SERVICE_NAME: "base-service"
+    expose:
+      - "8080"
+    networks:
+      - "dredge-ai-net"
+    restart: "unless-stopped"
+    healthcheck:
+      test:
+        - "CMD-SHELL"
+        - "curl -f http://localhost:8080/health || exit 1"
+      interval: "30s"
+      timeout: "5s"
+      retries: 3
+      start_period: "40s"
+  bidcompare-service:
+    image: "${BIDCOMPARE_SERVICE_IMAGE}"
+    environment:
+      OTEL_DOTNET_EXPERIMENTAL_OTLP_RETRY: "in_memory"
+      ASPNETCORE_FORWARDEDHEADERS_ENABLED: "true"
+      HTTP_PORTS: "8080"
+      AUTH_SERVICE_HTTP: "http://auth-service:${AUTH_SERVICE_PORT}"
+      services__auth-service__http__0: "http://auth-service:${AUTH_SERVICE_PORT}"
+      AUTH_SERVICE_HTTPS: "https://auth-service:${AUTH_SERVICE_PORT}"
+      App__CorsOrigins: "${CORS_ORIGINS}"
+      AuthServer__Authority: "http://auth-service:8080"
+      AlgoService__BaseUrl: "http://compare-algo:8100"
+      MeetingBot__BaseUrl: "http://meeting-bot:8101"
+      MeetingBot__Key: "${MEETING_BOT_KEY}"
+      AiGateway__BaseUrl: "http://ai-gateway:8200"
+      AiGateway__ApiToken: "${AI_GATEWAY_API_TOKEN}"
+      AiGateway__IngestToken: "${AI_GATEWAY_INGEST_TOKEN}"
+      OTEL_EXPORTER_OTLP_ENDPOINT: "http://docker-compose-dashboard:18889"
+      OTEL_EXPORTER_OTLP_PROTOCOL: "grpc"
+      OTEL_SERVICE_NAME: "bidcompare-service"
+    expose:
+      - "8080"
+    depends_on:
+      auth-service:
+        condition: "service_started"
+    networks:
+      - "dredge-ai-net"
+    restart: "unless-stopped"
+    healthcheck:
+      test:
+        - "CMD-SHELL"
+        - "curl -f http://localhost:8080/health || exit 1"
+      interval: "30s"
+      timeout: "5s"
+      retries: 3
+      start_period: "40s"
+  gateway-service:
+    image: "${GATEWAY_SERVICE_IMAGE}"
+    environment:
+      OTEL_DOTNET_EXPERIMENTAL_OTLP_RETRY: "in_memory"
+      ASPNETCORE_FORWARDEDHEADERS_ENABLED: "true"
+      HTTP_PORTS: "8080"
+      AUTH_SERVICE_HTTP: "http://auth-service:${AUTH_SERVICE_PORT}"
+      services__auth-service__http__0: "http://auth-service:${AUTH_SERVICE_PORT}"
+      AUTH_SERVICE_HTTPS: "https://auth-service:${AUTH_SERVICE_PORT}"
+      BASE_SERVICE_HTTP: "http://base-service:${BASE_SERVICE_PORT}"
+      services__base-service__http__0: "http://base-service:${BASE_SERVICE_PORT}"
+      BASE_SERVICE_HTTPS: "https://base-service:${BASE_SERVICE_PORT}"
+      BIDCOMPARE_SERVICE_HTTP: "http://bidcompare-service:${BIDCOMPARE_SERVICE_PORT}"
+      services__bidcompare-service__http__0: "http://bidcompare-service:${BIDCOMPARE_SERVICE_PORT}"
+      BIDCOMPARE_SERVICE_HTTPS: "https://bidcompare-service:${BIDCOMPARE_SERVICE_PORT}"
+      App__CorsOrigins: "${CORS_ORIGINS}"
+      AuthServer__Authority: "http://auth-service:8080"
+      OTEL_EXPORTER_OTLP_ENDPOINT: "http://docker-compose-dashboard:18889"
+      OTEL_EXPORTER_OTLP_PROTOCOL: "grpc"
+      OTEL_SERVICE_NAME: "gateway-service"
+    ports:
+      - "${GATEWAY_SERVICE_PORT}:8080"
+    depends_on:
+      auth-service:
+        condition: "service_started"
+      base-service:
+        condition: "service_started"
+      bidcompare-service:
+        condition: "service_started"
+    networks:
+      - "dredge-ai-net"
+    restart: "unless-stopped"
+    healthcheck:
+      test:
+        - "CMD-SHELL"
+        - "curl -f http://localhost:8080/health || exit 1"
+      interval: "30s"
+      timeout: "5s"
+      retries: 3
+      start_period: "40s"
+networks:
+  dredge-ai-net:
+    driver: "bridge"

@@ -35,6 +35,13 @@ public static class BidCompareServiceBuilder
         ServiceParameters p) =>
         bidCompareSvc.WithCommonBackendPublishEnvironment(p)
                .WithEnvironment("AuthServer__Authority", PublishCommonExtensions.AuthServerInternalAuthority)
+               // Python 服务：compose 网络内按服务名直连（.NET 配置优先级覆盖 appsettings.json 的 localhost 值）
+               .WithEnvironment("AlgoService__BaseUrl", "http://compare-algo:8100")
+               .WithEnvironment("MeetingBot__BaseUrl", "http://meeting-bot:8101")
+               .WithEnvironment("MeetingBot__Key", p.MeetingBotKey)
+               .WithEnvironment("AiGateway__BaseUrl", "http://ai-gateway:8200")
+               .WithEnvironment("AiGateway__ApiToken", p.AiGatewayApiToken)
+               .WithEnvironment("AiGateway__IngestToken", p.AiGatewayIngestToken)
                .PublishAsDockerComposeService((_, service) =>
                {
                    service.Restart = "unless-stopped";

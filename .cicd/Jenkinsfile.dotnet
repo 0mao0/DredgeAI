@@ -1,0 +1,302 @@
+// ============================================================
+// Jenkinsfile.dotnet — dredge-ai .NET 后端层 CI/CD Pipeline
+//
+// 服务（共 4 个镜像，ABP/.NET 10，业务编排/权限/持久化/对外 API）：
+//   auth-service        OpenIddict + Identity，签发 JWT（无宿主机端口，compose 网络内 expose 8080）
+//   base-service        基础服务/文件存储（Minio）（同上）
+//   bidcompare-service  比标业务主服务，编排 compare-algo/ai-gateway/meeting-bot（同上）
+//   gateway-service     统一入口网关（宿主机 ${GATEWAY_SERVICE_PORT} → 容器 8080）
+//
+// 参照 mucktarcing/Jenkinsfile 流程：版本配置 → 构建镜像 → 推送镜像 → 部署 → 打Git标签。
+// 构建上下文为 backend/（各 Host Dockerfile 内 COPY 均为 backend 相对路径）。
+//
+// 部署产物：.cicd/aspire-output/dotnet/docker-compose.yaml（pnpm publish-dotnet 生成，已提交仓库）。
+// 三层（frontend/python/dotnet）共用同一 compose project（dredge-ai-<branch>），
+// 共享硬编码网络 dredge-ai-net（bidcompare→compare-algo/ai-gateway/meeting-bot 依赖此）。
+//
+// 敏感配置通过 Jenkins 凭据注入（Secret text）：
+//   MINIO_ACCESS_KEY / MINIO_SECRET_KEY   Minio 对象存储密钥
+//   DASHBOARD_BROWSER_TOKEN               Aspire Dashboard 固定登录 token
+//   MEETING_BOT_KEY / AI_GATEWAY_API_TOKEN / AI_GATEWAY_INGEST_TOKEN
+//     — bidcompare 调用 python 层服务的令牌（需与 python 层凭据同值）
+//
+// 域名访问规划（反向代理由服务器侧配置，照搬 mucktarcing 子路径规则）：
+//   正式 dredge-ai.bim-ace.com        测试 test-dredge-ai.bim-ace.com
+//     /admin   → admin-web（登录入口，OPENIDDICT_ROOT_URL）
+//     /gateway → gateway-service（API 统一入口 / OIDC issuer / 文件签名站点前缀）
+// ============================================================
+
+pipeline {
+  agent any
+  options {
+    disableConcurrentBuilds abortPrevious: true
+    timeout(time: 60, unit: 'MINUTES')
+  }
+  environment {
+    SSH_CONFIG_NAME = "${env.BRANCH_NAME == 'develop' ? 'test-server-ssh' : 'datalink-cloud'}"
+    ROOT = "${WORKSPACE}"
+    BACKEND_ROOT = "${WORKSPACE}/backend"
+
+    DOCKER_PUSH_REPOSITORY = 'repository.bim-ace.com/repository/docker-hosted/'
+    DOCKER_BUILDKIT = '1'
+
+    // 镜像名（按分支隔离）
+    AUTH_IMAGE_NAME = "${BRANCH_NAME}_dredge_ai_auth"
+    BASE_IMAGE_NAME = "${BRANCH_NAME}_dredge_ai_base"
+    BIDCOMPARE_IMAGE_NAME = "${BRANCH_NAME}_dredge_ai_bidcompare"
+    GATEWAY_IMAGE_NAME = "${BRANCH_NAME}_dredge_ai_gateway"
+
+    // gateway 宿主机端口（其余 3 个后端无宿主机端口，仅 compose 网络内 expose 8080）
+    GATEWAY_SERVICE_PORT = 50250
+
+    // 远程部署目录（相对于 SSH 用户 home），docker-compose.yaml + .env 上传至此
+    DEPLOY_REMOTE_DIR = "dredge-ai/${BRANCH_NAME}/deploy/dotnet"
+
+    // Docker Compose project 名：三层统一，共享 dredge-ai-net 网络
+    COMPOSE_PROJECT_NAME = "dredge-ai-${BRANCH_NAME}"
+
+    // 运行环境标识：master 为 production，其余为 staging
+    APP_ENV = "${env.BRANCH_NAME == 'master' ? 'production' : 'staging'}"
+
+    // 部署主机域名
+    DEPLOY_HOST = "${env.BRANCH_NAME == 'master' ? 'dredge-ai.bim-ace.com' : 'test-dredge-ai.bim-ace.com'}"
+    DEPLOY_PROTOCOL = 'https'
+
+    // 文件签名 URL 站点前缀（base-service App:FileWebSiteUrl）：经边缘反代 → gateway
+    BASE_FILE_WEB_SITE_URL = "${DEPLOY_PROTOCOL}://${DEPLOY_HOST}/gateway"
+    // OpenIddict 客户端 RootUrl 指向管理后台登录入口 /admin
+    OPENIDDICT_ROOT_URL = "${DEPLOY_PROTOCOL}://${DEPLOY_HOST}/admin"
+    // OIDC issuer 固定值 = 网关公网入口（前端经网关登录时 issuer 校验一致）
+    OPENIDDICT_ISSUER_URI = "${DEPLOY_PROTOCOL}://${DEPLOY_HOST}/gateway"
+    // CORS 允许的前端源（user/admin 共用同一域名，仅设一个源）
+    CORS_ORIGINS = "${DEPLOY_PROTOCOL}://${DEPLOY_HOST}"
+
+    // Minio 对象存储（endpoint/bucket 非敏感；accessKey/secretKey 通过凭据注入）
+    MINIO_ENDPOINT = 'proj.bim-ace.com:10400'
+    MINIO_BUCKET = "${env.BRANCH_NAME == 'master' ? 'dredge-ai-prod' : 'dredge-ai-dev'}"
+  }
+
+  stages {
+    stage('版本配置') {
+      steps {
+        script {
+          // 从 backend/common.props 读取 .NET 版本（<Version>0.1.0</Version>）
+          def commonProps = readFile "${BACKEND_ROOT}/common.props"
+          def matcher = (commonProps =~ /<Version>([^<]+)<\/Version>/)
+          env.VERSION = matcher[0][1]
+          env.IMAGE_VERSION = "${BRANCH_NAME}-${VERSION}.${BUILD_NUMBER}"
+          env.ENV_FILE = ".env.${env.IMAGE_VERSION}"
+
+          env.AUTH_TAG = "${DOCKER_PUSH_REPOSITORY}${AUTH_IMAGE_NAME}:${env.IMAGE_VERSION}"
+          env.BASE_TAG = "${DOCKER_PUSH_REPOSITORY}${BASE_IMAGE_NAME}:${env.IMAGE_VERSION}"
+          env.BIDCOMPARE_TAG = "${DOCKER_PUSH_REPOSITORY}${BIDCOMPARE_IMAGE_NAME}:${env.IMAGE_VERSION}"
+          env.GATEWAY_TAG = "${DOCKER_PUSH_REPOSITORY}${GATEWAY_IMAGE_NAME}:${env.IMAGE_VERSION}"
+          env.GIT_TAG = "v${env.VERSION}.${BUILD_NUMBER}-${BRANCH_NAME}-dotnet"
+
+          echo "版本: ${env.VERSION} | 镜像版本: ${env.IMAGE_VERSION}"
+          echo "运行环境: ${env.APP_ENV} | 部署主机: ${env.DEPLOY_HOST}"
+          echo "Auth:        ${env.AUTH_TAG}"
+          echo "Base:        ${env.BASE_TAG}"
+          echo "BidCompare:  ${env.BIDCOMPARE_TAG}"
+          echo "Gateway:     ${env.GATEWAY_TAG}"
+        }
+      }
+    }
+
+    stage('构建镜像') {
+      when {
+        anyOf {
+          expression { env.BRANCH_NAME == 'develop' }
+          expression { env.BRANCH_NAME == 'master' }
+        }
+      }
+      // 全串行构建（首个失败即停）
+      stages {
+        stage('构建 auth-service') {
+          steps {
+            sh """
+            cd ${WORKSPACE}
+            docker build -t ${env.AUTH_TAG} -f backend/Auth/src/DredgeAI.Auth.Host/Dockerfile backend
+            """
+          }
+        }
+        stage('构建 base-service') {
+          steps {
+            sh """
+            cd ${WORKSPACE}
+            docker build -t ${env.BASE_TAG} -f backend/Base/src/DredgeAI.Base.Host/Dockerfile backend
+            """
+          }
+        }
+        stage('构建 bidcompare-service') {
+          steps {
+            sh """
+            cd ${WORKSPACE}
+            docker build -t ${env.BIDCOMPARE_TAG} -f backend/BidCompare/src/DredgeAI.BidCompare.Host/Dockerfile backend
+            """
+          }
+        }
+        stage('构建 gateway-service') {
+          steps {
+            sh """
+            cd ${WORKSPACE}
+            docker build -t ${env.GATEWAY_TAG} -f backend/Gateway/DredgeAI.Gateway.Host/Dockerfile backend
+            """
+          }
+        }
+      }
+    }
+
+    stage('推送镜像') {
+      when {
+        anyOf {
+          expression { env.BRANCH_NAME == 'develop' }
+          expression { env.BRANCH_NAME == 'master' }
+        }
+      }
+      steps {
+        withCredentials([string(credentialsId: 'dockerpush_pwd', variable: 'dockerpush_password')]) {
+          sh "docker push ${env.AUTH_TAG}"
+          sh "docker push ${env.BASE_TAG}"
+          sh "docker push ${env.BIDCOMPARE_TAG}"
+          sh "docker push ${env.GATEWAY_TAG}"
+        }
+      }
+    }
+
+    stage('部署') {
+      when {
+        anyOf {
+          expression { env.BRANCH_NAME == 'develop' }
+          expression { env.BRANCH_NAME == 'master' }
+        }
+      }
+      steps {
+        // 敏感配置通过 Jenkins 凭据注入（Secret text 类型）：
+        //   MINIO_ACCESS_KEY / MINIO_SECRET_KEY / DASHBOARD_BROWSER_TOKEN
+        //   MEETING_BOT_KEY / AI_GATEWAY_API_TOKEN / AI_GATEWAY_INGEST_TOKEN（与 python 层同值）
+        // 注：若 develop/master 需不同值，请用 Jenkins 文件夹/分支作用域凭据区分
+        withCredentials([
+          string(credentialsId: 'MINIO_ACCESS_KEY', variable: 'MINIO_ACCESS_KEY'),
+          string(credentialsId: 'MINIO_SECRET_KEY', variable: 'MINIO_SECRET_KEY'),
+          string(credentialsId: 'DASHBOARD_BROWSER_TOKEN', variable: 'DASHBOARD_BROWSER_TOKEN'),
+          string(credentialsId: 'MEETING_BOT_KEY', variable: 'MEETING_BOT_KEY'),
+          string(credentialsId: 'AI_GATEWAY_API_TOKEN', variable: 'AI_GATEWAY_API_TOKEN'),
+          string(credentialsId: 'AI_GATEWAY_INGEST_TOKEN', variable: 'AI_GATEWAY_INGEST_TOKEN')
+        ]) {
+          sshPublisher(publishers: [
+            sshPublisherDesc(
+              configName: "${SSH_CONFIG_NAME}",
+              transfers: [
+                sshTransfer(
+                  cleanRemote: false,
+                  excludes: '',
+                  execCommand: """
+                set -e
+                # 部署目录（与 sourceFiles 上传的 remoteDirectory 对应，位于 SSH 用户 home 下）
+                DEPLOY_DIR="\$HOME/${DEPLOY_REMOTE_DIR}"
+                mkdir -p "\$DEPLOY_DIR"
+                cd "\$DEPLOY_DIR"
+
+                # 1. 写入带版本号的 .env 文件
+                #    所有 \${VAR} 由 Jenkins/Groovy 在发送前展开为实际值；
+                #    <<'ENV_EOF' 单引号 heredoc 防止远程 shell 二次展开（保护连接串中的特殊字符）
+                #    注意：必须先生成 .env 再执行 docker compose，否则 yaml 中的 \${VAR}
+                #    在 down/up 时无法解析，全部回退为空字符串触发 warning
+                cat > "${ENV_FILE}" <<'ENV_EOF'
+# 镜像名
+AUTH_SERVICE_IMAGE=${AUTH_TAG}
+BASE_SERVICE_IMAGE=${BASE_TAG}
+BIDCOMPARE_SERVICE_IMAGE=${BIDCOMPARE_TAG}
+GATEWAY_SERVICE_IMAGE=${GATEWAY_TAG}
+# 服务端口 — gateway 有宿主机端口映射；其余 3 个为 compose 网络内 Service Discovery 解析端口（容器均监听 8080）
+AUTH_SERVICE_PORT=8080
+BASE_SERVICE_PORT=8080
+BIDCOMPARE_SERVICE_PORT=8080
+GATEWAY_SERVICE_PORT=${GATEWAY_SERVICE_PORT}
+# 服务 URL
+BASE_FILE_WEB_SITE_URL=${BASE_FILE_WEB_SITE_URL}
+OPENIDDICT_ROOT_URL=${OPENIDDICT_ROOT_URL}
+OPENIDDICT_ISSUER_URI=${OPENIDDICT_ISSUER_URI}
+# 公共配置
+CORS_ORIGINS=${CORS_ORIGINS}
+# Minio
+MINIO_ENDPOINT=${MINIO_ENDPOINT}
+MINIO_BUCKET=${MINIO_BUCKET}
+MINIO_ACCESS_KEY=${MINIO_ACCESS_KEY}
+MINIO_SECRET_KEY=${MINIO_SECRET_KEY}
+# python 层服务令牌（与 python 层部署凭据同值）
+MEETING_BOT_KEY=${MEETING_BOT_KEY}
+AI_GATEWAY_API_TOKEN=${AI_GATEWAY_API_TOKEN}
+AI_GATEWAY_INGEST_TOKEN=${AI_GATEWAY_INGEST_TOKEN}
+# Aspire Dashboard 固定登录 token
+DASHBOARD_BROWSER_TOKEN=${DASHBOARD_BROWSER_TOKEN}
+ENV_EOF
+
+                # 2. 停止并移除本层旧容器（首次部署时忽略错误；共享网络的
+                #    移除可能因其他层容器在线而报错，|| true 吞掉不影响本层重启）
+                docker compose -p ${COMPOSE_PROJECT_NAME} -f docker-compose.yaml --env-file "${ENV_FILE}" down || true
+
+                # 3. 启动本层服务
+                docker compose -p ${COMPOSE_PROJECT_NAME} -f docker-compose.yaml --env-file "${ENV_FILE}" up -d
+
+                # 4. 清理悬空镜像
+                docker image prune -f || true
+
+                echo "部署完成：${env.IMAGE_VERSION}"
+                """,
+                execTimeout: 180000,
+                flatten: false,
+                makeEmptyDirs: false,
+                noDefaultExcludes: false,
+                patternSeparator: '[, ]+',
+                remoteDirectory: "${DEPLOY_REMOTE_DIR}",
+                remoteDirectorySDF: false,
+                // 上传 Aspire 生成的 docker-compose.yaml，去除路径前缀使文件落在部署目录根
+                removePrefix: '.cicd/aspire-output/dotnet/',
+                sourceFiles: '.cicd/aspire-output/dotnet/docker-compose.yaml')],
+            usePromotionTimestamp: false,
+            useWorkspaceInPromotion: false,
+            verbose: true)])
+        }
+      }
+    }
+
+    stage('打Git标签') {
+      when {
+        anyOf {
+          expression { env.BRANCH_NAME == 'develop' }
+          expression { env.BRANCH_NAME == 'master' }
+        }
+      }
+      steps {
+        script {
+          echo "开始创建并推送Git标签：${env.GIT_TAG}"
+          sh """
+          echo "创建Git标签：${env.GIT_TAG}"
+          git tag -a ${env.GIT_TAG} -m "Jenkins Build: ${BUILD_NUMBER} - ${env.GIT_TAG}"
+          """
+        }
+        gitPush(gitScm: scm, targetBranch: env.BRANCH_NAME, targetRepo: 'origin')
+      }
+    }
+  }
+
+  post {
+    always {
+      script {
+        withCredentials([string(credentialsId: 'qyweixin-notification-key', variable: 'WECHAT_KEY')]) {
+          qyWechatNotification mentionedId: '',
+            mentionedMobile: '',
+            webhookUrl: "https://qyapi.weixin.qq.com/cgi-bin/webhook/send?key=${WECHAT_KEY}"
+        }
+      }
+    }
+    success {
+      echo '构建成功'
+    }
+    failure {
+      echo '构建失败'
+    }
+  }
+}

@@ -4,42 +4,42 @@ version = "0.1.0"
 description = "CosyVoice3-0.5B TTS 模型服务"
 requires-python = ">=3.10,<3.11"
 dependencies = [
-    "fastapi==0.115.6",
-    "uvicorn[standard]==0.30.0",
-    "python-multipart>=0.0.9",
-    "pydantic==2.7.0",
-    "numpy==1.26.4",
-    "tqdm>=4.66",
-    "hyperpyyaml==1.2.3",
-    "modelscope==1.20.0",
-    "omegaconf==2.3.0",
-    "transformers==4.51.3",
-    "diffusers==0.29.0",
-    "x-transformers==2.11.24",
-    "einops>=0.8",
-    "librosa==0.10.2",
-    "soundfile==0.12.1",
-    "pyworld==0.3.4",
-    "inflect==7.3.1",
-    "onnx==1.16.0",
-    "onnxruntime==1.18.0",
-    "pytorch-lightning==2.2.4",
-    "torch==2.3.1",
-    "torchaudio==2.3.1",
+  "diffusers==0.29.0",
+  "einops>=0.8",
+  "fastapi==0.115.6",
+  "hyperpyyaml==1.2.3",
+  "inflect==7.3.1",
+  "librosa==0.10.2",
+  "modelscope==1.20.0",
+  "numpy==1.26.4",
+  "omegaconf==2.3.0",
+  "onnx==1.16.0",
+  "onnxruntime==1.18.0",
+  "pydantic==2.7.0",
+  "python-multipart>=0.0.9",
+  "pytorch-lightning==2.2.4",
+  "pyworld==0.3.4",
+  "soundfile==0.12.1",
+  "torch==2.3.1",
+  "torchaudio==2.3.1",
+  "tqdm>=4.66",
+  "transformers==4.51.3",
+  "uvicorn[standard]==0.30.0",
+  "x-transformers==2.11.24",
 ]
 
-[[tool.uv.index]]
-name = "aliyun-pypi"
-url = "https://mirrors.aliyun.com/pypi/simple/"
-default = true
-
-[tool.uv]
-find-links = ["https://mirrors.aliyun.com/pytorch-wheels/cu121/"]
-
 [dependency-groups]
-dev = ["pytest>=8", "pytest-asyncio>=0.23", "httpx>=0.27"]
+dev = ["httpx>=0.27", "pytest>=8", "pytest-asyncio>=0.23"]
 
 [tool.pytest.ini_options]
 pythonpath = ["."]
 testpaths = ["tests"]
 asyncio_mode = "auto"
+
+[tool.uv]
+find-links = ["https://mirrors.aliyun.com/pytorch-wheels/cu121/"]
+
+[[tool.uv.index]]
+name = "aliyun-pypi"
+url = "https://mirrors.aliyun.com/pypi/simple/"
+default = true

@@ -1,4 +1,5 @@
 using System.Collections.Generic;
+using System.IO;
 using System.Threading;
 using System.Threading.Tasks;
 using DredgeAI.BidCompare.MeetingBot;
@@ -27,6 +28,11 @@ public class FakeMeetingBotClient : IMeetingBotClient
     {
         TtsTexts.Add(text);
         return Task.FromResult(new byte[] { 0x52, 0x49, 0x46, 0x46, 0x00 });
+    }
+
+    public Task StreamTtsAsync(string text, Stream destination, CancellationToken ct = default)
+    {
+        throw new System.NotImplementedException();
     }
 
     public Task<List<FaceMatchDto>> RecognizeAsync(byte[] image, CancellationToken ct = default)

@@ -19,17 +19,26 @@ public static class DockerComposeSetup
     /// </remarks>
     public static IResourceBuilder<DockerComposeEnvironmentResource> AddDockerComposeEnvironment(
         this IDistributedApplicationBuilder builder,
-        ServiceParameters parameters)
+        ServiceParameters parameters,
+        bool withDashboard = true)
     {
         var composeEnv = builder.AddDockerComposeEnvironment("docker-compose");
         composeEnv.Resource.DefaultNetworkName = "dredge-ai-net";
 
-        composeEnv.WithDashboard(dashboard =>
+        if (withDashboard)
         {
-            dashboard.WithContainerName("dashboard");
-            dashboard.WithHostPort(51329);
-            dashboard.WithEnvironment("Dashboard__Frontend__BrowserToken", parameters.DashboardBrowserToken);
-        });
+            composeEnv.WithDashboard(dashboard =>
+            {
+                dashboard.WithContainerName("dashboard");
+                dashboard.WithHostPort(51329);
+                dashboard.WithEnvironment("Dashboard__Frontend__BrowserToken", parameters.DashboardBrowserToken);
+            });
+        }
+        else
+        {
+            // Dashboard 默认启用，须显式关闭
+            composeEnv.WithDashboard(enabled: false);
+        }
 
         return composeEnv;
     }

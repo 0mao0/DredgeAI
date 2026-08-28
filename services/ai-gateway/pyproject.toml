@@ -9,7 +9,7 @@ dependencies = [
     "pydantic>=2.7",
     "pydantic-settings>=2.0",
     "python-dotenv>=1.0",
-    "angineer-ai-inference @ git+https://github.com/0mao0/angineer-ai-inference.git@v0.1.0",
+    "angineer-ai-inference>=0.1.0",
 ]
 
 [dependency-groups]
@@ -21,3 +21,8 @@ dev = [
 [tool.pytest.ini_options]
 pythonpath = ["."]
 testpaths = ["tests"]
+
+[[tool.uv.index]]
+name = "aliyun-pypi"
+url = "https://mirrors.aliyun.com/pypi/simple/"
+default = true
