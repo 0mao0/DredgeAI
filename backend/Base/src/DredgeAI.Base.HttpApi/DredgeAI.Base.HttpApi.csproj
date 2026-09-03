@@ -9,8 +9,6 @@
     </PropertyGroup>
 
     <ItemGroup>
-      <PackageReference Include="Shiw.File.HttpApi" />
-      <PackageReference Include="Shiw.File.Web" />
       <PackageReference Include="Volo.Abp.AspNetCore.Mvc" />
       <PackageReference Include="Volo.Abp.Identity.HttpApi" />
       <PackageReference Include="Volo.Abp.FeatureManagement.HttpApi" />

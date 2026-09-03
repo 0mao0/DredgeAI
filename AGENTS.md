@@ -65,7 +65,7 @@ ECharts 样式先读 `chart-conventions.md`。
 
 ## 3. 架构定位（ABP vs Python）
 
-- **ABP（.NET 10，`backend/BidCompare`，BidCompare 业务服务 :44361）**：应用清单、业务编排、任务队列/后台作业、存储抽象、PostgreSQL、对外 HTTP API。认证由 Auth 服务（:7233）签发，BidCompare 仅校验 JWT；凡涉及“业务状态、权限、持久化、给前端的 API”都放 ABP；ABP 不直接跑模型/算法。
+- **ABP（.NET 10，`backend/BidCompare`，BidCompare 业务服务 :44361）**：应用清单、业务编排、任务队列/后台作业、存储抽象、PostgreSQL、对外 HTTP API。认证由 Auth 服务（:44362）签发，BidCompare 仅校验 JWT；凡涉及“业务状态、权限、持久化、给前端的 API”都放 ABP；ABP 不直接跑模型/算法。
 - **Python services 是算法/推理基础设施**（内部 HTTP，无业务持久化，由 ABP 调用）：
   - `ai-gateway`（:8200）：平台唯一 LLM 入口（OpenAI 兼容 chat / SSE），消费 `angineer-ai-inference`；
   - `compare-algo`（:8100）：确定性比标算法（similarity / pricing / metadata），不碰 LLM；
@@ -76,9 +76,9 @@ ECharts 样式先读 `chart-conventions.md`。
 ## 4. 后端
 
 - 接口设计先读 `abp-api-conventions.md`。
-- .NET 工具链：用 `%LOCALAPPDATA%\Microsoft\dotnet\dotnet.exe`（SDK 8.0.423，含 ASP.NET Core 8.0.29）；PATH 上的 `C:\Program Files\dotnet` 是空壳，直接敲 `dotnet` 会报 No SDK/frameworks；Docker 无 .NET SDK 镜像。
-  构建：`& "$env:LOCALAPPDATA\Microsoft\dotnet\dotnet.exe" build backend/BidCompare/src/DredgeAI.BidCompare.Host/DredgeAI.BidCompare.Host.csproj -c Debug`
-  启动：设 `$env:DOTNET_ROOT="$env:LOCALAPPDATA\Microsoft\dotnet"` 后启动 `bin\Debug\net10.0\DredgeAI.BidCompare.Host.exe`；判活看 44361 监听；日志 `data/logs/backend.log`、`Logs/logs.txt`。
+- .NET 工具链：直接用 PATH 上的 `dotnet`（SDK 10.0.303，可构建 net10.0）。
+  构建：`dotnet build backend/DredgeAI.AppHost/DredgeAI.AppHost.csproj -c Debug`（AppHost 引用 Auth/Base/BidCompare/Gateway 全部 Host，一次构建全量）。
+  启动（Aspire AppHost 编排，仓库根执行）：`dotnet run backend/DredgeAI.AppHost/DredgeAI.AppHost.csproj`；缺省只起 backend 层（4 个 .NET 后端），分层启动用 `--launch-profile python|frontend|all` 或追加 `-- --tier=backend,python`（逗号组合）；判活看 Aspire Dashboard（默认 `https://localhost:17199`）资源全部 Running，服务端口固定 Auth 44362 / BidCompare 44361 / Gateway 44364（Gateway 为统一入口）；日志 `data/logs/backend.log`、`Logs/logs.txt`。
 ## 5. 操作禁令
 
 - **禁止执行 SQL**：不得直接对数据库执行任何 SQL（含 DDL/DML、schema 重建、docker psql 等）；数据库变更一律交付迁移脚本或交用户执行。

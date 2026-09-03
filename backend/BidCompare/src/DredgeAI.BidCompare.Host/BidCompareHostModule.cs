@@ -198,7 +198,7 @@ public class BidCompareHostModule : AbpModule
 
     private void ConfigureAuthentication(ServiceConfigurationContext context, IConfiguration configuration)
     {
-        // 令牌由 Auth 服务（https://localhost:7233/）签发，本服务仅校验 JWT。
+        // 令牌由 Auth 服务（https://localhost:44362/）签发，本服务仅校验 JWT。
         context.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
             .AddAbpJwtBearer(options =>
             {
