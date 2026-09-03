@@ -9,7 +9,7 @@ import {
   synthesizeSpeech,
 } from '@/api/modules/aiMeeting'
 import { splitSpeechText } from '@/utils/speechText'
-import { mergeAudioBlobs } from '@/utils/audioToWav'
+import { mergeAudioBlobs, parseWav, pcmToWavBlob } from '@/utils/audioToWav'
 import { useAudioPlayer } from './useAudioPlayer'
 
 /** 估算语速：约 4 字/秒 */
@@ -60,6 +60,31 @@ export function useSpeechPlayback() {
     return audioCtx
   }
 
+  /**
+   * 解析 16bit PCM WAV 为 AudioBuffer：按 WAV 头声明的原生采样率直接建 buffer
+   * （与 DGX 官方测试页一致）。不用 decodeAudioData —— 逐帧 decode 会对每个小帧
+   * 单独重采样（23040→上下文采样率），帧边界产生可闻的咔哒/滋滋声（约每 2s 一句停顿处最响）。
+   */
+  async function wavToAudioBuffer(ac: AudioContext, blob: Blob): Promise<AudioBuffer> {
+    const wav = await parseWav(blob)
+    const buffer = ac.createBuffer(wav.channels, wav.channelsData[0]!.length, wav.sampleRate)
+    for (let ch = 0; ch < wav.channels; ch++) buffer.getChannelData(ch)!.set(wav.channelsData[ch]!)
+    return buffer
+  }
+
+  /**
+   * 解析 16bit PCM 为 AudioBuffer：按声明采样率直接建 buffer，不做任何重采样。
+   * 调用方须先 evenLen 取偶（与 DGX 官方测试页一致，避免奇数尾字节错位）。
+   */
+  function pcmToAudioBuffer(ac: AudioContext, bytes: Uint8Array, sampleRate: number): AudioBuffer {
+    const n = Math.floor(bytes.length / 2)
+    const buffer = ac.createBuffer(1, n, sampleRate)
+    const data = buffer.getChannelData(0)
+    const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength)
+    for (let i = 0; i < n; i++) data[i] = view.getInt16(i * 2, true) / 32768
+    return buffer
+  }
+
   function cancelStreaming(): void {
     for (const source of streamSources) {
       try {
@@ -74,9 +99,10 @@ export function useSpeechPlayback() {
   }
 
   /**
-   * 流式播放（整稿一次请求、按句吐帧）：
+   * 流式播放（整稿一次请求、原始字节流直出）：
    * - 开场句有缓存先秒出，流式只合成剩余部分；
-   * - 服务端按句生成一帧推一帧，客户端边收边播，没有逐段固定开销；
+   * - DGX 流为原始 PCM（23040Hz）：evenLen 取偶 + 原生率 createBuffer 零间隙调度；
+   * - 降级腾讯云返回完整 WAV（RIFF 探测）：收齐后整段播放；
    * - 流式不可用时回退到“分段缓存优先 + 逐段合成”流水线。
    * 结束后返回合并好的整段音频（供写入服务端缓存），失败返回 null。
    */
@@ -89,14 +115,24 @@ export function useSpeechPlayback() {
     const ac = getAudioCtx()
     const lead = leadBlob && leadText && text.startsWith(leadText) ? leadText : ''
     const tailText = lead ? text.slice(lead.length).trim() : text
-    const frames: Blob[] = []
+    const pcmChunks: Uint8Array[] = []
+    const wavChunks: Uint8Array[] = []
+    let streamIsWav = false
+    let formatDetected = false
     let lastScheduled = -1
     let scheduledAny = false
-    let tailFrames = 0
+    let tailChunks = 0
     let completed = false
+    let pending = new Uint8Array(0)
 
-    const schedule = async (blob: Blob, index: number): Promise<void> => {
-      const buffer = await ac.decodeAudioData(await blob.arrayBuffer())
+    const concat = (a: Uint8Array, b: Uint8Array): Uint8Array => {
+      const out = new Uint8Array(a.length + b.length)
+      out.set(a, 0)
+      out.set(b, a.length)
+      return out
+    }
+
+    const scheduleBuffer = async (buffer: AudioBuffer, index: number): Promise<void> => {
       if (token !== seq) return
       const source = ac.createBufferSource()
       source.buffer = buffer
@@ -113,24 +149,58 @@ export function useSpeechPlayback() {
 
     try {
       if (lead && leadBlob) {
-        frames.push(leadBlob)
-        await schedule(leadBlob, 0)
+        const buffer = await wavToAudioBuffer(ac, leadBlob)
+        if (token === seq && buffer.length > 0) await scheduleBuffer(buffer, 0)
         scheduledAny = true
         synthesizing.value = false
       }
       if (tailText) {
-        let index = frames.length
-        for await (const frame of streamSpeechAudio(tailText)) {
+        let index = lead && leadBlob ? 1 : 0
+        for await (const chunk of streamSpeechAudio(tailText)) {
           if (token !== seq) return { ok: true, merged: null }
-          frames.push(frame)
-          tailFrames++
-          if (!scheduledAny) {
+          tailChunks++
+          if (!formatDetected) {
+            formatDetected = true
+            streamIsWav = chunk.length >= 4 && chunk[0] === 0x52 && chunk[1] === 0x49
+              && chunk[2] === 0x46 && chunk[3] === 0x46
+            if (streamIsWav) {
+              // 流式不可用、降级整段合成：等待生成完成后一次性播放
+              synthesisProgress.value = '正在生成完整语音，请稍候…'
+            } else if (!scheduledAny) {
+              // PCM 流已开始到达，即视为可播（首块可能不足一个样本，后续块会接上）
+              scheduledAny = true
+              synthesizing.value = false
+              preparingMore.value = false
+              synthesisProgress.value = ''
+            }
+          }
+          if (streamIsWav) {
+            wavChunks.push(chunk)
+            continue
+          }
+          pending = concat(pending, chunk)
+          const evenLen = pending.length - (pending.length % 2)
+          if (evenLen > 0) {
+            const pcm = pending.slice(0, evenLen)
+            pending = pending.slice(evenLen)
+            pcmChunks.push(pcm)
+            if (scheduledAny && pcm.length >= 2) {
+              const buffer = pcmToAudioBuffer(ac, pcm, 23040)
+              if (token === seq) await scheduleBuffer(buffer, index++)
+            }
+          }
+        }
+        // 降级为完整 WAV：收齐后整段播放（DGX 非流式整段合成完成后一次性返回）
+        if (streamIsWav && wavChunks.length > 0) {
+          const blob = new Blob(wavChunks, { type: 'audio/wav' })
+          const buffer = await wavToAudioBuffer(ac, blob)
+          if (token === seq && buffer.length > 0) {
+            await scheduleBuffer(buffer, index)
             scheduledAny = true
             synthesizing.value = false
             preparingMore.value = false
             synthesisProgress.value = ''
           }
-          await schedule(frame, index++)
         }
       }
       completed = true
@@ -139,18 +209,33 @@ export function useSpeechPlayback() {
     }
 
     // 一句都没播出来（或剩余部分一句都没收到）→ 交给分段回退
-    if (!scheduledAny || (tailText.length > 0 && tailFrames === 0)) {
+    if (!scheduledAny || (tailText.length > 0 && tailChunks === 0)) {
       return { ok: false, merged: null }
     }
     // 中途中断：保留已播内容，不写回缓存（避免缓存半截音频）
     if (!completed) {
       return { ok: true, merged: null }
     }
-    if (frames.length === 0) {
+    let tailBlob: Blob | null = null
+    if (streamIsWav) {
+      if (wavChunks.length > 0) tailBlob = new Blob(wavChunks, { type: 'audio/wav' })
+    } else if (pcmChunks.length > 0) {
+      const total = pcmChunks.reduce((sum, c) => sum + c.length, 0)
+      const mergedPcm = new Uint8Array(total)
+      let pos = 0
+      for (const c of pcmChunks) {
+        mergedPcm.set(c, pos)
+        pos += c.length
+      }
+      tailBlob = pcmToWavBlob(mergedPcm, 23040)
+    }
+    if (!tailBlob) {
       return { ok: true, merged: null }
     }
     try {
-      const merged = await mergeAudioBlobs(frames)
+      const merged = lead && leadBlob
+        ? await mergeAudioBlobs([leadBlob, tailBlob])
+        : tailBlob
       sharedPrepared.set(text, merged)
       if (sharedPrepared.size > 10) {
         const oldest = sharedPrepared.keys().next().value
@@ -312,7 +397,7 @@ export function useSpeechPlayback() {
           preparingMore.value = segments.length > 1
         }
         try {
-          const buffer = await ac.decodeAudioData(await blob.arrayBuffer())
+          const buffer = await wavToAudioBuffer(ac, blob)
           if (token !== seq) return
           const source = ac.createBufferSource()
           source.buffer = buffer

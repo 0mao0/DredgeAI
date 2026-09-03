@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
+using System.Threading;
 using System.Threading.Tasks;
 using DredgeAI.BidCompare.MeetingBot;
 using Microsoft.AspNetCore.Http;
@@ -18,11 +19,13 @@ public class MeetingRecordController : AbpControllerBase
 {
     private readonly IMeetingRecordAppService _service;
     private readonly IMeetingBotClient _bot;
+    private readonly ISpeechDraftStreamer _streamer;
 
-    public MeetingRecordController(IMeetingRecordAppService service, IMeetingBotClient bot)
+    public MeetingRecordController(IMeetingRecordAppService service, IMeetingBotClient bot, ISpeechDraftStreamer streamer)
     {
         _service = service;
         _bot = bot;
+        _streamer = streamer;
     }
 
     [HttpPost]
@@ -44,6 +47,44 @@ public class MeetingRecordController : AbpControllerBase
     [HttpPost("{id:guid}/speech/generate")]
     public Task<SpeechDraftDto> GenerateSpeech(Guid id)
         => _service.GenerateSpeechAsync(id);
+
+    /// <summary>
+    /// 流式生成晨会稿：text/plain 逐段推送 LLM 增量文本。
+    /// 请求正常结束即代表已落库；中途断开/报错则前端按失败处理，可重试。
+    /// 走 ISpeechDraftStreamer（普通服务，不经 ABP 校验/审计拦截器序列化参数）。
+    /// </summary>
+    [HttpPost("{id:guid}/speech/generate/stream")]
+    public async Task GenerateSpeechStream(Guid id)
+    {
+        var ct = HttpContext.RequestAborted;
+        Response.ContentType = "text/plain; charset=utf-8";
+        Response.Headers["X-Accel-Buffering"] = "no";
+        try
+        {
+            await _streamer.GenerateStreamAsync(
+                id,
+                async (delta, token) =>
+                {
+                    await Response.WriteAsync(delta, token);
+                    await Response.Body.FlushAsync(token);
+                },
+                ct);
+        }
+        catch (OperationCanceledException) when (ct.IsCancellationRequested)
+        {
+            // 客户端已断开：静默结束
+        }
+        catch (Exception)
+        {
+            // 尚未写任何内容时返回 500（text/plain 无 output formatter，
+            // 直接抛会变 406）；已开始推送则响应正常结束（部分文本已展示）
+            if (!Response.HasStarted)
+            {
+                Response.StatusCode = StatusCodes.Status500InternalServerError;
+                await Response.WriteAsync("晨会稿生成失败，请重试");
+            }
+        }
+    }
 
     [HttpGet("{id:guid}/speech")]
     public Task<SpeechDraftDto?> GetSpeech(Guid id)
@@ -86,7 +127,7 @@ public class MeetingRecordController : AbpControllerBase
     }
 
     [HttpPost("{id:guid}/speech/audio/cache")]
-    public async Task SaveSpeechAudioCache(Guid id, [FromForm] IFormFile file)
+    public async Task SaveSpeechAudioCache(Guid id, IFormFile file)
     {
         using var ms = new MemoryStream();
         await file.CopyToAsync(ms);
@@ -98,7 +139,7 @@ public class MeetingRecordController : AbpControllerBase
         => _service.StartAsync(id);
 
     [HttpPost("{id:guid}/attendance/recognize")]
-    public async Task<AttendanceRecognizeResult> Recognize(Guid id, [FromForm] IFormFile image)
+    public async Task<AttendanceRecognizeResult> Recognize(Guid id, IFormFile image)
     {
         using var ms = new MemoryStream();
         await image.CopyToAsync(ms);
@@ -108,7 +149,7 @@ public class MeetingRecordController : AbpControllerBase
     }
 
     [HttpPost("{id:guid}/unrecognized-faces")]
-    public async Task<int> SaveUnrecognizedFaces(Guid id, [FromForm] List<IFormFile> files, [FromForm] string? metadata)
+    public async Task<int> SaveUnrecognizedFaces(Guid id, List<IFormFile> files, [FromForm] string? metadata)
     {
         var items = new List<(byte[] Data, double Confidence, double[] Bbox)>();
         var parsed = ParseUnrecognizedMetadata(metadata);
@@ -136,7 +177,7 @@ public class MeetingRecordController : AbpControllerBase
         => _service.AskQaAsync(id, input.Question);
 
     [HttpPost("{id:guid}/qa/audio")]
-    public async Task<QaRecordDto> AskQaAudio(Guid id, [FromForm] IFormFile audio)
+    public async Task<QaRecordDto> AskQaAudio(Guid id, IFormFile audio)
     {
         using var ms = new MemoryStream();
         await audio.CopyToAsync(ms);
@@ -152,7 +193,7 @@ public class MeetingRecordController : AbpControllerBase
     }
 
     [HttpPost("~/api/meeting/asr")]
-    public async Task<string> Asr([FromForm] IFormFile audio)
+    public async Task<string> Asr(IFormFile audio)
     {
         using var ms = new MemoryStream();
         await audio.CopyToAsync(ms);
@@ -179,11 +220,14 @@ public class MeetingRecordController : AbpControllerBase
             return;
         }
         Response.ContentType = "application/octet-stream";
+        // 输出 DGX Qwen3 原始 PCM 流（23040Hz/16bit/单声道），零加工直通（53fa 同款）；
+        // 上游中断时异常冒泡中止响应，前端据此感知不完整并回退逐段合成
+        Response.Headers["x-sample-rate"] = "23040";
         await _bot.StreamTtsAsync(input.Text, Response.Body, HttpContext.RequestAborted);
     }
 
     [HttpPost("{id:guid}/recording")]
-    public async Task<MeetingRecordDto> SaveRecording(Guid id, [FromForm] IFormFile audio)
+    public async Task<MeetingRecordDto> SaveRecording(Guid id, IFormFile audio)
     {
         using var ms = new MemoryStream();
         await audio.CopyToAsync(ms);

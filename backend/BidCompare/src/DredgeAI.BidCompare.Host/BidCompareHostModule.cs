@@ -100,6 +100,12 @@ public class BidCompareHostModule : AbpModule
         });
 
         Configure<AbpDistributedCacheOptions>(options => { options.KeyPrefix = "DredgeAI:"; });
+        // Shiw 后台任务分叉要求 ApplicationName 非空（f_application_name NOT NULL），
+        // ABP 默认 null 会导致入队报 23502；多应用共用一库时按应用名隔离任务。
+        Configure<AbpBackgroundJobWorkerOptions>(options =>
+        {
+            options.ApplicationName = "BidCompare";
+        });
         Configure<AbpMultiTenancyOptions>(options =>
         {
             options.IsEnabled = MultiTenancyConsts.IsEnabled;

@@ -24,7 +24,7 @@ public class KnowledgeDocumentController : AbpControllerBase
     }
 
     [HttpPost]
-    public async Task<KnowledgeUploadResult> Upload([FromForm] IFormFile file)
+    public async Task<KnowledgeUploadResult> Upload(IFormFile file)
     {
         using var ms = new MemoryStream();
         await file.CopyToAsync(ms);

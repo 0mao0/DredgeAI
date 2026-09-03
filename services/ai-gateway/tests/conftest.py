@@ -1,3 +1,7 @@
+import os
+# 测试不校验网关令牌，避免 .env 中真实 token 导致所有接口 401
+os.environ.setdefault("AI_GATEWAY_API_TOKEN", "")
+
 import pytest
 from ai_inference import ChatResult
 

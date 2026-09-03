@@ -76,7 +76,7 @@ ECharts 样式先读 `chart-conventions.md`。
 ## 4. 后端
 
 - 接口设计先读 `abp-api-conventions.md`。
-- .NET 工具链：用 `%LOCALAPPDATA%\Microsoft\dotnet\dotnet.exe`（SDK 8.0.423，含 ASP.NET Core 8.0.29）；PATH 上的 `C:\Program Files\dotnet` 是空壳，直接敲 `dotnet` 会报 No SDK/frameworks；Docker 无 .NET SDK 镜像。
+- .NET 工具链：用 `%LOCALAPPDATA%\Microsoft\dotnet\dotnet.exe`（2026-08-31 起含 SDK 10.0.400 + 8.0.423；后端 target `net10.0` 必须用 10.x SDK，缺 10.0.400 时 `dotnet run` 报 NETSDK1045）；PATH 上的 `C:\Program Files\dotnet` 是空壳，直接敲 `dotnet` 会报 No SDK/frameworks；Docker 无 .NET SDK 镜像。
   构建：`& "$env:LOCALAPPDATA\Microsoft\dotnet\dotnet.exe" build backend/BidCompare/src/DredgeAI.BidCompare.Host/DredgeAI.BidCompare.Host.csproj -c Debug`
   启动：设 `$env:DOTNET_ROOT="$env:LOCALAPPDATA\Microsoft\dotnet"` 后启动 `bin\Debug\net10.0\DredgeAI.BidCompare.Host.exe`；判活看 44361 监听；日志 `data/logs/backend.log`、`Logs/logs.txt`。
 ## 5. 操作禁令

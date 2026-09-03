@@ -136,6 +136,7 @@ async def post_chat(req: ChatRequest) -> ChatResponse:
     ))
     return ChatResponse(
         text=result.text or "",
+        reasoning=result.reasoning,
         finish_reason=result.finish_reason,
         usage=result.usage,
         used_config=result.used_config,

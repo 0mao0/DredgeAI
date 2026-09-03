@@ -7,38 +7,31 @@ public class MeetingBotOptions
 
     public string? Key { get; set; }
 
-    /// <summary>
-    /// 云端 TTS（腾讯云语音合成）。配置 SecretId/SecretKey 后 TTS 优先走云端，
-    /// 未配置或云端失败时回退本地 CosyVoice。
-    /// </summary>
-    public CloudTtsOptions? CloudTts { get; set; }
+    /// <summary>DGX 模型服务共享密钥（DGX_API_KEY），供 DgxQwenTts/DgxCosyVoice/DgxAsr 鉴权。</summary>
+    public string? DgxApiKey { get; set; }
+
+    /// <summary>DGX TTS（Qwen3，OpenAI 兼容 /audio/speech）；配置后为 TTS 最高优先级。</summary>
+    public DgxTtsOptions? DgxQwenTts { get; set; }
+
+    /// <summary>DGX ASR（OpenAI 兼容 /audio/transcriptions）；配置后 ASR 优先走 DGX，失败回退 meeting-bot。</summary>
+    public DgxAsrOptions? DgxAsr { get; set; }
 }
 
-/// <summary>腾讯云语音合成（TextToVoice）配置，见 https://cloud.tencent.com/document/product/1073/37995。</summary>
-public class CloudTtsOptions
+/// <summary>DGX TTS 服务配置（BaseUrl 形如 http://124.221.238.70/api/tts 或 /api/cosyvoice）。</summary>
+public class DgxTtsOptions
 {
-    public string? SecretId { get; set; }
+    public string? BaseUrl { get; set; }
 
-    public string? SecretKey { get; set; }
+    public string? Model { get; set; }
 
-    /// <summary>可选地域，例如 ap-guangzhou；留空时不传 X-TC-Region。</summary>
-    public string? Region { get; set; }
+    /// <summary>音色名；Qwen3-TTS 用 serena 等，CosyVoice3 预置 serena/aiden/ryan，默认 serena。</summary>
+    public string? Voice { get; set; }
+}
 
-    /// <summary>音色 ID，默认 101013 智辉（新闻男声），与本地 zh-male-news 风格一致。</summary>
-    public int VoiceType { get; set; } = 101013;
+/// <summary>DGX ASR 服务配置（BaseUrl 形如 http://124.221.238.70/api/asr）。</summary>
+public class DgxAsrOptions
+{
+    public string? BaseUrl { get; set; }
 
-    /// <summary>采样率，默认 16000，与本地 CosyVoice 输出一致。</summary>
-    public int SampleRate { get; set; } = 16000;
-
-    /// <summary>语速，范围 [-2, 6]，0 为正常语速，越大越快。</summary>
-    public float Speed { get; set; } = 1f;
-
-    /// <summary>音量，范围 [-10, 10]，0 为正常音量。</summary>
-    public float Volume { get; set; } = 0f;
-
-    /// <summary>单次请求文本上限（接口上限 150 汉字，默认留 10 字余量）。</summary>
-    public int MaxTextChars { get; set; } = 140;
-
-    /// <summary>分片合成并发数。</summary>
-    public int MaxConcurrency { get; set; } = 4;
+    public string? Model { get; set; }
 }

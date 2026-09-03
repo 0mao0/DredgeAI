@@ -134,6 +134,7 @@ export const urls = {
   meetingHistory: '/meeting/records',
   meetingParsePlan: '/meeting/parse-plan',
   meetingSpeechGenerate: '/meeting/records/:id/speech/generate',
+  meetingSpeechGenerateStream: '/meeting/records/:id/speech/generate/stream',
   meetingSpeechDraft: '/meeting/records/:id/speech',
   meetingSpeechAudio: '/meeting/records/:id/speech/audio',
   meetingSpeechAudioStatus: '/meeting/records/:id/speech/audio/status',
