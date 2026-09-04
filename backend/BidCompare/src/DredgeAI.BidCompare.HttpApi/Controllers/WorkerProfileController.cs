@@ -31,7 +31,7 @@ public class WorkerProfileController : AbpControllerBase
         => _service.CreateAsync(input);
 
     [HttpPost("recognize-id-card")]
-    public async Task<IdCardRecognitionDto> RecognizeIdCard([FromForm] IFormFile image)
+    public async Task<IdCardRecognitionDto> RecognizeIdCard(IFormFile image)
     {
         using var ms = new MemoryStream();
         await image.CopyToAsync(ms);
@@ -39,7 +39,7 @@ public class WorkerProfileController : AbpControllerBase
     }
 
     [HttpPost("import")]
-    public async Task<int> Import([FromForm] IFormFile file)
+    public async Task<int> Import(IFormFile file)
     {
         using var ms = new MemoryStream();
         await file.CopyToAsync(ms);
@@ -47,7 +47,7 @@ public class WorkerProfileController : AbpControllerBase
     }
 
     [HttpPost("{id:guid}/face")]
-    public async Task<WorkerDto> UpdateFace(Guid id, [FromForm] IFormFile image)
+    public async Task<WorkerDto> UpdateFace(Guid id, IFormFile image)
     {
         using var ms = new MemoryStream();
         await image.CopyToAsync(ms);

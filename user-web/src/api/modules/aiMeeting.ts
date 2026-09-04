@@ -43,6 +43,38 @@ export function generateSpeech(id: string): Promise<SpeechDraftDto> {
   return request.post<SpeechDraftDto>(fillUrl(urls.meetingSpeechGenerate, { id }), undefined, { timeout: MediaTimeout })
 }
 
+/**
+ * 流式生成晨会稿：服务端按 LLM 增量逐段推送纯文本（text/plain），
+ * 客户端边收边渲染，避免整稿 30-50s 干等。
+ * 请求正常结束即代表已落库；中途断开/报错会抛出，由调用方按失败处理。
+ */
+export async function streamSpeechDraft(
+  id: string,
+  onDelta: (delta: string) => void,
+  signal?: AbortSignal,
+): Promise<void> {
+  const token = typeof localStorage !== 'undefined' ? localStorage.getItem(STORAGE_TOKEN_KEY) : null
+  const res = await fetch(`${API_BASE_URL}${fillUrl(urls.meetingSpeechGenerateStream, { id }).replace(/^\//, '')}`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
+    },
+    body: JSON.stringify({}),
+    signal,
+  })
+  if (!res.ok || !res.body) {
+    throw new Error(`晨会稿生成接口不可用（HTTP ${res.status}）`)
+  }
+  const reader = res.body.getReader()
+  const decoder = new TextDecoder('utf-8')
+  for (;;) {
+    const { done, value } = await reader.read()
+    if (done) break
+    onDelta(decoder.decode(value, { stream: true }))
+  }
+}
+
 export function getSpeechDraft(id: string): Promise<SpeechDraftDto | null> {
   return request.get<SpeechDraftDto | null>(fillUrl(urls.meetingSpeechDraft, { id }))
 }
@@ -101,10 +133,12 @@ export function synthesizeSpeech(text: string, timeout = MediaTimeout): Promise<
 }
 
 /**
- * 流式 TTS：整段文本一次请求，服务端按句吐音频帧。
- * 帧格式：4 字节大端长度 + WAV；length=0 表示结束。
+ * 流式 TTS：整段文本一次请求，返回原始字节流（无帧协议）。
+ * - DGX 流：audio/pcm 原始 PCM（23040Hz/16bit/单声道，停顿已压缩）；
+ * - 降级腾讯云：完整 WAV 文件；
+ * 调用方按首块 RIFF 探测格式，PCM 用 evenLen 取偶消费（与 DGX 官方测试页一致）。
  */
-export async function* streamSpeechAudio(text: string): AsyncGenerator<Blob> {
+export async function* streamSpeechAudio(text: string): AsyncGenerator<Uint8Array> {
   const token = typeof localStorage !== 'undefined' ? localStorage.getItem(STORAGE_TOKEN_KEY) : null
   const res = await fetch(`${API_BASE_URL}meeting/tts/stream`, {
     method: 'POST',
@@ -118,25 +152,10 @@ export async function* streamSpeechAudio(text: string): AsyncGenerator<Blob> {
     throw new Error(`TTS 流式接口不可用（HTTP ${res.status}）`)
   }
   const reader = res.body.getReader()
-  let pending = new Uint8Array(0)
-  const concat = (a: Uint8Array, b: Uint8Array): Uint8Array => {
-    const out = new Uint8Array(a.length + b.length)
-    out.set(a, 0)
-    out.set(b, a.length)
-    return out
-  }
   for (;;) {
     const { done, value } = await reader.read()
     if (done) break
-    if (value) pending = concat(pending, value)
-    while (pending.length >= 4) {
-      const len = (pending[0]! << 24) | (pending[1]! << 16) | (pending[2]! << 8) | pending[3]!
-      if (pending.length < 4 + len) break
-      const frame = pending.slice(4, 4 + len)
-      pending = pending.slice(4 + len)
-      if (len === 0) return
-      yield new Blob([frame], { type: 'audio/wav' })
-    }
+    if (value) yield value
   }
 }
 

@@ -37,6 +37,8 @@
       v-else-if="current === 2"
       :draft="draft"
       :loading="loading"
+      :streaming="streaming"
+      :streaming-text="streamingText"
       :date="meeting?.date"
       :meeting-id="meeting?.id"
       @generate="handleGenerateSpeech"
@@ -82,7 +84,6 @@ import type {
 import {
   completeMeeting,
   createMeeting,
-  generateSpeech,
   getMeeting,
   getMeetingProjects,
   getReport,
@@ -90,6 +91,7 @@ import {
   recognizeAttendance,
   saveSpeechDraft,
   startMeeting,
+  streamSpeechDraft,
   uploadUnrecognizedFaces,
   uploadMeetingRecording,
 } from '@/api/modules/aiMeeting'
@@ -110,6 +112,9 @@ const historyOpen = ref(false)
 const meeting = ref<MeetingRecordDto | null>(null)
 const loading = ref(false)
 const draft = ref<SpeechDraftDto | null>(null)
+/** 晨会稿流式生成中（边生成边显示文字） */
+const streaming = ref(false)
+const streamingText = ref('')
 const attendance = ref<AttendanceItemDto[]>([])
 const unrecognizedFaces = ref<AttendanceItemDto[]>([])
 const qaRecords = ref<QaRecordDto[]>([])
@@ -178,17 +183,37 @@ async function handleCreate(preInfo: PreInfo): Promise<void> {
     uploadedFaceSignatures.clear()
     planText.value = ''
     planResult.value = null
-    // 立刻进入晨会稿页，在该页显示生成中状态，不在确认页干等
+    // 立刻进入晨会稿页，在该页流式显示生成内容，不在确认页干等
     current.value = 2
     try {
-      draft.value = await generateSpeech(meeting.value.id)
+      await streamSpeechDraftFlow()
     } catch (err) {
-      // 自动生成失败时进入晨会稿页，由页面上的“生成晨会稿”按钮重试
-      draft.value = null
+      // 自动生成失败时留在晨会稿页，由页面上的“生成晨会稿”按钮重试
       message.warning(`晨会稿自动生成失败：${extractErrorMessage(err)}，可在晨会稿页点击重试`)
     }
   } finally {
     loading.value = false
+  }
+}
+
+/** 流式生成晨会稿：边生成边渲染文字，结束后落库为正式 draft */
+async function streamSpeechDraftFlow(): Promise<void> {
+  if (!meeting.value) return
+  streaming.value = true
+  streamingText.value = ''
+  try {
+    await streamSpeechDraft(meeting.value.id, (delta) => {
+      streamingText.value += delta
+    })
+    const content = streamingText.value
+    streamingText.value = ''
+    draft.value = { id: meeting.value.id, content, status: 'generated', updatedAt: new Date().toISOString() }
+  } catch (err) {
+    streamingText.value = ''
+    draft.value = null
+    throw err
+  } finally {
+    streaming.value = false
   }
 }
 
@@ -198,6 +223,8 @@ async function handleLoadHistory(id: string): Promise<void> {
     const record = await getMeeting(id)
     meeting.value = record
     uploadedFaceSignatures.clear()
+    streaming.value = false
+    streamingText.value = ''
     draft.value = record.speechDraft ?? null
     const { recognized, unrecognized } = splitAttendance(record.attendance)
     attendance.value = recognized
@@ -234,7 +261,9 @@ async function handleGenerateSpeech(): Promise<void> {
   if (!meeting.value) return
   loading.value = true
   try {
-    draft.value = await generateSpeech(meeting.value.id)
+    await streamSpeechDraftFlow()
+  } catch (err) {
+    message.error(`晨会稿生成失败：${extractErrorMessage(err)}`)
   } finally {
     loading.value = false
   }

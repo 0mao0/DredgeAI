@@ -1,8 +1,10 @@
 using System;
 using System.Collections.Generic;
+using System.IO;
 using System.Net.Http;
 using System.Net.Http.Headers;
 using System.Net.Http.Json;
+using System.Runtime.CompilerServices;
 using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
@@ -52,6 +54,74 @@ public class HttpLlmGateway : ILlmGateway, ITransientDependency
             new { role = "user", content = userPrompt }
         };
         return await PostChatAsync(messages, cancellationToken);
+    }
+
+    public async IAsyncEnumerable<string> CompleteStreamAsync(
+        string systemPrompt,
+        string userPrompt,
+        [EnumeratorCancellation] CancellationToken cancellationToken = default)
+    {
+        var messages = new object[]
+        {
+            new { role = "system", content = systemPrompt },
+            new { role = "user", content = userPrompt }
+        };
+        var client = _httpClientFactory.CreateClient(nameof(HttpLlmGateway));
+        if (!string.IsNullOrWhiteSpace(_options.ApiToken))
+        {
+            client.DefaultRequestHeaders.TryAddWithoutValidation("X-API-Key", _options.ApiToken);
+        }
+
+        var request = new
+        {
+            messages,
+            mode = "instruct",
+            business = "bid-compare"
+        };
+
+        using var response = await client.PostAsJsonAsync("v1/chat/stream", request, JsonOptions, cancellationToken);
+        if (!response.IsSuccessStatusCode)
+        {
+            throw await BuildGatewayExceptionAsync(response, cancellationToken);
+        }
+
+        await using var upstream = await response.Content.ReadAsStreamAsync(cancellationToken);
+        using var reader = new StreamReader(upstream);
+        while (await reader.ReadLineAsync(cancellationToken) is { } line)
+        {
+            if (!line.StartsWith("data: ", StringComparison.Ordinal))
+            {
+                continue;
+            }
+            using var document = JsonDocument.Parse(line[6..]);
+            var root = document.RootElement;
+            var type = root.TryGetProperty("type", out var typeElement) ? typeElement.GetString() : null;
+            if (type == "delta"
+                && root.TryGetProperty("text", out var textElement)
+                && textElement.GetString() is { Length: > 0 } text)
+            {
+                yield return text;
+            }
+            else if (type == "error")
+            {
+                throw BuildStreamError(root, _logger);
+            }
+        }
+    }
+
+    private static BusinessException BuildStreamError(JsonElement root, ILogger<HttpLlmGateway> logger)
+    {
+        var message = "AI Gateway 流式响应错误";
+        var errorCode = "";
+        if (root.TryGetProperty("error", out var error))
+        {
+            if (error.TryGetProperty("type", out var t)) errorCode = t.GetString() ?? "";
+            if (error.TryGetProperty("message", out var m)) message = m.GetString() ?? message;
+        }
+        logger.LogWarning("AI Gateway 流式响应错误事件：{Code} {Message}", errorCode, message);
+        return new BusinessException(BidCompareErrorCodes.AiGatewayFailed)
+            .WithData("serviceCode", errorCode)
+            .WithData("message", message);
     }
 
     public async Task<string> CompleteMultimodalAsync(

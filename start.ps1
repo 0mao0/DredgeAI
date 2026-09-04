@@ -4,7 +4,7 @@ param(
     [switch]$OpenBrowser
 )
 
-# DredgeAI Startup Script（比标后端 + 算法服务 + 用户端/管理端前端；AnGIneer 仅检测）
+# DredgeAI Startup Script（Auth + 比标后端 + 算法服务 + 用户端/管理端前端；AnGIneer 仅检测）
 [Console]::OutputEncoding = [System.Text.Encoding]::UTF8
 
 $rootDir = if ($PSScriptRoot) { $PSScriptRoot } else { (Get-Location).Path }
@@ -16,11 +16,13 @@ $backupDir = Join-Path $dataDir "backup"
 $compareAlgoLogPath = Join-Path $logsDir "compare-algo.log"
 $aiGatewayLogPath = Join-Path $logsDir "ai-gateway.log"
 $backendLogPath = Join-Path $logsDir "backend.log"
+$authLogPath = Join-Path $logsDir "auth.log"
 $frontendLogPath = Join-Path $logsDir "frontend.log"
 $adminLogPath = Join-Path $logsDir "admin-web.log"
 $compareAlgoPidPath = Join-Path $logsDir "compare-algo.pid"
 $aiGatewayPidPath = Join-Path $logsDir "ai-gateway.pid"
 $backendPidPath = Join-Path $logsDir "backend.pid"
+$authPidPath = Join-Path $logsDir "auth.pid"
 $frontendPidPath = Join-Path $logsDir "frontend.pid"
 $adminPidPath = Join-Path $logsDir "admin-web.pid"
 
@@ -35,11 +37,13 @@ $postgresPort = 5432
 $compareAlgoPort = 8100
 $aiGatewayPort = 8200
 $backendPort = 44361
+$authPort = 7233
 $frontendPort = 5373
 $adminPort = 5374
 $angineerPort = 8790
 
 $backendUrl = "https://localhost:$backendPort"
+$authUrl = "https://localhost:$authPort"
 $compareAlgoUrl = "http://localhost:$compareAlgoPort"
 $aiGatewayUrl = "http://localhost:$aiGatewayPort"
 $frontendUrl = "http://localhost:$frontendPort"
@@ -52,6 +56,7 @@ $compareAlgoPython = Join-Path $compareAlgoDir ".venv\Scripts\python.exe"
 $aiGatewayDir = Join-Path $rootDir "services\ai-gateway"
 $aiGatewayPython = Join-Path $aiGatewayDir ".venv\Scripts\python.exe"
 $backendProject = Join-Path $rootDir "backend\BidCompare\src\DredgeAI.BidCompare.Host"
+$authProject = Join-Path $rootDir "backend\Auth\src\DredgeAI.Auth.Host"
 $frontendDir = Join-Path $rootDir "user-web"
 $adminDir = Join-Path $rootDir "admin-web"
 $postgresContainer = "bidcompare-postgres"
@@ -323,7 +328,7 @@ if (-not (Test-Path $logsDir)) {
 }
 
 if ($TailLogs) {
-    Watch-ServiceLogs -LogPaths @($backendLogPath, $compareAlgoLogPath, $aiGatewayLogPath, $frontendLogPath, $adminLogPath)
+    Watch-ServiceLogs -LogPaths @($backendLogPath, $authLogPath, $compareAlgoLogPath, $aiGatewayLogPath, $frontendLogPath, $adminLogPath)
     exit 0
 }
 
@@ -331,6 +336,7 @@ if ($TailLogs) {
 Write-Host "[2/5] Cleaning up stale processes..." -ForegroundColor Yellow
 Stop-PortProcess -Label "compare-algo" -Port $compareAlgoPort
 Stop-PortProcess -Label "ai-gateway" -Port $aiGatewayPort
+Stop-PortProcess -Label "Auth" -Port $authPort
 Stop-PortProcess -Label "Backend" -Port $backendPort
 Stop-PortProcess -Label "Frontend" -Port $frontendPort
 Stop-PortProcess -Label "Admin Web" -Port $adminPort
@@ -369,6 +375,7 @@ if (-not $postgresReady) {
 Write-Host "[4/5] Starting services..." -ForegroundColor Yellow
 Write-Host "      compare-algo: $compareAlgoUrl" -ForegroundColor Green
 Write-Host "      ai-gateway:  $aiGatewayUrl" -ForegroundColor Green
+Write-Host "      Auth:        $authUrl" -ForegroundColor Green
 Write-Host "      Backend:      $backendUrl" -ForegroundColor Green
 Write-Host "      Frontend:     $frontendUrl" -ForegroundColor Green
 Write-Host "      Admin Web:    $adminUrl" -ForegroundColor Green
@@ -383,6 +390,10 @@ $escapedAiGatewayPython = $aiGatewayPython.Replace("'", "''")
 $aiGatewayCommand = "Set-Location '$escapedAiGatewayDir'; & '$escapedAiGatewayPython' -m uvicorn app.main:app --host 127.0.0.1 --port $aiGatewayPort"
 $aiGatewayProcess = Start-ServiceProcess -ServiceName "ai-gateway" -ServiceCommand $aiGatewayCommand -LogPath $aiGatewayLogPath -PidPath $aiGatewayPidPath
 
+$escapedAuthProject = $authProject.Replace("'", "''")
+$authCommand = "`$env:PATH=`"`$env:LOCALAPPDATA\Microsoft\dotnet;`$env:PATH`"; dotnet run --project '$escapedAuthProject' --launch-profile 'https'"
+$authProcess = Start-ServiceProcess -ServiceName "Auth" -ServiceCommand $authCommand -LogPath $authLogPath -PidPath $authPidPath
+
 $escapedProject = $backendProject.Replace("'", "''")
 $backendCommand = "`$env:PATH=`"`$env:LOCALAPPDATA\Microsoft\dotnet;`$env:PATH`"; dotnet run --project '$escapedProject' --launch-profile 'DredgeAI.BidCompare.Host'"
 $backendProcess = Start-ServiceProcess -ServiceName "Backend" -ServiceCommand $backendCommand -LogPath $backendLogPath -PidPath $backendPidPath
@@ -396,12 +407,13 @@ $adminCommand = "Set-Location '$escapedAdminDir'; pnpm dev"
 $adminProcess = Start-ServiceProcess -ServiceName "Admin Web" -ServiceCommand $adminCommand -LogPath $adminLogPath -PidPath $adminPidPath
 
 Write-Host "      Logs: $logsDir" -ForegroundColor DarkGray
-Write-Host "      Backend PID: $($backendProcess.Id), compare-algo PID: $($compareAlgoProcess.Id), ai-gateway PID: $($aiGatewayProcess.Id), frontend PID: $($frontendProcess.Id), admin-web PID: $($adminProcess.Id)" -ForegroundColor DarkGray
+Write-Host "      Auth PID: $($authProcess.Id), Backend PID: $($backendProcess.Id), compare-algo PID: $($compareAlgoProcess.Id), ai-gateway PID: $($aiGatewayProcess.Id), frontend PID: $($frontendProcess.Id), admin-web PID: $($adminProcess.Id)" -ForegroundColor DarkGray
 
 # 5. 健康检查
 Write-Host "[5/5] Waiting for services..." -ForegroundColor Yellow
 $compareAlgoHealthy = Test-HttpHealth -Label "compare-algo" -Url "$compareAlgoUrl/healthz" -TimeoutSeconds 60
 $aiGatewayHealthy = Test-HttpHealth -Label "ai-gateway" -Url "$aiGatewayUrl/healthz" -TimeoutSeconds 60
+$authHealthy = Test-HttpHealth -Label "Auth" -Url "$authUrl/health" -TimeoutSeconds 180
 $backendHealthy = Test-HttpHealth -Label "Backend" -Url "$backendUrl/swagger/v1/swagger.json" -TimeoutSeconds 180
 $frontendHealthy = Test-HttpHealth -Label "Frontend" -Url $frontendUrl -TimeoutSeconds 60
 $adminHealthy = Test-HttpHealth -Label "Admin Web" -Url $adminUrl -TimeoutSeconds 60
@@ -420,6 +432,7 @@ Write-Host "   Startup Summary" -ForegroundColor Cyan
 Write-Host "========================================" -ForegroundColor Cyan
 Write-Host ("  compare-algo {0}" -f $(if ($compareAlgoHealthy) { "OK" } else { "FAILED" })) -ForegroundColor $(if ($compareAlgoHealthy) { "Green" } else { "Red" })
 Write-Host ("  ai-gateway   {0}" -f $(if ($aiGatewayHealthy) { "OK" } else { "FAILED" })) -ForegroundColor $(if ($aiGatewayHealthy) { "Green" } else { "Red" })
+Write-Host ("  Auth         {0}" -f $(if ($authHealthy) { "OK" } else { "FAILED" })) -ForegroundColor $(if ($authHealthy) { "Green" } else { "Red" })
 Write-Host ("  Backend      {0}" -f $(if ($backendHealthy) { "OK" } else { "FAILED" })) -ForegroundColor $(if ($backendHealthy) { "Green" } else { "Red" })
 Write-Host ("  Frontend     {0}" -f $(if ($frontendHealthy) { "OK" } else { "FAILED" })) -ForegroundColor $(if ($frontendHealthy) { "Green" } else { "Red" })
 Write-Host ("  Admin Web    {0}" -f $(if ($adminHealthy) { "OK" } else { "FAILED" })) -ForegroundColor $(if ($adminHealthy) { "Green" } else { "Red" })
@@ -427,6 +440,7 @@ Write-Host ("  AnGIneer     {0}" -f $(if ($angineerReady) { "OK" } else { "not r
 Write-Host ""
 Write-Host "  Frontend: $frontendUrl" -ForegroundColor Cyan
 Write-Host "  Admin Web: $adminUrl" -ForegroundColor Cyan
+Write-Host "  Auth: $authUrl" -ForegroundColor Cyan
 Write-Host "  Backend Swagger: $backendUrl/swagger" -ForegroundColor Cyan
 Write-Host "  Logs: $logsDir" -ForegroundColor DarkGray
 Write-Host "  Tail logs with: .\start.ps1 -TailLogs" -ForegroundColor DarkGray

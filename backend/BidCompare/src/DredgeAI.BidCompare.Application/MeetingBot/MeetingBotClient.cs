@@ -26,21 +26,11 @@ public class MeetingBotClient : IMeetingBotClient, ITransientDependency
 {
     private const int TranscribeTimeoutSeconds = 180;
     private const int TranscribePollMs = 1500;
-    private const string TencentTtsHost = "tts.tencentcloudapi.com";
-    private const string TencentTtsService = "tts";
-    private const string TencentTtsAction = "TextToVoice";
-    private const string TencentTtsVersion = "2019-08-23";
 
     private static readonly JsonSerializerOptions JsonOptions = new()
     {
         PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
         PropertyNameCaseInsensitive = true
-    };
-
-    /// <summary>腾讯云 API 3.0 请求体：保持 PascalCase 属性名，非 ASCII 不转义（官方 SDK 均发送原始 UTF-8）。</summary>
-    private static readonly JsonSerializerOptions TencentJsonOptions = new()
-    {
-        Encoder = System.Text.Encodings.Web.JavaScriptEncoder.UnsafeRelaxedJsonEscaping
     };
 
     private readonly IHttpClientFactory _httpClientFactory;
@@ -59,6 +49,19 @@ public class MeetingBotClient : IMeetingBotClient, ITransientDependency
 
     public async Task<string> AsrAsync(byte[] audio, CancellationToken ct = default)
     {
+        var dgx = _options.DgxAsr;
+        if (IsDgxAsrConfigured(dgx))
+        {
+            try
+            {
+                return await DgxAsrAsync(audio, dgx, ct);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning(ex, "DGX ASR 失败，回退 meeting-bot（BaseUrl={BaseUrl}）", _options.BaseUrl);
+            }
+        }
+
         using var form = BuildForm();
         using var audioContent = new ByteArrayContent(audio);
         audioContent.Headers.ContentType = new MediaTypeHeaderValue("application/octet-stream");
@@ -70,56 +73,153 @@ public class MeetingBotClient : IMeetingBotClient, ITransientDependency
         return payload?.Text ?? throw new BusinessException("MEETING_BOT_ASR_FAILED", "ASR 响应缺少 text");
     }
 
+    /// <summary>DGX ASR（OpenAI 兼容 /audio/transcriptions，model=qwen3-asr）。</summary>
+    private async Task<string> DgxAsrAsync(byte[] audio, DgxAsrOptions dgx, CancellationToken ct)
+    {
+        using var form = new MultipartFormDataContent();
+        form.Add(new StringContent(dgx.Model ?? "qwen3-asr"), "model");
+        form.Add(new StringContent("auto"), "language");
+        using var audioContent = new ByteArrayContent(audio);
+        audioContent.Headers.ContentType = new MediaTypeHeaderValue("audio/wav");
+        form.Add(audioContent, "file", "audio.wav");
+
+        using var request = new HttpRequestMessage(HttpMethod.Post, dgx.BaseUrl!.TrimEnd('/') + "/audio/transcriptions")
+        {
+            Content = form
+        };
+        AddDgxAuth(request);
+        using var client = _httpClientFactory.CreateClient(); // 未命名客户端：不带 meeting-bot 默认请求头
+        using var response = await client.SendAsync(request, HttpCompletionOption.ResponseContentRead, ct);
+        await EnsureDgxSuccessAsync(response, "ASR", ct);
+        var payload = await response.Content.ReadFromJsonAsync<AsrResponse>(JsonOptions, ct);
+        return payload?.Text ?? throw new BusinessException("DGX_ASR_FAILED", "DGX ASR 响应缺少 text");
+    }
+
     public async Task<byte[]> TtsAsync(string text, CancellationToken ct = default)
     {
-        var cloud = _options.CloudTts;
-        if (IsCloudTtsConfigured(cloud))
+        // 1) DGX Qwen3-TTS（最高优先级）
+        if (IsDgxTtsConfigured(_options.DgxQwenTts))
         {
             try
             {
-                return await SynthesizeWithTencentCloudAsync(text, cloud!, ct);
+                return await DgxSynthesizeAsync(text, _options.DgxQwenTts, ct);
             }
             catch (Exception ex)
             {
-                _logger.LogWarning(ex, "腾讯云 TTS 合成失败，回退本地 CosyVoice（BaseUrl={BaseUrl}）", _options.BaseUrl);
+                _logger.LogWarning(ex, "DGX Qwen3-TTS 合成失败，回退本地 CosyVoice（BaseUrl={BaseUrl}）", _options.BaseUrl);
             }
         }
 
+        // 2) 本地 CosyVoice（兜底）
         using var response = await CreateClient().PostAsJsonAsync(
             "/tts", new { text }, JsonOptions, ct);
         await EnsureSuccessAsync(response, "TTS", ct);
         return await response.Content.ReadAsByteArrayAsync(ct);
     }
 
-    /// <summary>流式 TTS：把 meeting-bot 的帧流（4 字节大端长度 + WAV）持续写入 destination。</summary>
+    /// <summary>DGX TTS 合成（Qwen3，OpenAI 兼容 /audio/speech 非流式）。</summary>
+    private async Task<byte[]> DgxSynthesizeAsync(string text, DgxTtsOptions dgx, CancellationToken ct)
+    {
+        var url = dgx.BaseUrl!.TrimEnd('/') + "/audio/speech";
+        object payload = new
+        {
+            model = dgx.Model ?? "qwen3-tts",
+            input = text,
+            voice = dgx.Voice ?? "serena",
+            response_format = "wav"
+        };
+
+        using var request = new HttpRequestMessage(HttpMethod.Post, url)
+        {
+            Content = JsonContent.Create(payload, options: JsonOptions)
+        };
+        AddDgxAuth(request);
+        // 裸客户端 + 长超时：工厂客户端带 resilience 60s AttemptTimeout，
+        // 整段合成（长文本 3~4 分钟）会被超时强杀；裸客户端无重试/超时包装
+        using var client = new HttpClient(CreateDgxStreamHandler())
+        {
+            Timeout = TimeSpan.FromSeconds(300)
+        };
+        using var response = await client.SendAsync(request, HttpCompletionOption.ResponseContentRead, ct);
+        await EnsureDgxSuccessAsync(response, "TTS", ct);
+        var bytes = await response.Content.ReadAsByteArrayAsync(ct);
+        if (bytes.Length == 0)
+        {
+            throw new BusinessException("DGX_TTS_EMPTY_AUDIO", "DGX TTS 返回空音频");
+        }
+        return bytes;
+    }
+
+    /// <summary>流式 TTS 直通（53fa 官方页同款）：POST {base}/audio/speech，
+    /// stream=true + emit_frames=4，上游以 chunked audio/pcm 返回原始 PCM（23040Hz/16bit/单声道），
+    /// 本方法**零加工原样转发**：不做停顿压缩、不裁剪静音、不拼接帧——
+    /// 上游 emit_frames=4 的句间停顿本来就自然，任何加工只会破坏节奏并引入拼接爆音。
+    /// 客户端断开时静默结束；上游中断则异常自然冒泡，由 HTTP 层中止响应，
+    /// 前端据此感知流不完整并回退逐段合成。</summary>
     public async Task StreamTtsAsync(string text, Stream destination, CancellationToken ct = default)
     {
-        var cloud = _options.CloudTts;
-        if (IsCloudTtsConfigured(cloud))
+        var dgx = _options.DgxQwenTts;
+        if (!IsDgxTtsConfigured(dgx))
         {
-            try
-            {
-                // 云端整段合成（约 1~3 秒）完成后一次性吐帧，播放端收到整段直接播放，不再逐句等待。
-                var wav = await SynthesizeWithTencentCloudAsync(text, cloud!, ct);
-                await WriteFrameAsync(destination, wav, ct);
-                await WriteFrameAsync(destination, [], ct);
-                await destination.FlushAsync(ct);
-                return;
-            }
-            catch (Exception ex)
-            {
-                _logger.LogWarning(ex, "腾讯云 TTS 流式合成失败，回退本地 CosyVoice");
-            }
+            throw new BusinessException("TTS_STREAM_NOT_CONFIGURED", "流式语音合成未配置");
         }
 
-        using var request = new HttpRequestMessage(HttpMethod.Post, "/tts/stream")
+        var url = dgx!.BaseUrl!.TrimEnd('/') + "/audio/speech";
+        var payload = new
         {
-            Content = JsonContent.Create(new { text }, options: JsonOptions)
+            input = text,
+            voice = dgx.Voice ?? "serena",
+            stream = true,
+            emit_frames = 4,
         };
-        using var response = await CreateClient().SendAsync(request, HttpCompletionOption.ResponseHeadersRead, ct);
-        await EnsureSuccessAsync(response, "TTS 流式", ct);
+
+        using var request = new HttpRequestMessage(HttpMethod.Post, url)
+        {
+            Content = JsonContent.Create(payload, options: JsonOptions)
+        };
+        AddDgxAuth(request);
+
+        // 裸客户端：不走 IHttpClientFactory——resilience 的 60s AttemptTimeout 会强杀长文本流、
+        // 重试会拼接两次响应产生满幅噪声；不复用连接池，避免旧 keep-alive 连接的脏状态。
+        using var client = new HttpClient(CreateDgxStreamHandler())
+        {
+            Timeout = TimeSpan.FromSeconds(300)
+        };
+
+        using var response = await client.SendAsync(request, HttpCompletionOption.ResponseHeadersRead, ct);
+        await EnsureDgxSuccessAsync(response, "TTS stream", ct);
+
         await using var upstream = await response.Content.ReadAsStreamAsync(ct);
-        await upstream.CopyToAsync(destination, ct);
+        var buffer = new byte[8192];
+        try
+        {
+            int read;
+            while ((read = await upstream.ReadAsync(buffer.AsMemory(), ct)) > 0)
+            {
+                await destination.WriteAsync(buffer.AsMemory(0, read), ct);
+                await destination.FlushAsync(ct);
+            }
+        }
+        catch (OperationCanceledException) when (ct.IsCancellationRequested)
+        {
+            // 客户端已断开/主动停止：静默结束，已播内容保留
+        }
+        // 上游中断（EOF 提前/连接重置/超时）：不吞——冒泡中止响应，前端据此回退
+    }
+
+    /// <summary>
+    /// DGX 流式专用裸 HttpClient 处理器：不走 IHttpClientFactory（无 resilience/服务发现包装），
+    /// 不复用连接池（每次新连接，避免旧 keep-alive 连接的脏状态）。
+    /// </summary>
+    private static SocketsHttpHandler CreateDgxStreamHandler()
+    {
+        return new SocketsHttpHandler
+        {
+            PooledConnectionIdleTimeout = TimeSpan.Zero,
+            PooledConnectionLifetime = TimeSpan.Zero,
+            MaxConnectionsPerServer = 8,
+            AutomaticDecompression = System.Net.DecompressionMethods.None
+        };
     }
 
     public async Task<List<FaceMatchDto>> RecognizeAsync(byte[] image, CancellationToken ct = default)
@@ -202,175 +302,30 @@ public class MeetingBotClient : IMeetingBotClient, ITransientDependency
         return client;
     }
 
-    private static bool IsCloudTtsConfigured(CloudTtsOptions? cloud)
-        => cloud is not null
-           && !string.IsNullOrWhiteSpace(cloud.SecretId)
-           && !string.IsNullOrWhiteSpace(cloud.SecretKey);
+    private static bool IsDgxTtsConfigured(DgxTtsOptions? dgx)
+        => dgx is not null && !string.IsNullOrWhiteSpace(dgx.BaseUrl);
 
-    /// <summary>腾讯云 TextToVoice 合成：按 ≤MaxTextChars 断句分片，限流并发，最后拼接成整段 WAV。</summary>
-    private async Task<byte[]> SynthesizeWithTencentCloudAsync(string text, CloudTtsOptions cloud, CancellationToken ct)
+    private static bool IsDgxAsrConfigured(DgxAsrOptions? dgx)
+        => dgx is not null && !string.IsNullOrWhiteSpace(dgx.BaseUrl);
+
+    /// <summary>DGX 调用统一错误处理：非 2xx 时记录响应体并抛业务异常。</summary>
+    private async Task EnsureDgxSuccessAsync(HttpResponseMessage response, string label, CancellationToken ct)
     {
-        var chunks = SplitForCloud(text, cloud.MaxTextChars);
-        if (chunks.Count == 0)
+        if (response.IsSuccessStatusCode)
         {
-            throw new BusinessException("TENCENT_TTS_EMPTY_TEXT", "语音合成文本为空");
+            return;
         }
-
-        var wavs = new byte[chunks.Count][];
-        using var semaphore = new SemaphoreSlim(cloud.MaxConcurrency > 0 ? cloud.MaxConcurrency : 1);
-        var tasks = chunks.Select(async (chunk, i) =>
-        {
-            await semaphore.WaitAsync(ct);
-            try
-            {
-                wavs[i] = await TencentTextToVoiceAsync(chunk, cloud, ct);
-            }
-            finally
-            {
-                semaphore.Release();
-            }
-        }).ToArray();
-        await Task.WhenAll(tasks);
-
-        return MeetingRecordAppService.ConcatWavs(wavs);
+        var body = await response.Content.ReadAsStringAsync(ct);
+        _logger.LogWarning("DGX {Label} 失败（{Status}）：{Body}",
+            label, (int)response.StatusCode, Truncate(body, 500));
+        throw new BusinessException("DGX_CALL_FAILED", $"DGX {label} 调用失败（HTTP {(int)response.StatusCode}）");
     }
 
-    private async Task<byte[]> TencentTextToVoiceAsync(string text, CloudTtsOptions cloud, CancellationToken ct)
+    private void AddDgxAuth(HttpRequestMessage request)
     {
-        var payload = new
+        if (!string.IsNullOrWhiteSpace(_options.DgxApiKey))
         {
-            Text = text,
-            SessionId = Guid.NewGuid().ToString("D"),
-            Volume = cloud.Volume,
-            Speed = cloud.Speed,
-            ProjectId = 0,
-            ModelType = 1,
-            VoiceType = cloud.VoiceType,
-            PrimaryLanguage = 1,
-            SampleRate = cloud.SampleRate,
-            Codec = "wav"
-        };
-        var json = JsonSerializer.Serialize(payload, TencentJsonOptions);
-        var timestamp = DateTimeOffset.UtcNow.ToUnixTimeSeconds();
-
-        using var request = new HttpRequestMessage(HttpMethod.Post, $"https://{TencentTtsHost}/")
-        {
-            Content = new StringContent(json, Encoding.UTF8, "application/json")
-        };
-        request.Headers.TryAddWithoutValidation("Host", TencentTtsHost);
-        request.Headers.TryAddWithoutValidation("X-TC-Action", TencentTtsAction);
-        request.Headers.TryAddWithoutValidation("X-TC-Version", TencentTtsVersion);
-        request.Headers.TryAddWithoutValidation("X-TC-Timestamp", timestamp.ToString(CultureInfo.InvariantCulture));
-        if (!string.IsNullOrWhiteSpace(cloud.Region))
-        {
-            request.Headers.TryAddWithoutValidation("X-TC-Region", cloud.Region);
-        }
-        request.Headers.TryAddWithoutValidation("Authorization", BuildTencentAuthorization(cloud, json, timestamp));
-
-        using var client = _httpClientFactory.CreateClient(); // 未命名客户端：不带 meeting-bot 默认请求头
-        using var response = await client.SendAsync(request, HttpCompletionOption.ResponseContentRead, ct);
-        if (!response.IsSuccessStatusCode)
-        {
-            var errorBody = await response.Content.ReadAsStringAsync(ct);
-            _logger.LogWarning("腾讯云 TTS HTTP {Status}：{Body}",
-                (int)response.StatusCode, Truncate(errorBody, 500));
-            throw new BusinessException("TENCENT_TTS_HTTP_FAILED", $"腾讯云 TTS 调用失败（HTTP {(int)response.StatusCode}）");
-        }
-
-        return ParseTencentAudioResponse(await response.Content.ReadAsStringAsync(ct));
-    }
-
-    private static byte[] ParseTencentAudioResponse(string json)
-    {
-        using var doc = JsonDocument.Parse(json);
-        if (!doc.RootElement.TryGetProperty("Response", out var response))
-        {
-            throw new BusinessException("TENCENT_TTS_INVALID_RESPONSE", "腾讯云 TTS 返回格式异常");
-        }
-        if (response.TryGetProperty("Error", out var error))
-        {
-            var code = error.TryGetProperty("Code", out var codeEl) ? codeEl.GetString() : "Unknown";
-            var message = error.TryGetProperty("Message", out var msgEl) ? msgEl.GetString() : "";
-            throw new BusinessException("TENCENT_TTS_FAILED", $"腾讯云 TTS 失败：{code} {message}");
-        }
-        if (!response.TryGetProperty("Audio", out var audio) || audio.ValueKind != JsonValueKind.String)
-        {
-            throw new BusinessException("TENCENT_TTS_NO_AUDIO", "腾讯云 TTS 响应缺少 Audio");
-        }
-        return Convert.FromBase64String(audio.GetString()!);
-    }
-
-    /// <summary>TC3-HMAC-SHA256 签名（腾讯云 API 3.0）。</summary>
-    private static string BuildTencentAuthorization(CloudTtsOptions cloud, string payload, long timestamp)
-    {
-        var date = DateTimeOffset.FromUnixTimeSeconds(timestamp)
-            .UtcDateTime.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture);
-        var canonicalHeaders = $"content-type:application/json; charset=utf-8\nhost:{TencentTtsHost}\n";
-        const string signedHeaders = "content-type;host";
-        var canonicalRequest = $"POST\n/\n\n{canonicalHeaders}\n{signedHeaders}\n{Sha256Hex(payload)}";
-        var credentialScope = $"{date}/{TencentTtsService}/tc3_request";
-        var stringToSign = $"TC3-HMAC-SHA256\n{timestamp}\n{credentialScope}\n{Sha256Hex(canonicalRequest)}";
-
-        var secretDate = HmacSha256(Encoding.UTF8.GetBytes("TC3" + cloud.SecretKey), date);
-        var secretService = HmacSha256(secretDate, TencentTtsService);
-        var secretSigning = HmacSha256(secretService, "tc3_request");
-        var signature = HexLower(HmacSha256(secretSigning, stringToSign));
-
-        return $"TC3-HMAC-SHA256 Credential={cloud.SecretId}/{credentialScope}, SignedHeaders={signedHeaders}, Signature={signature}";
-    }
-
-    private static string Sha256Hex(string input)
-        => HexLower(SHA256.HashData(Encoding.UTF8.GetBytes(input)));
-
-    private static byte[] HmacSha256(byte[] key, string input)
-        => HMACSHA256.HashData(key, Encoding.UTF8.GetBytes(input));
-
-    private static string HexLower(byte[] bytes)
-        => Convert.ToHexString(bytes).ToLowerInvariant();
-
-    /// <summary>按句末标点断句，超过 maxChars 强制截断（接口上限 150 汉字）。</summary>
-    private static List<string> SplitForCloud(string text, int maxChars)
-    {
-        if (maxChars <= 0)
-        {
-            maxChars = 140;
-        }
-
-        var result = new List<string>();
-        var current = new StringBuilder();
-        foreach (var ch in text)
-        {
-            current.Append(ch);
-            var isSentenceEnd = ch is '。' or '！' or '？' or '；' or '…' or '\n';
-            if (current.Length >= maxChars || isSentenceEnd)
-            {
-                var segment = current.ToString().Trim();
-                if (segment.Length > 0)
-                {
-                    result.Add(segment);
-                }
-                current.Clear();
-            }
-        }
-        var tail = current.ToString().Trim();
-        if (tail.Length > 0)
-        {
-            result.Add(tail);
-        }
-        return result;
-    }
-
-    private static async Task WriteFrameAsync(Stream destination, byte[] payload, CancellationToken ct)
-    {
-        var header = new byte[4];
-        header[0] = (byte)(payload.Length >> 24);
-        header[1] = (byte)((payload.Length >> 16) & 0xFF);
-        header[2] = (byte)((payload.Length >> 8) & 0xFF);
-        header[3] = (byte)(payload.Length & 0xFF);
-        await destination.WriteAsync(header, 0, header.Length, ct);
-        if (payload.Length > 0)
-        {
-            await destination.WriteAsync(payload, 0, payload.Length, ct);
+            request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", _options.DgxApiKey);
         }
     }
 

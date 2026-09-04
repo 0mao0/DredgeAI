@@ -33,6 +33,7 @@ class ChatRequest(BaseApiModel):
 
 class ChatResponse(BaseApiModel):
     text: str
+    reasoning: str | None = None
     finish_reason: str | None = None
     usage: dict[str, Any] | None = None
     used_config: str | None = None

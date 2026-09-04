@@ -16,6 +16,12 @@ public interface ILlmGateway
     /// <summary>单次对话补全，返回 assistant 文本内容。</summary>
     Task<string> CompleteAsync(string systemPrompt, string userPrompt, CancellationToken cancellationToken = default);
 
+    /// <summary>流式对话补全：按生成增量逐段产出文本（首个 delta 之前的失败按瞬时错误处理）。</summary>
+    IAsyncEnumerable<string> CompleteStreamAsync(
+        string systemPrompt,
+        string userPrompt,
+        CancellationToken cancellationToken = default);
+
     /// <summary>多模态对话补全：用户消息携带文本 + 若干图片（Qwen 读图取字段等场景）。</summary>
     Task<string> CompleteMultimodalAsync(
         string systemPrompt,

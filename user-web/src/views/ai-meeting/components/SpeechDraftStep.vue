@@ -1,7 +1,7 @@
 <template>
   <div class="speech-draft-step">
     <SectionCard flush>
-      <div v-if="!draft" class="speech-draft-step__generate">
+      <div v-if="!draft && !streaming" class="speech-draft-step__generate">
         <div v-if="loading" class="speech-draft-step__loading">
           <div class="speech-draft-step__spinner">
             <span class="speech-draft-step__dot" />
@@ -18,12 +18,13 @@
         <div class="speech-draft-step__header">
           <div class="speech-draft-step__header-left">
             <span class="speech-draft-step__date"><CalendarOutlined /> {{ dateText }}</span>
-            <span class="speech-draft-step__badge">AI 已生成</span>
+            <span v-if="streaming" class="speech-draft-step__badge is-streaming">AI 生成中…</span>
+            <span v-else class="speech-draft-step__badge">AI 已生成</span>
           </div>
           <span class="speech-draft-step__stat">{{ charCount }} 字 · 约 {{ minutes }} 分钟</span>
         </div>
 
-        <div class="speech-draft-step__player">
+        <div v-if="!streaming" class="speech-draft-step__player">
           <SpeechPlayer ref="playerRef" :text="content" :meeting-id="meetingId" />
         </div>
 
@@ -38,6 +39,10 @@
               >
                 {{ para }}
               </p>
+              <p v-if="streaming && paragraphs.length === 0" class="speech-draft-step__typing-hint">
+                正在组织语言…
+              </p>
+              <span v-if="streaming" class="speech-draft-step__cursor" />
             </template>
             <a-textarea
               v-else
@@ -48,7 +53,7 @@
           </div>
         </div>
 
-        <div class="speech-draft-step__footer">
+        <div v-if="!streaming" class="speech-draft-step__footer">
           <div class="speech-draft-step__actions">
             <AppButton v-if="!editing" size="sm" variant="text" @click="onToggleEdit">
               编辑
@@ -85,6 +90,9 @@ import SpeechPlayer from './SpeechPlayer.vue'
 const props = defineProps<{
   draft: SpeechDraftDto | null
   loading: boolean
+  /** 流式生成中（草稿尚未落库，直接渲染 streamingText） */
+  streaming?: boolean
+  streamingText?: string
   date?: string
   meetingId?: string
 }>()
@@ -109,10 +117,11 @@ watch(
   { immediate: true },
 )
 
+const displayText = computed(() => (props.streaming && !props.draft ? props.streamingText ?? '' : content.value))
 const parsed = computed(() => {
   const lines: string[] = []
   let note = ''
-  for (const raw of content.value.split('\n')) {
+  for (const raw of displayText.value.split('\n')) {
     const line = raw.trim()
     if (!line) continue
     if (line.includes(NO_EVIDENCE_NOTE)) {
@@ -127,7 +136,7 @@ const parsed = computed(() => {
 })
 const paragraphs = computed(() => parsed.value.lines)
 const noEvidenceNote = computed(() => parsed.value.note)
-const charCount = computed(() => content.value.replace(/\s/g, '').length)
+const charCount = computed(() => displayText.value.replace(/\s/g, '').length)
 const minutes = computed(() => Math.max(1, Math.ceil(charCount.value / 4 / 60)))
 const dateText = computed(() => props.date?.slice(0, 10) ?? '')
 
@@ -203,6 +212,10 @@ function onConfirm(): void {
   border-radius: @radius-sm;
   font-weight: @font-weight-medium;
   white-space: nowrap;
+
+  &.is-streaming {
+    animation: speech-draft-pulse 1.6s infinite ease-in-out;
+  }
 }
 .speech-draft-step__stat {
   font-size: @font-size-sm;
@@ -275,6 +288,20 @@ function onConfirm(): void {
 .speech-draft-step__card {
   margin-bottom: @spacing-md;
 }
+.speech-draft-step__typing-hint {
+  margin: 0;
+  font-size: @font-size-sm;
+  color: @text-tertiary;
+}
+.speech-draft-step__cursor {
+  display: inline-block;
+  width: 2px;
+  height: 1em;
+  vertical-align: -0.15em;
+  margin-left: 2px;
+  background: @brand-primary;
+  animation: speech-draft-cursor 0.8s infinite steps(1);
+}
 .speech-draft-step__para {
   margin: 0 0 @spacing-base;
   line-height: 1.8;
@@ -336,6 +363,24 @@ function onConfirm(): void {
   40% {
     transform: translateY(-10px);
     opacity: 1;
+  }
+}
+
+@keyframes speech-draft-pulse {
+  0%, 100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.55;
+  }
+}
+
+@keyframes speech-draft-cursor {
+  0%, 100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0;
   }
 }
 

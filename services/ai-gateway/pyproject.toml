@@ -9,7 +9,7 @@ dependencies = [
     "pydantic>=2.7",
     "pydantic-settings>=2.0",
     "python-dotenv>=1.0",
-    "angineer-ai-inference>=0.1.0",
+    "angineer-ai-inference>=0.2.0",
 ]
 
 [dependency-groups]
@@ -26,3 +26,8 @@ testpaths = ["tests"]
 name = "aliyun-pypi"
 url = "https://mirrors.aliyun.com/pypi/simple/"
 default = true
+
+[[tool.uv.index]]
+name = "tuna-pypi"
+url = "https://pypi.tuna.tsinghua.edu.cn/simple/"
+default = false
