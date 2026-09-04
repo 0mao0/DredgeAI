@@ -22,6 +22,32 @@ public class DredgeMinioBlobProvider : MinioBlobProvider, IDredgeBlobProvider
     }
 
     /// <inheritdoc />
+    public async Task SaveAsync(BlobProviderSaveArgs args, string contentType)
+    {
+        var blobName = MinioBlobNameCalculator.Calculate(args);
+        var configuration = args.Configuration.GetMinioConfiguration();
+        var client = GetMinioClient(args);
+        var containerName = GetContainerName(args);
+
+        if (!args.OverrideExisting && await BlobExistsAsync(client, containerName, blobName))
+        {
+            throw new BlobAlreadyExistsException($"Saving BLOB '{args.BlobName}' does already exists in the container '{containerName}'! Set {nameof(args.OverrideExisting)} if it should be overwritten.");
+        }
+
+        if (configuration.CreateBucketIfNotExists)
+        {
+            await CreateBucketIfNotExists(client, containerName);
+        }
+
+        await client.PutObjectAsync(new PutObjectArgs()
+            .WithBucket(containerName)
+            .WithObject(blobName)
+            .WithStreamData(args.BlobStream)
+            .WithObjectSize(args.BlobStream.Length)
+            .WithContentType(contentType));
+    }
+
+    /// <inheritdoc />
     public async Task<BlobFileInfo?> GetStatOrNullAsync(BlobProviderGetArgs args)
     {
         var client = GetMinioClient(args);

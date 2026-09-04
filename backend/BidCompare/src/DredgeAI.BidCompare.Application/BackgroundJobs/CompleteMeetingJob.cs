@@ -7,6 +7,7 @@ using System.Threading;
 using System.Threading.Tasks;
 using DredgeAI.BidCompare.MeetingBot;
 using DredgeAI.BidCompare.Storage;
+using DredgeAI.BlobStoring;
 using Microsoft.Extensions.Logging;
 using Volo.Abp.BackgroundJobs;
 using Volo.Abp.DependencyInjection;
@@ -26,20 +27,20 @@ public class CompleteMeetingJob : AsyncBackgroundJob<CompleteMeetingArgs>, ITran
     private readonly IRepository<AttendanceRecord, Guid> _attendance;
     private readonly IRepository<QaRecord, Guid> _qa;
     private readonly IMeetingBotClient _bot;
-    private readonly IFileStorage _fileStorage;
+    private readonly IDredgeBlobContainer<BidCompareFileContainer> _container;
 
     public CompleteMeetingJob(
         IRepository<MeetingRecord, Guid> meetings,
         IRepository<AttendanceRecord, Guid> attendance,
         IRepository<QaRecord, Guid> qa,
         IMeetingBotClient bot,
-        IFileStorage fileStorage)
+        IDredgeBlobContainer<BidCompareFileContainer> blobContainer)
     {
         _meetings = meetings;
         _attendance = attendance;
         _qa = qa;
         _bot = bot;
-        _fileStorage = fileStorage;
+        _container = blobContainer;
     }
 
     public override async Task ExecuteAsync(CompleteMeetingArgs args)
@@ -80,7 +81,7 @@ public class CompleteMeetingJob : AsyncBackgroundJob<CompleteMeetingArgs>, ITran
         else if (string.IsNullOrEmpty(meeting.TranscriptText))
         {
             byte[] audio;
-            await using (var stream = await _fileStorage.GetAsync(meeting.TranscriptFile))
+            await using (var stream = await _container.GetAsync(meeting.TranscriptFile))
             using (var ms = new MemoryStream())
             {
                 await stream.CopyToAsync(ms);
@@ -95,7 +96,7 @@ public class CompleteMeetingJob : AsyncBackgroundJob<CompleteMeetingArgs>, ITran
         var key = $"meeting/{meeting.Id}/report.md";
         await using (var content = new MemoryStream(Encoding.UTF8.GetBytes(markdown)))
         {
-            await _fileStorage.UploadAsync(key, content, "text/markdown");
+            await _container.SaveAsync(key, content, "text/markdown", overrideExisting: true);
         }
         meeting.SetReport(key);
     }

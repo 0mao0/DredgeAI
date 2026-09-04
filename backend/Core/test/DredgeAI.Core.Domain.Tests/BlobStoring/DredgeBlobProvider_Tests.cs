@@ -153,13 +153,49 @@ public class DredgeBlobProvider_Tests : DredgeAICoreDomainTestBase
     // ── FileSystem：GetDownloadUrlAsync ────────────────────────────────
 
     [Fact]
-    public async Task FileSystem_GetDownloadUrl_ThrowsNotSupported()
+    public async Task FileSystem_GetDownloadUrl_ExistingBlob_ReturnsSignedUrl()
+    {
+        var (provider, configuration, dir) = CreateFileSystemFixture();
+        using var _ = dir;
+        await SaveAsync(provider, configuration, "a.txt", "hello"u8.ToArray());
+
+        var url = await provider.GetDownloadUrlAsync(GetArgs(configuration, "a.txt"));
+
+        url.ShouldNotBeNull();
+        url.ShouldStartWith("/api/compare/storage/file?key=");
+        url.ShouldContain("a.txt");
+        url.ShouldContain("&expires=");
+        url.ShouldContain("&sig=");
+    }
+
+    [Fact]
+    public async Task FileSystem_GetDownloadUrl_MissingBlob_ReturnsNull()
     {
         var (provider, configuration, dir) = CreateFileSystemFixture();
         using var _ = dir;
 
-        await Should.ThrowAsync<NotSupportedException>(
-            () => provider.GetDownloadUrlAsync(GetArgs(configuration, "a.txt")));
+        var url = await provider.GetDownloadUrlAsync(GetArgs(configuration, "missing.txt"));
+
+        url.ShouldBeNull();
+    }
+
+    [Fact]
+    public async Task FileSystem_SaveWithContentType_Roundtrips()
+    {
+        var (provider, configuration, dir) = CreateFileSystemFixture();
+        using var _ = dir;
+        var content = Enumerable.Range(0, 100).Select(i => (byte)i).ToArray();
+
+        await provider.SaveAsync(
+            new BlobProviderSaveArgs(ContainerName, configuration, "ct.bin", new MemoryStream(content), true),
+            "image/png");
+
+        // FileSystem 忽略 contentType，只证明该链路不破坏内容。
+        var stream = await provider.GetRangeOrNullAsync(GetArgs(configuration, "ct.bin"), 0, content.Length);
+        stream.ShouldNotBeNull();
+        using var ms = new MemoryStream();
+        await stream.CopyToAsync(ms);
+        ms.ToArray().ShouldBe(content);
     }
 
     // ── Minio 集成（环境变量门控，未配置时静默跳过）─────────────────────
@@ -193,14 +229,16 @@ public class DredgeBlobProvider_Tests : DredgeAICoreDomainTestBase
 
         try
         {
-            // 上传
+            // 上传（携带 ContentType，预签名下载按此返回）
             await provider.SaveAsync(
-                new BlobProviderSaveArgs(container, configuration, blobName, new MemoryStream(content), true));
+                new BlobProviderSaveArgs(container, configuration, blobName, new MemoryStream(content), true),
+                "image/png");
 
             // stat
             var stat = await provider.GetStatOrNullAsync(new BlobProviderGetArgs(container, configuration, blobName));
             stat.ShouldNotBeNull();
             stat.Size.ShouldBe(content.Length);
+            stat.ContentType.ShouldBe("image/png");
 
             // range 切片
             var range = await provider.GetRangeOrNullAsync(

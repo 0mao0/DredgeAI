@@ -1,4 +1,5 @@
 using System;
+using DredgeAI.BlobStoring;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
@@ -24,6 +25,9 @@ using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using Microsoft.OpenApi;
 using Volo.Abp;
+using Volo.Abp.BlobStoring;
+using Volo.Abp.BlobStoring.FileSystem;
+using Volo.Abp.BlobStoring.Minio;
 using Volo.Abp.AspNetCore.Mvc;
 using Volo.Abp.AspNetCore.Mvc.AntiForgery;
 using Volo.Abp.AspNetCore.Serilog;
@@ -112,16 +116,39 @@ public class BidCompareHostModule : AbpModule
         });
         Configure<S3StorageOptions>(configuration.GetSection("Storage:S3"));
         Configure<LocalStorageOptions>(configuration.GetSection("Storage:Local"));
-        if ((configuration["Storage:Provider"] ?? "S3").Equals("Local", StringComparison.OrdinalIgnoreCase))
+        var storageProvider = configuration["Storage:Provider"] ?? "S3";
+        var s3 = configuration.GetSection("Storage:S3").Get<S3StorageOptions>() ?? new S3StorageOptions();
+        var local = configuration.GetSection("Storage:Local").Get<LocalStorageOptions>() ?? new LocalStorageOptions();
+        Configure<AbpBlobStoringOptions>(options =>
         {
-            // 自注册供签名下载端点校验签名（StorageFileController）
-            context.Services.AddSingleton<LocalFileStorage>();
-            context.Services.AddSingleton<IFileStorage>(sp => sp.GetRequiredService<LocalFileStorage>());
-        }
-        else
+            options.Containers.Configure<BidCompareFileContainer>(c =>
+            {
+                if (storageProvider.Equals("Local", StringComparison.OrdinalIgnoreCase))
+                {
+                    c.UseFileSystem(fs => fs.BasePath = local.RootPath);
+                    c.ProviderType = typeof(DredgeFileSystemBlobProvider);
+                }
+                else
+                {
+                    var endpoint = new Uri(s3.ServiceUrl);
+                    c.UseMinio(minio =>
+                    {
+                        minio.EndPoint = endpoint.Authority;
+                        minio.AccessKey = s3.AccessKey;
+                        minio.SecretKey = s3.SecretKey;
+                        minio.BucketName = s3.Bucket; // 保持既有 bucket 名 bid-compare
+                        minio.WithSSL = endpoint.Scheme == "https";
+                        minio.CreateBucketIfNotExists = true;
+                    });
+                    c.ProviderType = typeof(DredgeMinioBlobProvider);
+                }
+            });
+        });
+        Configure<BlobFileSystemSigningOptions>(o =>
         {
-            context.Services.AddSingleton<IFileStorage, S3FileStorage>();
-        }
+            o.SigningSecret = local.SigningSecret;
+            o.DownloadEndpointPath = "/api/compare/storage/file";
+        });
         Configure<AnGineerPollOptions>(configuration.GetSection("AnGIneer"));
         Configure<AnGineerOptions>(configuration.GetSection("AnGIneer"));
         Configure<AlgoServiceOptions>(configuration.GetSection("AlgoService"));

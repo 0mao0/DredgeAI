@@ -19,14 +19,14 @@ public class ParseDocumentJobTests : BidCompareApplicationTestBase<BidCompareApp
 {
     private readonly ICompareTaskAppService _appService;
     private readonly RecordingBackgroundJobManager _jobManager;
-    private readonly InMemoryFileStorage _fileStorage;
+    private readonly InMemoryBlobProvider _fileStorage;
     private readonly FakeAnGineerClient _anGineerClient;
 
     public ParseDocumentJobTests()
     {
         _appService = GetRequiredService<ICompareTaskAppService>();
         _jobManager = (RecordingBackgroundJobManager)GetRequiredService<IBackgroundJobManager>();
-        _fileStorage = (InMemoryFileStorage)GetRequiredService<IFileStorage>();
+        _fileStorage = GetRequiredService<InMemoryBlobProvider>();
         _anGineerClient = (FakeAnGineerClient)GetRequiredService<IAnGineerClient>();
     }
 

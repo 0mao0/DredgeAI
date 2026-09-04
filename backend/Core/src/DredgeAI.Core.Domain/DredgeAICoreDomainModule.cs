@@ -1,3 +1,4 @@
+using Microsoft.Extensions.DependencyInjection;
 using DredgeAI.BlobStoring;
 using Volo.Abp.BlobStoring;
 using Volo.Abp.BlobStoring.FileSystem;
@@ -37,5 +38,9 @@ public class DredgeAICoreDomainModule : AbpModule
                 }
             });
         });
+
+        context.Services.AddTransient(typeof(IDredgeBlobContainer<>), typeof(DredgeBlobContainer<>));
+        context.Services.AddTransient(typeof(IDredgeBlobContainer),
+            sp => sp.GetRequiredService<IDredgeBlobContainer<DefaultContainer>>());
     }
 }

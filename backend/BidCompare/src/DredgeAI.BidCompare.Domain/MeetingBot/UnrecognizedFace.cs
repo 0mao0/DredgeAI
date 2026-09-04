@@ -8,7 +8,7 @@ public class UnrecognizedFace : FullAuditedEntity<Guid>
 {
     public Guid MeetingRecordId { get; private set; }
 
-    /// <summary>裁剪图存储 key（IFileStorage）。</summary>
+    /// <summary>裁剪图存储 key（blob 容器 BidCompareFileContainer）。</summary>
     public string PhotoKey { get; private set; } = "";
 
     public double Confidence { get; private set; }

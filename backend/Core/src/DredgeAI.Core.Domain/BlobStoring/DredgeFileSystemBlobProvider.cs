@@ -1,3 +1,4 @@
+using Microsoft.Extensions.Options;
 using Volo.Abp.BlobStoring;
 using Volo.Abp.BlobStoring.FileSystem;
 
@@ -9,10 +10,18 @@ namespace DredgeAI.BlobStoring;
 /// </summary>
 public class DredgeFileSystemBlobProvider : FileSystemBlobProvider, IDredgeBlobProvider
 {
-    public DredgeFileSystemBlobProvider(IBlobFilePathCalculator filePathCalculator)
+    private readonly IOptions<BlobFileSystemSigningOptions> _signingOptions;
+
+    public DredgeFileSystemBlobProvider(
+        IBlobFilePathCalculator filePathCalculator,
+        IOptions<BlobFileSystemSigningOptions> signingOptions)
         : base(filePathCalculator)
     {
+        _signingOptions = signingOptions;
     }
+
+    /// <inheritdoc />
+    public virtual Task SaveAsync(BlobProviderSaveArgs args, string contentType) => base.SaveAsync(args);
 
     /// <inheritdoc />
     public Task<BlobFileInfo?> GetStatOrNullAsync(BlobProviderGetArgs args)
@@ -121,6 +130,16 @@ public class DredgeFileSystemBlobProvider : FileSystemBlobProvider, IDredgeBlobP
     /// <inheritdoc />
     public Task<string?> GetDownloadUrlAsync(BlobProviderGetArgs args, int? expirySeconds = null)
     {
-        throw new NotSupportedException("FileSystem blob provider 不支持生成下载地址。");
+        var path = FilePathCalculator.Calculate(args);
+        if (!File.Exists(path))
+        {
+            return Task.FromResult<string?>(null);
+        }
+        var options = _signingOptions.Value;
+        var expires = DateTimeOffset.UtcNow
+            .AddSeconds(expirySeconds ?? options.DefaultExpirySeconds)
+            .ToUnixTimeSeconds();
+        return Task.FromResult<string?>(
+            BlobDownloadUrlSigner.BuildUrl(options.DownloadEndpointPath, options.SigningSecret!, args.BlobName, expires));
     }
 }

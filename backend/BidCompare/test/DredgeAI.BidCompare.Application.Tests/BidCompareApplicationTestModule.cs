@@ -1,3 +1,5 @@
+using System.Linq;
+using DredgeAI.BlobStoring;
 using DredgeAI.BidCompare.EntityFrameworkCore;
 using Shiw.Abp.BaseEntityFrameworkCore;
 using DredgeAI.BidCompare.AnGineer;
@@ -15,6 +17,7 @@ using Microsoft.EntityFrameworkCore.Storage;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
 using Volo.Abp.BackgroundJobs;
+using Volo.Abp.BlobStoring;
 using Volo.Abp;
 using Volo.Abp.EntityFrameworkCore;
 using Volo.Abp.EntityFrameworkCore.Sqlite;
@@ -39,7 +42,23 @@ public class BidCompareApplicationTestModule : AbpModule
         // 生产环境 IBackgroundJobManager 按作用域注册（DefaultBackgroundJobManager 依赖作用域内 DbContext/ObjectMapper）；
         // 看门狗曾因构造函数注入该服务、绑定到已释放作用域而崩溃，测试用 Scoped 复现该场景。
         context.Services.Replace(ServiceDescriptor.Scoped<IBackgroundJobManager, RecordingBackgroundJobManager>());
-        context.Services.Replace(ServiceDescriptor.Singleton<IFileStorage, InMemoryFileStorage>());
+        // DefaultBlobProviderSelector 从 IEnumerable<IBlobProvider> 按类型匹配取实例；
+        // InMemoryBlobProvider 经 IDredgeBlobProvider（继承 ITransientDependency）被约定注册，
+        // 必须清掉全部 transient 描述符并让各服务类型指向同一实例，容器写入与测试断言才看到同一 Objects。
+        foreach (var stale in context.Services
+                     .Where(sd => sd.ImplementationType == typeof(InMemoryBlobProvider))
+                     .ToList())
+        {
+            context.Services.Remove(stale);
+        }
+        var blobProvider = new InMemoryBlobProvider();
+        context.Services.AddSingleton(blobProvider);
+        context.Services.AddSingleton<IBlobProvider>(blobProvider);
+        context.Services.AddSingleton<IDredgeBlobProvider>(blobProvider);
+        Configure<AbpBlobStoringOptions>(options =>
+        {
+            options.Containers.Configure<BidCompareFileContainer>(c => c.ProviderType = typeof(InMemoryBlobProvider));
+        });
         context.Services.Replace(ServiceDescriptor.Singleton<IAnGineerClient, FakeAnGineerClient>());
         context.Services.Replace(ServiceDescriptor.Singleton<ICompareAlgoClient, FakeCompareAlgoClient>());
         context.Services.Replace(ServiceDescriptor.Singleton<ILlmGateway, FakeLlmGateway>());

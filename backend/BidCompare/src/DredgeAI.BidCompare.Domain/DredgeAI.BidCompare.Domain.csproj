@@ -10,6 +10,7 @@
 
   <ItemGroup>
     <ProjectReference Include="..\DredgeAI.BidCompare.Domain.Shared\DredgeAI.BidCompare.Domain.Shared.csproj" />
+    <ProjectReference Include="..\..\..\Core\src\DredgeAI.Core.Domain\DredgeAI.Core.Domain.csproj" />
   </ItemGroup>
 
   <ItemGroup>
