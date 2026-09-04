@@ -88,6 +88,9 @@
     <PackageVersion Include="Volo.Abp.Core" Version="10.5.0" />
     <PackageVersion Include="Volo.Abp.Timing" Version="10.5.0" />
     <PackageVersion Include="Volo.Abp.Validation" Version="10.5.0" />
+    <PackageVersion Include="Volo.Abp.BlobStoring" Version="10.5.0" />
+    <PackageVersion Include="Volo.Abp.BlobStoring.Minio" Version="10.5.0" />
+    <PackageVersion Include="Volo.Abp.BlobStoring.FileSystem" Version="10.5.0" />
     <PackageVersion Include="Microsoft.Extensions.FileProviders.Embedded" Version="10.0.11" />
     <PackageVersion Include="Microsoft.Extensions.Hosting" Version="10.0.9" />
     <PackageVersion Include="Microsoft.Extensions.Http" Version="10.0.11" />
