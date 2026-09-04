@@ -1,20 +1,33 @@
 using System.Threading.RateLimiting;
+using DredgeAI.Gateway;
+using DredgeAI.Gateway.EntityFrameworkCore;
+using DredgeAI.Gateway.Proxying;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.Cors;
 using Microsoft.AspNetCore.RateLimiting;
 using Microsoft.AspNetCore.Http;
+using Microsoft.Extensions.DependencyInjection;
 using Volo.Abp;
 using Volo.Abp.AspNetCore.Authentication.JwtBearer;
+using Volo.Abp.AspNetCore.Mvc;
 using Volo.Abp.AspNetCore.Serilog;
 using Volo.Abp.Autofac;
+using Volo.Abp.Data;
+using Volo.Abp.EntityFrameworkCore.PostgreSql;
 using Volo.Abp.Modularity;
+using Volo.Abp.Threading;
 
 namespace DredgeAI;
 
 [DependsOn(
     typeof(AbpAspNetCoreAuthenticationJwtBearerModule),
     typeof(AbpAspNetCoreSerilogModule),
-    typeof(AbpAutofacModule)
+    typeof(AbpAutofacModule),
+    typeof(AbpAspNetCoreMvcModule),
+    typeof(AbpEntityFrameworkCorePostgreSqlModule),
+    typeof(GatewayApplicationModule),
+    typeof(GatewayHttpApiModule),
+    typeof(GatewayEntityFrameworkCoreModule)
 )]
 public class DredgeAIGatewayHostModule : AbpModule
 {
@@ -34,9 +47,9 @@ public class DredgeAIGatewayHostModule : AbpModule
                 options.Audience = "DredgeAI";
             });
 
-        // YARP：路由全部来自配置文件 ReverseProxy 节
-        context.Services.AddReverseProxy()
-            .LoadFromConfig(configuration.GetSection("ReverseProxy"));
+        // YARP：路由/集群来自 DB（DatabaseProxyConfigProvider 由 GatewayApplicationModule 注册，支持热重载）；
+        // appsettings 的 ReverseProxy 节仅作为首次启动的种子数据源
+        context.Services.AddReverseProxy();
 
         // 请求限流：按客户端 IP 分区的固定窗口；仅作用于代理端点（不健康检查），不设 GlobalLimiter
         var permitLimit = configuration.GetValue("RateLimiting:PermitLimit", 100);
@@ -81,6 +94,15 @@ public class DredgeAIGatewayHostModule : AbpModule
     public override Task OnApplicationInitializationAsync(ApplicationInitializationContext context)
     {
         var app = context.GetApplicationBuilder();
+
+        // 首次启动：路由表为空时从 ReverseProxy 配置节导入 DB；随后显式 Reload 保证 YARP 快照就位
+        AsyncHelper.RunSync(async () =>
+        {
+            using var scope = context.ServiceProvider.CreateScope();
+            await scope.ServiceProvider.GetRequiredService<IDataSeeder>().SeedAsync();
+        });
+        context.ServiceProvider.GetRequiredService<DatabaseProxyConfigProvider>().Reload();
+
         // 还原 nginx 转发头（For/Proto/Host/Prefix），必须最先执行：
         // YARP 默认以 Set 动作从自身请求状态生成 X-Forwarded-* 传给下游，
         // Auth 据此还原公网地址；同时限流分区才能拿到真实客户端 IP。
@@ -116,7 +138,10 @@ public class DredgeAIGatewayHostModule : AbpModule
         app.UseAuthorization();
         app.UseAbpSerilogEnrichers();
         app.UseConfiguredEndpoints(endpoints =>
-            endpoints.MapReverseProxy().RequireRateLimiting(ProxyRateLimitPolicy));
+        {
+            endpoints.MapControllers();
+            endpoints.MapReverseProxy().RequireRateLimiting(ProxyRateLimitPolicy);
+        });
         return Task.CompletedTask;
     }
 }

@@ -1,5 +1,5 @@
 # 构建上下文：DredgeAI/
-# 构建命令：docker build -f Gateway/DredgeAI.Gateway.Host/Dockerfile DredgeAI/
+# 构建命令：docker build -f Gateway/src/DredgeAI.Gateway.Host/Dockerfile DredgeAI/
 # 说明：Gateway 网关服务（YARP 反向代理 + 请求限流 + JWT 验证，统一入口）
 
 # ============================================================================
@@ -14,15 +14,21 @@ COPY nuget.config Directory.Packages.props common.props ./
 # 复制所有 csproj 用于 restore 缓存（仅 csproj 变化时才重新 restore）
 COPY ["DredgeAI.Host.Shared/DredgeAI.Host.Shared.csproj", "DredgeAI.Host.Shared/"]
 COPY ["DredgeAI.ServiceDefaults/DredgeAI.ServiceDefaults.csproj", "DredgeAI.ServiceDefaults/"]
-COPY ["Gateway/DredgeAI.Gateway.Host/DredgeAI.Gateway.Host.csproj", "Gateway/DredgeAI.Gateway.Host/"]
+COPY ["Gateway/src/DredgeAI.Gateway.Host/DredgeAI.Gateway.Host.csproj", "Gateway/src/DredgeAI.Gateway.Host/"]
+COPY ["Gateway/src/DredgeAI.Gateway.Domain.Shared/DredgeAI.Gateway.Domain.Shared.csproj", "Gateway/src/DredgeAI.Gateway.Domain.Shared/"]
+COPY ["Gateway/src/DredgeAI.Gateway.Domain/DredgeAI.Gateway.Domain.csproj", "Gateway/src/DredgeAI.Gateway.Domain/"]
+COPY ["Gateway/src/DredgeAI.Gateway.Application.Contracts/DredgeAI.Gateway.Application.Contracts.csproj", "Gateway/src/DredgeAI.Gateway.Application.Contracts/"]
+COPY ["Gateway/src/DredgeAI.Gateway.Application/DredgeAI.Gateway.Application.csproj", "Gateway/src/DredgeAI.Gateway.Application/"]
+COPY ["Gateway/src/DredgeAI.Gateway.EntityFrameworkCore/DredgeAI.Gateway.EntityFrameworkCore.csproj", "Gateway/src/DredgeAI.Gateway.EntityFrameworkCore/"]
+COPY ["Gateway/src/DredgeAI.Gateway.HttpApi/DredgeAI.Gateway.HttpApi.csproj", "Gateway/src/DredgeAI.Gateway.HttpApi/"]
 
-RUN dotnet restore "Gateway/DredgeAI.Gateway.Host/DredgeAI.Gateway.Host.csproj"
+RUN dotnet restore "Gateway/src/DredgeAI.Gateway.Host/DredgeAI.Gateway.Host.csproj"
 
 # 复制全部源码（.dockerignore 已排除 bin/obj/Logs）
 COPY . .
 
 # 编译发布
-RUN dotnet publish "Gateway/DredgeAI.Gateway.Host/DredgeAI.Gateway.Host.csproj" \
+RUN dotnet publish "Gateway/src/DredgeAI.Gateway.Host/DredgeAI.Gateway.Host.csproj" \
     -c Release -o /app/publish --no-restore
 
 # ============================================================================

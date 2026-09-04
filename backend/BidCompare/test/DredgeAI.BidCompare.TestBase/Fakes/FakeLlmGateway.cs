@@ -32,6 +32,15 @@ public class FakeLlmGateway : ILlmGateway
         return Task.FromResult(_responses.Dequeue());
     }
 
+    public async IAsyncEnumerable<string> CompleteStreamAsync(
+        string systemPrompt,
+        string userPrompt,
+        [System.Runtime.CompilerServices.EnumeratorCancellation] CancellationToken cancellationToken = default)
+    {
+        // 非流式语义：整段响应作为单个 delta 产出
+        yield return await CompleteAsync(systemPrompt, userPrompt, cancellationToken);
+    }
+
     public Task<string> CompleteMultimodalAsync(
         string systemPrompt,
         string text,
