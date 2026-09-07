@@ -39,11 +39,14 @@ public class DredgeMinioBlobProvider : MinioBlobProvider, IDredgeBlobProvider
             await CreateBucketIfNotExists(client, containerName);
         }
 
+        // 非可寻流（如 IFormFile 直通上传流）无法提前获知长度：传 -1 让 SDK 走分片上传（按 16MiB 分片读至 EOF）。
+        var objectSize = args.BlobStream.CanSeek ? args.BlobStream.Length : -1L;
+
         await client.PutObjectAsync(new PutObjectArgs()
             .WithBucket(containerName)
             .WithObject(blobName)
             .WithStreamData(args.BlobStream)
-            .WithObjectSize(args.BlobStream.Length)
+            .WithObjectSize(objectSize)
             .WithContentType(contentType));
     }
 

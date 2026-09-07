@@ -60,25 +60,22 @@ public class BidCompareHostModule : AbpModule
 {
     public override void PreConfigureServices(ServiceConfigurationContext context)
     {
-        
         AbpBackgroundJobsDbProperties.DbTablePrefix = "tab_";
     }
 
     public override void ConfigureServices(ServiceConfigurationContext context)
     {
+        context.Services.AddAlwaysAllowAuthorization();
         var configuration = context.Services.GetConfiguration();
         var hostingEnvironment = context.Services.GetHostingEnvironment();
-        Configure<AbpClockOptions>(options =>
-        {
-            options.Kind = DateTimeKind.Utc;
-        });
+        Configure<AbpClockOptions>(options => { options.Kind = DateTimeKind.Utc; });
         ConfigureAuthentication(context, configuration);
         ConfigureUrls(configuration);
         ConfigureConventionalControllers();
         ConfigureVirtualFileSystem(context);
         ConfigureCors(context, configuration);
         ConfigureSwaggerServices(context, configuration);
-     
+
         if (hostingEnvironment.IsDevelopment())
         {
             // 本地联调：user-web 尚无登录/权限链路，关闭 ABP 自动防伪校验；
@@ -90,7 +87,8 @@ public class BidCompareHostModule : AbpModule
         {
             for (var i = options.JsonSerializerOptions.Converters.Count - 1; i >= 0; i--)
             {
-                if (options.JsonSerializerOptions.Converters[i] is System.Text.Json.Serialization.JsonStringEnumConverter)
+                if (options.JsonSerializerOptions.Converters[i] is System.Text.Json.Serialization
+                        .JsonStringEnumConverter)
                 {
                     options.JsonSerializerOptions.Converters.RemoveAt(i);
                 }
@@ -106,48 +104,23 @@ public class BidCompareHostModule : AbpModule
         Configure<AbpDistributedCacheOptions>(options => { options.KeyPrefix = "DredgeAI:"; });
         // Shiw 后台任务分叉要求 ApplicationName 非空（f_application_name NOT NULL），
         // ABP 默认 null 会导致入队报 23502；多应用共用一库时按应用名隔离任务。
-        Configure<AbpBackgroundJobWorkerOptions>(options =>
-        {
-            options.ApplicationName = "BidCompare";
-        });
-        Configure<AbpMultiTenancyOptions>(options =>
-        {
-            options.IsEnabled = MultiTenancyConsts.IsEnabled;
-        });
-        Configure<S3StorageOptions>(configuration.GetSection("Storage:S3"));
-        Configure<LocalStorageOptions>(configuration.GetSection("Storage:Local"));
-        var storageProvider = configuration["Storage:Provider"] ?? "S3";
-        var s3 = configuration.GetSection("Storage:S3").Get<S3StorageOptions>() ?? new S3StorageOptions();
-        var local = configuration.GetSection("Storage:Local").Get<LocalStorageOptions>() ?? new LocalStorageOptions();
+        Configure<AbpBackgroundJobWorkerOptions>(options => { options.ApplicationName = "BidCompare"; });
+        Configure<AbpMultiTenancyOptions>(options => { options.IsEnabled = MultiTenancyConsts.IsEnabled; });
         Configure<AbpBlobStoringOptions>(options =>
         {
             options.Containers.Configure<BidCompareFileContainer>(c =>
             {
-                if (storageProvider.Equals("Local", StringComparison.OrdinalIgnoreCase))
+                c.UseMinio(minio =>
                 {
-                    c.UseFileSystem(fs => fs.BasePath = local.RootPath);
-                    c.ProviderType = typeof(DredgeFileSystemBlobProvider);
-                }
-                else
-                {
-                    var endpoint = new Uri(s3.ServiceUrl);
-                    c.UseMinio(minio =>
-                    {
-                        minio.EndPoint = endpoint.Authority;
-                        minio.AccessKey = s3.AccessKey;
-                        minio.SecretKey = s3.SecretKey;
-                        minio.BucketName = s3.Bucket; // 保持既有 bucket 名 bid-compare
-                        minio.WithSSL = endpoint.Scheme == "https";
-                        minio.CreateBucketIfNotExists = true;
-                    });
-                    c.ProviderType = typeof(DredgeMinioBlobProvider);
-                }
+                    minio.EndPoint = configuration.GetValue<string>("Minio:EndPoint") ?? string.Empty;
+                    minio.AccessKey = configuration.GetValue<string>("Minio:AccessKey") ?? string.Empty;
+                    minio.SecretKey = configuration.GetValue<string>("Minio:SecretKey") ?? string.Empty;
+                    minio.BucketName = configuration.GetValue<string>("Minio:BucketName");
+                    minio.WithSSL = configuration.GetValue<bool>("Minio:WithSSL");
+                    minio.CreateBucketIfNotExists = configuration.GetValue<bool>("Minio:CreateBucketIfNotExists");
+                });
+                c.ProviderType = typeof(DredgeMinioBlobProvider);
             });
-        });
-        Configure<BlobFileSystemSigningOptions>(o =>
-        {
-            o.SigningSecret = local.SigningSecret;
-            o.DownloadEndpointPath = "/api/compare/storage/file";
         });
         Configure<AnGineerPollOptions>(configuration.GetSection("AnGIneer"));
         Configure<AnGineerOptions>(configuration.GetSection("AnGIneer"));
@@ -157,13 +130,13 @@ public class BidCompareHostModule : AbpModule
         Configure<LibreOfficeOptions>(configuration.GetSection("LibreOffice"));
         Configure<WatchdogOptions>(configuration.GetSection("Watchdog"));
         Configure<CleanupOptions>(configuration.GetSection("Cleanup"));
-        
+
         Configure<AbpLocalizationOptions>(options =>
         {
             options.Languages.Add(new LanguageInfo("en", "en", "English"));
             options.Languages.Add(new LanguageInfo("zh-Hans", "zh-Hans", "简体中文"));
         });
-        
+
         // 应用展示顺序存储：JSON 文件持久化（App_Data/app-order.json），后端重启不丢
         context.Services.AddSingleton(sp =>
         {
@@ -220,10 +193,8 @@ public class BidCompareHostModule : AbpModule
                 client.DefaultRequestHeaders.Add("X-Meeting-Bot-Key", options.Key);
             }
         });
-        context.Services.AddHttpClient(nameof(HttpWeatherClient), (sp, client) =>
-        {
-            client.Timeout = TimeSpan.FromSeconds(10);
-        });
+        context.Services.AddHttpClient(nameof(HttpWeatherClient),
+            (sp, client) => { client.Timeout = TimeSpan.FromSeconds(10); });
         context.Services.AddTransient<IWeatherClient, HttpWeatherClient>();
         context.Services.AddTransient<IMeetingBotClient, MeetingBotClient>();
         context.Services.AddHttpClient();
@@ -246,7 +217,8 @@ public class BidCompareHostModule : AbpModule
         Configure<AppUrlOptions>(options =>
         {
             options.Applications["MVC"].RootUrl = configuration["App:SelfUrl"];
-            options.RedirectAllowedUrls.AddRange(configuration["App:RedirectAllowedUrls"]?.Split(',') ?? Array.Empty<string>());
+            options.RedirectAllowedUrls.AddRange(configuration["App:RedirectAllowedUrls"]?.Split(',') ??
+                                                 Array.Empty<string>());
         });
     }
 
@@ -288,7 +260,7 @@ public class BidCompareHostModule : AbpModule
             configuration["AuthServer:Authority"]!,
             new Dictionary<string, string>
             {
-                    {"DredgeAI", "DredgeAI API"}
+                { "DredgeAI", "DredgeAI API" }
             },
             options =>
             {
@@ -331,7 +303,8 @@ public class BidCompareHostModule : AbpModule
         });
     }
 
-    public override async System.Threading.Tasks.Task OnApplicationInitializationAsync(ApplicationInitializationContext context)
+    public override async System.Threading.Tasks.Task OnApplicationInitializationAsync(
+        ApplicationInitializationContext context)
     {
         var app = context.GetApplicationBuilder();
         var env = context.GetEnvironment();
@@ -378,8 +351,7 @@ public class BidCompareHostModule : AbpModule
         app.UseUnitOfWork();
         app.UseAuthorization();
 
-        var swaggerEnabled = env.IsDevelopment()
-            || context.ServiceProvider.GetRequiredService<IConfiguration>().GetValue<bool>("Swagger:Enabled");
+        var swaggerEnabled = env.IsDevelopment();
         if (swaggerEnabled)
         {
             app.UseSwagger();
