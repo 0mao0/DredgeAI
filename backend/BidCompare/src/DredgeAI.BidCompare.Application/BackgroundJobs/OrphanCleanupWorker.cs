@@ -4,6 +4,7 @@ using System.Threading.Tasks;
 using DredgeAI.BidCompare.Drafts;
 using DredgeAI.BidCompare.Exports;
 using DredgeAI.BidCompare.Storage;
+using DredgeAI.BlobStoring;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
@@ -46,7 +47,7 @@ public class OrphanCleanupWorker : AsyncPeriodicBackgroundWorkerBase, ITransient
     internal async Task SweepDraftsAsync(IServiceProvider serviceProvider, DateTime now)
     {
         var repository = serviceProvider.GetRequiredService<IRepository<CompareDraftDocument, Guid>>();
-        var storage = serviceProvider.GetRequiredService<IFileStorage>();
+        var storage = serviceProvider.GetRequiredService<IDredgeBlobContainer<BidCompareFileContainer>>();
 
         var deadline = now - _options.DraftRetention;
         var stale = await repository.GetListAsync(d => d.CreationTime < deadline);
@@ -69,7 +70,7 @@ public class OrphanCleanupWorker : AsyncPeriodicBackgroundWorkerBase, ITransient
     internal async Task SweepExportsAsync(IServiceProvider serviceProvider, DateTime now)
     {
         var repository = serviceProvider.GetRequiredService<IRepository<ExportJob, Guid>>();
-        var storage = serviceProvider.GetRequiredService<IFileStorage>();
+        var storage = serviceProvider.GetRequiredService<IDredgeBlobContainer<BidCompareFileContainer>>();
 
         var deadline = now - _options.ExportRetention;
         var stale = await repository.GetListAsync(j => j.CreationTime < deadline);

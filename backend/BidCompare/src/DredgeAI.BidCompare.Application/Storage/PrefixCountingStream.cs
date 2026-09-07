@@ -29,11 +29,11 @@ internal sealed class PrefixCountingStream : Stream
     public override bool CanRead => true;
     public override bool CanSeek => false;
     public override bool CanWrite => false;
-    public override long Length => throw new NotSupportedException();
+    public override long Length => _inner.Length;
     public override long Position
     {
         get => TotalBytesRead;
-        set => throw new NotSupportedException();
+        set => _inner.Position=value;
     }
 
     public override int Read(byte[] buffer, int offset, int count)

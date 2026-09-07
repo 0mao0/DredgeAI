@@ -1,10 +1,14 @@
 param(
     [switch]$TailLogs,
     [switch]$NoBrowser,
-    [switch]$OpenBrowser
+    [switch]$OpenBrowser,
+    # 跳过本地 PostgreSQL（Docker）启动，假定实例已由外部提供（远程库或已运行的容器）
+    [switch]$NoPostgres
 )
 
 # DredgeAI Startup Script（Auth + 比标后端 + 算法服务 + 用户端/管理端前端；AnGIneer 仅检测）
+# 参数：-TailLogs 跟随日志；-OpenBrowser 启动后打开浏览器（-NoBrowser 强制关闭）；
+#       -NoPostgres 跳过本地 PostgreSQL（Docker）启动，使用外部/已运行的 PostgreSQL
 [Console]::OutputEncoding = [System.Text.Encoding]::UTF8
 
 $rootDir = if ($PSScriptRoot) { $PSScriptRoot } else { (Get-Location).Path }
@@ -37,7 +41,7 @@ $postgresPort = 5432
 $compareAlgoPort = 8100
 $aiGatewayPort = 8200
 $backendPort = 44361
-$authPort = 7233
+$authPort = 44362
 $frontendPort = 5373
 $adminPort = 5374
 $angineerPort = 8790
@@ -341,34 +345,43 @@ Stop-PortProcess -Label "Backend" -Port $backendPort
 Stop-PortProcess -Label "Frontend" -Port $frontendPort
 Stop-PortProcess -Label "Admin Web" -Port $adminPort
 
-# 3. PostgreSQL（Docker）
-Write-Host "[3/5] Ensuring PostgreSQL (Docker)..." -ForegroundColor Yellow
-$dockerCmd = Get-Command docker -ErrorAction SilentlyContinue
-if (-not $dockerCmd) {
-    Write-Warning "Docker not found; PostgreSQL must be started manually (port $postgresPort)."
-} else {
-    try {
-        $existing = docker ps -a --filter "name=^/$postgresContainer$" --format "{{.Names}}" 2>$null
-        if ($existing) {
-            docker start $postgresContainer | Out-Null
-            Write-Host "  Started container $postgresContainer" -ForegroundColor Green
-        } else {
-            docker run -d --name $postgresContainer `
-                -e POSTGRES_USER=postgres `
-                -e POSTGRES_PASSWORD=postgres `
-                -e POSTGRES_DB=BidCompare `
-                -p "${postgresPort}:5432" `
-                -v "${postgresDataDir}:/var/lib/postgresql/data" `
-                postgres:16 | Out-Null
-            Write-Host "  Created container $postgresContainer" -ForegroundColor Green
-        }
-    } catch {
-        Write-Warning "PostgreSQL start failed: $($_.Exception.Message)"
+# 3. PostgreSQL（Docker；-NoPostgres 跳过本地启动，假定由外部提供）
+if ($NoPostgres) {
+    Write-Host "[3/5] Skipping PostgreSQL (Docker) startup (-NoPostgres)..." -ForegroundColor Yellow
+    if (Get-NetTCPConnection -LocalPort $postgresPort -State Listen -ErrorAction SilentlyContinue) {
+        Write-Host "  PostgreSQL already listening on port $postgresPort." -ForegroundColor Green
+    } else {
+        Write-Host "  PostgreSQL not listening locally on port $postgresPort (expected for external/remote instances)." -ForegroundColor DarkGray
     }
-}
-$postgresReady = Test-PortListening -Label "PostgreSQL" -Port $postgresPort -TimeoutSeconds 30
-if (-not $postgresReady) {
-    Write-Host "  WARNING: PostgreSQL not ready; backend may fail to start." -ForegroundColor Red
+} else {
+    Write-Host "[3/5] Ensuring PostgreSQL (Docker)..." -ForegroundColor Yellow
+    $dockerCmd = Get-Command docker -ErrorAction SilentlyContinue
+    if (-not $dockerCmd) {
+        Write-Warning "Docker not found; PostgreSQL must be started manually (port $postgresPort)."
+    } else {
+        try {
+            $existing = docker ps -a --filter "name=^/$postgresContainer$" --format "{{.Names}}" 2>$null
+            if ($existing) {
+                docker start $postgresContainer | Out-Null
+                Write-Host "  Started container $postgresContainer" -ForegroundColor Green
+            } else {
+                docker run -d --name $postgresContainer `
+                    -e POSTGRES_USER=postgres `
+                    -e POSTGRES_PASSWORD=postgres `
+                    -e POSTGRES_DB=BidCompare `
+                    -p "${postgresPort}:5432" `
+                    -v "${postgresDataDir}:/var/lib/postgresql/data" `
+                    postgres:16 | Out-Null
+                Write-Host "  Created container $postgresContainer" -ForegroundColor Green
+            }
+        } catch {
+            Write-Warning "PostgreSQL start failed: $($_.Exception.Message)"
+        }
+    }
+    $postgresReady = Test-PortListening -Label "PostgreSQL" -Port $postgresPort -TimeoutSeconds 30
+    if (-not $postgresReady) {
+        Write-Host "  WARNING: PostgreSQL not ready; backend may fail to start." -ForegroundColor Red
+    }
 }
 
 # 4. 启动服务
@@ -391,7 +404,7 @@ $aiGatewayCommand = "Set-Location '$escapedAiGatewayDir'; & '$escapedAiGatewayPy
 $aiGatewayProcess = Start-ServiceProcess -ServiceName "ai-gateway" -ServiceCommand $aiGatewayCommand -LogPath $aiGatewayLogPath -PidPath $aiGatewayPidPath
 
 $escapedAuthProject = $authProject.Replace("'", "''")
-$authCommand = "`$env:PATH=`"`$env:LOCALAPPDATA\Microsoft\dotnet;`$env:PATH`"; dotnet run --project '$escapedAuthProject' --launch-profile 'https'"
+$authCommand = "`$env:PATH=`"`$env:LOCALAPPDATA\Microsoft\dotnet;`$env:PATH`"; dotnet run --project '$escapedAuthProject' --launch-profile 'DredgeAI.Auth.Host'"
 $authProcess = Start-ServiceProcess -ServiceName "Auth" -ServiceCommand $authCommand -LogPath $authLogPath -PidPath $authPidPath
 
 $escapedProject = $backendProject.Replace("'", "''")

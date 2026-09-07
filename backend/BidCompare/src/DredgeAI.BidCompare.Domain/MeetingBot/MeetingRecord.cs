@@ -18,7 +18,7 @@ public class MeetingRecord : FullAuditedAggregateRoot<Guid>
 
     public Guid? SpeechDraftId { get; private set; }
 
-    /// <summary>会议全程录音存储 key（IFileStorage）。</summary>
+    /// <summary>会议全程录音存储 key（blob 容器 BidCompareFileContainer）。</summary>
     public string? TranscriptFile { get; private set; }
 
     /// <summary>转写文本（后台任务回填）。</summary>

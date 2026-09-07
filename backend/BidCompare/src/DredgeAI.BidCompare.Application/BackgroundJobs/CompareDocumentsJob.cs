@@ -9,6 +9,7 @@ using DredgeAI.BidCompare.CompareTasks;
 using DredgeAI.BidCompare.Documents;
 using DredgeAI.BidCompare.Evidences;
 using DredgeAI.BidCompare.Storage;
+using DredgeAI.BlobStoring;
 using Microsoft.Extensions.Logging;
 using Volo.Abp.BackgroundJobs;
 using Volo.Abp.DependencyInjection;
@@ -33,7 +34,7 @@ public class CompareDocumentsJob : AsyncBackgroundJob<CompareDocumentsArgs>, ITr
     private readonly IRepository<CompareTask, Guid> _taskRepository;
     private readonly IRepository<CompareDocument, Guid> _documentRepository;
     private readonly IRepository<EvidenceItem, Guid> _evidenceRepository;
-    private readonly IFileStorage _fileStorage;
+    private readonly IDredgeBlobContainer<BidCompareFileContainer> _container;
     private readonly ICompareAlgoClient _algoClient;
     private readonly IGuidGenerator _guidGenerator;
     private readonly IBackgroundJobManager _backgroundJobManager;
@@ -44,7 +45,7 @@ public class CompareDocumentsJob : AsyncBackgroundJob<CompareDocumentsArgs>, ITr
         IRepository<CompareTask, Guid> taskRepository,
         IRepository<CompareDocument, Guid> documentRepository,
         IRepository<EvidenceItem, Guid> evidenceRepository,
-        IFileStorage fileStorage,
+        IDredgeBlobContainer<BidCompareFileContainer> blobContainer,
         ICompareAlgoClient algoClient,
         IGuidGenerator guidGenerator,
         IBackgroundJobManager backgroundJobManager,
@@ -54,7 +55,7 @@ public class CompareDocumentsJob : AsyncBackgroundJob<CompareDocumentsArgs>, ITr
         _taskRepository = taskRepository;
         _documentRepository = documentRepository;
         _evidenceRepository = evidenceRepository;
-        _fileStorage = fileStorage;
+        _container = blobContainer;
         _algoClient = algoClient;
         _guidGenerator = guidGenerator;
         _backgroundJobManager = backgroundJobManager;
@@ -297,13 +298,13 @@ public class CompareDocumentsJob : AsyncBackgroundJob<CompareDocumentsArgs>, ITr
 
         // 逐份读取构建请求，单份读完即释放（算法契约需全文，无法流式，但不做全量驻留之外的重复缓冲）
         string graphJsonl;
-        await using (var stream = await _fileStorage.GetAsync(rawGraphKey, cancellationToken))
+        await using (var stream = await _container.GetAsync(rawGraphKey, cancellationToken))
         using (var reader = new StreamReader(stream))
         {
             graphJsonl = await reader.ReadToEndAsync(cancellationToken);
         }
         string metaJson;
-        await using (var stream = await _fileStorage.GetAsync(rawMetaKey, cancellationToken))
+        await using (var stream = await _container.GetAsync(rawMetaKey, cancellationToken))
         using (var reader = new StreamReader(stream))
         {
             metaJson = await reader.ReadToEndAsync(cancellationToken);

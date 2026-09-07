@@ -8,6 +8,7 @@ using DredgeAI.BidCompare.AI;
 using DredgeAI.BidCompare.CompareTasks;
 using DredgeAI.BidCompare.Documents;
 using DredgeAI.BidCompare.Storage;
+using DredgeAI.BlobStoring;
 using Microsoft.Extensions.Logging;
 using Volo.Abp;
 using Volo.Abp.BackgroundJobs;
@@ -32,20 +33,20 @@ public class ExtractClausesJob : AsyncBackgroundJob<ExtractClausesArgs>, ITransi
 
     private readonly IRepository<CompareTask, Guid> _taskRepository;
     private readonly IRepository<CompareDocument, Guid> _documentRepository;
-    private readonly IFileStorage _fileStorage;
+    private readonly IDredgeBlobContainer<BidCompareFileContainer> _container;
     private readonly ILlmGateway _llmGateway;
     private readonly IUnitOfWorkManager _unitOfWorkManager;
 
     public ExtractClausesJob(
         IRepository<CompareTask, Guid> taskRepository,
         IRepository<CompareDocument, Guid> documentRepository,
-        IFileStorage fileStorage,
+        IDredgeBlobContainer<BidCompareFileContainer> blobContainer,
         ILlmGateway llmGateway,
         IUnitOfWorkManager unitOfWorkManager)
     {
         _taskRepository = taskRepository;
         _documentRepository = documentRepository;
-        _fileStorage = fileStorage;
+        _container = blobContainer;
         _llmGateway = llmGateway;
         _unitOfWorkManager = unitOfWorkManager;
     }
@@ -85,7 +86,7 @@ public class ExtractClausesJob : AsyncBackgroundJob<ExtractClausesArgs>, ITransi
     /// <summary>限量读取招标文件 Markdown：全量拼 prompt 会超模型上下文/网关超时，按字符上限截断。</summary>
     private async Task<string> ReadDocMdAsync(string storageKey, CancellationToken cancellationToken)
     {
-        await using var stream = await _fileStorage.GetAsync(storageKey, cancellationToken);
+        await using var stream = await _container.GetAsync(storageKey, cancellationToken);
         using var reader = new StreamReader(stream);
         var buffer = new char[4096];
         var builder = new StringBuilder();

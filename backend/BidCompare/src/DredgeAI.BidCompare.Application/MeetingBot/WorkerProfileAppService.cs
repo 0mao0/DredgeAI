@@ -7,6 +7,7 @@ using System.Text.Json;
 using System.Threading.Tasks;
 using DredgeAI.BidCompare.AI;
 using DredgeAI.BidCompare.Storage;
+using DredgeAI.BlobStoring;
 using DocumentFormat.OpenXml.Packaging;
 using DocumentFormat.OpenXml.Spreadsheet;
 using Volo.Abp;
@@ -24,18 +25,18 @@ public class WorkerProfileAppService : ApplicationService, IWorkerProfileAppServ
 {
     private readonly IRepository<WorkerProfile, Guid> _workers;
     private readonly IMeetingBotClient _bot;
-    private readonly IFileStorage _fileStorage;
+    private readonly IDredgeBlobContainer<BidCompareFileContainer> _container;
     private readonly ILlmGateway _llmGateway;
 
     public WorkerProfileAppService(
         IRepository<WorkerProfile, Guid> workers,
         IMeetingBotClient bot,
-        IFileStorage fileStorage,
+        IDredgeBlobContainer<BidCompareFileContainer> blobContainer,
         ILlmGateway llmGateway)
     {
         _workers = workers;
         _bot = bot;
-        _fileStorage = fileStorage;
+        _container = blobContainer;
         _llmGateway = llmGateway;
     }
 
@@ -140,7 +141,7 @@ public class WorkerProfileAppService : ApplicationService, IWorkerProfileAppServ
 
         var key = $"meeting/workers/{worker.Id}/face-{DateTime.Now:yyyyMMddHHmmss}.jpg";
         await using var stream = new MemoryStream(image);
-        await _fileStorage.UploadAsync(key, stream, "image/jpeg");
+        await _container.SaveAsync(key, stream, "image/jpeg", overrideExisting: true);
 
         var photos = new List<string>();
         try

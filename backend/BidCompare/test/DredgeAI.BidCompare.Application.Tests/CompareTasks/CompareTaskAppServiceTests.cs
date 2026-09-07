@@ -20,13 +20,13 @@ namespace DredgeAI.BidCompare.CompareTasks;
 public class CompareTaskAppServiceTests : BidCompareApplicationTestBase<BidCompareApplicationTestModule>
 {
     private readonly ICompareTaskAppService _appService;
-    private readonly InMemoryFileStorage _fileStorage;
+    private readonly InMemoryBlobProvider _fileStorage;
     private readonly RecordingBackgroundJobManager _jobManager;
 
     public CompareTaskAppServiceTests()
     {
         _appService = GetRequiredService<ICompareTaskAppService>();
-        _fileStorage = (InMemoryFileStorage)GetRequiredService<IFileStorage>();
+        _fileStorage = GetRequiredService<InMemoryBlobProvider>();
         _jobManager = (RecordingBackgroundJobManager)GetRequiredService<Volo.Abp.BackgroundJobs.IBackgroundJobManager>();
     }
 

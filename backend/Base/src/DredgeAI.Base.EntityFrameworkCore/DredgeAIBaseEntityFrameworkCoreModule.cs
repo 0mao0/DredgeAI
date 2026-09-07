@@ -1,5 +1,4 @@
 ﻿using Microsoft.Extensions.DependencyInjection;
-using Shiw.File.EntityFrameworkCore;
 using Volo.Abp.EntityFrameworkCore;
 using Volo.Abp.Modularity;
 
@@ -7,8 +6,7 @@ namespace DredgeAI;
 
 [DependsOn(
     typeof(DredgeAIBaseDomainModule),
-    typeof(AbpEntityFrameworkCoreModule),
-    typeof(FileEntityFrameworkCoreModule)
+    typeof(AbpEntityFrameworkCoreModule)
 )]
 public class DredgeAIBaseEntityFrameworkCoreModule : AbpModule
 {
