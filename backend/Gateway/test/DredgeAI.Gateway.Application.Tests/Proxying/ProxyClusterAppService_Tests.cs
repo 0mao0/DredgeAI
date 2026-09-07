@@ -1,4 +1,3 @@
-using System.Collections.Generic;
 using System.Linq;
 using System.Threading.Tasks;
 using Shouldly;
@@ -10,10 +9,12 @@ namespace DredgeAI.Gateway.Proxying;
 public class ProxyClusterAppService_Tests : GatewayApplicationTestBase<GatewayApplicationTestModule>
 {
     private readonly IProxyClusterAppService _appService;
+    private readonly DatabaseProxyConfigProvider _configProvider;
 
     public ProxyClusterAppService_Tests()
     {
         _appService = GetRequiredService<IProxyClusterAppService>();
+        _configProvider = GetRequiredService<DatabaseProxyConfigProvider>();
     }
 
     [Fact]
@@ -33,7 +34,7 @@ public class ProxyClusterAppService_Tests : GatewayApplicationTestBase<GatewayAp
         var ex = await Should.ThrowAsync<BusinessException>(() => _appService.CreateAsync(new ProxyClusterCreateUpdateDto
         {
             ClusterId = "cluster-bad",
-            Destinations = new Dictionary<string, string> { ["destination1"] = "not-a-uri" }
+            Destinations = new() { ["destination1"] = new ClusterDestinationDto { Address = "not-a-uri" } }
         }));
 
         ex.Code.ShouldBe(GatewayErrorCodes.InvalidDestinationAddress);
@@ -45,11 +46,27 @@ public class ProxyClusterAppService_Tests : GatewayApplicationTestBase<GatewayAp
         await _appService.CreateAsync(new ProxyClusterCreateUpdateDto
         {
             ClusterId = "cluster-c",
-            Destinations = new Dictionary<string, string> { ["destination1"] = "http://c:8080/" }
+            Destinations = new() { ["destination1"] = new ClusterDestinationDto { Address = "http://c:8080/" } }
         });
 
         var list = await _appService.GetListAsync();
         var clusterC = list.Items.Single(x => x.ClusterId == "cluster-c");
-        clusterC.Destinations.ShouldBe(new Dictionary<string, string> { ["destination1"] = "http://c:8080/" });
+        clusterC.Destinations["destination1"].Address.ShouldBe("http://c:8080/");
+    }
+
+    [Fact]
+    public async Task Create_With_IsEnabled_False_Should_Persist_And_Exclude_From_Snapshot()
+    {
+        await _appService.CreateAsync(new ProxyClusterCreateUpdateDto
+        {
+            ClusterId = "cluster-disabled",
+            Destinations = new() { ["destination1"] = new ClusterDestinationDto { Address = "http://d:8080/" } },
+            IsEnabled = false
+        });
+
+        var list = await _appService.GetListAsync();
+        list.Items.Single(x => x.ClusterId == "cluster-disabled").IsEnabled.ShouldBeFalse();
+
+        _configProvider.GetConfig().Clusters.ShouldNotContain(x => x.ClusterId == "cluster-disabled");
     }
 }

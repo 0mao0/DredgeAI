@@ -38,32 +38,21 @@ public static class GatewayDbContextModelCreatingExtensions
                 .IsRequired()
                 .HasComment("路由匹配优先级（值越小越优先）");
 
-            b.Property(x => x.MatchPath)
-                .HasColumnName(handler.FieldNameHandler(nameof(ProxyRoute.MatchPath)))
-                .IsRequired()
-                .HasMaxLength(256)
-                .HasComment("路径匹配模式，如 /api/compare/{**catch-all}");
-
-            b.Property(x => x.MatchHostsJson)
-                .HasColumnName(handler.FieldNameHandler(nameof(ProxyRoute.MatchHostsJson)))
+            b.Property(x => x.ConfigJson)
+                .HasColumnName(handler.FieldNameHandler(nameof(ProxyRoute.ConfigJson)))
                 .HasColumnType("text")
-                .HasComment("Host 匹配列表 JSON 数组，null 表示不限制");
-
-            b.Property(x => x.MatchMethodsJson)
-                .HasColumnName(handler.FieldNameHandler(nameof(ProxyRoute.MatchMethodsJson)))
-                .HasColumnType("text")
-                .HasComment("HTTP 方法匹配列表 JSON 数组，null 表示不限制");
-
-            b.Property(x => x.AuthorizationPolicy)
-                .HasColumnName(handler.FieldNameHandler(nameof(ProxyRoute.AuthorizationPolicy)))
                 .IsRequired()
-                .HasMaxLength(64)
-                .HasComment("授权策略（YARP 内置字面量 anonymous 或 default）");
+                .HasComment("完整 YARP RouteConfig JSON（camelCase）");
 
             b.Property(x => x.IsEnabled)
                 .HasColumnName(handler.FieldNameHandler(nameof(ProxyRoute.IsEnabled)))
                 .IsRequired()
                 .HasComment("是否启用；禁用的路由不进 YARP 快照");
+
+            b.Property(x => x.Description)
+                .HasColumnName(handler.FieldNameHandler(nameof(ProxyRoute.Description)))
+                .HasMaxLength(256)
+                .HasComment("路由描述");
         });
 
         // ProxyCluster — YARP 代理集群
@@ -81,11 +70,22 @@ public static class GatewayDbContextModelCreatingExtensions
                 .HasComment("YARP 集群 ID，全局唯一");
             b.HasIndex(x => x.ClusterId).IsUnique();
 
-            b.Property(x => x.DestinationsJson)
-                .HasColumnName(handler.FieldNameHandler(nameof(ProxyCluster.DestinationsJson)))
-                .IsRequired()
+            b.Property(x => x.ConfigJson)
+                .HasColumnName(handler.FieldNameHandler(nameof(ProxyCluster.ConfigJson)))
                 .HasColumnType("text")
-                .HasComment("目的地字典 JSON（destinationId → 下游地址）");
+                .IsRequired()
+                .HasComment("完整 YARP ClusterConfig JSON（camelCase）");
+
+            b.Property(x => x.Description)
+                .HasColumnName(handler.FieldNameHandler(nameof(ProxyCluster.Description)))
+                .HasMaxLength(256)
+                .HasComment("集群描述");
+
+            b.Property(x => x.IsEnabled)
+                .HasColumnName(handler.FieldNameHandler(nameof(ProxyCluster.IsEnabled)))
+                .IsRequired()
+                .HasDefaultValue(true)
+                .HasComment("是否启用；禁用的集群及其路由不进 YARP 快照");
         });
     }
 }

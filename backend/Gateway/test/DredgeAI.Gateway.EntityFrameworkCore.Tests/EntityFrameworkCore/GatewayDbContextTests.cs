@@ -19,7 +19,7 @@ public class GatewayDbContextTests : GatewayEntityFrameworkCoreTestBase
 
         routeA.ShouldNotBeNull();
         routeA.ClusterId.ShouldBe("cluster-a");
-        routeA.MatchPath.ShouldBe("/api/a/{**catch-all}");
+        routeA.ToRouteConfig().Match.Path.ShouldBe("/api/a/{**catch-all}");
     }
 
     [Fact]
@@ -30,6 +30,6 @@ public class GatewayDbContextTests : GatewayEntityFrameworkCoreTestBase
         var clusterB = await clusterRepo.FindAsync(x => x.ClusterId == "cluster-b");
 
         clusterB.ShouldNotBeNull();
-        clusterB.DestinationsJson.ShouldContain("http://b:8080/");
+        clusterB.ToClusterConfig().Destinations!["destination1"].Address.ShouldBe("http://b:8080/");
     }
 }

@@ -1,5 +1,4 @@
 using System;
-using System.Collections.Generic;
 using System.Linq;
 using System.Threading.Tasks;
 using Shouldly;
@@ -20,25 +19,37 @@ public class ProxyRouteAppService_Tests : GatewayApplicationTestBase<GatewayAppl
     }
 
     [Fact]
-    public async Task Create_Should_Roundtrip_With_MatchHosts()
+    public async Task Create_Should_Roundtrip_Simplified_RouteConfig()
     {
         var created = await _appService.CreateAsync(new ProxyRouteCreateUpdateDto
         {
             RouteId = "route-crud",
             ClusterId = "cluster-a",
             Order = 3,
-            MatchPath = "/api/crud/{**catch-all}",
-            MatchHosts = new List<string> { "example.com" },
-            AuthorizationPolicy = "default"
+            AuthorizationPolicy = "anonymous",
+            Description = "ops",
+            Match = new ProxyRouteMatchDto { Path = "/api/crud/{**catch-all}", Hosts = new[] { "example.com" } }
         });
 
         created.Id.ShouldNotBe(Guid.Empty);
-        created.MatchHosts.ShouldBe(new List<string> { "example.com" });
+
+        // GetAsync 扁平字段往返
+        var fetched = await _appService.GetAsync(created.Id);
+        fetched.Match.Path.ShouldBe("/api/crud/{**catch-all}");
+        fetched.Match.Hosts.ShouldBe(new[] { "example.com" });
+        fetched.AuthorizationPolicy.ShouldBe("anonymous");
+        fetched.Description.ShouldBe("ops");
+        fetched.Order.ShouldBe(3);
 
         var list = await _appService.GetListAsync(new GetProxyRoutesInput { Keyword = "route-crud", MaxResultCount = 10 });
         list.TotalCount.ShouldBe(1);
-        list.Items[0].MatchPath.ShouldBe("/api/crud/{**catch-all}");
-        list.Items[0].MatchHosts.ShouldBe(new List<string> { "example.com" });
+        list.Items[0].Match.Path.ShouldBe("/api/crud/{**catch-all}");
+
+        // 快照内同字段生效
+        var snapshot = _configProvider.GetConfig();
+        var snapRoute = snapshot.Routes.Single(r => r.RouteId == "route-crud");
+        snapRoute.Match.Hosts.ShouldBe(new[] { "example.com" });
+        snapRoute.AuthorizationPolicy.ShouldBe("anonymous");
     }
 
     [Fact]
@@ -48,8 +59,7 @@ public class ProxyRouteAppService_Tests : GatewayApplicationTestBase<GatewayAppl
         {
             RouteId = "route-a",
             ClusterId = "cluster-a",
-            MatchPath = "/api/dup/{**catch-all}",
-            AuthorizationPolicy = "default"
+            Match = new ProxyRouteMatchDto { Path = "/api/dup/{**catch-all}" }
         }));
 
         ex.Code.ShouldBe(GatewayErrorCodes.DuplicateRouteId);
@@ -62,8 +72,7 @@ public class ProxyRouteAppService_Tests : GatewayApplicationTestBase<GatewayAppl
         {
             RouteId = "route-orphan",
             ClusterId = "cluster-missing",
-            MatchPath = "/api/orphan/{**catch-all}",
-            AuthorizationPolicy = "default"
+            Match = new ProxyRouteMatchDto { Path = "/api/orphan/{**catch-all}" }
         }));
 
         ex.Code.ShouldBe(GatewayErrorCodes.ClusterNotFound);
@@ -80,8 +89,9 @@ public class ProxyRouteAppService_Tests : GatewayApplicationTestBase<GatewayAppl
             RouteId = routeB.RouteId,
             ClusterId = routeB.ClusterId,
             Order = routeB.Order,
-            MatchPath = "/api/b2/{**catch-all}",
             AuthorizationPolicy = routeB.AuthorizationPolicy,
+            Description = routeB.Description,
+            Match = new ProxyRouteMatchDto { Path = "/api/b2/{**catch-all}" },
             IsEnabled = true
         });
 

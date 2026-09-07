@@ -1,12 +1,11 @@
 using System;
-using System.Collections.Generic;
 using System.Linq;
-using System.Text.Json;
 using System.Threading.Tasks;
 using Volo.Abp;
 using Volo.Abp.Application.Dtos;
 using Volo.Abp.Application.Services;
 using Volo.Abp.Domain.Repositories;
+using Yarp.ReverseProxy.Configuration;
 
 namespace DredgeAI.Gateway.Proxying;
 
@@ -32,7 +31,7 @@ public class ProxyRouteAppService : ApplicationService, IProxyRouteAppService
         var queryable = await _repository.GetQueryableAsync();
         queryable = queryable
             .WhereIf(!input.Keyword.IsNullOrWhiteSpace(),
-                x => x.RouteId.Contains(input.Keyword!) || x.MatchPath.Contains(input.Keyword!))
+                x => x.RouteId.Contains(input.Keyword!) || x.ConfigJson.Contains(input.Keyword!))
             .WhereIf(!input.ClusterId.IsNullOrWhiteSpace(), x => x.ClusterId == input.ClusterId);
 
         var totalCount = await AsyncExecuter.CountAsync(queryable);
@@ -53,15 +52,8 @@ public class ProxyRouteAppService : ApplicationService, IProxyRouteAppService
 
     public async Task<ProxyRouteDto> CreateAsync(ProxyRouteCreateUpdateDto input)
     {
-        var entity = new ProxyRoute(
-            GuidGenerator.Create(),
-            input.RouteId.Trim(),
-            input.ClusterId.Trim(),
-            input.Order,
-            input.MatchPath.Trim(),
-            SerializeStringList(input.MatchHosts),
-            SerializeStringList(input.MatchMethods),
-            input.AuthorizationPolicy.Trim());
+        var config = ObjectMapper.Map<ProxyRouteCreateUpdateDto, RouteConfig>(input);
+        var entity = new ProxyRoute(GuidGenerator.Create(), config, input.Description);
         if (!input.IsEnabled)
         {
             entity.Disable();
@@ -69,21 +61,15 @@ public class ProxyRouteAppService : ApplicationService, IProxyRouteAppService
 
         await _configManager.ValidateNewRouteAsync(entity);
         await _repository.InsertAsync(entity, autoSave: true);
-        _configProvider.Reload();
+        await _configProvider.ReloadAsync();
         return ObjectMapper.Map<ProxyRoute, ProxyRouteDto>(entity);
     }
 
     public async Task<ProxyRouteDto> UpdateAsync(Guid id, ProxyRouteCreateUpdateDto input)
     {
         var entity = await _repository.GetAsync(id);
-        entity.Update(
-            input.RouteId.Trim(),
-            input.ClusterId.Trim(),
-            input.Order,
-            input.MatchPath.Trim(),
-            SerializeStringList(input.MatchHosts),
-            SerializeStringList(input.MatchMethods),
-            input.AuthorizationPolicy.Trim());
+        var config = ObjectMapper.Map<ProxyRouteCreateUpdateDto, RouteConfig>(input);
+        entity.Update(config, input.Description);
         if (input.IsEnabled)
         {
             entity.Enable();
@@ -95,7 +81,7 @@ public class ProxyRouteAppService : ApplicationService, IProxyRouteAppService
 
         await _configManager.ValidateUpdateRouteAsync(entity);
         await _repository.UpdateAsync(entity, autoSave: true);
-        _configProvider.Reload();
+        await _configProvider.ReloadAsync();
         return ObjectMapper.Map<ProxyRoute, ProxyRouteDto>(entity);
     }
 
@@ -103,11 +89,7 @@ public class ProxyRouteAppService : ApplicationService, IProxyRouteAppService
     {
         var entity = await _repository.GetAsync(id);
         await _repository.DeleteAsync(entity, autoSave: true);
-        _configProvider.Reload();
+        await _configProvider.ReloadAsync();
     }
 
-    private static string? SerializeStringList(List<string>? values)
-    {
-        return values is { Count: > 0 } ? JsonSerializer.Serialize(values) : null;
-    }
 }

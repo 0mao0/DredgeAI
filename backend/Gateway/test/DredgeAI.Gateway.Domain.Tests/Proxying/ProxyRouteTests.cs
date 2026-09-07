@@ -1,6 +1,7 @@
 using System;
 using Shouldly;
 using Xunit;
+using Yarp.ReverseProxy.Configuration;
 
 namespace DredgeAI.Gateway.Proxying;
 
@@ -10,44 +11,73 @@ public class ProxyRouteTests
     public void Ctor_Should_Throw_On_Empty_RouteId()
     {
         Should.Throw<ArgumentException>(() =>
-            new ProxyRoute(Guid.NewGuid(), " ", "cluster-a", 0, "/api/a/{**catch-all}", null, null, "default"));
-    }
-
-    [Fact]
-    public void Ctor_Should_Throw_On_Empty_MatchPath()
-    {
-        Should.Throw<ArgumentException>(() =>
-            new ProxyRoute(Guid.NewGuid(), "route-x", "cluster-a", 0, "", null, null, "default"));
+            new ProxyRoute(Guid.NewGuid(), new RouteConfig
+            {
+                RouteId = " ",
+                ClusterId = "cluster-a",
+                Match = new RouteMatch { Path = "/api/a/{**catch-all}" }
+            }));
     }
 
     [Fact]
     public void Ctor_Should_Default_Enabled()
     {
-        var route = new ProxyRoute(Guid.NewGuid(), "route-x", "cluster-a", 1, "/api/x/{**catch-all}", null, null, "anonymous");
+        var route = new ProxyRoute(Guid.NewGuid(), new RouteConfig
+        {
+            RouteId = "route-x",
+            ClusterId = "cluster-a",
+            AuthorizationPolicy = "anonymous",
+            Match = new RouteMatch { Path = "/api/x/{**catch-all}" }
+        });
+
         route.IsEnabled.ShouldBeTrue();
-        route.AuthorizationPolicy.ShouldBe("anonymous");
+        route.ToRouteConfig().AuthorizationPolicy.ShouldBe("anonymous");
     }
 
     [Fact]
-    public void Update_Should_Replace_Values()
+    public void Update_Should_Replace_Config()
     {
-        var route = new ProxyRoute(Guid.NewGuid(), "route-x", "cluster-a", 0, "/api/x/{**catch-all}", null, null, "default");
+        var route = new ProxyRoute(Guid.NewGuid(), new RouteConfig
+        {
+            RouteId = "route-x",
+            ClusterId = "cluster-a",
+            Match = new RouteMatch { Path = "/api/x/{**catch-all}" }
+        });
 
-        route.Update("route-y", "cluster-b", 5, "/api/y/{**catch-all}", "[\"h1\"]", "[\"GET\"]", "anonymous");
+        route.Update(new RouteConfig
+        {
+            RouteId = "route-y",
+            ClusterId = "cluster-b",
+            Order = 5,
+            AuthorizationPolicy = "anonymous",
+            Match = new RouteMatch
+            {
+                Path = "/api/y/{**catch-all}",
+                Hosts = new[] { "h1" },
+                Methods = new[] { "GET" }
+            }
+        });
 
         route.RouteId.ShouldBe("route-y");
         route.ClusterId.ShouldBe("cluster-b");
         route.Order.ShouldBe(5);
-        route.MatchPath.ShouldBe("/api/y/{**catch-all}");
-        route.MatchHostsJson.ShouldBe("[\"h1\"]");
-        route.MatchMethodsJson.ShouldBe("[\"GET\"]");
-        route.AuthorizationPolicy.ShouldBe("anonymous");
+
+        var config = route.ToRouteConfig();
+        config.Match.Path.ShouldBe("/api/y/{**catch-all}");
+        config.Match.Hosts.ShouldBe(new[] { "h1" });
+        config.Match.Methods.ShouldBe(new[] { "GET" });
+        config.AuthorizationPolicy.ShouldBe("anonymous");
     }
 
     [Fact]
     public void Enable_Disable_Should_Flip_IsEnabled()
     {
-        var route = new ProxyRoute(Guid.NewGuid(), "route-x", "cluster-a", 0, "/api/x/{**catch-all}", null, null, "default");
+        var route = new ProxyRoute(Guid.NewGuid(), new RouteConfig
+        {
+            RouteId = "route-x",
+            ClusterId = "cluster-a",
+            Match = new RouteMatch { Path = "/api/x/{**catch-all}" }
+        });
 
         route.Disable();
         route.IsEnabled.ShouldBeFalse();

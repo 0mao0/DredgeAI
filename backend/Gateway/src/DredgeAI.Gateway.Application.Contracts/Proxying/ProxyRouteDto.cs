@@ -1,24 +1,21 @@
 using System;
-using System.Collections.Generic;
 using Volo.Abp.Application.Dtos;
 
 namespace DredgeAI.Gateway.Proxying;
 
 public class ProxyRouteDto : AuditedEntityDto<Guid>
 {
-    public string RouteId { get; set; } = default!;
+    public string RouteId { get; set; } = string.Empty;
 
-    public string ClusterId { get; set; } = default!;
+    public string? Description { get; set; }
+
+    public string ClusterId { get; set; } = string.Empty;
+
+    public string? AuthorizationPolicy { get; set; }
 
     public int Order { get; set; }
 
-    public string MatchPath { get; set; } = default!;
-
-    public List<string>? MatchHosts { get; set; }
-
-    public List<string>? MatchMethods { get; set; }
-
-    public string AuthorizationPolicy { get; set; } = default!;
+    public ProxyRouteMatchDto Match { get; set; } = new();
 
     public bool IsEnabled { get; set; }
 }

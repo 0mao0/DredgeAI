@@ -1,11 +1,11 @@
 using System.Collections.Generic;
-using System.Text.Json;
 using System.Threading.Tasks;
 using DredgeAI.Gateway.Proxying;
 using Volo.Abp.Data;
 using Volo.Abp.DependencyInjection;
 using Volo.Abp.Domain.Repositories;
 using Volo.Abp.Guids;
+using Yarp.ReverseProxy.Configuration;
 
 namespace DredgeAI.Gateway;
 
@@ -33,15 +33,41 @@ public class GatewayTestDataSeedContributor : IDataSeedContributor, ITransientDe
         }
 
         await _clusterRepository.InsertAsync(new ProxyCluster(
-            _guidGenerator.Create(), "cluster-a",
-            JsonSerializer.Serialize(new Dictionary<string, string> { ["destination1"] = "http://a:8080/" })));
+            _guidGenerator.Create(),
+            new ClusterConfig
+            {
+                ClusterId = "cluster-a",
+                Destinations = new Dictionary<string, DestinationConfig>
+                {
+                    ["destination1"] = new() { Address = "http://a:8080/" }
+                }
+            }));
         await _clusterRepository.InsertAsync(new ProxyCluster(
-            _guidGenerator.Create(), "cluster-b",
-            JsonSerializer.Serialize(new Dictionary<string, string> { ["destination1"] = "http://b:8080/" })));
+            _guidGenerator.Create(),
+            new ClusterConfig
+            {
+                ClusterId = "cluster-b",
+                Destinations = new Dictionary<string, DestinationConfig>
+                {
+                    ["destination1"] = new() { Address = "http://b:8080/" }
+                }
+            }));
 
         await _routeRepository.InsertAsync(new ProxyRoute(
-            _guidGenerator.Create(), "route-a", "cluster-a", 0, "/api/a/{**catch-all}", null, null, "default"));
+            _guidGenerator.Create(),
+            new RouteConfig
+            {
+                RouteId = "route-a",
+                ClusterId = "cluster-a",
+                Match = new RouteMatch { Path = "/api/a/{**catch-all}" }
+            }));
         await _routeRepository.InsertAsync(new ProxyRoute(
-            _guidGenerator.Create(), "route-b", "cluster-b", 0, "/api/b/{**catch-all}", null, null, "default"));
+            _guidGenerator.Create(),
+            new RouteConfig
+            {
+                RouteId = "route-b",
+                ClusterId = "cluster-b",
+                Match = new RouteMatch { Path = "/api/b/{**catch-all}" }
+            }));
     }
 }

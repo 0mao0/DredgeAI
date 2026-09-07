@@ -1,6 +1,4 @@
 using System;
-using System.Collections.Generic;
-using System.Text.Json;
 using System.Threading.Tasks;
 using Volo.Abp;
 using Volo.Abp.Domain.Repositories;
@@ -49,15 +47,15 @@ public class ProxyConfigManager : DomainService
             throw new BusinessException(GatewayErrorCodes.DuplicateClusterId);
         }
 
-        var destinations = JsonSerializer.Deserialize<Dictionary<string, string>>(cluster.DestinationsJson);
-        if (destinations is null || destinations.Count == 0)
+        var cfg = cluster.ToClusterConfig();
+        if (cfg.Destinations is null || cfg.Destinations.Count == 0)
         {
             throw new BusinessException(GatewayErrorCodes.InvalidDestinationAddress);
         }
 
-        foreach (var address in destinations.Values)
+        foreach (var destination in cfg.Destinations.Values)
         {
-            if (!Uri.TryCreate(address, UriKind.Absolute, out var uri)
+            if (!Uri.TryCreate(destination.Address, UriKind.Absolute, out var uri)
                 || (uri.Scheme != Uri.UriSchemeHttp && uri.Scheme != Uri.UriSchemeHttps))
             {
                 throw new BusinessException(GatewayErrorCodes.InvalidDestinationAddress);

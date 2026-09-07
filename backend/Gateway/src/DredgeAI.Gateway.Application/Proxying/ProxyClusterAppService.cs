@@ -1,11 +1,11 @@
 using System;
 using System.Linq;
-using System.Text.Json;
 using System.Threading.Tasks;
 using Volo.Abp;
 using Volo.Abp.Application.Dtos;
 using Volo.Abp.Application.Services;
 using Volo.Abp.Domain.Repositories;
+using Yarp.ReverseProxy.Configuration;
 
 namespace DredgeAI.Gateway.Proxying;
 
@@ -41,25 +41,36 @@ public class ProxyClusterAppService : ApplicationService, IProxyClusterAppServic
 
     public async Task<ProxyClusterDto> CreateAsync(ProxyClusterCreateUpdateDto input)
     {
-        var entity = new ProxyCluster(
-            GuidGenerator.Create(),
-            input.ClusterId.Trim(),
-            JsonSerializer.Serialize(input.Destinations));
+        var config = ObjectMapper.Map<ProxyClusterCreateUpdateDto, ClusterConfig>(input);
+        var entity = new ProxyCluster(GuidGenerator.Create(), config, input.Description);
+        if (!input.IsEnabled)
+        {
+            entity.Disable();
+        }
 
         await _configManager.ValidateClusterAsync(entity);
         await _repository.InsertAsync(entity, autoSave: true);
-        _configProvider.Reload();
+        await _configProvider.ReloadAsync();
         return ObjectMapper.Map<ProxyCluster, ProxyClusterDto>(entity);
     }
 
     public async Task<ProxyClusterDto> UpdateAsync(Guid id, ProxyClusterCreateUpdateDto input)
     {
         var entity = await _repository.GetAsync(id);
-        entity.Update(JsonSerializer.Serialize(input.Destinations));
+        var config = ObjectMapper.Map<ProxyClusterCreateUpdateDto, ClusterConfig>(input);
+        entity.Update(config, input.Description);
+        if (input.IsEnabled)
+        {
+            entity.Enable();
+        }
+        else
+        {
+            entity.Disable();
+        }
 
         await _configManager.ValidateClusterAsync(entity, excludeId: id);
         await _repository.UpdateAsync(entity, autoSave: true);
-        _configProvider.Reload();
+        await _configProvider.ReloadAsync();
         return ObjectMapper.Map<ProxyCluster, ProxyClusterDto>(entity);
     }
 
@@ -68,6 +79,6 @@ public class ProxyClusterAppService : ApplicationService, IProxyClusterAppServic
         var entity = await _repository.GetAsync(id);
         await _configManager.ValidateClusterDeleteAsync(entity.ClusterId);
         await _repository.DeleteAsync(entity, autoSave: true);
-        _configProvider.Reload();
+        await _configProvider.ReloadAsync();
     }
 }

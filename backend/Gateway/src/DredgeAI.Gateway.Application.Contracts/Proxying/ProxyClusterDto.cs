@@ -6,7 +6,11 @@ namespace DredgeAI.Gateway.Proxying;
 
 public class ProxyClusterDto : AuditedEntityDto<Guid>
 {
-    public string ClusterId { get; set; } = default!;
+    public string ClusterId { get; set; } = string.Empty;
 
-    public Dictionary<string, string> Destinations { get; set; } = new();
+    public string? Description { get; set; }
+
+    public Dictionary<string, ClusterDestinationDto> Destinations { get; set; } = new();
+
+    public bool IsEnabled { get; set; }
 }

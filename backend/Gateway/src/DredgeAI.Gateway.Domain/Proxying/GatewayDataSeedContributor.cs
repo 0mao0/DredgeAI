@@ -1,6 +1,5 @@
 using System;
 using System.Collections.Generic;
-using System.Text.Json;
 using System.Threading.Tasks;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging;
@@ -8,6 +7,7 @@ using Volo.Abp.Data;
 using Volo.Abp.DependencyInjection;
 using Volo.Abp.Domain.Repositories;
 using Volo.Abp.Guids;
+using Yarp.ReverseProxy.Configuration;
 
 namespace DredgeAI.Gateway.Proxying;
 
@@ -44,77 +44,38 @@ public class GatewayDataSeedContributor : IDataSeedContributor, ITransientDepend
             return;
         }
 
-        var clusters = _configuration.GetSection("ReverseProxy:Clusters").Get<Dictionary<string, ClusterSection>>();
-        var routes = _configuration.GetSection("ReverseProxy:Routes").Get<Dictionary<string, RouteSection>>();
+        // appsettings 的 Routes/Clusters 以字典键为 ID，对象内部无 ID 字段，需用 with 回填。
+        var clusters = _configuration.GetSection("ReverseProxy:Clusters").Get<Dictionary<string, ClusterConfig>>();
+        var routes = _configuration.GetSection("ReverseProxy:Routes").Get<Dictionary<string, RouteConfig>>();
 
         if (clusters is not null)
         {
-            foreach (var (clusterId, cluster) in clusters)
+            foreach (var (clusterId, section) in clusters)
             {
-                var destinations = new Dictionary<string, string>();
-                if (cluster.Destinations is not null)
+                var config = section with { ClusterId = clusterId };
+                if (config.Destinations is null || config.Destinations.Count == 0)
                 {
-                    foreach (var (destinationId, destination) in cluster.Destinations)
-                    {
-                        if (string.IsNullOrWhiteSpace(destination.Address))
-                        {
-                            _logger.LogWarning("种子跳过集群 {ClusterId} 的空地址目的地 {DestinationId}", clusterId, destinationId);
-                            continue;
-                        }
-                        destinations[destinationId] = destination.Address;
-                    }
+                    _logger.LogWarning("种子跳过无目的地的集群 {ClusterId}", clusterId);
+                    continue;
                 }
                 await _clusterRepository.InsertAsync(
-                    new ProxyCluster(_guidGenerator.Create(), clusterId, JsonSerializer.Serialize(destinations)));
+                    new ProxyCluster(_guidGenerator.Create(), config));
             }
         }
 
         if (routes is not null)
         {
-            foreach (var (routeId, route) in routes)
+            foreach (var (routeId, section) in routes)
             {
-                if (string.IsNullOrWhiteSpace(route.Match?.Path))
+                var config = section with { RouteId = routeId };
+                if (string.IsNullOrWhiteSpace(config.ClusterId))
                 {
-                    _logger.LogWarning("种子跳过缺少 Match.Path 的路由 {RouteId}", routeId);
+                    _logger.LogWarning("种子跳过缺少 ClusterId 的路由 {RouteId}", routeId);
                     continue;
                 }
-
                 await _routeRepository.InsertAsync(
-                    new ProxyRoute(
-                        _guidGenerator.Create(),
-                        routeId,
-                        route.ClusterId ?? string.Empty,
-                        route.Order,
-                        route.Match.Path,
-                        route.Match.Hosts is { Length: > 0 } ? JsonSerializer.Serialize(route.Match.Hosts) : null,
-                        route.Match.Methods is { Length: > 0 } ? JsonSerializer.Serialize(route.Match.Methods) : null,
-                        string.IsNullOrWhiteSpace(route.AuthorizationPolicy) ? "default" : route.AuthorizationPolicy));
+                    new ProxyRoute(_guidGenerator.Create(), config));
             }
         }
-    }
-
-    private sealed class RouteSection
-    {
-        public string? ClusterId { get; set; }
-        public string? AuthorizationPolicy { get; set; }
-        public int Order { get; set; }
-        public MatchSection? Match { get; set; }
-    }
-
-    private sealed class MatchSection
-    {
-        public string? Path { get; set; }
-        public string[]? Hosts { get; set; }
-        public string[]? Methods { get; set; }
-    }
-
-    private sealed class ClusterSection
-    {
-        public Dictionary<string, DestinationSection>? Destinations { get; set; }
-    }
-
-    private sealed class DestinationSection
-    {
-        public string? Address { get; set; }
     }
 }

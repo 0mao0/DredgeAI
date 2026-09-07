@@ -36,11 +36,11 @@ public class DatabaseProxyConfigProvider_Tests : GatewayApplicationTestBase<Gate
     }
 
     [Fact]
-    public void Reload_Should_Signal_Old_Snapshot_Token()
+    public async Task Reload_Should_Signal_Old_Snapshot_Token()
     {
         var old = _configProvider.GetConfig();
 
-        _configProvider.Reload();
+        await _configProvider.ReloadAsync();
 
         old.ChangeToken.HasChanged.ShouldBeTrue();
     }
@@ -55,7 +55,7 @@ public class DatabaseProxyConfigProvider_Tests : GatewayApplicationTestBase<Gate
         routeA.Disable();
         await routeRepository.UpdateAsync(routeA, autoSave: true);
 
-        _configProvider.Reload();
+        await _configProvider.ReloadAsync();
 
         var config = _configProvider.GetConfig();
 
@@ -65,6 +65,28 @@ public class DatabaseProxyConfigProvider_Tests : GatewayApplicationTestBase<Gate
         // 恢复，避免影响同类中其他用例（共享单例 provider 与内存库）
         routeA.Enable();
         await routeRepository.UpdateAsync(routeA, autoSave: true);
-        _configProvider.Reload();
+        await _configProvider.ReloadAsync();
+    }
+
+    [Fact]
+    public async Task Disabled_Cluster_Should_Exclude_Its_Routes_After_Reload()
+    {
+        using var scope = ServiceProvider.CreateScope();
+        var clusterRepository = scope.ServiceProvider.GetRequiredService<IRepository<ProxyCluster, Guid>>();
+
+        var clusterA = await clusterRepository.GetAsync(x => x.ClusterId == "cluster-a");
+        clusterA.Disable();
+        await clusterRepository.UpdateAsync(clusterA, autoSave: true);
+
+        await _configProvider.ReloadAsync();
+
+        var config = _configProvider.GetConfig();
+        config.Clusters.ShouldNotContain(x => x.ClusterId == "cluster-a");
+        config.Routes.ShouldNotContain(x => x.RouteId == "route-a");
+
+        // 恢复，避免影响同类中其他用例（共享单例 provider 与内存库）
+        clusterA.Enable();
+        await clusterRepository.UpdateAsync(clusterA, autoSave: true);
+        await _configProvider.ReloadAsync();
     }
 }

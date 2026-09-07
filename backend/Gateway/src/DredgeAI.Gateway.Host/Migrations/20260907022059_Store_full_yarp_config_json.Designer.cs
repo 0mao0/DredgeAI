@@ -3,6 +3,7 @@ using System;
 using DredgeAI.Gateway.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 using Volo.Abp.EntityFrameworkCore;
@@ -12,9 +13,11 @@ using Volo.Abp.EntityFrameworkCore;
 namespace DredgeAI.Migrations
 {
     [DbContext(typeof(GatewayDbContext))]
-    partial class GatewayDbContextModelSnapshot : ModelSnapshot
+    [Migration("20260907022059_Store_full_yarp_config_json")]
+    partial class Store_full_yarp_config_json
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -72,12 +75,6 @@ namespace DredgeAI.Migrations
                         .HasColumnName("f_deletion_time")
                         .HasComment("删除时间");
 
-                    b.Property<string>("Description")
-                        .HasMaxLength(256)
-                        .HasColumnType("character varying(256)")
-                        .HasColumnName("f_description")
-                        .HasComment("集群描述");
-
                     b.Property<string>("ExtraProperties")
                         .IsRequired()
                         .HasColumnType("text")
@@ -90,13 +87,6 @@ namespace DredgeAI.Migrations
                         .HasDefaultValue(false)
                         .HasColumnName("f_is_deleted")
                         .HasComment("是否删除 0.否 1.是");
-
-                    b.Property<bool>("IsEnabled")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("boolean")
-                        .HasDefaultValue(true)
-                        .HasColumnName("f_is_enabled")
-                        .HasComment("是否启用；禁用的集群及其路由不进 YARP 快照");
 
                     b.Property<DateTime?>("LastModificationTime")
                         .HasColumnType("timestamp with time zone")
@@ -163,12 +153,6 @@ namespace DredgeAI.Migrations
                         .HasColumnType("timestamp with time zone")
                         .HasColumnName("f_deletion_time")
                         .HasComment("删除时间");
-
-                    b.Property<string>("Description")
-                        .HasMaxLength(256)
-                        .HasColumnType("character varying(256)")
-                        .HasColumnName("f_description")
-                        .HasComment("路由描述");
 
                     b.Property<string>("ExtraProperties")
                         .IsRequired()

@@ -1,7 +1,8 @@
 using System.Collections.Generic;
-using System.Text.Json;
+using System.Linq;
 using AutoMapper;
 using DredgeAI.Gateway.Proxying;
+using Yarp.ReverseProxy.Configuration;
 
 namespace DredgeAI.Gateway;
 
@@ -9,29 +10,31 @@ public class GatewayApplicationAutoMapperProfile : Profile
 {
     public GatewayApplicationAutoMapperProfile()
     {
+        // 输入：扁平 DTO → YARP
+        CreateMap<ClusterDestinationDto, DestinationConfig>();
+        CreateMap<ProxyClusterCreateUpdateDto, ClusterConfig>();
+
+        CreateMap<ProxyRouteMatchDto, RouteMatch>();
+        CreateMap<ProxyRouteCreateUpdateDto, RouteConfig>();
+
+        // 输出：实体 → 扁平 DTO（RouteId/ClusterId/Order/Description/IsEnabled 及 Id/审计字段按约定映射）
         CreateMap<ProxyRoute, ProxyRouteDto>()
-            .ForMember(d => d.MatchHosts, o => o.MapFrom(s => DeserializeStringList(s.MatchHostsJson)))
-            .ForMember(d => d.MatchMethods, o => o.MapFrom(s => DeserializeStringList(s.MatchMethodsJson)));
+            .ForMember(d => d.AuthorizationPolicy, o => o.MapFrom(s => s.ToRouteConfig().AuthorizationPolicy))
+            .ForMember(d => d.Match, o => o.MapFrom(s => ToMatchDto(s.ToRouteConfig().Match)));
 
         CreateMap<ProxyCluster, ProxyClusterDto>()
-            .ForMember(d => d.Destinations, o => o.MapFrom(s => DeserializeDestinations(s.DestinationsJson)));
+            .ForMember(d => d.Destinations, o => o.MapFrom(s => ToDestinationsDto(s.ToClusterConfig())));
     }
 
-    private static List<string>? DeserializeStringList(string? json)
+    private static ProxyRouteMatchDto ToMatchDto(RouteMatch? match) => new()
     {
-        if (string.IsNullOrWhiteSpace(json))
-        {
-            return null;
-        }
-        return JsonSerializer.Deserialize<List<string>>(json);
-    }
+        Path = match?.Path,
+        Hosts = match?.Hosts
+    };
 
-    private static Dictionary<string, string> DeserializeDestinations(string? json)
-    {
-        if (string.IsNullOrWhiteSpace(json))
-        {
-            return new Dictionary<string, string>();
-        }
-        return JsonSerializer.Deserialize<Dictionary<string, string>>(json) ?? new Dictionary<string, string>();
-    }
+    private static Dictionary<string, ClusterDestinationDto> ToDestinationsDto(ClusterConfig config) =>
+        (config.Destinations ?? new Dictionary<string, DestinationConfig>())
+            .ToDictionary(
+                kv => kv.Key,
+                kv => new ClusterDestinationDto { Address = kv.Value.Address, Health = kv.Value.Health });
 }

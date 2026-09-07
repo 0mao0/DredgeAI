@@ -1,6 +1,5 @@
 using System;
 using System.Collections.Generic;
-using System.Linq;
 using System.Threading.Tasks;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
@@ -59,9 +58,11 @@ public class GatewayDataSeedContributor_Tests : GatewayApplicationTestBase<Gatew
         var seededRoute = await routeRepository.GetAsync(x => x.RouteId == "route-seed");
         seededRoute.ClusterId.ShouldBe("cluster-seed");
         seededRoute.Order.ShouldBe(7);
-        seededRoute.MatchPath.ShouldBe("/api/seed/{**catch-all}");
-        seededRoute.MatchHostsJson.ShouldBe("[\"seed.example.com\"]");
-        seededRoute.AuthorizationPolicy.ShouldBe("anonymous");
+
+        var seededConfig = seededRoute.ToRouteConfig();
+        seededConfig.Match.Path.ShouldBe("/api/seed/{**catch-all}");
+        seededConfig.Match.Hosts.ShouldBe(new[] { "seed.example.com" });
+        seededConfig.AuthorizationPolicy.ShouldBe("anonymous");
 
         // 幂等：再次执行行数不变
         await contributor.SeedAsync(new DataSeedContext());
