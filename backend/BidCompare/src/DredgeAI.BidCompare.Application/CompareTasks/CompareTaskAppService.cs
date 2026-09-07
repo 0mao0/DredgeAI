@@ -18,6 +18,7 @@ using DredgeAI.BidCompare.Reports;
 using DredgeAI.BidCompare.Reporting;
 using DredgeAI.BidCompare.Storage;
 using DredgeAI.BidCompare.TenderReadings;
+using DredgeAI.BlobStoring;
 using Microsoft.Extensions.Logging;
 using Volo.Abp;
 using Volo.Abp.Application.Dtos;
@@ -53,7 +54,7 @@ public class CompareTaskAppService : ApplicationService, ICompareTaskAppService
     private readonly IRepository<CompareDraftDocument, Guid> _draftDocumentRepository;
     private readonly IRepository<EvidenceItem, Guid> _evidenceRepository;
     private readonly IRepository<ExportJob, Guid> _exportJobRepository;
-    private readonly IFileStorage _fileStorage;
+    private readonly IDredgeBlobContainer<BidCompareFileContainer> _container;
     private readonly IBackgroundJobManager _backgroundJobManager;
     private readonly IPdfConverter _pdfConverter;
     private readonly ReportBuilder _reportBuilder;
@@ -66,7 +67,7 @@ public class CompareTaskAppService : ApplicationService, ICompareTaskAppService
         IRepository<CompareDraftDocument, Guid> draftDocumentRepository,
         IRepository<EvidenceItem, Guid> evidenceRepository,
         IRepository<ExportJob, Guid> exportJobRepository,
-        IFileStorage fileStorage,
+        IDredgeBlobContainer<BidCompareFileContainer> blobContainer,
         IBackgroundJobManager backgroundJobManager,
         IPdfConverter pdfConverter,
         IRepository<TenderReadingTask, Guid> tenderReadingTaskRepository,
@@ -78,7 +79,7 @@ public class CompareTaskAppService : ApplicationService, ICompareTaskAppService
         _draftDocumentRepository = draftDocumentRepository;
         _evidenceRepository = evidenceRepository;
         _exportJobRepository = exportJobRepository;
-        _fileStorage = fileStorage;
+        _container = blobContainer;
         _backgroundJobManager = backgroundJobManager;
         _pdfConverter = pdfConverter;
         _reportBuilder = reportBuilder;
@@ -434,7 +435,7 @@ public class CompareTaskAppService : ApplicationService, ICompareTaskAppService
         var documentId = GuidGenerator.Create();
         var storageKey = $"compare/{id}/{documentId}/origin{extension}";
         var uploadStream = new PrefixCountingStream(header, headerLength, content);
-        await _fileStorage.UploadAsync(storageKey, uploadStream, ContentTypeOf(extension));
+        await _container.SaveAsync(storageKey, uploadStream, ContentTypeOf(extension), overrideExisting: true);
 
         var document = new CompareDocument(documentId, id, role, Path.GetFileName(fileName), uploadStream.TotalBytesRead, storageKey);
         await _documentRepository.InsertAsync(document, autoSave: true);
@@ -528,11 +529,11 @@ public class CompareTaskAppService : ApplicationService, ICompareTaskAppService
             await convertLock.WaitAsync();
             try
             {
-                if (await _fileStorage.ExistsAsync(previewKey))
+                if (await _container.ExistsAsync(previewKey))
                 {
                     return new CompareDocumentFileResult
                     {
-                        Content = await _fileStorage.GetAsync(previewKey),
+                        Content = await _container.GetAsync(previewKey),
                         ContentType = "application/pdf",
                         FileName = Path.GetFileNameWithoutExtension(document.FileName) + ".pdf",
                     };
@@ -540,12 +541,12 @@ public class CompareTaskAppService : ApplicationService, ICompareTaskAppService
 
                 try
                 {
-                    await using var origin = await _fileStorage.GetAsync(document.OriginStorageKey);
+                    await using var origin = await _container.GetAsync(document.OriginStorageKey);
                     using var originBuffer = new MemoryStream();
                     await origin.CopyToAsync(originBuffer);
                     var pdfBytes = await _pdfConverter.ConvertToPdfAsync(originBuffer.ToArray());
                     await using var pdfStream = new MemoryStream(pdfBytes);
-                    await _fileStorage.UploadAsync(previewKey, pdfStream, "application/pdf");
+                    await _container.SaveAsync(previewKey, pdfStream, "application/pdf", overrideExisting: true);
                     return new CompareDocumentFileResult
                     {
                         Content = new MemoryStream(pdfBytes),
@@ -558,7 +559,7 @@ public class CompareTaskAppService : ApplicationService, ICompareTaskAppService
                     Logger.LogWarning(ex, "Word 文档转 PDF 预览失败，回退返回原始文件：{Key}", document.OriginStorageKey);
                     return new CompareDocumentFileResult
                     {
-                        Content = await _fileStorage.GetAsync(document.OriginStorageKey),
+                        Content = await _container.GetAsync(document.OriginStorageKey),
                         ContentType = ContentTypeOf(extension),
                         FileName = document.FileName,
                     };
@@ -575,7 +576,7 @@ public class CompareTaskAppService : ApplicationService, ICompareTaskAppService
             }
         }
 
-        var content = await _fileStorage.GetAsync(document.OriginStorageKey);
+        var content = await _container.GetAsync(document.OriginStorageKey);
         return new CompareDocumentFileResult
         {
             Content = content,
@@ -604,7 +605,7 @@ public class CompareTaskAppService : ApplicationService, ICompareTaskAppService
             return hit.Ir;
         }
 
-        await using var stream = await _fileStorage.GetAsync(document.IrStorageKey);
+        await using var stream = await _container.GetAsync(document.IrStorageKey);
         var ir = await JsonSerializer.DeserializeAsync<DocumentIrDto>(stream, SnapshotJsonOptions);
         if (ir == null)
         {
@@ -797,7 +798,7 @@ public class CompareTaskAppService : ApplicationService, ICompareTaskAppService
         }
 
         var downloadUrl = job.Status == ExportJobStatus.Succeeded && job.FileStorageKey != null
-            ? await _fileStorage.GetPresignedUrlAsync(job.FileStorageKey, TimeSpan.FromHours(1))
+            ? await _container.GetDownloadUrlAsync(job.FileStorageKey, 3600)
             : null;
         return MapToDto(job, downloadUrl);
     }
@@ -1011,7 +1012,7 @@ public class CompareTaskAppService : ApplicationService, ICompareTaskAppService
     {
         try
         {
-            await _fileStorage.DeleteByPrefixAsync(prefix);
+            await _container.DeleteByPrefixAsync(prefix);
         }
         catch
         {

@@ -10,6 +10,7 @@ using DredgeAI.BidCompare.AnGineer;
 using DredgeAI.BidCompare.BackgroundJobs;
 using DredgeAI.BidCompare.Documents;
 using DredgeAI.BidCompare.Storage;
+using DredgeAI.BlobStoring;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using Volo.Abp;
@@ -25,7 +26,7 @@ namespace DredgeAI.BidCompare.TenderReadings;
 public class TenderDocumentParsePipeline : ITransientDependency
 {
     private readonly IRepository<TenderReadingDocument, Guid> _documentRepository;
-    private readonly IFileStorage _fileStorage;
+    private readonly IDredgeBlobContainer<BidCompareFileContainer> _container;
     private readonly IAnGineerClient _anGineerClient;
     private readonly IIrValidator _irValidator;
     private readonly AnGineerPollOptions _pollOptions;
@@ -33,14 +34,14 @@ public class TenderDocumentParsePipeline : ITransientDependency
 
     public TenderDocumentParsePipeline(
         IRepository<TenderReadingDocument, Guid> documentRepository,
-        IFileStorage fileStorage,
+        IDredgeBlobContainer<BidCompareFileContainer> blobContainer,
         IAnGineerClient anGineerClient,
         IIrValidator irValidator,
         IOptions<AnGineerPollOptions> pollOptions,
         ILogger<TenderDocumentParsePipeline> logger)
     {
         _documentRepository = documentRepository;
-        _fileStorage = fileStorage;
+        _container = blobContainer;
         _anGineerClient = anGineerClient;
         _irValidator = irValidator;
         _pollOptions = pollOptions.Value;
@@ -57,7 +58,7 @@ public class TenderDocumentParsePipeline : ITransientDependency
     {
         return await _anGineerClient.SubmitAsync(
             document.FileName,
-            async () => await _fileStorage.GetAsync(document.OriginStorageKey, cancellationToken),
+            async () => await _container.GetAsync(document.OriginStorageKey, cancellationToken),
             cancellationToken);
     }
 
@@ -259,22 +260,25 @@ public class TenderDocumentParsePipeline : ITransientDependency
 
         var prefix = $"tender-read/{document.TaskId}/{document.Id}";
 
-        await _fileStorage.UploadAsync(
+        await _container.SaveAsync(
             $"{prefix}/raw/doc_blocks_graph.jsonl",
             new MemoryStream(Encoding.UTF8.GetBytes(graphJsonl)),
             "application/x-ndjson",
+            overrideExisting: true,
             cancellationToken);
-        await _fileStorage.UploadAsync(
+        await _container.SaveAsync(
             $"{prefix}/raw/doc_blocks_graph_meta.json",
             new MemoryStream(Encoding.UTF8.GetBytes(metaJson)),
             "application/json",
+            overrideExisting: true,
             cancellationToken);
 
         var irKey = $"{prefix}/ir.json";
-        await _fileStorage.UploadAsync(
+        await _container.SaveAsync(
             irKey,
             new MemoryStream(Encoding.UTF8.GetBytes(irJson)),
             "application/json",
+            overrideExisting: true,
             cancellationToken);
 
         string? docMdKey = null;
@@ -283,13 +287,13 @@ public class TenderDocumentParsePipeline : ITransientDependency
         {
             docMdKey = $"{prefix}/content.md";
             await using var stream = await _anGineerClient.OpenArtifactAsync(anGineerJobId, contentMdArtifact, cancellationToken);
-            await _fileStorage.UploadAsync(docMdKey, stream, "text/markdown", cancellationToken);
+            await _container.SaveAsync(docMdKey, stream, "text/markdown", overrideExisting: true, cancellationToken);
         }
 
         foreach (var image in artifacts.Where(a => a.Name.StartsWith("images/", StringComparison.Ordinal)))
         {
             await using var stream = await _anGineerClient.OpenArtifactAsync(anGineerJobId, image, cancellationToken);
-            await _fileStorage.UploadAsync($"{prefix}/{image.Name}", stream, "application/octet-stream", cancellationToken);
+            await _container.SaveAsync($"{prefix}/{image.Name}", stream, "application/octet-stream", overrideExisting: true, cancellationToken);
         }
 
         using var irDocument = JsonDocument.Parse(irJson);

@@ -7,6 +7,7 @@ using System.Threading.Tasks;
 using DredgeAI.BidCompare.CompareTasks;
 using DredgeAI.BidCompare.Documents;
 using DredgeAI.BidCompare.Storage;
+using DredgeAI.BlobStoring;
 using Microsoft.Extensions.Logging;
 using Volo.Abp.BackgroundJobs;
 using Volo.Abp.DependencyInjection;
@@ -23,7 +24,7 @@ public class ParseTaskStateAdvancer : ITransientDependency
 {
     private readonly IRepository<CompareDocument, Guid> _documentRepository;
     private readonly IRepository<CompareTask, Guid> _taskRepository;
-    private readonly IFileStorage _fileStorage;
+    private readonly IDredgeBlobContainer<BidCompareFileContainer> _container;
     private readonly IBackgroundJobManager _backgroundJobManager;
     private readonly IUnitOfWorkManager _unitOfWorkManager;
     private readonly ILogger<ParseTaskStateAdvancer> _logger;
@@ -31,14 +32,14 @@ public class ParseTaskStateAdvancer : ITransientDependency
     public ParseTaskStateAdvancer(
         IRepository<CompareDocument, Guid> documentRepository,
         IRepository<CompareTask, Guid> taskRepository,
-        IFileStorage fileStorage,
+        IDredgeBlobContainer<BidCompareFileContainer> blobContainer,
         IBackgroundJobManager backgroundJobManager,
         IUnitOfWorkManager unitOfWorkManager,
         ILogger<ParseTaskStateAdvancer> logger)
     {
         _documentRepository = documentRepository;
         _taskRepository = taskRepository;
-        _fileStorage = fileStorage;
+        _container = blobContainer;
         _backgroundJobManager = backgroundJobManager;
         _unitOfWorkManager = unitOfWorkManager;
         _logger = logger;
@@ -167,7 +168,7 @@ public class ParseTaskStateAdvancer : ITransientDependency
         }
         try
         {
-            await using var stream = await _fileStorage.GetAsync(document.IrStorageKey, cancellationToken);
+            await using var stream = await _container.GetAsync(document.IrStorageKey, cancellationToken);
             using var ir = await JsonDocument.ParseAsync(stream, cancellationToken: cancellationToken);
             if (ir.RootElement.TryGetProperty("outline", out var outline) &&
                 outline.ValueKind == JsonValueKind.Array &&

@@ -5,6 +5,7 @@ using System.Linq;
 using System.Threading.Tasks;
 using DredgeAI.BidCompare.Documents;
 using DredgeAI.BidCompare.Storage;
+using DredgeAI.BlobStoring;
 using Microsoft.Extensions.Logging;
 using Volo.Abp;
 using Volo.Abp.Application.Services;
@@ -20,14 +21,14 @@ public class CompareDraftAppService : ApplicationService, ICompareDraftAppServic
     private const int MaxBidDocuments = 8;
 
     private readonly IRepository<CompareDraftDocument, Guid> _draftDocumentRepository;
-    private readonly IFileStorage _fileStorage;
+    private readonly IDredgeBlobContainer<BidCompareFileContainer> _container;
 
     public CompareDraftAppService(
         IRepository<CompareDraftDocument, Guid> draftDocumentRepository,
-        IFileStorage fileStorage)
+        IDredgeBlobContainer<BidCompareFileContainer> blobContainer)
     {
         _draftDocumentRepository = draftDocumentRepository;
-        _fileStorage = fileStorage;
+        _container = blobContainer;
     }
 
     public async Task<List<CompareDraftDocumentDto>> GetDocumentsAsync(Guid draftId)
@@ -79,7 +80,7 @@ public class CompareDraftAppService : ApplicationService, ICompareDraftAppServic
         var documentId = GuidGenerator.Create();
         var storageKey = $"compare/drafts/{draftId}/{documentId}/origin{extension}";
         var uploadStream = new PrefixCountingStream(header, headerLength, content);
-        await _fileStorage.UploadAsync(storageKey, uploadStream, ContentTypeOf(extension));
+        await _container.SaveAsync(storageKey, uploadStream, ContentTypeOf(extension), overrideExisting: true);
 
         var document = new CompareDraftDocument(
             documentId,
@@ -114,7 +115,7 @@ public class CompareDraftAppService : ApplicationService, ICompareDraftAppServic
         // 按会话前缀整树清理（逐 key 删除在部分失败时会留孤儿对象）
         try
         {
-            await _fileStorage.DeleteByPrefixAsync($"compare/drafts/{draftId}/");
+            await _container.DeleteByPrefixAsync($"compare/drafts/{draftId}/");
         }
         catch
         {
@@ -138,7 +139,7 @@ public class CompareDraftAppService : ApplicationService, ICompareDraftAppServic
     {
         try
         {
-            await _fileStorage.DeleteAsync(key);
+            await _container.DeleteAsync(key);
         }
         catch
         {

@@ -22,8 +22,6 @@
         <PackageReference Include="Shiw.Abp.PermissionManagement.EntityFrameworkCore" />
         <PackageReference Include="Shiw.Abp.SettingManagement.EntityFrameworkCore" />
         <PackageReference Include="Shiw.Abp.TenantManagement.EntityFrameworkCore" />
-        <PackageReference Include="Shiw.File.Application" />
-        <PackageReference Include="Shiw.File.BlobStoring.Minio" />
         <PackageReference Include="Volo.Abp.AspNetCore.Authentication.JwtBearer" />
         <PackageReference Include="Volo.Abp.AspNetCore.Mvc" />
         <PackageReference Include="Volo.Abp.AspNetCore.Mvc.UI.MultiTenancy" />

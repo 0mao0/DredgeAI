@@ -16,12 +16,12 @@ namespace DredgeAI.BidCompare.Exports;
 public class ExportJobTests : BidCompareApplicationTestBase<BidCompareApplicationTestModule>
 {
     private readonly ICompareTaskAppService _appService;
-    private readonly InMemoryFileStorage _fileStorage;
+    private readonly InMemoryBlobProvider _fileStorage;
 
     public ExportJobTests()
     {
         _appService = GetRequiredService<ICompareTaskAppService>();
-        _fileStorage = (InMemoryFileStorage)GetRequiredService<IFileStorage>();
+        _fileStorage = GetRequiredService<InMemoryBlobProvider>();
     }
 
     private async Task<Guid> PrepareDoneTaskAsync()

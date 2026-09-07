@@ -8,9 +8,6 @@ using Shiw.Abp.Identity.EntityFrameworkCore;
 using Shiw.Abp.PermissionManagement.EntityFrameworkCore;
 using Shiw.Abp.SettingManagement.EntityFrameworkCore;
 using Shiw.Abp.TenantManagement.EntityFrameworkCore;
-using Shiw.File;
-using Shiw.File.BlobStoring.Minio;
-using Shiw.File.Domain;
 using DredgeAI.Permissions;
 using Volo.Abp;
 using Volo.Abp.Account;
@@ -68,8 +65,6 @@ namespace DredgeAI;
     typeof(AbpFeatureManagementHttpApiModule),
     typeof(AbpTenantManagementApplicationModule),
     typeof(AbpTenantManagementHttpApiModule),
-    typeof(FileApplicationModule),
-    typeof(FileBlobStoringMinioModule),
     typeof(DredgeAIBaseApplicationModule),
     typeof(DredgeAIBaseHttpApiModule),
     typeof(DredgeAIBaseEntityFrameworkCoreModule),
@@ -83,23 +78,12 @@ public class DredgeAIBaseHostModule : AbpModule
         AbpCommonDbProperties.DbTablePrefix = "tab";
         AbpIdentityDbProperties.DbTablePrefix="tab_identity";
         DredgeAIBaseDbProperties.DbTablePrefix="tab";
-        FileDbProperties.DbTablePrefix = "tab";
     }
 
     public override void ConfigureServices(ServiceConfigurationContext context)
     {
         var hostingEnvironment = context.Services.GetHostingEnvironment();
         var configuration = context.Services.GetConfiguration();
-        context.Services.AddFileOptions(options =>
-        {
-            options.EnableSignedUrl = true;
-            options.IsRouterStyleV2 = false;
-            options.IsAppendFileRoutePath = true;
-            // 签名文件 URL 站点前缀（独立配置 App:FileWebSiteUrl）：发布环境注入域名根，经 gateway 文件路由可达
-            options.WebSite = configuration.GetValue<string>("App:FileWebSiteUrl");
-            options.AccessTokenSecret=configuration.GetValue<string>("App:FileUrlSecretKey");
-        });
-
         Configure<AbpClockOptions>(options =>
         {
             options.Kind = DateTimeKind.Utc;

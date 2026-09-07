@@ -6,6 +6,7 @@ using DredgeAI.BidCompare.CompareTasks;
 using DredgeAI.BidCompare.Exports;
 using DredgeAI.BidCompare.Reporting;
 using DredgeAI.BidCompare.Storage;
+using DredgeAI.BlobStoring;
 using Microsoft.Extensions.Logging;
 using Volo.Abp.BackgroundJobs;
 using Volo.Abp.DependencyInjection;
@@ -22,7 +23,7 @@ public class ExportReportJob : AsyncBackgroundJob<ExportReportArgs>, ITransientD
     private readonly ReportBuilder _reportBuilder;
     private readonly IWordReportRenderer _wordReportRenderer;
     private readonly IPdfConverter _pdfConverter;
-    private readonly IFileStorage _fileStorage;
+    private readonly IDredgeBlobContainer<BidCompareFileContainer> _container;
     private readonly IUnitOfWorkManager _unitOfWorkManager;
 
     public ExportReportJob(
@@ -31,7 +32,7 @@ public class ExportReportJob : AsyncBackgroundJob<ExportReportArgs>, ITransientD
         ReportBuilder reportBuilder,
         IWordReportRenderer wordReportRenderer,
         IPdfConverter pdfConverter,
-        IFileStorage fileStorage,
+        IDredgeBlobContainer<BidCompareFileContainer> blobContainer,
         IUnitOfWorkManager unitOfWorkManager)
     {
         _exportJobRepository = exportJobRepository;
@@ -39,7 +40,7 @@ public class ExportReportJob : AsyncBackgroundJob<ExportReportArgs>, ITransientD
         _reportBuilder = reportBuilder;
         _wordReportRenderer = wordReportRenderer;
         _pdfConverter = pdfConverter;
-        _fileStorage = fileStorage;
+        _container = blobContainer;
         _unitOfWorkManager = unitOfWorkManager;
     }
 
@@ -97,7 +98,7 @@ public class ExportReportJob : AsyncBackgroundJob<ExportReportArgs>, ITransientD
             }
 
             var key = $"compare/{job.TaskId}/exports/{job.Id}.{extension}";
-            await _fileStorage.UploadAsync(key, new MemoryStream(output), contentType, cancellationToken);
+            await _container.SaveAsync(key, new MemoryStream(output), contentType, overrideExisting: true, cancellationToken);
             job.MarkSucceeded(key);
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
