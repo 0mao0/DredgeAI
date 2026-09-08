@@ -17,9 +17,8 @@ namespace DredgeAI.BidCompare.EntityFrameworkCore;
 
 [ConnectionStringName(BidCompareDbProperties.ConnectionStringName)]
 public class BidCompareDbContext :
-    AbpDbContext<BidCompareDbContext>
+    AbpDbContext<BidCompareDbContext>, IBidCompareDbContext
 {
-    /* Add DbSet properties for your Aggregate Roots / Entities here. */
 
     public DbSet<CompareTask> CompareTasks { get; set; }
     public DbSet<CompareDocument> CompareDocuments { get; set; }

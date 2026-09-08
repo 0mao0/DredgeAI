@@ -1,0 +1,11 @@
+{
+  "version": 1,
+  "skills": {
+    "abp-authorization": {
+      "source": "abpframework/abp",
+      "sourceType": "github",
+      "skillPath": ".agents/skills/abp-authorization/SKILL.md",
+      "computedHash": "fa81711617f295f4423f59c2401356fc2f9891bf2cfba626411ad45214e09cf1"
+    }
+  }
+}
