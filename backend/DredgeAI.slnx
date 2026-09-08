@@ -65,7 +65,20 @@
     <Project Path="BidCompare/test/DredgeAI.BidCompare.Application.Tests/DredgeAI.BidCompare.Application.Tests.csproj" />
     <Project Path="BidCompare/test/DredgeAI.BidCompare.EntityFrameworkCore.Tests/DredgeAI.BidCompare.EntityFrameworkCore.Tests.csproj" />
   </Folder>
-  <Folder Name="/Services/Gateway/">
-    <Project Path="Gateway/DredgeAI.Gateway.Host/DredgeAI.Gateway.Host.csproj" />
+  <Folder Name="/Services/Gateway/" />
+  <Folder Name="/Services/Gateway/src/">
+    <Project Path="Gateway/src/DredgeAI.Gateway.Domain.Shared/DredgeAI.Gateway.Domain.Shared.csproj" />
+    <Project Path="Gateway/src/DredgeAI.Gateway.Domain/DredgeAI.Gateway.Domain.csproj" />
+    <Project Path="Gateway/src/DredgeAI.Gateway.Application.Contracts/DredgeAI.Gateway.Application.Contracts.csproj" />
+    <Project Path="Gateway/src/DredgeAI.Gateway.Application/DredgeAI.Gateway.Application.csproj" />
+    <Project Path="Gateway/src/DredgeAI.Gateway.EntityFrameworkCore/DredgeAI.Gateway.EntityFrameworkCore.csproj" />
+    <Project Path="Gateway/src/DredgeAI.Gateway.HttpApi/DredgeAI.Gateway.HttpApi.csproj" />
+    <Project Path="Gateway/src/DredgeAI.Gateway.Host/DredgeAI.Gateway.Host.csproj" />
+  </Folder>
+  <Folder Name="/Services/Gateway/test/">
+    <Project Path="Gateway/test/DredgeAI.Gateway.TestBase/DredgeAI.Gateway.TestBase.csproj" />
+    <Project Path="Gateway/test/DredgeAI.Gateway.Domain.Tests/DredgeAI.Gateway.Domain.Tests.csproj" />
+    <Project Path="Gateway/test/DredgeAI.Gateway.EntityFrameworkCore.Tests/DredgeAI.Gateway.EntityFrameworkCore.Tests.csproj" />
+    <Project Path="Gateway/test/DredgeAI.Gateway.Application.Tests/DredgeAI.Gateway.Application.Tests.csproj" />
   </Folder>
 </Solution>

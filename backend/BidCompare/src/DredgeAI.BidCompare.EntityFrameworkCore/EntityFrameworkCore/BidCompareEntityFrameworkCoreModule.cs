@@ -26,7 +26,7 @@ public class BidCompareEntityFrameworkCoreModule : AbpModule
         {
                 /* Remove "includeAllEntities: true" to create
                  * default repositories only for aggregate roots */
-            options.AddDefaultRepositories(includeAllEntities: true);
+            options.AddDefaultRepositories<IBidCompareDbContext>(includeAllEntities: true);
         });
 
         Configure<AbpDbContextOptions>(options =>

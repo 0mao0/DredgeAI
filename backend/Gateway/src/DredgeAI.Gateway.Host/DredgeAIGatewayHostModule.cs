@@ -1,20 +1,37 @@
 using System.Threading.RateLimiting;
+using DredgeAI.Gateway;
+using DredgeAI.Gateway.EntityFrameworkCore;
+using DredgeAI.Gateway.Proxying;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.Cors;
 using Microsoft.AspNetCore.RateLimiting;
 using Microsoft.AspNetCore.Http;
+using Microsoft.Extensions.DependencyInjection;
+using Microsoft.OpenApi;
 using Volo.Abp;
 using Volo.Abp.AspNetCore.Authentication.JwtBearer;
+using Volo.Abp.AspNetCore.Mvc;
 using Volo.Abp.AspNetCore.Serilog;
 using Volo.Abp.Autofac;
+using Volo.Abp.Data;
+using Volo.Abp.EntityFrameworkCore.PostgreSql;
 using Volo.Abp.Modularity;
+using Volo.Abp.Threading;
+using Volo.Abp.Timing;
+using Volo.Abp.Swashbuckle;
 
 namespace DredgeAI;
 
 [DependsOn(
     typeof(AbpAspNetCoreAuthenticationJwtBearerModule),
     typeof(AbpAspNetCoreSerilogModule),
-    typeof(AbpAutofacModule)
+    typeof(AbpAutofacModule),
+    typeof(AbpAspNetCoreMvcModule),
+    typeof(AbpEntityFrameworkCorePostgreSqlModule),
+    typeof(GatewayApplicationModule),
+    typeof(GatewayHttpApiModule),
+    typeof(GatewayEntityFrameworkCoreModule),
+    typeof(AbpSwashbuckleModule)
 )]
 public class DredgeAIGatewayHostModule : AbpModule
 {
@@ -24,6 +41,7 @@ public class DredgeAIGatewayHostModule : AbpModule
     public override void ConfigureServices(ServiceConfigurationContext context)
     {
         var configuration = context.Services.GetConfiguration();
+        Configure<AbpClockOptions>(options => { options.Kind = DateTimeKind.Utc; });
 
         // 接入认证中心：验证 Auth 服务颁发的 JWT（配置与其他服务一致）
         context.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
@@ -34,9 +52,36 @@ public class DredgeAIGatewayHostModule : AbpModule
                 options.Audience = "DredgeAI";
             });
 
-        // YARP：路由全部来自配置文件 ReverseProxy 节
-        context.Services.AddReverseProxy()
-            .LoadFromConfig(configuration.GetSection("ReverseProxy"));
+        // Swagger：常驻（对齐 Base Host，无环境门控）；OAuth 走 PKCE，无需 secret
+        context.Services.AddAbpSwaggerGenWithOAuth(
+            configuration["AuthServer:Authority"]!,
+            new Dictionary<string, string>
+            {
+                { "DredgeAI", "DredgeAI API" }
+            },
+            options =>
+            {
+                options.SwaggerDoc("v1", new OpenApiInfo
+                {
+                    Title = "DredgeAI Gateway API",
+                    Version = "v1",
+                    Description = "All DateTime fields use UTC with Z suffix (ISO 8601). Example: 2026-07-12T02:00:00Z"
+                });
+                options.DocInclusionPredicate((docName, description) => true);
+                options.CustomSchemaIds(type => type.FullName);
+                options.SchemaFilter<DateTimeUtcSchemaFilter>();
+
+                // 加载输出目录中所有 DredgeAI.*.xml 注释文件（Gateway 无 Shiw 依赖，不加载 Shiw.*.xml）
+                var xmlFiles = Directory.GetFiles(AppContext.BaseDirectory, "DredgeAI.*.xml");
+                foreach (var xmlFile in xmlFiles)
+                {
+                    options.IncludeXmlComments(xmlFile);
+                }
+            });
+
+        // YARP：路由/集群来自 DB（DatabaseProxyConfigProvider 由 GatewayApplicationModule 注册，支持热重载）；
+        // appsettings 的 ReverseProxy 节仅作为首次启动的种子数据源
+        context.Services.AddReverseProxy();
 
         // 请求限流：按客户端 IP 分区的固定窗口；仅作用于代理端点（不健康检查），不设 GlobalLimiter
         var permitLimit = configuration.GetValue("RateLimiting:PermitLimit", 100);
@@ -78,16 +123,24 @@ public class DredgeAIGatewayHostModule : AbpModule
         });
     }
 
-    public override Task OnApplicationInitializationAsync(ApplicationInitializationContext context)
+    public override async Task OnApplicationInitializationAsync(ApplicationInitializationContext context)
     {
         var app = context.GetApplicationBuilder();
+        var configuration = context.GetConfiguration();
+
+        // 首次启动：路由表为空时从 ReverseProxy 配置节导入 DB；随后显式 Reload 保证 YARP 快照就位
+        using var scope = context.ServiceProvider.CreateScope();
+        await scope.ServiceProvider.GetRequiredService<IDataSeeder>().SeedAsync();
+
+        await context.ServiceProvider.GetRequiredService<DatabaseProxyConfigProvider>().ReloadAsync();
+
         // 还原 nginx 转发头（For/Proto/Host/Prefix），必须最先执行：
         // YARP 默认以 Set 动作从自身请求状态生成 X-Forwarded-* 传给下游，
         // Auth 据此还原公网地址；同时限流分区才能拿到真实客户端 IP。
         app.UseForwardedHeaders();
 
         var env = context.GetEnvironment();
-        
+
 
         if (env.IsDevelopment())
         {
@@ -102,7 +155,7 @@ public class DredgeAIGatewayHostModule : AbpModule
         app.UseCorrelationId();
 
         // Path base for deployment path prefix (e.g. /gateway). Empty in local dev.
-        var pathBase =context.GetConfiguration()["PathBase"];
+        var pathBase = context.GetConfiguration()["PathBase"];
         if (!string.IsNullOrEmpty(pathBase))
         {
             app.UsePathBase(new PathString(pathBase));
@@ -114,9 +167,20 @@ public class DredgeAIGatewayHostModule : AbpModule
         app.UseAbpRequestLocalization(opt => { opt.SetDefaultCulture("zh-Hans"); });
         app.UseRateLimiter();
         app.UseAuthorization();
+
+        app.UseSwagger();
+        app.UseAbpSwaggerUI(options =>
+        {
+            options.SwaggerEndpoint($"{pathBase}/swagger/v1/swagger.json", "Gateway API");
+
+            options.OAuthClientId(configuration["AuthServer:SwaggerClientId"]);
+            options.OAuthScopes("DredgeAI");
+        });
         app.UseAbpSerilogEnrichers();
         app.UseConfiguredEndpoints(endpoints =>
-            endpoints.MapReverseProxy().RequireRateLimiting(ProxyRateLimitPolicy));
-        return Task.CompletedTask;
+        {
+            endpoints.MapControllers();
+            endpoints.MapReverseProxy().RequireRateLimiting(ProxyRateLimitPolicy);
+        });
     }
 }
