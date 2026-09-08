@@ -116,7 +116,7 @@ public class OpenIddictDataSeedContributor : IDataSeedContributor, ITransientDep
                 redirectUri: consoleAndAngularClientRootUrl,
                 postLogoutRedirectUri: consoleAndAngularClientRootUrl,
                 additionalRedirectUris: configurationSection
-                    .GetSection("DredgeAI_App:AdminRedirectUris")
+                    .GetSection("DredgeAI_App:AdditionalRedirectUris")
                     .Get<List<string>>()
             );
         }

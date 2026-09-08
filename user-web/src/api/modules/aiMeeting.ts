@@ -1,5 +1,6 @@
 import request from '@/api/request'
 import { API_BASE_URL, STORAGE_TOKEN_KEY } from '@/utils/constants'
+import { getCookie } from '@/utils/cookie'
 import { urls, fillUrl } from '@shared/core/api'
 import type {
   MeetingRecordDto,
@@ -53,7 +54,7 @@ export async function streamSpeechDraft(
   onDelta: (delta: string) => void,
   signal?: AbortSignal,
 ): Promise<void> {
-  const token = typeof localStorage !== 'undefined' ? localStorage.getItem(STORAGE_TOKEN_KEY) : null
+  const token = getCookie(STORAGE_TOKEN_KEY)
   const res = await fetch(`${API_BASE_URL}${fillUrl(urls.meetingSpeechGenerateStream, { id }).replace(/^\//, '')}`, {
     method: 'POST',
     headers: {
@@ -139,7 +140,7 @@ export function synthesizeSpeech(text: string, timeout = MediaTimeout): Promise<
  * 调用方按首块 RIFF 探测格式，PCM 用 evenLen 取偶消费（与 DGX 官方测试页一致）。
  */
 export async function* streamSpeechAudio(text: string): AsyncGenerator<Uint8Array> {
-  const token = typeof localStorage !== 'undefined' ? localStorage.getItem(STORAGE_TOKEN_KEY) : null
+  const token = getCookie(STORAGE_TOKEN_KEY)
   const res = await fetch(`${API_BASE_URL}meeting/tts/stream`, {
     method: 'POST',
     headers: {
