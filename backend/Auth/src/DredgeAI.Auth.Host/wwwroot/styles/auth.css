@@ -1,0 +1,179 @@
+/* ============================================
+ * 统一认证中心（Auth 服务 Account 布局）样式
+ * 色值与前端 packages/shared/src/web/styles/themes.less light 块一致
+ * ============================================ */
+
+:root {
+    --color-brand: #0EA5E9;
+    --color-brand-hover: #0284C7;
+    --color-brand-gradient: linear-gradient(135deg, #0EA5E9 0%, #06B6D4 100%);
+    --color-content-bg: #F6F3EF;
+    --color-card-bg: #FFFFFF;
+    --color-text-primary: #1C1917;
+    --color-text-secondary: #78716C;
+    --color-border: #E5DFD8;
+    --color-danger: #EF4444;
+    --shadow-lg: 0 12px 32px rgb(0 0 0 / 0.10);
+    --shadow-brand: 0 8px 24px rgb(14 165 233 / 0.20);
+}
+
+.auth-page {
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    background: var(--color-content-bg);
+    padding: 24px;
+    font-family: -apple-system, 'PingFang SC', 'Microsoft YaHei', 'Segoe UI', sans-serif;
+    color: var(--color-text-primary);
+}
+
+/* ---------- 品牌头 ---------- */
+
+.auth-brand {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    margin-bottom: 24px;
+    text-align: center;
+}
+
+.auth-brand__mark {
+    width: 44px;
+    height: 44px;
+    border-radius: 12px;
+    background: var(--color-brand-gradient);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    box-shadow: var(--shadow-brand);
+    margin-bottom: 12px;
+}
+
+.auth-brand__mark svg {
+    width: 30px;
+    height: 30px;
+    display: block;
+}
+
+.auth-brand__name {
+    font-size: 22px;
+    font-weight: 600;
+    color: var(--color-text-primary);
+    line-height: 1.2;
+    letter-spacing: 0.02em;
+}
+
+.auth-brand__ai {
+    background: var(--color-brand-gradient);
+    -webkit-background-clip: text;
+    background-clip: text;
+    -webkit-text-fill-color: transparent;
+    font-weight: 700;
+}
+
+.auth-brand__sub {
+    font-size: 12px;
+    color: var(--color-text-secondary);
+    letter-spacing: 0.6px;
+    line-height: 1.3;
+    margin-top: 4px;
+}
+
+/* ---------- 卡片 ---------- */
+
+.auth-card {
+    width: min(440px, 100%);
+    background: var(--color-card-bg);
+    border-radius: 12px;
+    box-shadow: var(--shadow-lg);
+    padding: 40px;
+    animation: auth-card-enter 0.3s ease;
+}
+
+@keyframes auth-card-enter {
+    from {
+        opacity: 0;
+        transform: translateY(8px);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+.auth-card__title {
+    font-size: 20px;
+    font-weight: 600;
+    color: var(--color-text-primary);
+    margin: 0 0 16px;
+}
+
+/* ---------- 表单覆盖（Bootstrap 之上的 BEM 修饰） ---------- */
+
+.auth-card .form-control:focus {
+    border-color: var(--color-brand);
+    box-shadow: 0 0 0 3px rgb(14 165 233 / 0.15);
+}
+
+.auth-card .btn-primary,
+.auth-card .auth-btn-primary {
+    background: var(--color-brand-gradient);
+    border: none;
+}
+
+.auth-card .btn-primary:hover,
+.auth-card .btn-primary:focus,
+.auth-card .auth-btn-primary:hover,
+.auth-card .auth-btn-primary:focus {
+    background: var(--color-brand-gradient);
+    border: none;
+    filter: brightness(1.05);
+    box-shadow: var(--shadow-brand);
+}
+
+.auth-card .btn-primary:active,
+.auth-card .auth-btn-primary:active {
+    background: var(--color-brand-gradient);
+    border: none;
+    filter: brightness(0.97);
+}
+
+/* 密码可见性切换按钮 */
+.auth-card #PasswordVisibilityButton {
+    border: 1px solid var(--color-border);
+    border-left: none;
+    background: transparent;
+    color: var(--color-text-secondary);
+}
+
+.auth-card #PasswordVisibilityButton:hover,
+.auth-card #PasswordVisibilityButton:focus {
+    background: transparent;
+    color: var(--color-text-primary);
+    border-color: var(--color-border);
+}
+
+/* PageAlerts 输出的错误提示，圆角与卡片风格一致 */
+.auth-card .alert-danger {
+    border-radius: 8px;
+}
+
+/* ---------- 响应式与动效降级 ---------- */
+
+@media (max-width: 480px) {
+    .auth-page {
+        padding: 16px;
+    }
+
+    .auth-card {
+        padding: 24px;
+    }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .auth-card {
+        animation: none;
+    }
+}

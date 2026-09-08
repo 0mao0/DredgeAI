@@ -1,0 +1,101 @@
+@using Microsoft.Extensions.Localization
+@using Microsoft.Extensions.Options
+@using Volo.Abp.AspNetCore.Mvc.UI.Components.LayoutHook
+@using Volo.Abp.AspNetCore.Mvc.UI.Theme.Basic.Bundling
+@using Volo.Abp.AspNetCore.Mvc.UI.Theme.Basic.Themes.Basic.Components.PageAlerts
+@using Volo.Abp.AspNetCore.Mvc.UI.Theming
+@using Volo.Abp.AspNetCore.Mvc.UI.Widgets.Components.WidgetScripts
+@using Volo.Abp.AspNetCore.Mvc.UI.Widgets.Components.WidgetStyles
+@using Volo.Abp.Localization
+@using Volo.Abp.Ui.Branding
+@using Volo.Abp.Ui.LayoutHooks
+@inject IBrandingProvider BrandingProvider
+@inject IOptions<AbpThemingOptions> ThemingOptions
+
+@{
+    Layout = null;
+    var rtl = CultureHelper.IsRtl ? "rtl" : string.Empty;
+    // 自定义 auth-page 布局不再使用 Bootstrap container；
+    // 保留 ViewBag.FluidLayout 读取以保持与上游 Account 布局的兼容（目前无任何页面设置该值）。
+    var fluidClass = ViewBag.FluidLayout == true ? "abp-fluid" : string.Empty;
+}
+
+<!DOCTYPE html>
+
+<html lang="@CultureInfo.CurrentCulture.Name" dir="@rtl">
+<head>
+    @await Component.InvokeLayoutHookAsync(LayoutHooks.Head.First, StandardLayouts.Account)
+
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+    <meta http-equiv="X-UA-Compatible" content="ie=edge">
+    @* <link rel="icon" href="~/themes/basic/favicon.svg" type="image/svg+xml"> *@
+    @if (!ThemingOptions.Value.BaseUrl.IsNullOrWhiteSpace())
+    {
+        <base href="@ThemingOptions.Value.BaseUrl" />
+    }
+
+    <title>@(ViewBag.Title == null ? BrandingProvider.AppName : ViewBag.Title)</title>
+
+    @if (ViewBag.Description != null)
+    {
+        <meta name="description" content="@(ViewBag.Description as string)" />
+    }
+    <abp-style-bundle name="@BasicThemeBundles.Styles.Global" />
+    <link rel="stylesheet" href="~/styles/auth.css" asp-append-version="true" />
+
+    @await RenderSectionAsync("styles", false)
+
+    @await Component.InvokeAsync(typeof(WidgetStylesViewComponent))
+
+    @await Component.InvokeLayoutHookAsync(LayoutHooks.Head.Last, StandardLayouts.Account)
+</head>
+<body class="abp-account-layout @rtl @fluidClass">
+    @await Component.InvokeLayoutHookAsync(LayoutHooks.Body.First, StandardLayouts.Account)
+
+    <div class="auth-page">
+        <div class="auth-brand">
+            <div class="auth-brand__mark">
+                <svg viewBox="0 0 32 32" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+                    <!-- 疏浚铲斗：切入水面的梯形铲头 -->
+                    <path
+                        d="M7 9.5 L25 9.5 L21.5 17.5 Q16 20.5 10.5 17.5 Z"
+                        fill="white" fill-opacity="0.96"
+                    />
+                    <!-- 铲斗内高光分割线 -->
+                    <path d="M7 9.5 L25 9.5 L23.2 13 L8.8 13 Z" fill="white" fill-opacity="0.28" />
+                    <!-- 双层水波 -->
+                    <path
+                        d="M4 22.5 Q8.5 20.5 13 22.5 T24 22.5"
+                        stroke="white" stroke-width="1.6" stroke-linecap="round" fill="none" stroke-opacity="0.55"
+                    />
+                    <path
+                        d="M6 26 Q10 24.3 13.5 26 T22 26"
+                        stroke="white" stroke-width="1.6" stroke-linecap="round" fill="none" stroke-opacity="0.3"
+                    />
+                </svg>
+            </div>
+            <div class="auth-brand__name">智浚 <span class="auth-brand__ai">AI</span></div>
+            <div class="auth-brand__sub">统一认证中心</div>
+        </div>
+        <div class="auth-card">
+            @(await Component.InvokeAsync<PageAlertsViewComponent>())
+            @await Component.InvokeLayoutHookAsync(LayoutHooks.PageContent.First, StandardLayouts.Account)
+            @RenderBody()
+            @await Component.InvokeLayoutHookAsync(LayoutHooks.PageContent.Last, StandardLayouts.Account)
+        </div>
+    </div>
+
+    <abp-script-bundle name="@BasicThemeBundles.Scripts.Global" />
+
+    <script src="~/Abp/ApplicationLocalizationScript?cultureName=@CultureInfo.CurrentUICulture.Name"></script>
+    <script src="~/Abp/ApplicationConfigurationScript"></script>
+    <script src="~/Abp/ServiceProxyScript"></script>
+
+    @await RenderSectionAsync("scripts", false)
+
+    @await Component.InvokeAsync(typeof(WidgetScriptsViewComponent))
+
+    @await Component.InvokeLayoutHookAsync(LayoutHooks.Body.Last, StandardLayouts.Account)
+</body>
+</html>
