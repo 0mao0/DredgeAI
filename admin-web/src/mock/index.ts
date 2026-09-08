@@ -26,7 +26,7 @@ export function registerMock(): void {
     return [200, handler()]
   }
 
-  // 模块 mock 关闭时转发到真实 API（保留 baseURL，避免 mock 库 passThrough 丢 /api/admin 前缀）
+  // 模块 mock 关闭时转发到真实 API（保留 baseURL，避免 mock 库 passThrough 丢 /api 前缀）
   const forwardToRealApi = async (config: AxiosRequestConfig): Promise<[number, unknown]> => {
     const headers: Record<string, string> = {}
     const rawHeaders = config.headers as AxiosHeaders | undefined
@@ -65,7 +65,7 @@ export function registerMock(): void {
   const modules: { key: string, register?: (m: MockAdapter, w: typeof wrap) => void, passthrough?: RegExp }[] = [
     { key: 'dashboard', register: registerDashboardMock },
     { key: 'permissions', register: registerPermissionMock },
-    { key: 'applications', register: registerApplicationMock, passthrough: /^\/applications/ },
+    { key: 'applications', register: registerApplicationMock, passthrough: /^\/bidcompare\/app-catalog/ },
     { key: 'datasource', register: registerDatasourceMock },
     { key: 'analytics', register: registerAnalyticsMock },
     { key: 'profile', register: registerProfileMock },
@@ -74,7 +74,7 @@ export function registerMock(): void {
     { key: 'orgUsers', register: registerOrgUsersMock },
     { key: 'roles', register: registerRolesMock },
     { key: 'standards', register: registerStandardsMock },
-    { key: 'appOrder', passthrough: /^\/app-order/ },
+    { key: 'appOrder', passthrough: /^\/bidcompare\/app-order/ },
   ]
 
   for (const mod of modules) {

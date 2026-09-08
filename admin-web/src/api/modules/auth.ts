@@ -4,7 +4,7 @@ import { AUTH_CLIENT_ID, AUTH_SCOPE } from '@/utils/constants'
 
 /**
  * Auth 认证中心（OpenIddict /connect/*）API。
- * 端点不在 API baseURL（/api/admin/）之下，故用原生 fetch 拼同源路径
+ * 端点不在 API baseURL（/api/）之下，故用原生 fetch 拼同源路径
  * （dev 由 vite /connect 代理转发到 Auth 服务），不经过 request 实例 / mock。
  */
 

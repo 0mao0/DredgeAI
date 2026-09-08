@@ -162,7 +162,7 @@ public class DredgeBlobProvider_Tests : DredgeAICoreDomainTestBase
         var url = await provider.GetDownloadUrlAsync(GetArgs(configuration, "a.txt"));
 
         url.ShouldNotBeNull();
-        url.ShouldStartWith("/api/compare/storage/file?key=");
+        url.ShouldStartWith("/api/bidcompare/storage/file?key=");
         url.ShouldContain("a.txt");
         url.ShouldContain("&expires=");
         url.ShouldContain("&sig=");

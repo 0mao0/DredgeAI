@@ -4,17 +4,19 @@ using DredgeAI.BidCompare.AnGineer;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
-using Volo.Abp.AspNetCore.Mvc;
+using Volo.Abp;
 
 namespace DredgeAI.BidCompare.Controllers;
 
-/// <summary>
-/// AI 晨会知识库：上传施组方案 PDF/Word → AnGIneer 解析（stages=all），
-/// 前端轮询状态，完成后即可被知识检索命中。
-/// </summary>
-[Route("api/meeting/knowledge/documents")]
+/// <summary>知识库文档接口</summary>
+/// <remarks>AI 晨会知识库：上传施组方案 PDF/Word → AnGIneer 解析（stages=all），
+/// 前端轮询状态，完成后即可被知识检索命中。</remarks>
 [Authorize]
-public class KnowledgeDocumentController : AbpControllerBase
+[Route("api/bidcompare/knowledge-documents")]
+[RemoteService(Name = BidCompareRemoteServiceConsts.RemoteServiceName)]
+[Area(BidCompareRemoteServiceConsts.ModuleName)]
+[Tags("知识库文档")]
+public class KnowledgeDocumentController : BidCompareController
 {
     private readonly IAnGineerClient _anGineer;
 
@@ -23,8 +25,11 @@ public class KnowledgeDocumentController : AbpControllerBase
         _anGineer = anGineer;
     }
 
+    /// <summary>上传知识库文档并触发 AnGIneer 解析</summary>
+    /// <param name="file">待上传的施组方案 PDF/Word 文件</param>
+    /// <returns>解析任务 ID 与当前状态</returns>
     [HttpPost]
-    public async Task<KnowledgeUploadResult> Upload(IFormFile file)
+    public async Task<KnowledgeUploadResult> UploadAsync(IFormFile file)
     {
         using var ms = new MemoryStream();
         await file.CopyToAsync(ms);
@@ -38,8 +43,11 @@ public class KnowledgeDocumentController : AbpControllerBase
         };
     }
 
+    /// <summary>查询知识库文档解析状态</summary>
+    /// <param name="docId">AnGIneer 文档 ID</param>
+    /// <returns>解析状态、进度与阶段信息</returns>
     [HttpGet("{docId}/status")]
-    public async Task<KnowledgeJobStatusDto> Status(string docId)
+    public async Task<KnowledgeJobStatusDto> StatusAsync(string docId)
     {
         return Map(await _anGineer.GetStateAsync(docId));
     }

@@ -65,7 +65,7 @@ export function registerMock(): void {
   // 按模块注册 mock，模块开关关闭则该模块请求直连真实 API
   const modules: { key: string, register?: (m: MockAdapter, w: typeof wrap) => void, passthrough?: RegExp }[] = [
     { key: 'user', register: registerUserMock },
-    { key: 'app', register: registerAppMock, passthrough: /^\/app\/list/ },
+    { key: 'app', register: registerAppMock, passthrough: /^\/bidcompare\/app-catalog\/list/ },
     { key: 'task', register: registerTaskMock },
     { key: 'file', register: registerFileMock },
     { key: 'bid', register: registerBidMock },
@@ -73,10 +73,10 @@ export function registerMock(): void {
     { key: 'apikey', register: registerApiKeyMock },
     { key: 'chart', register: registerChartMock },
     { key: 'dubbing', register: registerDubbingMock },
-    { key: 'meeting', register: registerMeetingMock, passthrough: /^\/meeting\// },
-    { key: 'compare', passthrough: /^\/compare\// },
-    { key: 'tenderRead', passthrough: /^\/tender-read\// },
-    { key: 'appOrder', passthrough: /^\/admin\/app-order/ },
+    { key: 'meeting', register: registerMeetingMock, passthrough: /^\/bidcompare\/(meeting-|knowledge-documents)/ },
+    { key: 'compare', passthrough: /^\/bidcompare\/compare-/ },
+    { key: 'tenderRead', passthrough: /^\/bidcompare\/tender-reading-tasks/ },
+    { key: 'appOrder', passthrough: /^\/bidcompare\/app-order/ },
   ]
 
   for (const mod of modules) {

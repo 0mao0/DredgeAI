@@ -31,9 +31,9 @@ function extractId(url: string | undefined, pattern: RegExp, group = 1): string 
 }
 
 export function registerRolesMock(mock: MockAdapter, wrap: (handler: () => unknown) => () => Promise<[number, unknown]>): void {
-  mock.onGet('/api/admin/roles').reply(wrap(() => [...roles]))
+  mock.onGet('/api/roles').reply(wrap(() => [...roles]))
 
-  mock.onPost('/api/admin/roles').reply((config) => {
+  mock.onPost('/api/roles').reply((config) => {
     const body = parseBody(config.data)
     const r: Role = {
       id: String(Date.now()),

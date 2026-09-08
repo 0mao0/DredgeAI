@@ -59,7 +59,7 @@ const privateVoices: VoiceItem[] = [
 const adminVoices: VoiceItem[] = [...publicVoices, ...privateVoices]
 
 export function registerDubbingMock(mock: MockAdapter, wrap: (handler: () => unknown) => () => Promise<[number, unknown]>): void {
-  mock.onGet('/api/admin/dubbing/admin/tasks').reply((config) => {
+  mock.onGet('/api/dubbing/admin/tasks').reply((config) => {
     const params = config.params || {}
     let items = [...dubbingTasks]
     if (params.keyword) {
@@ -75,8 +75,8 @@ export function registerDubbingMock(mock: MockAdapter, wrap: (handler: () => unk
     return [200, { items, totalCount: items.length }]
   })
 
-  mock.onDelete(/\/api\/admin\/dubbing\/admin\/tasks\/(.+)$/).reply((config) => {
-    const match = config.url?.match(/\/api\/admin\/dubbing\/admin\/tasks\/(.+)$/)
+  mock.onDelete(/\/api\/dubbing\/admin\/tasks\/(.+)$/).reply((config) => {
+    const match = config.url?.match(/\/api\/dubbing\/admin\/tasks\/(.+)$/)
     if (!match) return [404, {}]
     const id = match[1]
     const idx = dubbingTasks.findIndex((t) => t.id === id)
@@ -96,7 +96,7 @@ export function registerDubbingMock(mock: MockAdapter, wrap: (handler: () => unk
     return [204]
   })
 
-  mock.onGet('/api/admin/dubbing/admin/voices').reply((config) => {
+  mock.onGet('/api/dubbing/admin/voices').reply((config) => {
     const params = config.params || {}
     let list = [...adminVoices]
     if (params.keyword) {
@@ -109,7 +109,7 @@ export function registerDubbingMock(mock: MockAdapter, wrap: (handler: () => unk
     return [200, list]
   })
 
-  mock.onPost('/api/admin/dubbing/admin/voices').reply((config) => {
+  mock.onPost('/api/dubbing/admin/voices').reply((config) => {
     const body = typeof config.data === 'string' ? JSON.parse(config.data) : config.data
     const now = new Date().toISOString()
     const newVoice: VoiceItem = {
@@ -125,8 +125,8 @@ export function registerDubbingMock(mock: MockAdapter, wrap: (handler: () => unk
     return [200, newVoice]
   })
 
-  mock.onDelete(/\/api\/admin\/dubbing\/admin\/voices\/(.+)$/).reply((config) => {
-    const match = config.url?.match(/\/api\/admin\/dubbing\/admin\/voices\/(.+)$/)
+  mock.onDelete(/\/api\/dubbing\/admin\/voices\/(.+)$/).reply((config) => {
+    const match = config.url?.match(/\/api\/dubbing\/admin\/voices\/(.+)$/)
     if (!match) return [404, {}]
     const id = match[1]
     const idx = adminVoices.findIndex((v) => v.id === id)
@@ -140,7 +140,7 @@ export function registerDubbingMock(mock: MockAdapter, wrap: (handler: () => unk
     return [204]
   })
 
-  mock.onGet('/api/admin/dubbing/admin/usage/summary').reply(wrap(() => dubbingUsageSummary))
+  mock.onGet('/api/dubbing/admin/usage/summary').reply(wrap(() => dubbingUsageSummary))
 
-  mock.onGet('/api/admin/dubbing/admin/usage/timeseries').reply(wrap(() => dubbingUsageTimeSeries))
+  mock.onGet('/api/dubbing/admin/usage/timeseries').reply(wrap(() => dubbingUsageTimeSeries))
 }

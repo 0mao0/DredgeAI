@@ -1,6 +1,7 @@
 using System.Collections.Generic;
 using DredgeAI.BidCompare.Applications;
 using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using Volo.Abp;
 using Volo.Abp.AspNetCore.Mvc;
@@ -11,10 +12,12 @@ namespace DredgeAI.BidCompare.Controllers;
 /// 应用目录服务：admin 发布管理（发布/下架、分类、图标）与 user-web 应用列表
 /// 读写同一份后端目录（JSON 文件持久化），保证两端联动。
 /// </summary>
-[Route("api/admin/applications")]
-[Route("api/app")]
 [Authorize]
-public class ApplicationCatalogController : AbpControllerBase
+[Route("api/bidcompare/app-catalog")]
+[RemoteService(Name = BidCompareRemoteServiceConsts.RemoteServiceName)]
+[Area(BidCompareRemoteServiceConsts.ModuleName)]
+[Tags("应用目录")]
+public class ApplicationCatalogController : BidCompareController
 {
     private readonly ApplicationCatalogStore _store;
 
@@ -23,24 +26,28 @@ public class ApplicationCatalogController : AbpControllerBase
         _store = store;
     }
 
-    /// <summary>GET /api/admin/applications 应用目录（含子应用）。</summary>
+    /// <summary>GET /api/bidcompare/app-catalog 应用目录（含子应用）</summary>
+    /// <returns>应用目录列表</returns>
     [HttpGet]
-    public List<CatalogApp> Get()
+    public List<CatalogApp> GetAsync()
         => _store.GetAll();
 
-    /// <summary>GET /api/admin/applications/categories 分类配置。</summary>
+    /// <summary>GET /api/bidcompare/app-catalog/categories 分类配置</summary>
+    /// <returns>分类配置列表</returns>
     [HttpGet("categories")]
-    public List<CategoryConfigDto> GetCategories()
+    public List<CategoryConfigDto> GetCategoriesAsync()
         => _store.GetCategories();
 
-    /// <summary>GET /api/app/list user-web 应用列表（按发布状态实时推导）。</summary>
+    /// <summary>GET /api/bidcompare/app-catalog/list user-web 应用列表（按发布状态实时推导）</summary>
+    /// <returns>已发布应用卡片列表</returns>
     [HttpGet("list")]
-    public List<UserAppCardDto> GetUserList()
+    public List<UserAppCardDto> GetUserListAsync()
         => _store.GetUserApps();
 
-    /// <summary>POST /api/admin/applications/status 发布/下架主应用。</summary>
+    /// <summary>POST /api/bidcompare/app-catalog/status 发布/下架主应用</summary>
+    /// <param name="input">应用 ID + 目标状态</param>
     [HttpPost("status")]
-    public void SetStatus([FromBody] SetAppStatusInput input)
+    public void SetStatusAsync([FromBody] SetAppStatusInput input)
     {
         if (string.IsNullOrWhiteSpace(input.AppId))
         {
@@ -53,9 +60,10 @@ public class ApplicationCatalogController : AbpControllerBase
         }
     }
 
-    /// <summary>POST /api/admin/applications/sub/status 发布/下架子应用。</summary>
+    /// <summary>POST /api/bidcompare/app-catalog/sub/status 发布/下架子应用</summary>
+    /// <param name="input">子应用 ID + 目标状态</param>
     [HttpPost("sub/status")]
-    public void SetSubStatus([FromBody] SetSubStatusInput input)
+    public void SetSubStatusAsync([FromBody] SetSubStatusInput input)
     {
         if (string.IsNullOrWhiteSpace(input.SubId))
         {
@@ -68,9 +76,10 @@ public class ApplicationCatalogController : AbpControllerBase
         }
     }
 
-    /// <summary>POST /api/admin/applications/category 设置主应用分类。</summary>
+    /// <summary>POST /api/bidcompare/app-catalog/category 设置主应用分类</summary>
+    /// <param name="input">应用 ID + 分类</param>
     [HttpPost("category")]
-    public void SetCategory([FromBody] SetAppFieldInput input)
+    public void SetCategoryAsync([FromBody] SetAppFieldInput input)
     {
         if (!_store.SetCategory(input.AppId, input.Category))
         {
@@ -78,9 +87,10 @@ public class ApplicationCatalogController : AbpControllerBase
         }
     }
 
-    /// <summary>POST /api/admin/applications/sub/category 设置子应用分类。</summary>
+    /// <summary>POST /api/bidcompare/app-catalog/sub/category 设置子应用分类</summary>
+    /// <param name="input">子应用 ID + 分类</param>
     [HttpPost("sub/category")]
-    public void SetSubCategory([FromBody] SetSubFieldInput input)
+    public void SetSubCategoryAsync([FromBody] SetSubFieldInput input)
     {
         if (!_store.SetCategory(input.SubId, input.Category))
         {
@@ -88,9 +98,10 @@ public class ApplicationCatalogController : AbpControllerBase
         }
     }
 
-    /// <summary>POST /api/admin/applications/icon 设置主应用图标。</summary>
+    /// <summary>POST /api/bidcompare/app-catalog/icon 设置主应用图标</summary>
+    /// <param name="input">应用 ID + 图标</param>
     [HttpPost("icon")]
-    public void SetIcon([FromBody] SetAppIconInput input)
+    public void SetIconAsync([FromBody] SetAppIconInput input)
     {
         if (!_store.SetIcon(input.AppId, input.Icon))
         {
@@ -98,9 +109,10 @@ public class ApplicationCatalogController : AbpControllerBase
         }
     }
 
-    /// <summary>POST /api/admin/applications/sub/icon 设置子应用图标。</summary>
+    /// <summary>POST /api/bidcompare/app-catalog/sub/icon 设置子应用图标</summary>
+    /// <param name="input">子应用 ID + 图标</param>
     [HttpPost("sub/icon")]
-    public void SetSubIcon([FromBody] SetSubIconInput input)
+    public void SetSubIconAsync([FromBody] SetSubIconInput input)
     {
         if (!_store.SetIcon(input.SubId, input.Icon))
         {

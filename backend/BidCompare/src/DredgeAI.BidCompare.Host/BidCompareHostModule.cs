@@ -323,7 +323,7 @@ public class BidCompareHostModule : AbpModule
             app.ApplicationServices.GetRequiredService<Microsoft.Extensions.Logging.ILoggerFactory>()
                 .CreateLogger("AiGatewayConfig")
                 .LogWarning(
-                    "AiGateway:IngestToken 未配置，POST /api/ai-gateway/usage-records 已 fail-closed 拒绝所有上报；" +
+                    "AiGateway:IngestToken 未配置，POST /api/bidcompare/ai-gateway/usage-records 已 fail-closed 拒绝所有上报；" +
                     "共享/生产环境必须配置 AI_GATEWAY_INGEST_TOKEN");
         }
 

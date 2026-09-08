@@ -20,7 +20,7 @@ export const MOCK_MODULES: Record<string, boolean> = {
   appOrder: false,
 }
 
-export const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || '/api/admin/'
+export const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || '/api/'
 
 // 登录态 cookie（唯一持久层；STORAGE_TOKEN_KEY 同时作为 access token 的 cookie 名）
 export const STORAGE_TOKEN_KEY = 'DREDGE_AI_ADMIN_TOKEN'
