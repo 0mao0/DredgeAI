@@ -46,7 +46,7 @@
 
       <div class="login-page__alt">
         <AppButton class="login-page__alt-btn" @click="startAuthCenter">
-          Auth 认证中心登录
+          认证中心登录
         </AppButton>
         <AppButton class="login-page__alt-btn" @click="qrVisible = true">
           交建通扫码登录
