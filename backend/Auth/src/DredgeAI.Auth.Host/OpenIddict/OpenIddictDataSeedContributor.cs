@@ -114,7 +114,10 @@ public class OpenIddictDataSeedContributor : IDataSeedContributor, ITransientDep
                 },
                 scopes: commonScopes,
                 redirectUri: consoleAndAngularClientRootUrl,
-                postLogoutRedirectUri: consoleAndAngularClientRootUrl
+                postLogoutRedirectUri: consoleAndAngularClientRootUrl,
+                additionalRedirectUris: configurationSection
+                    .GetSection("DredgeAI_App:AdditionalRedirectUris")
+                    .Get<List<string>>()
             );
         }
 
@@ -150,7 +153,8 @@ public class OpenIddictDataSeedContributor : IDataSeedContributor, ITransientDep
         List<string> scopes,
         string? redirectUri = null,
         string? postLogoutRedirectUri = null,
-        List<string>? permissions = null)
+        List<string>? permissions = null,
+        List<string>? additionalRedirectUris = null)
     {
         if (!string.IsNullOrEmpty(secret) && string.Equals(type, OpenIddictConstants.ClientTypes.Public,
                 StringComparison.OrdinalIgnoreCase))
@@ -164,14 +168,32 @@ public class OpenIddictDataSeedContributor : IDataSeedContributor, ITransientDep
             throw new BusinessException(L["TheClientSecretIsRequiredForConfidentialApplications"]);
         }
 
-        if (!string.IsNullOrEmpty(name) && await _applicationManager.FindByClientIdAsync(name) != null)
-        {
-            return;
-            //throw new BusinessException(L["TheClientIdentifierIsAlreadyTakenByAnotherApplication"]);
-        }
-
         var client = await _applicationManager.FindByClientIdAsync(name);
-        if (client == null)
+        if (client != null)
+        {
+            // 已存在客户端：幂等 seed 重入时增量补齐缺失的 redirect URI
+            var descriptor = new OpenIddictApplicationDescriptor();
+            await _applicationManager.PopulateAsync(descriptor, client);
+            var changed = false;
+            foreach (var u in EnumerateAllRedirectUris(redirectUri, additionalRedirectUris))
+            {
+                if (Uri.TryCreate(u, UriKind.Absolute, out var uri) &&
+                    descriptor.RedirectUris.All(x => x != uri))
+                {
+                    descriptor.RedirectUris.Add(uri);
+                    changed = true;
+                }
+            }
+
+            if (changed)
+            {
+                await _applicationManager.PopulateAsync(client, descriptor);
+                await _applicationManager.UpdateAsync(client, descriptor);
+            }
+
+            return;
+        }
+        else
         {
             var application = new OpenIddictApplicationDescriptor
             {
@@ -344,6 +366,27 @@ public class OpenIddictDataSeedContributor : IDataSeedContributor, ITransientDep
             }
 
             await _applicationManager.CreateAsync(application);
+        }
+    }
+
+    private static IEnumerable<string> EnumerateAllRedirectUris(
+        string? redirectUri,
+        List<string>? additionalRedirectUris)
+    {
+        if (!string.IsNullOrEmpty(redirectUri))
+        {
+            yield return redirectUri;
+        }
+
+        if (additionalRedirectUris != null)
+        {
+            foreach (var uri in additionalRedirectUris)
+            {
+                if (!string.IsNullOrEmpty(uri))
+                {
+                    yield return uri;
+                }
+            }
         }
     }
 }

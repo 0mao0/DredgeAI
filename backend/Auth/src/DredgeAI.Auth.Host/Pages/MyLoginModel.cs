@@ -10,7 +10,7 @@ using Volo.Abp.OpenIddict;
 
 namespace DredgeAI.Pages;
 
-[ExposeServices(typeof(LoginModel))]
+[ExposeServices(typeof(LoginModel), typeof(MyLoginModel))]
 public class MyLoginModel : OpenIddictSupportedLoginModel
 {
     public MyLoginModel(IAuthenticationSchemeProvider schemeProvider, IOptions<AbpAccountOptions> accountOptions,

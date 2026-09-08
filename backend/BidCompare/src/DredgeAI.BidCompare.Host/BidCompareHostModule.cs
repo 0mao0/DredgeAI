@@ -65,7 +65,6 @@ public class BidCompareHostModule : AbpModule
 
     public override void ConfigureServices(ServiceConfigurationContext context)
     {
-        context.Services.AddAlwaysAllowAuthorization();
         var configuration = context.Services.GetConfiguration();
         var hostingEnvironment = context.Services.GetHostingEnvironment();
         Configure<AbpClockOptions>(options => { options.Kind = DateTimeKind.Utc; });

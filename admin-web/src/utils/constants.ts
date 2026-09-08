@@ -21,7 +21,22 @@ export const MOCK_MODULES: Record<string, boolean> = {
 }
 
 export const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || '/api/admin/'
+
+// 登录态 cookie（唯一持久层；STORAGE_TOKEN_KEY 同时作为 access token 的 cookie 名）
 export const STORAGE_TOKEN_KEY = 'DREDGE_AI_ADMIN_TOKEN'
+export const REFRESH_TOKEN_COOKIE = 'DREDGE_AI_ADMIN_REFRESH_TOKEN'
+/** access token 过期时刻（epoch 毫秒），供自动刷新调度使用 */
+export const TOKEN_EXPIRES_AT_COOKIE = 'DREDGE_AI_ADMIN_TOKEN_EXPIRES_AT'
+/** access cookie 有效期 = token 有效期 − 5 分钟（临过期刷新窗口） */
+export const ACCESS_TOKEN_MAX_AGE_OFFSET_SEC = 300
+export const REFRESH_TOKEN_COOKIE_MAX_AGE_SEC = 14 * 24 * 3600
+
+// OIDC / OpenIddict 参数
+export const AUTH_CLIENT_ID = 'DredgeAI_App'
+/** offline_access 才会下发 refresh_token（ABP/OpenIddict 约定） */
+export const AUTH_SCOPE = 'DredgeAI offline_access'
+export const AUTH_CALLBACK_PATH = '/auth/callback'
+export const LOGIN_PATH = '/login'
 
 export const USER_WEB_URL = import.meta.env.VITE_USER_WEB_URL || 'http://localhost:5373'
 

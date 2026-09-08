@@ -4,6 +4,10 @@
  * 修复历史问题：原 user-web 用 /key、admin-web 用 /apikey，命名不统一。
  */
 export const urls = {
+  // 认证（/connect 前缀，不经 API baseURL，由 auth 模块直接用 fetch 拼同源路径）
+  authToken: '/connect/token',
+  authAuthorize: '/connect/authorize',
+
   // user-web
   userCurrent: '/user/current',
   appList: '/app/list',
