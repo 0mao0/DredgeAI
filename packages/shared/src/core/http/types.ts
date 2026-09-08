@@ -10,6 +10,8 @@ export interface CreateRequestOptions {
   timeout?: number
   /** 401 未授权时的回调（可选，由各端注入跳转逻辑） */
   onUnauthorized?: () => void
+  /** 自定义 token 读取函数（可选）：优先于 tokenKey，供 cookie 存储等场景使用 */
+  getToken?: () => string | null
 }
 
 /**

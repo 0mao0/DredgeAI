@@ -1,6 +1,7 @@
 // 类型 barrel，按领域 sub-bundle 导出
 export * from './common'
 export * from './abp'
+export * from './auth'
 export * from './apikey'
 export * from './application'
 export * from './dashboard'

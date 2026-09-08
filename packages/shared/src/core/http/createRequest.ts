@@ -9,13 +9,13 @@ import { applyAbpInterceptors } from './abp'
  * 返回独立 RequestInstance 包装（泛型方法直接返回数据体），不污染全局 axios 类型。
  */
 export function createRequest(opts: CreateRequestOptions): RequestInstance {
-  const { baseURL, tokenKey, timeout = 15000, onUnauthorized } = opts
+  const { baseURL, tokenKey, timeout = 15000, onUnauthorized, getToken } = opts
 
   const instance = axios.create({ baseURL, timeout })
 
   // token 注入
   instance.interceptors.request.use((config) => {
-    const token = typeof localStorage !== 'undefined' ? localStorage.getItem(tokenKey) : null
+    const token = getToken?.() ?? (typeof localStorage !== 'undefined' ? localStorage.getItem(tokenKey) : null)
     if (token) {
       config.headers.Authorization = `Bearer ${token}`
     }
