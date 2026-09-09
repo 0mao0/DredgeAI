@@ -1,5 +1,8 @@
 <template>
   <SectionCard title="信息确认" flush>
+    <div v-if="parsing" class="plan-confirm__hint">
+      AI 正在整理你的口述内容，结果会自动填入下方（你也可以先手动修改）
+    </div>
     <a-form layout="horizontal" label-align="left" class="plan-confirm__form">
       <a-form-item
         label="日期"
@@ -48,6 +51,8 @@ import type { PlanParseResult, PreInfo } from '@/types'
 const props = defineProps<{
   plan: PlanParseResult | null
   loading: boolean
+  /** AI 正在整理：本页已用原始输入预填，结果回来后回填未改动字段 */
+  parsing?: boolean
 }>()
 const emit = defineEmits<{
   submit: [preInfo: PreInfo]
@@ -61,14 +66,27 @@ const form = reactive<PreInfo>({
   riskPoints: '',
 })
 
+/** 上一次由外部写入的字段值：与当前值一致说明用户没动过，可以安全覆盖 */
+const applied = { date: '', weather: '', tasks: '', riskPoints: '' }
+
 watch(
   () => props.plan,
   (plan) => {
     if (!plan) return
-    form.date = plan.date?.slice(0, 10) || form.date
-    form.weather = plan.weather ?? ''
-    form.tasks = plan.tasks ?? ''
-    form.riskPoints = plan.riskPoints ?? ''
+    const next = {
+      date: plan.date?.slice(0, 10) || form.date,
+      weather: plan.weather ?? '',
+      tasks: plan.tasks ?? '',
+      riskPoints: plan.riskPoints ?? '',
+    }
+    if (!applied.tasks || form.tasks === applied.tasks) form.tasks = next.tasks
+    if (!applied.riskPoints || form.riskPoints === applied.riskPoints) form.riskPoints = next.riskPoints
+    if (!applied.weather || form.weather === applied.weather) form.weather = next.weather
+    if (!applied.date || form.date === applied.date) form.date = next.date
+    applied.date = form.date
+    applied.weather = form.weather
+    applied.tasks = form.tasks
+    applied.riskPoints = form.riskPoints
   },
   { immediate: true },
 )
@@ -81,6 +99,14 @@ function onSubmit(): void {
 <style scoped lang="less">
 @import '@shared/web/styles/variables.less';
 
+.plan-confirm__hint {
+  margin-bottom: @spacing-base;
+  padding: @spacing-sm @spacing-base;
+  border-radius: @radius-sm;
+  background: color-mix(in srgb, var(--color-brand) 8%, transparent);
+  color: @text-secondary;
+  font-size: @font-size-sm;
+}
 .plan-confirm__actions {
   display: flex;
   gap: @spacing-md;
