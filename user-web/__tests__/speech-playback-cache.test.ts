@@ -6,6 +6,20 @@ const saveSpeechAudioCache = vi.fn(async () => {})
 let pulledSeconds = 0
 const startEvents: Array<{ pulledSeconds: number, duration: number }> = []
 
+/** 分块闸门：gated=true 时每个分块都要测试显式放行，便于在中途停止播放 */
+let gated = false
+const gates: Array<() => void> = []
+
+const flush = (): Promise<void> => new Promise((resolve) => setTimeout(resolve, 0))
+
+/** 逐块放行：每放一块要等生成器重新挂上下一个闸门 */
+async function releaseChunks(count: number): Promise<void> {
+  for (let i = 0; i < count; i++) {
+    gates.shift()?.()
+    await flush()
+  }
+}
+
 vi.mock('@/api/modules/aiMeeting', () => ({
   async* streamSpeechAudio(text: string, onMeta?: (m: { sampleRate: number }) => void) {
     streamCalls.push(text)
@@ -13,6 +27,7 @@ vi.mock('@/api/modules/aiMeeting', () => ({
     // 20 × 0.1s = 2s 的 24kHz 单声道 16bit PCM
     const chunk = new Uint8Array(24000 * 2 * 0.1)
     for (let i = 0; i < 20; i++) {
+      if (gated) await new Promise<void>((resolve) => gates.push(resolve))
       pulledSeconds += 0.1
       yield chunk
     }
@@ -97,6 +112,8 @@ vi.stubGlobal('Audio', FakeAudio)
 beforeEach(() => {
   streamCalls.length = 0
   startEvents.length = 0
+  gates.length = 0
+  gated = false
   pulledSeconds = 0
   saveSpeechAudioCache.mockClear()
 })
@@ -123,5 +140,51 @@ describe('useSpeechPlayback 整稿流式播放', () => {
     expect(startEvents.length).toBeGreaterThan(0)
     expect(startEvents[0]!.pulledSeconds).toBeLessThanOrEqual(0.4)
     expect(startEvents[0]!.duration).toBeGreaterThan(0)
+  })
+
+  it('停止播放后不再排期，但合成任务继续收完并写回缓存', async () => {
+    gated = true
+    const { useSpeechPlayback } = await import('@/views/ai-meeting/composables/useSpeechPlayback')
+    const { play, stop } = useSpeechPlayback()
+    const playback = play('各位工友，大家早上好！停止后继续收完的用例。', 'meeting-drain-1')
+    await flush()
+    await releaseChunks(4)
+    await flush()
+    expect(startEvents.length).toBeGreaterThan(0)
+
+    stop()
+    const scheduledAtStop = startEvents.length
+    await releaseChunks(30)
+    await flush()
+    await flush()
+    await playback
+
+    expect(streamCalls).toHaveLength(1)
+    expect(startEvents.length).toBe(scheduledAtStop)
+    expect(saveSpeechAudioCache).toHaveBeenCalledTimes(1)
+    const [, blob] = saveSpeechAudioCache.mock.calls[0] as unknown as [string, Blob]
+    expect(blob.size).toBe(24000 * 2 * 2 + 44)
+  })
+
+  it('同一文本再次播放复用进行中的任务，不重复请求上游', async () => {
+    gated = true
+    const { useSpeechPlayback } = await import('@/views/ai-meeting/composables/useSpeechPlayback')
+    const playback = useSpeechPlayback()
+    const first = playback.play('各位工友，大家早上好！复用进行中任务的用例。', 'meeting-join-1')
+    await flush()
+    await releaseChunks(3)
+    await flush()
+    playback.stop()
+    await first
+
+    const second = playback.play('各位工友，大家早上好！复用进行中任务的用例。', 'meeting-join-1')
+    await flush()
+    await releaseChunks(30)
+    await flush()
+    await flush()
+    await second
+
+    expect(streamCalls).toHaveLength(1)
+    expect(saveSpeechAudioCache).toHaveBeenCalledTimes(1)
   })
 })

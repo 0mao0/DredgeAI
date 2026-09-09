@@ -12,6 +12,101 @@ import { mergeAudioBlobs, parseWav, pcmToWavBlob } from '@/utils/audioToWav'
 import { getPreparedSpeech, putPreparedSpeech } from './speechPreparedCache'
 import { useAudioPlayer } from './useAudioPlayer'
 
+/**
+ * 整稿合成任务：与播放解耦，一旦发起就跑到底。
+ * 用户中途停止播放只是停止"排期"，任务继续收完并在完成时写回缓存——这样
+ * 上游只会看到一次请求（不会出现"我们停了、上游还在合成"的重叠），
+ * 同一稿子再次播放时也能直接命中缓存秒开。
+ */
+interface SpeechStreamJob {
+  text: string
+  chunks: Uint8Array[]
+  sampleRate: number
+  done: boolean
+  merged: Blob | null
+  error: unknown
+  waiters: Array<() => void>
+}
+
+const streamJobs = new Map<string, SpeechStreamJob>()
+
+function notifyJob(job: SpeechStreamJob): void {
+  const waiters = job.waiters
+  job.waiters = []
+  for (const resume of waiters) resume()
+}
+
+function waitJob(job: SpeechStreamJob): Promise<void> {
+  if (job.done) return Promise.resolve()
+  return new Promise((resolve) => job.waiters.push(resolve))
+}
+
+/** 唤醒所有等待者：停止播放时让消费循环立刻退出，任务本身照旧继续跑 */
+function wakeAllJobs(): void {
+  for (const job of streamJobs.values()) notifyJob(job)
+}
+
+function startStreamJob(
+  text: string,
+  tailText: string,
+  leadBlob: Blob | null,
+  meetingId?: string,
+): SpeechStreamJob {
+  const job: SpeechStreamJob = {
+    text,
+    chunks: [],
+    sampleRate: 24000,
+    done: false,
+    merged: null,
+    error: null,
+    waiters: [],
+  }
+  streamJobs.set(text, job)
+  void (async () => {
+    try {
+      for await (const chunk of streamSpeechAudio(tailText, (meta) => {
+        job.sampleRate = meta.sampleRate
+      })) {
+        job.chunks.push(chunk)
+        notifyJob(job)
+      }
+      const total = job.chunks.reduce((sum, c) => sum + c.length, 0)
+      const evenLen = total - (total % 2)
+      if (evenLen >= 2) {
+        const pcm = new Uint8Array(evenLen)
+        let pos = 0
+        for (const chunk of job.chunks) {
+          if (pos >= evenLen) break
+          const take = Math.min(chunk.length, evenLen - pos)
+          pcm.set(chunk.subarray(0, take), pos)
+          pos += take
+        }
+        const tailBlob = pcmToWavBlob(pcm, job.sampleRate)
+        const merged = leadBlob ? await mergeAudioBlobs([leadBlob, tailBlob]) : tailBlob
+        job.merged = merged
+        putPreparedSpeech(text, merged)
+        if (meetingId) void saveSpeechAudioCache(meetingId, merged).catch(() => {})
+      }
+    } catch (err) {
+      job.error = err
+    } finally {
+      job.done = true
+      notifyJob(job)
+      streamJobs.delete(text)
+    }
+  })()
+  return job
+}
+
+function getOrStartStreamJob(
+  text: string,
+  tailText: string,
+  leadBlob: Blob | null,
+  meetingId?: string,
+): SpeechStreamJob {
+  return streamJobs.get(text) ?? startStreamJob(text, tailText, leadBlob, meetingId)
+}
+
 /** 估算语速：约 4 字/秒 */
 function estimateSeconds(text: string): number {
   return Math.round(text.replace(/\s/g, '').length / 4)
@@ -136,16 +231,20 @@ export function useSpeechPlayback() {
     streamSources = []
     streamResolve?.()
     streamResolve = null
+    // 停止排期后，正在等待新分块的消费循环要立刻醒来退出（合成任务不受影响）
+    wakeAllJobs()
   }
 
   /**
-   * 整稿流式播放：一次请求、上游按句吐 PCM，边到边无缝调度。
-   * - 开场句有服务端缓存时先秒播，流式只合成剩余部分；
-   * - 攒够 STREAM_PREBUFFER_SECONDS 才开播，之后按 STREAM_BLOCK_SECONDS 分块排期；
-   * - 返回 ok=false 表示流式不可用（调用方回退逐段合成）。
+   * 整稿流式播放：复用/启动整稿合成任务，边到边无缝调度。
+   * - 开场句有服务端缓存时先秒播，任务只合成剩余部分；
+   * - 攒够 STREAM_PREBUFFER_SECONDS 就开播，之后按 STREAM_BLOCK_SECONDS 分块排期；
+   * - 停止播放只停止排期，合成任务继续收完并写回缓存（见 startStreamJob）；
+   * - 返回 ok=false 表示上游不可用（调用方回退逐段合成）。
    */
   async function tryStreamPlay(
     text: string,
+    meetingId: string | undefined,
     leadBlob: Blob | null | undefined,
     leadText: string,
     token: number,
@@ -153,13 +252,11 @@ export function useSpeechPlayback() {
     const ac = getAudioCtx()
     const lead = leadBlob && leadText && text.startsWith(leadText) ? leadText : ''
     const tailText = lead ? text.slice(lead.length).trim() : text
-    const pcmChunks: Uint8Array[] = []
+    const job = getOrStartStreamJob(text, tailText, leadBlob ?? null, meetingId)
     let pending = new Uint8Array(0)
-    let sampleRate = 24000
     let scheduledAny = false
     let lastScheduled = -1
-    let tailChunks = 0
-    let completed = false
+    let readIndex = 0
     let index = 0
 
     const concat = (a: Uint8Array, b: Uint8Array): Uint8Array => {
@@ -192,20 +289,20 @@ export function useSpeechPlayback() {
         scheduledAny = true
         synthesizing.value = false
       }
-      if (tailText) {
-        for await (const chunk of streamSpeechAudio(tailText, (meta) => {
-          sampleRate = meta.sampleRate
-        })) {
-          if (token !== seq) return { ok: true, merged: null }
-          tailChunks++
-          pending = concat(pending, chunk)
+      for (;;) {
+        if (token !== seq) {
+          // 停止播放：只停止排期，合成任务在后台继续收完并写回缓存
+          return { ok: true, merged: null }
+        }
+        while (readIndex < job.chunks.length) {
+          pending = concat(pending, job.chunks[readIndex]!)
+          readIndex++
           const evenLen = pending.length - (pending.length % 2)
-          const need = Math.floor((scheduledAny ? STREAM_BLOCK_SECONDS : STREAM_PREBUFFER_SECONDS) * sampleRate) * 2
+          const need = Math.floor((scheduledAny ? STREAM_BLOCK_SECONDS : STREAM_PREBUFFER_SECONDS) * job.sampleRate) * 2
           if (evenLen >= need) {
             const pcm = pending.slice(0, evenLen)
             pending = pending.slice(evenLen)
-            pcmChunks.push(pcm)
-            scheduleBuffer(pcmToAudioBuffer(ac, pcm, sampleRate))
+            scheduleBuffer(pcmToAudioBuffer(ac, pcm, job.sampleRate))
             if (!scheduledAny) {
               scheduledAny = true
               synthesizing.value = false
@@ -214,49 +311,26 @@ export function useSpeechPlayback() {
             }
           }
         }
-        // 流结束时把不足一块的余量也排上
-        const restLen = pending.length - (pending.length % 2)
-        if (restLen >= 2) {
-          const rest = pending.slice(0, restLen)
-          pending = new Uint8Array(0)
-          pcmChunks.push(rest)
-          scheduleBuffer(pcmToAudioBuffer(ac, rest, sampleRate))
-        }
+        if (job.done) break
+        await waitJob(job)
       }
-      completed = true
+      // 收齐后把不足一块的余量也排上
+      const restLen = pending.length - (pending.length % 2)
+      if (restLen >= 2) {
+        const rest = pending.slice(0, restLen)
+        pending = new Uint8Array(0)
+        scheduleBuffer(pcmToAudioBuffer(ac, rest, job.sampleRate))
+      }
     } catch {
-      // 流式接口不可用/中途中断 → 交给逐段回退
+      // 解码/调度异常 → 交给逐段回退
     }
 
-    // 一句都没播出来（或剩余部分一个字节都没收到）→ 回退
-    if (!scheduledAny || (tailText.length > 0 && tailChunks === 0)) {
+    // 一句都没播出来（上游失败）→ 回退逐段合成
+    if (!scheduledAny) {
       return { ok: false, merged: null }
     }
-    // 中途中断：保留已播内容，不写回缓存（避免缓存半截音频）
-    if (!completed) {
-      return { ok: true, merged: null }
-    }
-    if (pcmChunks.length === 0) {
-      return { ok: true, merged: null }
-    }
-    try {
-      const total = pcmChunks.reduce((sum, c) => sum + c.length, 0)
-      const mergedPcm = new Uint8Array(total)
-      let pos = 0
-      for (const c of pcmChunks) {
-        mergedPcm.set(c, pos)
-        pos += c.length
-      }
-      const tailBlob = pcmToWavBlob(mergedPcm, sampleRate)
-      const merged = lead && leadBlob
-        ? await mergeAudioBlobs([leadBlob, tailBlob])
-        : tailBlob
-      putPreparedSpeech(text, merged)
-      streamMergedBlob = merged
-      return { ok: true, merged }
-    } catch {
-      return { ok: true, merged: null }
-    }
+    // 缓存写回由合成任务负责（见 startStreamJob），这里只把结果交给调用方
+    return { ok: true, merged: job.merged }
   }
 
   async function playStreamed(
@@ -303,19 +377,28 @@ export function useSpeechPlayback() {
       })
     }
     makeAllDone()
-    timer = window.setInterval(() => {
+    // 上一轮若还挂着计时器（被新的播放打断时），先清掉避免叠加
+    if (timer) {
+      window.clearInterval(timer)
+      timer = null
+    }
+    const myTimer = window.setInterval(() => {
       if (token !== seq) return
       currentTime.value = Math.min(currentTime.value + 1, duration.value)
       progress.value = duration.value > 0 ? currentTime.value / duration.value : 0
     }, 1000)
-
-    // 整稿流式优先：一次请求、上游按句吐帧，首音最快且全程无缝
-    const streamResult = await tryStreamPlay(text, leadBlob, leadText, token)
-    if (streamResult.ok) {
-      // 下载已完整（不是中途取消）：立刻写回服务端缓存，不必等尾部播完
-      if (streamResult.merged && meetingId) {
-        void saveSpeechAudioCache(meetingId, streamResult.merged).catch(() => {})
+    timer = myTimer
+    /** 只清自己的计时器：新一轮播放可能已经把 timer 换掉了 */
+    const clearMyTimer = (): void => {
+      if (timer === myTimer) {
+        window.clearInterval(myTimer)
+        timer = null
       }
+    }
+
+    // 整稿流式优先：复用/启动整稿合成任务，首音最快且全程无缝
+    const streamResult = await tryStreamPlay(text, meetingId, leadBlob, leadText, token)
+    if (streamResult.ok) {
       await allDone
       if (token === seq) {
         playing.value = false
@@ -324,8 +407,8 @@ export function useSpeechPlayback() {
         synthesisProgress.value = ''
         currentTime.value = duration.value
         progress.value = 1
-        if (timer) window.clearInterval(timer)
       }
+      clearMyTimer()
       return streamResult.merged
     }
 
@@ -448,8 +531,8 @@ export function useSpeechPlayback() {
       synthesisProgress.value = ''
       currentTime.value = duration.value
       progress.value = 1
-      if (timer) window.clearInterval(timer)
     }
+    clearMyTimer()
     return streamMergedBlob
   }
 
