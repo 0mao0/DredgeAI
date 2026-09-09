@@ -5,5 +5,5 @@ export function registerAppMock(
   mock: MockAdapter,
   wrap: (h: () => unknown) => () => Promise<[number, unknown]>,
 ): void {
-  mock.onGet('/api/app/list').reply(wrap(() => appCards))
+  mock.onGet('/api/bidcompare/app-catalog/list').reply(wrap(() => appCards))
 }

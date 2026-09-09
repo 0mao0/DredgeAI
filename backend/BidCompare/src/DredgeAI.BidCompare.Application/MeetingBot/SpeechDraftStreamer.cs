@@ -7,11 +7,10 @@ using System.Threading;
 using System.Threading.Tasks;
 using DredgeAI.BidCompare.AI;
 using DredgeAI.BidCompare.AnGineer;
-using DredgeAI.BidCompare.BackgroundJobs;
 using DredgeAI.BidCompare.Storage;
+using DredgeAI.BlobStoring;
 using Microsoft.Extensions.Logging;
 using Volo.Abp;
-using Volo.Abp.BackgroundJobs;
 using Volo.Abp.DependencyInjection;
 using Volo.Abp.Domain.Repositories;
 using Volo.Abp.Guids;
@@ -37,7 +36,7 @@ public class SpeechDraftStreamer : ISpeechDraftStreamer, ITransientDependency
     private readonly IRepository<SpeechDraft, Guid> _drafts;
     private readonly IAnGineerClient _anGineer;
     private readonly ILlmGateway _llmGateway;
-    private readonly IFileStorage _fileStorage;
+    private readonly IDredgeBlobContainer<BidCompareFileContainer> _container;
     private readonly IGuidGenerator _guidGenerator;
     private readonly ILogger<SpeechDraftStreamer> _logger;
 
@@ -46,7 +45,7 @@ public class SpeechDraftStreamer : ISpeechDraftStreamer, ITransientDependency
         IRepository<SpeechDraft, Guid> drafts,
         IAnGineerClient anGineer,
         ILlmGateway llmGateway,
-        IFileStorage fileStorage,
+        IDredgeBlobContainer<BidCompareFileContainer> blobContainer,
         IGuidGenerator guidGenerator,
         ILogger<SpeechDraftStreamer> logger)
     {
@@ -54,7 +53,7 @@ public class SpeechDraftStreamer : ISpeechDraftStreamer, ITransientDependency
         _drafts = drafts;
         _anGineer = anGineer;
         _llmGateway = llmGateway;
-        _fileStorage = fileStorage;
+        _container = blobContainer;
         _guidGenerator = guidGenerator;
         _logger = logger;
     }
@@ -169,9 +168,9 @@ public class SpeechDraftStreamer : ISpeechDraftStreamer, ITransientDependency
     {
         try
         {
-            await _fileStorage.DeleteAsync($"{SpeechAudioCachePrefix}/{meetingId}.wav");
-            await _fileStorage.DeleteAsync($"{SpeechAudioCachePrefix}/{meetingId}/lead.wav");
-            await _fileStorage.DeleteByPrefixAsync($"{SpeechAudioCachePrefix}/{meetingId}/seg/");
+            await _container.DeleteAsync($"{SpeechAudioCachePrefix}/{meetingId}.wav");
+            await _container.DeleteAsync($"{SpeechAudioCachePrefix}/{meetingId}/lead.wav");
+            await _container.DeleteByPrefixAsync($"{SpeechAudioCachePrefix}/{meetingId}/seg/");
         }
         catch (Exception ex)
         {

@@ -1,15 +1,13 @@
 export interface AdminUserInfo {
-  id: string
   username: string
   name: string
   email: string
-  phone: string
-  role: 'super_admin' | 'admin' | 'operator'
-  department: string
-  avatar?: string
-  status: '启用' | '禁用'
-  createdAt: string
+  phone?: string
+  departments: string[]
+  roles: string[]
+  createdAt?: string
   lastLogin?: string
+  concurrencyStamp?: string
 }
 
 export interface UserUserInfo {

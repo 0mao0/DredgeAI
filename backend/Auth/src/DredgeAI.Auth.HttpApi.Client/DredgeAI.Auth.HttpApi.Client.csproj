@@ -8,8 +8,6 @@
         <RootNamespace>DredgeAI</RootNamespace>
     </PropertyGroup>
     <ItemGroup>
-      <PackageReference Include="Shiw.Abp.Identity.EntityFrameworkCore" />
-      <PackageReference Include="Shiw.Abp.OpenIddict.EntityFrameworkCore" />
       <PackageReference Include="Volo.Abp.Http.Client" />
     </ItemGroup>
     <ItemGroup>

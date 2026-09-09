@@ -65,7 +65,7 @@ ECharts 样式先读 `chart-conventions.md`。
 
 ## 3. 架构定位（ABP vs Python）
 
-- **ABP（.NET 10，`backend/BidCompare`，BidCompare 业务服务 :44361）**：应用清单、业务编排、任务队列/后台作业、存储抽象、PostgreSQL、对外 HTTP API。认证由 Auth 服务（:7233）签发，BidCompare 仅校验 JWT；凡涉及“业务状态、权限、持久化、给前端的 API”都放 ABP；ABP 不直接跑模型/算法。
+- **ABP（.NET 10，`backend/BidCompare`，BidCompare 业务服务 :44361）**：应用清单、业务编排、任务队列/后台作业、存储抽象、PostgreSQL、对外 HTTP API。认证由 Auth 服务（:44362）签发，BidCompare 仅校验 JWT；凡涉及“业务状态、权限、持久化、给前端的 API”都放 ABP；ABP 不直接跑模型/算法。
 - **Python services 是算法/推理基础设施**（内部 HTTP，无业务持久化，由 ABP 调用）：
   - `ai-gateway`（:8200）：平台唯一 LLM 入口（OpenAI 兼容 chat / SSE），消费 `angineer-ai-inference`；
   - `compare-algo`（:8100）：确定性比标算法（similarity / pricing / metadata），不碰 LLM；
@@ -76,11 +76,12 @@ ECharts 样式先读 `chart-conventions.md`。
 ## 4. 后端
 
 - 接口设计先读 `abp-api-conventions.md`。
-- .NET 工具链：用 `%LOCALAPPDATA%\Microsoft\dotnet\dotnet.exe`（2026-08-31 起含 SDK 10.0.400 + 8.0.423；后端 target `net10.0` 必须用 10.x SDK，缺 10.0.400 时 `dotnet run` 报 NETSDK1045）；PATH 上的 `C:\Program Files\dotnet` 是空壳，直接敲 `dotnet` 会报 No SDK/frameworks；Docker 无 .NET SDK 镜像。
-  构建：`& "$env:LOCALAPPDATA\Microsoft\dotnet\dotnet.exe" build backend/BidCompare/src/DredgeAI.BidCompare.Host/DredgeAI.BidCompare.Host.csproj -c Debug`
-  启动：设 `$env:DOTNET_ROOT="$env:LOCALAPPDATA\Microsoft\dotnet"` 后启动 `bin\Debug\net10.0\DredgeAI.BidCompare.Host.exe`；判活看 44361 监听；日志 `data/logs/backend.log`、`Logs/logs.txt`。
+- .NET 工具链：直接用 PATH 上的 `dotnet`（SDK 10.0.303，可构建 net10.0）。
+  构建：`dotnet build backend/DredgeAI.AppHost/DredgeAI.AppHost.csproj -c Debug`（AppHost 引用 Auth/Base/BidCompare/Gateway 全部 Host，一次构建全量）。
+  启动（Aspire AppHost 编排，仓库根执行）：`dotnet run backend/DredgeAI.AppHost/DredgeAI.AppHost.csproj`；缺省只起 backend 层（4 个 .NET 后端），分层启动用 `--launch-profile python|frontend|all` 或追加 `-- --tier=backend,python`（逗号组合）；判活看 Aspire Dashboard（默认 `https://localhost:17199`）资源全部 Running，服务端口固定 Auth 44362 / BidCompare 44361 / Gateway 44364（Gateway 为统一入口）；日志 `data/logs/backend.log`、`Logs/logs.txt`。
 ## 5. 操作禁令
 
 - **禁止执行 SQL**：不得直接对数据库执行任何 SQL（含 DDL/DML、schema 重建、docker psql 等）；数据库变更一律交付迁移脚本或交用户执行。
 - **禁止自动启动项目**：不得自行启动后端/前端/依赖服务进程（含 dotnet run、启动 exe、docker 起服务等）；运行时验证依赖用户已启动的环境，未运行时报告给用户而非代劳。
+- **禁止自动拉起浏览器做验证**：不得自行启动或驱动浏览器（含 headless）打开页面做 UI/运行时验证；页面类验证交用户执行，交付说明中列出访问路径、操作步骤与预期结果。
 - **脚本按平台执行**：macOS/Linux 下执行 `.sh`（bash）脚本，Windows 下执行 `.ps1`（pwsh）脚本；禁止在 Windows 下跑 `.sh`（Git Bash/WSL 的 PATH 与路径解析不可靠）。

@@ -9,6 +9,7 @@ using System.Threading;
 using System.Threading.Tasks;
 using DredgeAI.BidCompare.Documents;
 using DredgeAI.BidCompare.Storage;
+using DredgeAI.BlobStoring;
 using Microsoft.Extensions.Logging;
 using Volo.Abp.DependencyInjection;
 using Volo.Abp.Domain.Repositories;
@@ -24,7 +25,7 @@ public class BaselineExtractionService : ITransientDependency
     private readonly IRepository<SourceMapItem, Guid> _sourceRepository;
     private readonly IRepository<TenderReadingTask, Guid> _taskRepository;
     private readonly IRepository<TenderReadingDocument, Guid> _documentRepository;
-    private readonly IFileStorage _fileStorage;
+    private readonly IDredgeBlobContainer<BidCompareFileContainer> _container;
     private readonly IEnumerable<IBaselineFieldExtractor> _extractors;
     private readonly IBaselineSchemaValidator _schemaValidator;
     private readonly BaselineStore _baselineStore;
@@ -35,7 +36,7 @@ public class BaselineExtractionService : ITransientDependency
         IRepository<SourceMapItem, Guid> sourceRepository,
         IRepository<TenderReadingTask, Guid> taskRepository,
         IRepository<TenderReadingDocument, Guid> documentRepository,
-        IFileStorage fileStorage,
+        IDredgeBlobContainer<BidCompareFileContainer> blobContainer,
         IEnumerable<IBaselineFieldExtractor> extractors,
         IBaselineSchemaValidator schemaValidator,
         BaselineStore baselineStore,
@@ -45,7 +46,7 @@ public class BaselineExtractionService : ITransientDependency
         _sourceRepository = sourceRepository;
         _taskRepository = taskRepository;
         _documentRepository = documentRepository;
-        _fileStorage = fileStorage;
+        _container = blobContainer;
         _extractors = extractors;
         _schemaValidator = schemaValidator;
         _baselineStore = baselineStore;
@@ -405,7 +406,7 @@ public class BaselineExtractionService : ITransientDependency
         CancellationToken cancellationToken)
     {
         string irJson;
-        await using (var stream = await _fileStorage.GetAsync(doc.IrStorageKey!, cancellationToken))
+        await using (var stream = await _container.GetAsync(doc.IrStorageKey!, cancellationToken))
         using (var reader = new StreamReader(stream))
         {
             irJson = await reader.ReadToEndAsync(cancellationToken);
@@ -421,10 +422,11 @@ public class BaselineExtractionService : ITransientDependency
             var upgraded = await TryUpgradeIrFromRawAsync(prefix, doc, cancellationToken);
             if (upgraded != null)
             {
-                await _fileStorage.UploadAsync(
+                await _container.SaveAsync(
                     doc.IrStorageKey!,
                     new MemoryStream(Encoding.UTF8.GetBytes(upgraded)),
                     "application/json",
+                    overrideExisting: true,
                     cancellationToken);
                 return upgraded;
             }
@@ -487,7 +489,7 @@ public class BaselineExtractionService : ITransientDependency
         string graphJsonl;
         try
         {
-            await using (var stream = await _fileStorage.GetAsync($"{prefix}/raw/doc_blocks_graph.jsonl", cancellationToken))
+            await using (var stream = await _container.GetAsync($"{prefix}/raw/doc_blocks_graph.jsonl", cancellationToken))
             using (var reader = new StreamReader(stream))
             {
                 graphJsonl = await reader.ReadToEndAsync(cancellationToken);
@@ -502,7 +504,7 @@ public class BaselineExtractionService : ITransientDependency
         string metaJson;
         try
         {
-            await using (var stream = await _fileStorage.GetAsync($"{prefix}/raw/doc_blocks_graph_meta.json", cancellationToken))
+            await using (var stream = await _container.GetAsync($"{prefix}/raw/doc_blocks_graph_meta.json", cancellationToken))
             using (var reader = new StreamReader(stream))
             {
                 metaJson = await reader.ReadToEndAsync(cancellationToken);

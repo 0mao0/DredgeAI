@@ -4,11 +4,9 @@ import type { AxiosHeaders, AxiosRequestConfig } from 'axios'
 import request from '@/api/request'
 import { API_BASE_URL, USE_MOCK, MOCK_MODULES } from '@/utils/constants'
 import { registerDashboardMock } from './routes/dashboard'
-import { registerPermissionMock } from './routes/permissions'
 import { registerApplicationMock } from './routes/applications'
 import { registerDatasourceMock } from './routes/datasource'
 import { registerAnalyticsMock } from './routes/analytics'
-import { registerProfileMock } from './routes/profile'
 import { registerApiKeyMock } from './routes/apikey'
 import { registerDubbingMock } from './routes/dubbing'
 import { registerOrgUsersMock } from './routes/org-users'
@@ -26,7 +24,7 @@ export function registerMock(): void {
     return [200, handler()]
   }
 
-  // 模块 mock 关闭时转发到真实 API（保留 baseURL，避免 mock 库 passThrough 丢 /api/admin 前缀）
+  // 模块 mock 关闭时转发到真实 API（保留 baseURL，避免 mock 库 passThrough 丢 /api 前缀）
   const forwardToRealApi = async (config: AxiosRequestConfig): Promise<[number, unknown]> => {
     const headers: Record<string, string> = {}
     const rawHeaders = config.headers as AxiosHeaders | undefined
@@ -64,17 +62,17 @@ export function registerMock(): void {
   // 按模块注册 mock，模块开关关闭则该模块请求直连真实 API
   const modules: { key: string, register?: (m: MockAdapter, w: typeof wrap) => void, passthrough?: RegExp }[] = [
     { key: 'dashboard', register: registerDashboardMock },
-    { key: 'permissions', register: registerPermissionMock },
-    { key: 'applications', register: registerApplicationMock, passthrough: /^\/applications/ },
+    { key: 'appConfig', passthrough: /^\/base\/application-configuration/ },
+    { key: 'applications', register: registerApplicationMock, passthrough: /^\/bidcompare\/app-catalog/ },
     { key: 'datasource', register: registerDatasourceMock },
     { key: 'analytics', register: registerAnalyticsMock },
-    { key: 'profile', register: registerProfileMock },
+    { key: 'profile', passthrough: /^\/base\/account\/my-profile/ },
     { key: 'apikey', register: registerApiKeyMock },
     { key: 'dubbing', register: registerDubbingMock },
     { key: 'orgUsers', register: registerOrgUsersMock },
     { key: 'roles', register: registerRolesMock },
     { key: 'standards', register: registerStandardsMock },
-    { key: 'appOrder', passthrough: /^\/app-order/ },
+    { key: 'appOrder', passthrough: /^\/bidcompare\/app-order/ },
   ]
 
   for (const mod of modules) {

@@ -9,6 +9,7 @@ using System.Threading.Tasks;
 using DredgeAI.BidCompare.AnGineer;
 using DredgeAI.BidCompare.Documents;
 using DredgeAI.BidCompare.Storage;
+using DredgeAI.BlobStoring;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using Volo.Abp;
@@ -24,7 +25,7 @@ namespace DredgeAI.BidCompare.BackgroundJobs;
 public class DocumentParsePipeline : ITransientDependency
 {
     private readonly IRepository<CompareDocument, Guid> _documentRepository;
-    private readonly IFileStorage _fileStorage;
+    private readonly IDredgeBlobContainer<BidCompareFileContainer> _container;
     private readonly IAnGineerClient _anGineerClient;
     private readonly IIrValidator _irValidator;
     private readonly AnGineerPollOptions _pollOptions;
@@ -32,14 +33,14 @@ public class DocumentParsePipeline : ITransientDependency
 
     public DocumentParsePipeline(
         IRepository<CompareDocument, Guid> documentRepository,
-        IFileStorage fileStorage,
+        IDredgeBlobContainer<BidCompareFileContainer> blobContainer,
         IAnGineerClient anGineerClient,
         IIrValidator irValidator,
         IOptions<AnGineerPollOptions> pollOptions,
         ILogger<DocumentParsePipeline> logger)
     {
         _documentRepository = documentRepository;
-        _fileStorage = fileStorage;
+        _container = blobContainer;
         _anGineerClient = anGineerClient;
         _irValidator = irValidator;
         _pollOptions = pollOptions.Value;
@@ -57,7 +58,7 @@ public class DocumentParsePipeline : ITransientDependency
         // 流工厂：重试时重新打开存储流（避免 StreamContent 释放后复用已关闭流）
         return await _anGineerClient.SubmitAsync(
             document.FileName,
-            async () => await _fileStorage.GetAsync(document.OriginStorageKey, cancellationToken),
+            async () => await _container.GetAsync(document.OriginStorageKey, cancellationToken),
             cancellationToken);
     }
 
@@ -337,11 +338,11 @@ public class DocumentParsePipeline : ITransientDependency
         var prefix = $"compare/{document.TaskId}/{document.Id}";
 
         // AnGIneer 原始产物留档（追溯/调试，v2 §1 数据源原样保存）
-        await _fileStorage.UploadAsync($"{prefix}/raw/doc_blocks_graph.jsonl", new MemoryStream(Encoding.UTF8.GetBytes(graphJsonl)), "application/x-ndjson", cancellationToken);
-        await _fileStorage.UploadAsync($"{prefix}/raw/doc_blocks_graph_meta.json", new MemoryStream(Encoding.UTF8.GetBytes(metaJson)), "application/json", cancellationToken);
+        await _container.SaveAsync($"{prefix}/raw/doc_blocks_graph.jsonl", new MemoryStream(Encoding.UTF8.GetBytes(graphJsonl)), "application/x-ndjson", overrideExisting: true, cancellationToken);
+        await _container.SaveAsync($"{prefix}/raw/doc_blocks_graph_meta.json", new MemoryStream(Encoding.UTF8.GetBytes(metaJson)), "application/json", overrideExisting: true, cancellationToken);
 
         var irKey = $"{prefix}/ir.json"; // 内部适配 IR（非跨系统交付物）
-        await _fileStorage.UploadAsync(irKey, new MemoryStream(Encoding.UTF8.GetBytes(irJson)), "application/json", cancellationToken);
+        await _container.SaveAsync(irKey, new MemoryStream(Encoding.UTF8.GetBytes(irJson)), "application/json", overrideExisting: true, cancellationToken);
 
         // content.md / images 目前 AnGIneer v1 产物清单尚未开放（仅 graph/meta）；
         // 清单里一旦出现即随包流式落存储，避免后续再改适配层。
@@ -351,14 +352,14 @@ public class DocumentParsePipeline : ITransientDependency
         {
             docMdKey = $"{prefix}/content.md";
             await using var stream = await _anGineerClient.OpenArtifactAsync(anGineerJobId, contentMdArtifact, cancellationToken);
-            await _fileStorage.UploadAsync(docMdKey, stream, "text/markdown", cancellationToken);
+            await _container.SaveAsync(docMdKey, stream, "text/markdown", overrideExisting: true, cancellationToken);
         }
 
         foreach (var image in artifacts.Where(a =>
                      a.Name.StartsWith("images/", StringComparison.Ordinal)))
         {
             await using var stream = await _anGineerClient.OpenArtifactAsync(anGineerJobId, image, cancellationToken);
-            await _fileStorage.UploadAsync($"{prefix}/{image.Name}", stream, "application/octet-stream", cancellationToken);
+            await _container.SaveAsync($"{prefix}/{image.Name}", stream, "application/octet-stream", overrideExisting: true, cancellationToken);
         }
 
         using var irDocument = JsonDocument.Parse(irJson);

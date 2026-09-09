@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Linq;
 using DredgeAI.BidCompare.Applications;
 using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using Volo.Abp;
 using Volo.Abp.AspNetCore.Mvc;
@@ -16,9 +17,12 @@ namespace DredgeAI.BidCompare.Controllers;
 /// - 用户维护个性化顺序（user-web 拖拽/上移下移后写入）；
 /// 前端合并规则：个性化优先，未个性化用户按默认顺序，新应用按默认顺序稳定插入。
 /// </summary>
-[Route("api/admin/app-order")]
 [Authorize]
-public class ApplicationOrderController : AbpControllerBase
+[Route("api/bidcompare/app-order")]
+[RemoteService(Name = BidCompareRemoteServiceConsts.RemoteServiceName)]
+[Area(BidCompareRemoteServiceConsts.ModuleName)]
+[Tags("应用排序")]
+public class ApplicationOrderController : BidCompareController
 {
     private readonly ApplicationOrderStore _store;
     private readonly ICurrentUser _currentUser;
@@ -29,17 +33,20 @@ public class ApplicationOrderController : AbpControllerBase
         _currentUser = currentUser;
     }
 
-    /// <summary>GET /api/app-order 获取 admin 全局默认顺序（应用 id 列表）。</summary>
+    /// <summary>GET /api/bidcompare/app-order 获取 admin 全局默认顺序（应用 id 列表）</summary>
+    /// <returns>全局默认顺序（含子应用顺序）</returns>
     [HttpGet]
-    public ApplicationOrderResult Get()
+    public ApplicationOrderResult GetAsync()
     {
         var (appIds, subOrders) = _store.GetDefaultOrder();
         return new ApplicationOrderResult(appIds, subOrders);
     }
 
-    /// <summary>POST /api/app-order/move 上移/下移一个应用，返回重排后的默认顺序。</summary>
+    /// <summary>POST /api/bidcompare/app-order/move 上移/下移一个应用，返回重排后的默认顺序</summary>
+    /// <param name="input">应用 ID + 移动方向（up|down）</param>
+    /// <returns>重排后的默认顺序</returns>
     [HttpPost("move")]
-    public ApplicationOrderResult Move([FromBody] MoveApplicationOrderInput input)
+    public ApplicationOrderResult MoveAsync([FromBody] MoveApplicationOrderInput input)
     {
         if (string.IsNullOrWhiteSpace(input.AppId))
         {
@@ -55,9 +62,11 @@ public class ApplicationOrderController : AbpControllerBase
         return new ApplicationOrderResult(appIds, subOrders);
     }
 
-    /// <summary>POST /api/app-order/seed 合并默认顺序：保留已有位置，仅追加新出现的应用/子应用 id（admin 前端每次加载时调用，幂等）。</summary>
+    /// <summary>POST /api/bidcompare/app-order/seed 合并默认顺序：保留已有位置，仅追加新出现的应用/子应用 id（admin 前端每次加载时调用，幂等）</summary>
+    /// <param name="input">现有应用/子应用 id 列表</param>
+    /// <returns>合并后的默认顺序</returns>
     [HttpPost("seed")]
-    public ApplicationOrderResult Seed([FromBody] SeedApplicationOrderInput input)
+    public ApplicationOrderResult SeedAsync([FromBody] SeedApplicationOrderInput input)
     {
         var ids = (input.AppIds ?? new List<string>())
             .Where(x => !string.IsNullOrWhiteSpace(x))
@@ -76,14 +85,17 @@ public class ApplicationOrderController : AbpControllerBase
         return new ApplicationOrderResult(appIds, resultSubOrders);
     }
 
-    /// <summary>GET /api/app-order/user 获取当前用户的个性化顺序（route 列表；未个性化返回 null）。</summary>
+    /// <summary>GET /api/bidcompare/app-order/user 获取当前用户的个性化顺序（route 列表；未个性化返回 null）</summary>
+    /// <returns>当前用户的个性化顺序</returns>
     [HttpGet("user")]
-    public UserApplicationOrderResult GetUserOrder()
+    public UserApplicationOrderResult GetUserOrderAsync()
         => new(_store.GetUserOrder(CurrentUserId()));
 
-    /// <summary>PUT /api/app-order/user 保存当前用户的个性化顺序（route 列表）。</summary>
+    /// <summary>PUT /api/bidcompare/app-order/user 保存当前用户的个性化顺序（route 列表）</summary>
+    /// <param name="input">route 顺序列表</param>
+    /// <returns>保存后的个性化顺序</returns>
     [HttpPut("user")]
-    public UserApplicationOrderResult SetUserOrder([FromBody] SetUserApplicationOrderInput input)
+    public UserApplicationOrderResult SetUserOrderAsync([FromBody] SetUserApplicationOrderInput input)
     {
         var routes = (input.RouteIds ?? new List<string>())
             .Where(x => !string.IsNullOrWhiteSpace(x))
@@ -93,9 +105,10 @@ public class ApplicationOrderController : AbpControllerBase
         return new UserApplicationOrderResult(routes);
     }
 
-    /// <summary>POST /api/app-order/reset 清空所有用户的个性化顺序（管理员显式动作）。</summary>
+    /// <summary>POST /api/bidcompare/app-order/reset 清空所有用户的个性化顺序（管理员显式动作）</summary>
+    /// <returns>清空的数量</returns>
     [HttpPost("reset")]
-    public ResetUserOrdersResult Reset()
+    public ResetUserOrdersResult ResetAsync()
         => new(_store.ResetUserOrders());
 
     private Guid CurrentUserId()

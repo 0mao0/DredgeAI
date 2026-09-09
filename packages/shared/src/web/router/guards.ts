@@ -13,10 +13,14 @@ declare module 'vue-router' {
 }
 
 /** 创建登录守卫：未携带 token 时重定向到 loginPath */
-export function createAuthGuard(tokenKey: string, loginPath = '/login'): NavigationGuardWithThis<undefined> {
+export function createAuthGuard(
+  tokenKey: string,
+  loginPath = '/login',
+  getToken?: () => string | null,
+): NavigationGuardWithThis<undefined> {
   return (to) => {
     if (to.meta.requiresAuth === false) return true
-    const token = typeof localStorage !== 'undefined' ? localStorage.getItem(tokenKey) : null
+    const token = getToken?.() ?? (typeof localStorage !== 'undefined' ? localStorage.getItem(tokenKey) : null)
     if (!token) {
       return { path: loginPath, query: { redirect: to.fullPath } }
     }
@@ -66,10 +70,12 @@ export function installGuards(
     enableTitle?: boolean
     getPermissions?: () => string[] | Promise<string[]>
     permissionFallback?: string
+    /** 自定义 token 读取函数（可选）：优先于 tokenKey（localStorage），供 cookie 存储等场景使用 */
+    getToken?: () => string | null
   },
 ): void {
   if (opts.enableAuth && opts.tokenKey) {
-    router.beforeEach(createAuthGuard(opts.tokenKey, opts.loginPath))
+    router.beforeEach(createAuthGuard(opts.tokenKey, opts.loginPath, opts.getToken))
   }
   if (opts.getPermissions) {
     router.beforeEach(createPermissionGuard(opts.getPermissions, opts.permissionFallback))

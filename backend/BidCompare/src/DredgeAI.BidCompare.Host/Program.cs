@@ -134,14 +134,6 @@ public class Program
         MapEnv(overrides, "DGX_TTS_VOICE", "MeetingBot:DgxQwenTts:Voice");
         MapEnv(overrides, "DGX_ASR_BASE_URL", "MeetingBot:DgxAsr:BaseUrl");
         MapEnv(overrides, "DGX_ASR_MODEL", "MeetingBot:DgxAsr:Model");
-        MapEnv(overrides, "BIDCOMPARE_DB_CONNECTION", "ConnectionStrings:Default");
-        MapEnv(overrides, "STORAGE_S3_ACCESSKEY", "Storage:S3:AccessKey");
-        MapEnv(overrides, "STORAGE_S3_SECRETKEY", "Storage:S3:SecretKey");
-        MapEnv(overrides, "STORAGE_LOCAL_SIGNING_SECRET", "Storage:Local:SigningSecret");
-        MapEnv(overrides, "STORAGE_LOCAL_ROOT", "Storage:Local:RootPath");
-        MapEnv(overrides, "STRING_ENCRYPTION_PASSPHRASE", "StringEncryption:DefaultPassPhrase");
-        MapEnv(overrides, "AUTH_REQUIRE_HTTPS_METADATA", "AuthServer:RequireHttpsMetadata");
-        MapEnv(overrides, "SWAGGER_ENABLED", "Swagger:Enabled");
         // monorepo 约定：未显式指定时，本地文件存储统一落在仓库根 data/storage
         // （与启动脚本、PostgreSQL、日志共用同一 data/ 根目录，便于备份与迁移）。
         if (!overrides.ContainsKey("Storage:Local:RootPath") && _repoRoot != null)

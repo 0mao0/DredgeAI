@@ -1,5 +1,6 @@
 import request from '@/api/request'
 import { API_BASE_URL, STORAGE_TOKEN_KEY } from '@/utils/constants'
+import { getCookie } from '@/utils/cookie'
 import { urls, fillUrl } from '@shared/core/api'
 import type {
   MeetingRecordDto,
@@ -53,7 +54,7 @@ export async function streamSpeechDraft(
   onDelta: (delta: string) => void,
   signal?: AbortSignal,
 ): Promise<void> {
-  const token = typeof localStorage !== 'undefined' ? localStorage.getItem(STORAGE_TOKEN_KEY) : null
+  const token = getCookie(STORAGE_TOKEN_KEY)
   const res = await fetch(`${API_BASE_URL}${fillUrl(urls.meetingSpeechGenerateStream, { id }).replace(/^\//, '')}`, {
     method: 'POST',
     headers: {
@@ -152,8 +153,8 @@ export async function* streamSpeechAudio(
   onMeta?: (meta: SpeechStreamMeta) => void,
   signal?: AbortSignal,
 ): AsyncGenerator<Uint8Array> {
-  const token = typeof localStorage !== 'undefined' ? localStorage.getItem(STORAGE_TOKEN_KEY) : null
-  const res = await fetch(`${API_BASE_URL}meeting/tts/stream`, {
+  const token = getCookie(STORAGE_TOKEN_KEY)
+  const res = await fetch(`${API_BASE_URL}bidcompare/meeting-records/tts/stream`, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',

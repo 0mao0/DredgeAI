@@ -11,6 +11,9 @@
     <ItemGroup>
       <PackageReference Include="Volo.Abp.Ddd.Domain" />
       <PackageReference Include="Volo.Abp.Ddd.Domain.Shared" />
+      <PackageReference Include="Volo.Abp.BlobStoring" />
+      <PackageReference Include="Volo.Abp.BlobStoring.Minio" />
+      <PackageReference Include="Volo.Abp.BlobStoring.FileSystem" />
     </ItemGroup>
 
     <ItemGroup>

@@ -8,14 +8,18 @@ using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.Options;
-using Volo.Abp.AspNetCore.Mvc;
+using Volo.Abp;
 
 namespace DredgeAI.BidCompare.Controllers;
 
-/// <summary>POST /api/ai-gateway/chat/stream：前端统一问答端点，SSE 透传 services/ai-gateway。</summary>
-[Route("api/ai-gateway")]
+/// <summary>AI 网关接口（流式问答）</summary>
+/// <remarks>POST /api/bidcompare/ai-gateway/chat/stream：前端统一问答端点，SSE 透传 services/ai-gateway。</remarks>
 [Authorize]
-public class AiGatewayChatController : AbpControllerBase
+[Route("api/bidcompare/ai-gateway")]
+[RemoteService(Name = BidCompareRemoteServiceConsts.RemoteServiceName)]
+[Area(BidCompareRemoteServiceConsts.ModuleName)]
+[Tags("AI 网关")]
+public class AiGatewayChatController : BidCompareController
 {
     private static readonly JsonSerializerOptions JsonOptions = new()
     {
@@ -34,6 +38,9 @@ public class AiGatewayChatController : AbpControllerBase
         _options = options.Value;
     }
 
+    /// <summary>流式对话：将请求透传给 AI 网关并透传其 SSE 响应流</summary>
+    /// <param name="input">对话请求：消息列表与生成参数</param>
+    /// <returns>text/event-stream 响应流</returns>
     [HttpPost("chat/stream")]
     public async Task<System.IO.Stream> ChatStreamAsync([FromBody] ChatStreamRequest input)
     {

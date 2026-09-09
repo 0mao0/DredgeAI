@@ -1,7 +1,6 @@
 ﻿using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Design;
 using Shiw.Abp.BaseEntityFrameworkCore;
-using Shiw.File;
 using Volo.Abp.Data;
 using Volo.Abp.Identity;
 
@@ -16,7 +15,6 @@ public class BaseServerDbContextFactory : IDesignTimeDbContextFactory<BaseServer
         AbpCommonDbProperties.DbTablePrefix = "tab";
         AbpIdentityDbProperties.DbTablePrefix="tab_identity";
         DredgeAIBaseDbProperties.DbTablePrefix="tab";
-        FileDbProperties.DbTablePrefix = "tab";
         var builder = new DbContextOptionsBuilder<BaseServerDbContext>()
             .UseNpgsql(configuration.GetConnectionString("Default"));
 

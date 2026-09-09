@@ -11,6 +11,7 @@ using DredgeAI.BidCompare.CompareTasks;
 using DredgeAI.BidCompare.Documents;
 using DredgeAI.BidCompare.Evidences;
 using DredgeAI.BidCompare.Storage;
+using DredgeAI.BlobStoring;
 using Microsoft.Extensions.Logging;
 using Volo.Abp;
 using Volo.Abp.BackgroundJobs;
@@ -53,7 +54,7 @@ public class AiAnalysisJob : AsyncBackgroundJob<AiAnalysisArgs>, ITransientDepen
     private readonly IRepository<CompareTask, Guid> _taskRepository;
     private readonly IRepository<CompareDocument, Guid> _documentRepository;
     private readonly IRepository<EvidenceItem, Guid> _evidenceRepository;
-    private readonly IFileStorage _fileStorage;
+    private readonly IDredgeBlobContainer<BidCompareFileContainer> _container;
     private readonly ILlmGateway _llmGateway;
     private readonly IGuidGenerator _guidGenerator;
     private readonly IUnitOfWorkManager _unitOfWorkManager;
@@ -62,7 +63,7 @@ public class AiAnalysisJob : AsyncBackgroundJob<AiAnalysisArgs>, ITransientDepen
         IRepository<CompareTask, Guid> taskRepository,
         IRepository<CompareDocument, Guid> documentRepository,
         IRepository<EvidenceItem, Guid> evidenceRepository,
-        IFileStorage fileStorage,
+        IDredgeBlobContainer<BidCompareFileContainer> blobContainer,
         ILlmGateway llmGateway,
         IGuidGenerator guidGenerator,
         IUnitOfWorkManager unitOfWorkManager)
@@ -70,7 +71,7 @@ public class AiAnalysisJob : AsyncBackgroundJob<AiAnalysisArgs>, ITransientDepen
         _taskRepository = taskRepository;
         _documentRepository = documentRepository;
         _evidenceRepository = evidenceRepository;
-        _fileStorage = fileStorage;
+        _container = blobContainer;
         _llmGateway = llmGateway;
         _guidGenerator = guidGenerator;
         _unitOfWorkManager = unitOfWorkManager;
@@ -104,7 +105,7 @@ public class AiAnalysisJob : AsyncBackgroundJob<AiAnalysisArgs>, ITransientDepen
             foreach (var doc in bidDocs.Where(d => d.DocMdStorageKey != null))
             {
                 // 全量读入内存：指标抽取要按关键词全文采样；prompt 组装处再分别截断（条款 20k / 指标 8k）
-                await using var stream = await _fileStorage.GetAsync(doc.DocMdStorageKey!, cancellationToken);
+                await using var stream = await _container.GetAsync(doc.DocMdStorageKey!, cancellationToken);
                 docMds[doc] = await ReadAllAsync(stream, cancellationToken);
             }
 

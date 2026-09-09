@@ -2,7 +2,7 @@ import type MockAdapter from 'axios-mock-adapter'
 import { mockOrgUsers } from '@shared/mock/data/org-users'
 
 export function registerOrgUsersMock(mock: MockAdapter, wrap: (handler: () => unknown) => () => Promise<[number, unknown]>): void {
-  mock.onGet('/api/admin/org-users').reply(
+  mock.onGet('/api/org-users').reply(
     wrap(() => ({
       items: [...mockOrgUsers],
       total: mockOrgUsers.length,

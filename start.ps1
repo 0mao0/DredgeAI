@@ -1,10 +1,14 @@
 param(
     [switch]$TailLogs,
     [switch]$NoBrowser,
-    [switch]$OpenBrowser
+    [switch]$OpenBrowser,
+    # 跳过本地 PostgreSQL（Docker）启动，假定实例已由外部提供（远程库或已运行的容器）
+    [switch]$NoPostgres
 )
 
-# DredgeAI Startup Script（Auth + 比标后端 + 算法服务 + 用户端/管理端前端；AnGIneer 仅检测）
+# DredgeAI Startup Script（Auth + Base + BidCompare + Gateway 后端 + 算法服务 + 用户端/管理端前端；AnGIneer 仅检测）
+# 参数：-TailLogs 跟随日志；-OpenBrowser 启动后打开浏览器（-NoBrowser 强制关闭）；
+#       -NoPostgres 跳过本地 PostgreSQL（Docker）启动，使用外部/已运行的 PostgreSQL
 [Console]::OutputEncoding = [System.Text.Encoding]::UTF8
 
 $rootDir = if ($PSScriptRoot) { $PSScriptRoot } else { (Get-Location).Path }
@@ -15,13 +19,17 @@ $storageDir = Join-Path $dataDir "storage"
 $backupDir = Join-Path $dataDir "backup"
 $compareAlgoLogPath = Join-Path $logsDir "compare-algo.log"
 $aiGatewayLogPath = Join-Path $logsDir "ai-gateway.log"
-$backendLogPath = Join-Path $logsDir "backend.log"
+$baseLogPath = Join-Path $logsDir "base.log"
+$bidcompareLogPath = Join-Path $logsDir "bidcompare.log"
+$gatewayLogPath = Join-Path $logsDir "gateway.log"
 $authLogPath = Join-Path $logsDir "auth.log"
 $frontendLogPath = Join-Path $logsDir "frontend.log"
 $adminLogPath = Join-Path $logsDir "admin-web.log"
 $compareAlgoPidPath = Join-Path $logsDir "compare-algo.pid"
 $aiGatewayPidPath = Join-Path $logsDir "ai-gateway.pid"
-$backendPidPath = Join-Path $logsDir "backend.pid"
+$basePidPath = Join-Path $logsDir "base.pid"
+$bidcomparePidPath = Join-Path $logsDir "bidcompare.pid"
+$gatewayPidPath = Join-Path $logsDir "gateway.pid"
 $authPidPath = Join-Path $logsDir "auth.pid"
 $frontendPidPath = Join-Path $logsDir "frontend.pid"
 $adminPidPath = Join-Path $logsDir "admin-web.pid"
@@ -36,14 +44,18 @@ if (Test-Path (Join-Path $localDotnetDir "dotnet.exe")) {
 $postgresPort = 5432
 $compareAlgoPort = 8100
 $aiGatewayPort = 8200
-$backendPort = 44361
-$authPort = 7233
+$bidcomparePort = 44361
+$authPort = 44362
+$basePort = 44363
+$gatewayPort = 44364
 $frontendPort = 5373
 $adminPort = 5374
 $angineerPort = 8790
 
-$backendUrl = "https://localhost:$backendPort"
+$bidcompareUrl = "https://localhost:$bidcomparePort"
 $authUrl = "https://localhost:$authPort"
+$baseUrl = "https://localhost:$basePort"
+$gatewayUrl = "https://localhost:$gatewayPort"
 $compareAlgoUrl = "http://localhost:$compareAlgoPort"
 $aiGatewayUrl = "http://localhost:$aiGatewayPort"
 $frontendUrl = "http://localhost:$frontendPort"
@@ -55,8 +67,10 @@ $compareAlgoDir = Join-Path $rootDir "services\compare-algo"
 $compareAlgoPython = Join-Path $compareAlgoDir ".venv\Scripts\python.exe"
 $aiGatewayDir = Join-Path $rootDir "services\ai-gateway"
 $aiGatewayPython = Join-Path $aiGatewayDir ".venv\Scripts\python.exe"
-$backendProject = Join-Path $rootDir "backend\BidCompare\src\DredgeAI.BidCompare.Host"
+$bidcompareProject = Join-Path $rootDir "backend\BidCompare\src\DredgeAI.BidCompare.Host"
 $authProject = Join-Path $rootDir "backend\Auth\src\DredgeAI.Auth.Host"
+$baseProject = Join-Path $rootDir "backend\Base\src\DredgeAI.Base.Host"
+$gatewayProject = Join-Path $rootDir "backend\Gateway\src\DredgeAI.Gateway.Host"
 $frontendDir = Join-Path $rootDir "user-web"
 $adminDir = Join-Path $rootDir "admin-web"
 $postgresContainer = "bidcompare-postgres"
@@ -323,12 +337,17 @@ if (-not (Test-Path (Join-Path $adminDir "package.json"))) {
 }
 Write-Host "  admin-web OK" -ForegroundColor DarkGray
 
+foreach ($proj in @($authProject, $baseProject, $bidcompareProject, $gatewayProject)) {
+    if (-not (Test-Path $proj)) { Write-Error "Backend host project not found: $proj"; exit 1 }
+}
+Write-Host "  backend hosts (Auth/Base/BidCompare/Gateway) OK" -ForegroundColor DarkGray
+
 if (-not (Test-Path $logsDir)) {
     New-Item -ItemType Directory -Path $logsDir | Out-Null
 }
 
 if ($TailLogs) {
-    Watch-ServiceLogs -LogPaths @($backendLogPath, $authLogPath, $compareAlgoLogPath, $aiGatewayLogPath, $frontendLogPath, $adminLogPath)
+    Watch-ServiceLogs -LogPaths @($bidcompareLogPath, $baseLogPath, $gatewayLogPath, $authLogPath, $compareAlgoLogPath, $aiGatewayLogPath, $frontendLogPath, $adminLogPath)
     exit 0
 }
 
@@ -337,38 +356,49 @@ Write-Host "[2/5] Cleaning up stale processes..." -ForegroundColor Yellow
 Stop-PortProcess -Label "compare-algo" -Port $compareAlgoPort
 Stop-PortProcess -Label "ai-gateway" -Port $aiGatewayPort
 Stop-PortProcess -Label "Auth" -Port $authPort
-Stop-PortProcess -Label "Backend" -Port $backendPort
+Stop-PortProcess -Label "Base" -Port $basePort
+Stop-PortProcess -Label "BidCompare" -Port $bidcomparePort
+Stop-PortProcess -Label "Gateway" -Port $gatewayPort
 Stop-PortProcess -Label "Frontend" -Port $frontendPort
 Stop-PortProcess -Label "Admin Web" -Port $adminPort
 
-# 3. PostgreSQL（Docker）
-Write-Host "[3/5] Ensuring PostgreSQL (Docker)..." -ForegroundColor Yellow
-$dockerCmd = Get-Command docker -ErrorAction SilentlyContinue
-if (-not $dockerCmd) {
-    Write-Warning "Docker not found; PostgreSQL must be started manually (port $postgresPort)."
-} else {
-    try {
-        $existing = docker ps -a --filter "name=^/$postgresContainer$" --format "{{.Names}}" 2>$null
-        if ($existing) {
-            docker start $postgresContainer | Out-Null
-            Write-Host "  Started container $postgresContainer" -ForegroundColor Green
-        } else {
-            docker run -d --name $postgresContainer `
-                -e POSTGRES_USER=postgres `
-                -e POSTGRES_PASSWORD=postgres `
-                -e POSTGRES_DB=BidCompare `
-                -p "${postgresPort}:5432" `
-                -v "${postgresDataDir}:/var/lib/postgresql/data" `
-                postgres:16 | Out-Null
-            Write-Host "  Created container $postgresContainer" -ForegroundColor Green
-        }
-    } catch {
-        Write-Warning "PostgreSQL start failed: $($_.Exception.Message)"
+# 3. PostgreSQL（Docker；-NoPostgres 跳过本地启动，假定由外部提供）
+if ($NoPostgres) {
+    Write-Host "[3/5] Skipping PostgreSQL (Docker) startup (-NoPostgres)..." -ForegroundColor Yellow
+    if (Get-NetTCPConnection -LocalPort $postgresPort -State Listen -ErrorAction SilentlyContinue) {
+        Write-Host "  PostgreSQL already listening on port $postgresPort." -ForegroundColor Green
+    } else {
+        Write-Host "  PostgreSQL not listening locally on port $postgresPort (expected for external/remote instances)." -ForegroundColor DarkGray
     }
-}
-$postgresReady = Test-PortListening -Label "PostgreSQL" -Port $postgresPort -TimeoutSeconds 30
-if (-not $postgresReady) {
-    Write-Host "  WARNING: PostgreSQL not ready; backend may fail to start." -ForegroundColor Red
+} else {
+    Write-Host "[3/5] Ensuring PostgreSQL (Docker)..." -ForegroundColor Yellow
+    $dockerCmd = Get-Command docker -ErrorAction SilentlyContinue
+    if (-not $dockerCmd) {
+        Write-Warning "Docker not found; PostgreSQL must be started manually (port $postgresPort)."
+    } else {
+        try {
+            $existing = docker ps -a --filter "name=^/$postgresContainer$" --format "{{.Names}}" 2>$null
+            if ($existing) {
+                docker start $postgresContainer | Out-Null
+                Write-Host "  Started container $postgresContainer" -ForegroundColor Green
+            } else {
+                docker run -d --name $postgresContainer `
+                    -e POSTGRES_USER=postgres `
+                    -e POSTGRES_PASSWORD=postgres `
+                    -e POSTGRES_DB=BidCompare `
+                    -p "${postgresPort}:5432" `
+                    -v "${postgresDataDir}:/var/lib/postgresql/data" `
+                    postgres:16 | Out-Null
+                Write-Host "  Created container $postgresContainer" -ForegroundColor Green
+            }
+        } catch {
+            Write-Warning "PostgreSQL start failed: $($_.Exception.Message)"
+        }
+    }
+    $postgresReady = Test-PortListening -Label "PostgreSQL" -Port $postgresPort -TimeoutSeconds 30
+    if (-not $postgresReady) {
+        Write-Host "  WARNING: PostgreSQL not ready; backend may fail to start." -ForegroundColor Red
+    }
 }
 
 # 4. 启动服务
@@ -376,7 +406,9 @@ Write-Host "[4/5] Starting services..." -ForegroundColor Yellow
 Write-Host "      compare-algo: $compareAlgoUrl" -ForegroundColor Green
 Write-Host "      ai-gateway:  $aiGatewayUrl" -ForegroundColor Green
 Write-Host "      Auth:        $authUrl" -ForegroundColor Green
-Write-Host "      Backend:      $backendUrl" -ForegroundColor Green
+Write-Host "      Base:        $baseUrl" -ForegroundColor Green
+Write-Host "      BidCompare:   $bidcompareUrl" -ForegroundColor Green
+Write-Host "      Gateway:      $gatewayUrl" -ForegroundColor Green
 Write-Host "      Frontend:     $frontendUrl" -ForegroundColor Green
 Write-Host "      Admin Web:    $adminUrl" -ForegroundColor Green
 
@@ -391,12 +423,20 @@ $aiGatewayCommand = "Set-Location '$escapedAiGatewayDir'; & '$escapedAiGatewayPy
 $aiGatewayProcess = Start-ServiceProcess -ServiceName "ai-gateway" -ServiceCommand $aiGatewayCommand -LogPath $aiGatewayLogPath -PidPath $aiGatewayPidPath
 
 $escapedAuthProject = $authProject.Replace("'", "''")
-$authCommand = "`$env:PATH=`"`$env:LOCALAPPDATA\Microsoft\dotnet;`$env:PATH`"; dotnet run --project '$escapedAuthProject' --launch-profile 'https'"
+$authCommand = "`$env:PATH=`"`$env:LOCALAPPDATA\Microsoft\dotnet;`$env:PATH`"; dotnet run --project '$escapedAuthProject' --launch-profile 'DredgeAI.Auth.Host'"
 $authProcess = Start-ServiceProcess -ServiceName "Auth" -ServiceCommand $authCommand -LogPath $authLogPath -PidPath $authPidPath
 
-$escapedProject = $backendProject.Replace("'", "''")
-$backendCommand = "`$env:PATH=`"`$env:LOCALAPPDATA\Microsoft\dotnet;`$env:PATH`"; dotnet run --project '$escapedProject' --launch-profile 'DredgeAI.BidCompare.Host'"
-$backendProcess = Start-ServiceProcess -ServiceName "Backend" -ServiceCommand $backendCommand -LogPath $backendLogPath -PidPath $backendPidPath
+$escapedBaseProject = $baseProject.Replace("'", "''")
+$baseCommand = "`$env:PATH=`"`$env:LOCALAPPDATA\Microsoft\dotnet;`$env:PATH`"; dotnet run --project '$escapedBaseProject' --launch-profile 'DredgeAI.Base.Host'"
+$baseProcess = Start-ServiceProcess -ServiceName "Base" -ServiceCommand $baseCommand -LogPath $baseLogPath -PidPath $basePidPath
+
+$escapedBidcompareProject = $bidcompareProject.Replace("'", "''")
+$bidcompareCommand = "`$env:PATH=`"`$env:LOCALAPPDATA\Microsoft\dotnet;`$env:PATH`"; dotnet run --project '$escapedBidcompareProject' --launch-profile 'DredgeAI.BidCompare.Host'"
+$bidcompareProcess = Start-ServiceProcess -ServiceName "BidCompare" -ServiceCommand $bidcompareCommand -LogPath $bidcompareLogPath -PidPath $bidcomparePidPath
+
+$escapedGatewayProject = $gatewayProject.Replace("'", "''")
+$gatewayCommand = "`$env:PATH=`"`$env:LOCALAPPDATA\Microsoft\dotnet;`$env:PATH`"; dotnet run --project '$escapedGatewayProject' --launch-profile 'DredgeAI.Gateway.Host'"
+$gatewayProcess = Start-ServiceProcess -ServiceName "Gateway" -ServiceCommand $gatewayCommand -LogPath $gatewayLogPath -PidPath $gatewayPidPath
 
 $escapedFrontendDir = $frontendDir.Replace("'", "''")
 $frontendCommand = "Set-Location '$escapedFrontendDir'; pnpm dev"
@@ -407,14 +447,16 @@ $adminCommand = "Set-Location '$escapedAdminDir'; pnpm dev"
 $adminProcess = Start-ServiceProcess -ServiceName "Admin Web" -ServiceCommand $adminCommand -LogPath $adminLogPath -PidPath $adminPidPath
 
 Write-Host "      Logs: $logsDir" -ForegroundColor DarkGray
-Write-Host "      Auth PID: $($authProcess.Id), Backend PID: $($backendProcess.Id), compare-algo PID: $($compareAlgoProcess.Id), ai-gateway PID: $($aiGatewayProcess.Id), frontend PID: $($frontendProcess.Id), admin-web PID: $($adminProcess.Id)" -ForegroundColor DarkGray
+Write-Host "      Auth PID: $($authProcess.Id), Base PID: $($baseProcess.Id), BidCompare PID: $($bidcompareProcess.Id), Gateway PID: $($gatewayProcess.Id), compare-algo PID: $($compareAlgoProcess.Id), ai-gateway PID: $($aiGatewayProcess.Id), frontend PID: $($frontendProcess.Id), admin-web PID: $($adminProcess.Id)" -ForegroundColor DarkGray
 
 # 5. 健康检查
 Write-Host "[5/5] Waiting for services..." -ForegroundColor Yellow
 $compareAlgoHealthy = Test-HttpHealth -Label "compare-algo" -Url "$compareAlgoUrl/healthz" -TimeoutSeconds 60
 $aiGatewayHealthy = Test-HttpHealth -Label "ai-gateway" -Url "$aiGatewayUrl/healthz" -TimeoutSeconds 60
 $authHealthy = Test-HttpHealth -Label "Auth" -Url "$authUrl/health" -TimeoutSeconds 180
-$backendHealthy = Test-HttpHealth -Label "Backend" -Url "$backendUrl/swagger/v1/swagger.json" -TimeoutSeconds 180
+$baseHealthy = Test-HttpHealth -Label "Base" -Url "$baseUrl/health" -TimeoutSeconds 180
+$bidcompareHealthy = Test-HttpHealth -Label "BidCompare" -Url "$bidcompareUrl/health" -TimeoutSeconds 180
+$gatewayHealthy = Test-HttpHealth -Label "Gateway" -Url "$gatewayUrl/health" -TimeoutSeconds 180
 $frontendHealthy = Test-HttpHealth -Label "Frontend" -Url $frontendUrl -TimeoutSeconds 60
 $adminHealthy = Test-HttpHealth -Label "Admin Web" -Url $adminUrl -TimeoutSeconds 60
 
@@ -433,20 +475,27 @@ Write-Host "========================================" -ForegroundColor Cyan
 Write-Host ("  compare-algo {0}" -f $(if ($compareAlgoHealthy) { "OK" } else { "FAILED" })) -ForegroundColor $(if ($compareAlgoHealthy) { "Green" } else { "Red" })
 Write-Host ("  ai-gateway   {0}" -f $(if ($aiGatewayHealthy) { "OK" } else { "FAILED" })) -ForegroundColor $(if ($aiGatewayHealthy) { "Green" } else { "Red" })
 Write-Host ("  Auth         {0}" -f $(if ($authHealthy) { "OK" } else { "FAILED" })) -ForegroundColor $(if ($authHealthy) { "Green" } else { "Red" })
-Write-Host ("  Backend      {0}" -f $(if ($backendHealthy) { "OK" } else { "FAILED" })) -ForegroundColor $(if ($backendHealthy) { "Green" } else { "Red" })
+Write-Host ("  Base         {0}" -f $(if ($baseHealthy) { "OK" } else { "FAILED" })) -ForegroundColor $(if ($baseHealthy) { "Green" } else { "Red" })
+Write-Host ("  BidCompare   {0}" -f $(if ($bidcompareHealthy) { "OK" } else { "FAILED" })) -ForegroundColor $(if ($bidcompareHealthy) { "Green" } else { "Red" })
+Write-Host ("  Gateway      {0}" -f $(if ($gatewayHealthy) { "OK" } else { "FAILED" })) -ForegroundColor $(if ($gatewayHealthy) { "Green" } else { "Red" })
 Write-Host ("  Frontend     {0}" -f $(if ($frontendHealthy) { "OK" } else { "FAILED" })) -ForegroundColor $(if ($frontendHealthy) { "Green" } else { "Red" })
 Write-Host ("  Admin Web    {0}" -f $(if ($adminHealthy) { "OK" } else { "FAILED" })) -ForegroundColor $(if ($adminHealthy) { "Green" } else { "Red" })
 Write-Host ("  AnGIneer     {0}" -f $(if ($angineerReady) { "OK" } else { "not running" })) -ForegroundColor $(if ($angineerReady) { "Green" } else { "DarkYellow" })
 Write-Host ""
+Write-Host "  compare-algo: $compareAlgoUrl" -ForegroundColor Cyan
+Write-Host "  ai-gateway: $aiGatewayUrl" -ForegroundColor Cyan
+Write-Host "  Auth: $authUrl" -ForegroundColor Cyan
+Write-Host "  Base: $baseUrl" -ForegroundColor Cyan
+Write-Host "  BidCompare Swagger: $bidcompareUrl/swagger" -ForegroundColor Cyan
+Write-Host "  Gateway: $gatewayUrl" -ForegroundColor Cyan
 Write-Host "  Frontend: $frontendUrl" -ForegroundColor Cyan
 Write-Host "  Admin Web: $adminUrl" -ForegroundColor Cyan
-Write-Host "  Auth: $authUrl" -ForegroundColor Cyan
-Write-Host "  Backend Swagger: $backendUrl/swagger" -ForegroundColor Cyan
+Write-Host "  AnGIneer: $angineerUrl" -ForegroundColor Cyan
 Write-Host "  Logs: $logsDir" -ForegroundColor DarkGray
 Write-Host "  Tail logs with: .\start.ps1 -TailLogs" -ForegroundColor DarkGray
 
 # 默认不自动打开浏览器；需要时显式加 -OpenBrowser（-NoBrowser 仍可强制关闭）
-if ($backendHealthy -and $OpenBrowser -and -not $NoBrowser) {
+if ($gatewayHealthy -and $OpenBrowser -and -not $NoBrowser) {
     Start-Process $frontendUrl
 }
 

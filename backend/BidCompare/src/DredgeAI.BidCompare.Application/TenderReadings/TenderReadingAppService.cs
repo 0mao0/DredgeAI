@@ -11,6 +11,7 @@ using DredgeAI.BidCompare.Documents;
 using DredgeAI.BidCompare.Exports;
 using DredgeAI.BidCompare.Ir;
 using DredgeAI.BidCompare.Storage;
+using DredgeAI.BlobStoring;
 using Microsoft.Extensions.Logging;
 using Volo.Abp;
 using Volo.Abp.Application.Dtos;
@@ -39,7 +40,7 @@ public class TenderReadingAppService : ApplicationService, ITenderReadingAppServ
     private readonly IRepository<TenderReadingDocument, Guid> _documentRepository;
     private readonly IRepository<BaselineField, Guid> _fieldRepository;
     private readonly IRepository<SourceMapItem, Guid> _sourceRepository;
-    private readonly IFileStorage _fileStorage;
+    private readonly IDredgeBlobContainer<BidCompareFileContainer> _container;
     private readonly IBackgroundJobManager _backgroundJobManager;
     private readonly BaselineStore _baselineStore;
     private readonly BaselineExtractionService _extractionService;
@@ -52,7 +53,7 @@ public class TenderReadingAppService : ApplicationService, ITenderReadingAppServ
         IRepository<TenderReadingDocument, Guid> documentRepository,
         IRepository<BaselineField, Guid> fieldRepository,
         IRepository<SourceMapItem, Guid> sourceRepository,
-        IFileStorage fileStorage,
+        IDredgeBlobContainer<BidCompareFileContainer> blobContainer,
         IBackgroundJobManager backgroundJobManager,
         BaselineStore baselineStore,
         BaselineExtractionService extractionService,
@@ -64,7 +65,7 @@ public class TenderReadingAppService : ApplicationService, ITenderReadingAppServ
         _documentRepository = documentRepository;
         _fieldRepository = fieldRepository;
         _sourceRepository = sourceRepository;
-        _fileStorage = fileStorage;
+        _container = blobContainer;
         _backgroundJobManager = backgroundJobManager;
         _baselineStore = baselineStore;
         _extractionService = extractionService;
@@ -176,7 +177,7 @@ public class TenderReadingAppService : ApplicationService, ITenderReadingAppServ
         }
 
         var uploadStream = new PrefixCountingStream(header, headerLength, content);
-        await _fileStorage.UploadAsync(storageKey, uploadStream, ContentTypeOf(extension));
+        await _container.SaveAsync(storageKey, uploadStream, ContentTypeOf(extension), overrideExisting: true);
 
         var document = new TenderReadingDocument(
             documentId,
@@ -293,7 +294,7 @@ public class TenderReadingAppService : ApplicationService, ITenderReadingAppServ
             return new List<TenderReadingOutlineNodeDto>();
         }
 
-        await using var stream = await _fileStorage.GetAsync(document.IrStorageKey!);
+        await using var stream = await _container.GetAsync(document.IrStorageKey!);
         using var ir = await JsonDocument.ParseAsync(stream);
 
         if (!ir.RootElement.TryGetProperty("outline", out var outline)
@@ -315,7 +316,7 @@ public class TenderReadingAppService : ApplicationService, ITenderReadingAppServ
         }
 
         string irJson;
-        await using (var irStream = await _fileStorage.GetAsync(document.IrStorageKey!))
+        await using (var irStream = await _container.GetAsync(document.IrStorageKey!))
         using (var reader = new StreamReader(irStream))
         {
             irJson = await reader.ReadToEndAsync();
@@ -325,9 +326,9 @@ public class TenderReadingAppService : ApplicationService, ITenderReadingAppServ
 
         string content;
         if (!string.IsNullOrWhiteSpace(document.DocMdStorageKey)
-            && await _fileStorage.ExistsAsync(document.DocMdStorageKey))
+            && await _container.ExistsAsync(document.DocMdStorageKey))
         {
-            await using var mdStream = await _fileStorage.GetAsync(document.DocMdStorageKey);
+            await using var mdStream = await _container.GetAsync(document.DocMdStorageKey);
             using var mdReader = new StreamReader(mdStream);
             content = await mdReader.ReadToEndAsync();
         }
@@ -460,11 +461,11 @@ public class TenderReadingAppService : ApplicationService, ITenderReadingAppServ
             await convertLock.WaitAsync();
             try
             {
-                if (await _fileStorage.ExistsAsync(previewKey))
+                if (await _container.ExistsAsync(previewKey))
                 {
                     return new TenderReadingDocumentFileResult
                     {
-                        Content = await _fileStorage.GetAsync(previewKey),
+                        Content = await _container.GetAsync(previewKey),
                         ContentType = "application/pdf",
                         FileName = Path.GetFileNameWithoutExtension(document.FileName) + ".pdf"
                     };
@@ -472,12 +473,12 @@ public class TenderReadingAppService : ApplicationService, ITenderReadingAppServ
 
                 try
                 {
-                    await using var origin = await _fileStorage.GetAsync(document.OriginStorageKey);
+                    await using var origin = await _container.GetAsync(document.OriginStorageKey);
                     using var originBuffer = new MemoryStream();
                     await origin.CopyToAsync(originBuffer);
                     var pdfBytes = await _pdfConverter.ConvertToPdfAsync(originBuffer.ToArray());
                     await using var pdfStream = new MemoryStream(pdfBytes);
-                    await _fileStorage.UploadAsync(previewKey, pdfStream, "application/pdf");
+                    await _container.SaveAsync(previewKey, pdfStream, "application/pdf", overrideExisting: true);
                     return new TenderReadingDocumentFileResult
                     {
                         Content = new MemoryStream(pdfBytes),
@@ -500,7 +501,7 @@ public class TenderReadingAppService : ApplicationService, ITenderReadingAppServ
             }
         }
 
-        var content = await _fileStorage.GetAsync(document.OriginStorageKey);
+        var content = await _container.GetAsync(document.OriginStorageKey);
         return new TenderReadingDocumentFileResult
         {
             Content = content,
@@ -625,7 +626,7 @@ public class TenderReadingAppService : ApplicationService, ITenderReadingAppServ
     {
         try
         {
-            await _fileStorage.DeleteByPrefixAsync(prefix);
+            await _container.DeleteByPrefixAsync(prefix);
         }
         catch
         {

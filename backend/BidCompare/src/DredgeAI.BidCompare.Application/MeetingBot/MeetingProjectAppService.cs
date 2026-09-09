@@ -17,7 +17,7 @@ namespace DredgeAI.BidCompare.MeetingBot;
 /// AI 晨会施工项目：项目下拉数据源 + 施工方案解析后的项目信息/主要内容提取。
 /// 施工方案本体走既有知识库上传链路（AnGIneer 解析入知识库），本服务只维护项目档案。
 /// </summary>
-[RemoteService(false)] // 精确路由由 HttpApi 显式 Controller 暴露（/api/meeting/projects）
+[RemoteService(false)] // 精确路由由 HttpApi 显式 Controller 暴露（/api/bidcompare/meeting-projects）
 public class MeetingProjectAppService : ApplicationService, IMeetingProjectAppService
 {
     private readonly IRepository<MeetingProject, Guid> _projects;

@@ -74,7 +74,7 @@ export interface AppManifest {
   component?: () => Promise<unknown>
   /** 默认是否在侧边栏可见 */
   defaultVisible?: boolean
-  /** 所需权限码（可选，路由守卫消费） */
+  /** 所需权限码（可选，路由守卫与菜单过滤消费） */
   requiredPermission?: string
   /** 分类标签（用于侧边栏分组） */
   category?: '通用' | '经营' | '设计' | '施工'

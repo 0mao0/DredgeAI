@@ -10,6 +10,7 @@
 
     <ItemGroup>
       <PackageReference Include="Volo.Abp.Ddd.Application" />
+      <PackageReference Include="Volo.Abp.Account.Application.Contracts" />
       <PackageReference Include="Volo.Abp.Mapperly" />
       <PackageReference Include="Volo.Abp.AuditLogging.Domain" />
       <PackageReference Include="Volo.Abp.Identity.Domain" />

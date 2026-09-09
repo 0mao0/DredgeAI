@@ -13,6 +13,7 @@ using DredgeAI.BidCompare.AnGineer;
 using DredgeAI.BidCompare.BackgroundJobs;
 using DredgeAI.BidCompare.Storage;
 using DredgeAI.BidCompare.Weather;
+using DredgeAI.BlobStoring;
 using Microsoft.Extensions.Logging;
 using Volo.Abp;
 using Volo.Abp.Application.Services;
@@ -24,7 +25,7 @@ namespace DredgeAI.BidCompare.MeetingBot;
 /// <summary>
 /// AI 晨会编排：会前录入 → 晨会稿生成（AnGIneer 检索 + LLM）→ 点名 → 问答 → 会后报告。
 /// </summary>
-[RemoteService(false)] // 精确路由由 HttpApi 显式 Controller 暴露（/api/meeting/records）
+[RemoteService(false)] // 精确路由由 HttpApi 显式 Controller 暴露（/api/bidcompare/meeting-records）
 public class MeetingRecordAppService : ApplicationService, IMeetingRecordAppService
 {
     private const double RecognizeThreshold = 0.6;
@@ -60,7 +61,7 @@ public class MeetingRecordAppService : ApplicationService, IMeetingRecordAppServ
     private readonly ILlmGateway _llmGateway;
     private readonly ISpeechDraftStreamer _streamer;
     private readonly IWeatherClient _weather;
-    private readonly IFileStorage _fileStorage;
+    private readonly IDredgeBlobContainer<BidCompareFileContainer> _container;
     private readonly IBackgroundJobManager _backgroundJobManager;
 
     public MeetingRecordAppService(
@@ -75,7 +76,7 @@ public class MeetingRecordAppService : ApplicationService, IMeetingRecordAppServ
         ILlmGateway llmGateway,
         ISpeechDraftStreamer streamer,
         IWeatherClient weather,
-        IFileStorage fileStorage,
+        IDredgeBlobContainer<BidCompareFileContainer> blobContainer,
         IBackgroundJobManager backgroundJobManager)
     {
         _meetings = meetings;
@@ -89,7 +90,7 @@ public class MeetingRecordAppService : ApplicationService, IMeetingRecordAppServ
         _llmGateway = llmGateway;
         _streamer = streamer;
         _weather = weather;
-        _fileStorage = fileStorage;
+        _container = blobContainer;
         _backgroundJobManager = backgroundJobManager;
     }
 
@@ -245,9 +246,9 @@ public class MeetingRecordAppService : ApplicationService, IMeetingRecordAppServ
         var cacheKey = $"{SpeechAudioCachePrefix}/{meeting.Id}.wav";
         try
         {
-            if (await _fileStorage.ExistsAsync(cacheKey))
+            if (await _container.ExistsAsync(cacheKey))
             {
-                await using var cached = await _fileStorage.GetAsync(cacheKey);
+                await using var cached = await _container.GetAsync(cacheKey);
                 using var ms = new MemoryStream();
                 await cached.CopyToAsync(ms);
                 return ms.ToArray();
@@ -262,7 +263,7 @@ public class MeetingRecordAppService : ApplicationService, IMeetingRecordAppServ
         try
         {
             await using var output = new MemoryStream(bytes);
-            await _fileStorage.UploadAsync(cacheKey, output, "audio/wav");
+            await _container.SaveAsync(cacheKey, output, "audio/wav", overrideExisting: true);
         }
         catch (Exception ex)
         {
@@ -416,7 +417,7 @@ public class MeetingRecordAppService : ApplicationService, IMeetingRecordAppServ
         }
         try
         {
-            return await _fileStorage.ExistsAsync($"{SpeechAudioCachePrefix}/{meeting.Id}.wav");
+            return await _container.ExistsAsync($"{SpeechAudioCachePrefix}/{meeting.Id}.wav");
         }
         catch (Exception ex)
         {
@@ -434,7 +435,7 @@ public class MeetingRecordAppService : ApplicationService, IMeetingRecordAppServ
         }
         var key = $"{SpeechAudioCachePrefix}/{meeting.Id}.wav";
         await using var stream = new MemoryStream(wav);
-        await _fileStorage.UploadAsync(key, stream, "audio/wav");
+        await _container.SaveAsync(key, stream, "audio/wav", overrideExisting: true);
     }
 
     public async Task<byte[]?> GetSpeechLeadAudioAsync(Guid id)
@@ -447,11 +448,11 @@ public class MeetingRecordAppService : ApplicationService, IMeetingRecordAppServ
         var key = SpeechLeadAudioKey(meeting.Id);
         try
         {
-            if (!await _fileStorage.ExistsAsync(key))
+            if (!await _container.ExistsAsync(key))
             {
                 return null;
             }
-            await using var cached = await _fileStorage.GetAsync(key);
+            await using var cached = await _container.GetAsync(key);
             using var ms = new MemoryStream();
             await cached.CopyToAsync(ms);
             return ms.ToArray();
@@ -472,7 +473,7 @@ public class MeetingRecordAppService : ApplicationService, IMeetingRecordAppServ
         }
         try
         {
-            return await _fileStorage.ExistsAsync(SpeechLeadAudioKey(meeting.Id));
+            return await _container.ExistsAsync(SpeechLeadAudioKey(meeting.Id));
         }
         catch (Exception ex)
         {
@@ -507,11 +508,11 @@ public class MeetingRecordAppService : ApplicationService, IMeetingRecordAppServ
         var key = SpeechSegmentAudioKey(meeting.Id, index);
         try
         {
-            if (!await _fileStorage.ExistsAsync(key))
+            if (!await _container.ExistsAsync(key))
             {
                 return null;
             }
-            await using var cached = await _fileStorage.GetAsync(key);
+            await using var cached = await _container.GetAsync(key);
             using var ms = new MemoryStream();
             await cached.CopyToAsync(ms);
             return ms.ToArray();
@@ -527,9 +528,9 @@ public class MeetingRecordAppService : ApplicationService, IMeetingRecordAppServ
     {
         try
         {
-            await _fileStorage.DeleteAsync($"{SpeechAudioCachePrefix}/{meetingId}.wav");
-            await _fileStorage.DeleteAsync(SpeechLeadAudioKey(meetingId));
-            await _fileStorage.DeleteByPrefixAsync(SpeechSegmentCachePrefix(meetingId));
+            await _container.DeleteAsync($"{SpeechAudioCachePrefix}/{meetingId}.wav");
+            await _container.DeleteAsync(SpeechLeadAudioKey(meetingId));
+            await _container.DeleteByPrefixAsync(SpeechSegmentCachePrefix(meetingId));
         }
         catch (Exception ex)
         {
@@ -667,7 +668,7 @@ public class MeetingRecordAppService : ApplicationService, IMeetingRecordAppServ
         {
             var key = $"meeting/unrecognized/{meeting.Id}/{GuidGenerator.Create():N}.jpg";
             await using var stream = new MemoryStream(face.Data);
-            await _fileStorage.UploadAsync(key, stream, "image/jpeg");
+            await _container.SaveAsync(key, stream, "image/jpeg", overrideExisting: true);
             await _unrecognizedFaces.InsertAsync(new UnrecognizedFace(
                 GuidGenerator.Create(),
                 meeting.Id,
@@ -728,7 +729,7 @@ public class MeetingRecordAppService : ApplicationService, IMeetingRecordAppServ
             {
                 return null;
             }
-            return await _fileStorage.GetPresignedUrlAsync(key, TimeSpan.FromHours(1));
+            return await _container.GetDownloadUrlAsync(key, 3600);
         }
         catch
         {
@@ -809,7 +810,7 @@ public class MeetingRecordAppService : ApplicationService, IMeetingRecordAppServ
             : Path.GetExtension(fileName).TrimStart('.').ToLowerInvariant() is { Length: > 0 } e ? e : "webm";
         var key = $"meeting/{id}/recording.{ext}";
         using var stream = new MemoryStream(audio);
-        await _fileStorage.UploadAsync(key, stream, "application/octet-stream");
+        await _container.SaveAsync(key, stream, "application/octet-stream", overrideExisting: true);
         meeting.SetRecording(key);
         await _meetings.UpdateAsync(meeting);
         return await GetAsync(id);
@@ -852,7 +853,7 @@ public class MeetingRecordAppService : ApplicationService, IMeetingRecordAppServ
         {
             try
             {
-                await using var stream = await _fileStorage.GetAsync(meeting.TranscriptFile);
+                await using var stream = await _container.GetAsync(meeting.TranscriptFile);
                 using var reader = new StreamReader(stream);
                 transcript = await reader.ReadToEndAsync();
             }
@@ -876,8 +877,8 @@ public class MeetingRecordAppService : ApplicationService, IMeetingRecordAppServ
         {
             try
             {
-                report.ReportUrl = await _fileStorage.GetPresignedUrlAsync(
-                    meeting.ReportFile, TimeSpan.FromHours(1));
+                report.ReportUrl = await _container.GetDownloadUrlAsync(
+                    meeting.ReportFile, 3600);
             }
             catch (Exception ex)
             {
@@ -896,7 +897,7 @@ public class MeetingRecordAppService : ApplicationService, IMeetingRecordAppServ
             string? photoUrl = null;
             try
             {
-                photoUrl = await _fileStorage.GetPresignedUrlAsync(face.PhotoKey, TimeSpan.FromHours(1));
+                photoUrl = await _container.GetDownloadUrlAsync(face.PhotoKey, 3600);
             }
             catch
             {
