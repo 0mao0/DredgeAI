@@ -6,10 +6,10 @@ import {
   getSpeechSegmentAudio,
   saveSpeechAudioCache,
   streamSpeechAudio,
-  synthesizeSpeech,
 } from '@/api/modules/aiMeeting'
 import { splitSpeechText } from '@/utils/speechText'
 import { mergeAudioBlobs, parseWav, pcmToWavBlob } from '@/utils/audioToWav'
+import { getPreparedSpeech, putPreparedSpeech } from './speechPreparedCache'
 import { useAudioPlayer } from './useAudioPlayer'
 
 /** 估算语速：约 4 字/秒 */
@@ -17,13 +17,21 @@ function estimateSeconds(text: string): number {
   return Math.round(text.replace(/\s/g, '').length / 4)
 }
 
-/** 跨实例共享已生成语音：晨会稿页生成后，点名页直接复用，避免重复合成 */
-const sharedPrepared = new Map<string, Blob>()
-
-/** 并行预取深度：边播边合成时同时开工的断句数 */
-const PREFETCH_CONCURRENCY = 3
+/**
+ * 兜底分段合成的并发度：DGX 并发能力弱（闸门 3，且会拖慢单请求），
+ * 这里严格串行——同一时刻只发一个 TTS 请求，避免和实时流/其他播放抢算力。
+ */
+const SEGMENT_CONCURRENCY = 1
 /** 单句合成/拉取超时 */
 const SEGMENT_FETCH_TIMEOUT = 30_000
+/** 整稿流式播放的首块预缓冲：攒够这么多秒音频就开播（越小出声越快） */
+const STREAM_PREBUFFER_SECONDS = 0.25
+/**
+ * 开播后每次调度的音频块时长。
+ * 必须满足 预缓冲 ≥ 分块 / 上游吞吐（实测 1.8～2.2x），否则第二块到达前会断音——
+ * 旧参数 0.5s 预缓冲配 1.5s 分块在 1.85x 下缺口约 0.3s。
+ */
+const STREAM_BLOCK_SECONDS = 0.4
 
 /**
  * 晨会稿播放：
@@ -72,10 +80,7 @@ export function useSpeechPlayback() {
     return buffer
   }
 
-  /**
-   * 解析 16bit PCM 为 AudioBuffer：按声明采样率直接建 buffer，不做任何重采样。
-   * 调用方须先 evenLen 取偶（与 DGX 官方测试页一致，避免奇数尾字节错位）。
-   */
+  /** 解析 16bit PCM 为 AudioBuffer：按声明采样率直接建 buffer，不做重采样（调用方须偶数对齐）。 */
   function pcmToAudioBuffer(ac: AudioContext, bytes: Uint8Array, sampleRate: number): AudioBuffer {
     const n = Math.floor(bytes.length / 2)
     const buffer = ac.createBuffer(1, n, sampleRate)
@@ -83,6 +88,41 @@ export function useSpeechPlayback() {
     const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength)
     for (let i = 0; i < n; i++) data[i] = view.getInt16(i * 2, true) / 32768
     return buffer
+  }
+
+  /**
+   * 单段合成：走流式接口收齐后包成 WAV。
+   * 不再使用非流式 /tts 接口——上游同步整段合成在并发紧张时会拖慢甚至失败，统一走流式链路。
+   */
+  async function fetchSegmentAudio(text: string, timeoutMs: number): Promise<Blob> {
+    const controller = new AbortController()
+    const timer = window.setTimeout(() => controller.abort(), timeoutMs)
+    let sampleRate = 24000
+    const chunks: Uint8Array[] = []
+    let total = 0
+    try {
+      for await (const chunk of streamSpeechAudio(text, (meta) => {
+        sampleRate = meta.sampleRate
+      }, controller.signal)) {
+        chunks.push(chunk)
+        total += chunk.length
+      }
+    } finally {
+      window.clearTimeout(timer)
+    }
+    const evenLen = total - (total % 2)
+    if (evenLen < 2) {
+      throw new Error('单段合成为空')
+    }
+    const pcm = new Uint8Array(evenLen)
+    let pos = 0
+    for (const chunk of chunks) {
+      if (pos >= evenLen) break
+      const take = Math.min(chunk.length, evenLen - pos)
+      pcm.set(chunk.subarray(0, take), pos)
+      pos += take
+    }
+    return pcmToWavBlob(pcm, sampleRate)
   }
 
   function cancelStreaming(): void {
@@ -99,12 +139,10 @@ export function useSpeechPlayback() {
   }
 
   /**
-   * 流式播放（整稿一次请求、原始字节流直出）：
-   * - 开场句有缓存先秒出，流式只合成剩余部分；
-   * - DGX 流为原始 PCM（23040Hz）：evenLen 取偶 + 原生率 createBuffer 零间隙调度；
-   * - 降级腾讯云返回完整 WAV（RIFF 探测）：收齐后整段播放；
-   * - 流式不可用时回退到“分段缓存优先 + 逐段合成”流水线。
-   * 结束后返回合并好的整段音频（供写入服务端缓存），失败返回 null。
+   * 整稿流式播放：一次请求、上游按句吐 PCM，边到边无缝调度。
+   * - 开场句有服务端缓存时先秒播，流式只合成剩余部分；
+   * - 攒够 STREAM_PREBUFFER_SECONDS 才开播，之后按 STREAM_BLOCK_SECONDS 分块排期；
+   * - 返回 ok=false 表示流式不可用（调用方回退逐段合成）。
    */
   async function tryStreamPlay(
     text: string,
@@ -116,14 +154,13 @@ export function useSpeechPlayback() {
     const lead = leadBlob && leadText && text.startsWith(leadText) ? leadText : ''
     const tailText = lead ? text.slice(lead.length).trim() : text
     const pcmChunks: Uint8Array[] = []
-    const wavChunks: Uint8Array[] = []
-    let streamIsWav = false
-    let formatDetected = false
-    let lastScheduled = -1
+    let pending = new Uint8Array(0)
+    let sampleRate = 24000
     let scheduledAny = false
+    let lastScheduled = -1
     let tailChunks = 0
     let completed = false
-    let pending = new Uint8Array(0)
+    let index = 0
 
     const concat = (a: Uint8Array, b: Uint8Array): Uint8Array => {
       const out = new Uint8Array(a.length + b.length)
@@ -132,7 +169,7 @@ export function useSpeechPlayback() {
       return out
     }
 
-    const scheduleBuffer = async (buffer: AudioBuffer, index: number): Promise<void> => {
+    const scheduleBuffer = (buffer: AudioBuffer): void => {
       if (token !== seq) return
       const source = ac.createBufferSource()
       source.buffer = buffer
@@ -141,74 +178,57 @@ export function useSpeechPlayback() {
       source.start(startAt)
       streamNextStart = startAt + buffer.duration
       streamSources.push(source)
-      lastScheduled = index
+      const myIndex = index++
+      lastScheduled = myIndex
       source.onended = () => {
-        if (index === lastScheduled) streamResolve?.()
+        if (myIndex === lastScheduled) streamResolve?.()
       }
     }
 
     try {
       if (lead && leadBlob) {
         const buffer = await wavToAudioBuffer(ac, leadBlob)
-        if (token === seq && buffer.length > 0) await scheduleBuffer(buffer, 0)
+        if (buffer.length > 0) scheduleBuffer(buffer)
         scheduledAny = true
         synthesizing.value = false
       }
       if (tailText) {
-        let index = lead && leadBlob ? 1 : 0
-        for await (const chunk of streamSpeechAudio(tailText)) {
+        for await (const chunk of streamSpeechAudio(tailText, (meta) => {
+          sampleRate = meta.sampleRate
+        })) {
           if (token !== seq) return { ok: true, merged: null }
           tailChunks++
-          if (!formatDetected) {
-            formatDetected = true
-            streamIsWav = chunk.length >= 4 && chunk[0] === 0x52 && chunk[1] === 0x49
-              && chunk[2] === 0x46 && chunk[3] === 0x46
-            if (streamIsWav) {
-              // 流式不可用、降级整段合成：等待生成完成后一次性播放
-              synthesisProgress.value = '正在生成完整语音，请稍候…'
-            } else if (!scheduledAny) {
-              // PCM 流已开始到达，即视为可播（首块可能不足一个样本，后续块会接上）
+          pending = concat(pending, chunk)
+          const evenLen = pending.length - (pending.length % 2)
+          const need = Math.floor((scheduledAny ? STREAM_BLOCK_SECONDS : STREAM_PREBUFFER_SECONDS) * sampleRate) * 2
+          if (evenLen >= need) {
+            const pcm = pending.slice(0, evenLen)
+            pending = pending.slice(evenLen)
+            pcmChunks.push(pcm)
+            scheduleBuffer(pcmToAudioBuffer(ac, pcm, sampleRate))
+            if (!scheduledAny) {
               scheduledAny = true
               synthesizing.value = false
               preparingMore.value = false
               synthesisProgress.value = ''
             }
           }
-          if (streamIsWav) {
-            wavChunks.push(chunk)
-            continue
-          }
-          pending = concat(pending, chunk)
-          const evenLen = pending.length - (pending.length % 2)
-          if (evenLen > 0) {
-            const pcm = pending.slice(0, evenLen)
-            pending = pending.slice(evenLen)
-            pcmChunks.push(pcm)
-            if (scheduledAny && pcm.length >= 2) {
-              const buffer = pcmToAudioBuffer(ac, pcm, 23040)
-              if (token === seq) await scheduleBuffer(buffer, index++)
-            }
-          }
         }
-        // 降级为完整 WAV：收齐后整段播放（DGX 非流式整段合成完成后一次性返回）
-        if (streamIsWav && wavChunks.length > 0) {
-          const blob = new Blob(wavChunks, { type: 'audio/wav' })
-          const buffer = await wavToAudioBuffer(ac, blob)
-          if (token === seq && buffer.length > 0) {
-            await scheduleBuffer(buffer, index)
-            scheduledAny = true
-            synthesizing.value = false
-            preparingMore.value = false
-            synthesisProgress.value = ''
-          }
+        // 流结束时把不足一块的余量也排上
+        const restLen = pending.length - (pending.length % 2)
+        if (restLen >= 2) {
+          const rest = pending.slice(0, restLen)
+          pending = new Uint8Array(0)
+          pcmChunks.push(rest)
+          scheduleBuffer(pcmToAudioBuffer(ac, rest, sampleRate))
         }
       }
       completed = true
     } catch {
-      // 流式接口不可用或中途中断
+      // 流式接口不可用/中途中断 → 交给逐段回退
     }
 
-    // 一句都没播出来（或剩余部分一句都没收到）→ 交给分段回退
+    // 一句都没播出来（或剩余部分一个字节都没收到）→ 回退
     if (!scheduledAny || (tailText.length > 0 && tailChunks === 0)) {
       return { ok: false, merged: null }
     }
@@ -216,10 +236,10 @@ export function useSpeechPlayback() {
     if (!completed) {
       return { ok: true, merged: null }
     }
-    let tailBlob: Blob | null = null
-    if (streamIsWav) {
-      if (wavChunks.length > 0) tailBlob = new Blob(wavChunks, { type: 'audio/wav' })
-    } else if (pcmChunks.length > 0) {
+    if (pcmChunks.length === 0) {
+      return { ok: true, merged: null }
+    }
+    try {
       const total = pcmChunks.reduce((sum, c) => sum + c.length, 0)
       const mergedPcm = new Uint8Array(total)
       let pos = 0
@@ -227,20 +247,11 @@ export function useSpeechPlayback() {
         mergedPcm.set(c, pos)
         pos += c.length
       }
-      tailBlob = pcmToWavBlob(mergedPcm, 23040)
-    }
-    if (!tailBlob) {
-      return { ok: true, merged: null }
-    }
-    try {
+      const tailBlob = pcmToWavBlob(mergedPcm, sampleRate)
       const merged = lead && leadBlob
         ? await mergeAudioBlobs([leadBlob, tailBlob])
         : tailBlob
-      sharedPrepared.set(text, merged)
-      if (sharedPrepared.size > 10) {
-        const oldest = sharedPrepared.keys().next().value
-        if (oldest !== undefined) sharedPrepared.delete(oldest)
-      }
+      putPreparedSpeech(text, merged)
       streamMergedBlob = merged
       return { ok: true, merged }
     } catch {
@@ -275,7 +286,7 @@ export function useSpeechPlayback() {
       // 自动播放策略拦截时静默失败，等待用户手势
     }
     streamSources = []
-    streamNextStart = ac.currentTime + 0.1
+    streamNextStart = ac.currentTime + 0.05
     streamMergedBlob = null
 
     let finished = false
@@ -298,9 +309,13 @@ export function useSpeechPlayback() {
       progress.value = duration.value > 0 ? currentTime.value / duration.value : 0
     }, 1000)
 
-    // 流式优先：整稿一次请求、按句吐帧，零逐段固定开销
+    // 整稿流式优先：一次请求、上游按句吐帧，首音最快且全程无缝
     const streamResult = await tryStreamPlay(text, leadBlob, leadText, token)
     if (streamResult.ok) {
+      // 下载已完整（不是中途取消）：立刻写回服务端缓存，不必等尾部播完
+      if (streamResult.merged && meetingId) {
+        void saveSpeechAudioCache(meetingId, streamResult.merged).catch(() => {})
+      }
       await allDone
       if (token === seq) {
         playing.value = false
@@ -314,11 +329,11 @@ export function useSpeechPlayback() {
       return streamResult.merged
     }
 
-    // —— 回退：分段缓存优先 + 并行预取逐段合成 ——
+    // —— 回退：逐段合成（首段好就开播，后续并行合成，边播边产）——
     stopAudio()
     cancelStreaming()
     streamSources = []
-    streamNextStart = ac.currentTime + 0.1
+    streamNextStart = ac.currentTime + 0.05
     streamMergedBlob = null
     synthesizing.value = true
     makeAllDone()
@@ -329,17 +344,13 @@ export function useSpeechPlayback() {
 
     async function fetchCached(index: number): Promise<Blob | null> {
       if (!meetingId) return null
-      for (let attempt = 0; attempt < 2; attempt++) {
-        if (token !== seq) return null
-        try {
-          const blob = await getSpeechSegmentAudio(meetingId, index)
-          if (blob && blob.size > 0) return blob
-        } catch {
-          // 未缓存 → 稍后重试或回退合成
-        }
-        if (attempt === 0) await new Promise((r) => setTimeout(r, 1200))
+      try {
+        const blob = await getSpeechSegmentAudio(meetingId, index)
+        return blob && blob.size > 0 ? blob : null
+      } catch {
+        // 未缓存（服务端分段预热未启用）→ 直接合成
+        return null
       }
-      return null
     }
 
     async function produceOne(i: number): Promise<Blob | null> {
@@ -349,9 +360,10 @@ export function useSpeechPlayback() {
       for (let attempt = 0; attempt < 3; attempt++) {
         if (token !== seq) return null
         try {
-          return await synthesizeSpeech(segments[i]!, SEGMENT_FETCH_TIMEOUT)
+          return await fetchSegmentAudio(segments[i]!, SEGMENT_FETCH_TIMEOUT)
         } catch {
-          // 重试
+          // 撞上游并发（429）时退避后重试
+          if (attempt < 2) await new Promise((r) => setTimeout(r, 400 * (attempt + 1)))
         }
       }
       return null
@@ -363,7 +375,7 @@ export function useSpeechPlayback() {
     let inFlight = 0
 
     function kick(): void {
-      while (nextToStart < total && inFlight < PREFETCH_CONCURRENCY) {
+      while (nextToStart < total && inFlight < SEGMENT_CONCURRENCY) {
         const i = nextToStart++
         inFlight++
         pending[i] = produceOne(i)
@@ -417,12 +429,9 @@ export function useSpeechPlayback() {
       if (token === seq && produced.length > 0) {
         try {
           const merged = await mergeAudioBlobs(produced)
-          sharedPrepared.set(text, merged)
-          if (sharedPrepared.size > 10) {
-            const oldest = sharedPrepared.keys().next().value
-            if (oldest !== undefined) sharedPrepared.delete(oldest)
-          }
+          putPreparedSpeech(text, merged)
           streamMergedBlob = merged
+          if (meetingId) void saveSpeechAudioCache(meetingId, merged).catch(() => {})
         } catch {
           // 合并失败不影响已播内容
         }
@@ -449,7 +458,7 @@ export function useSpeechPlayback() {
     const segments = splitSpeechText(text)
     if (segments.length === 0) return false
     if (preparedText === text && preparedBlob) return true
-    const cached = sharedPrepared.get(text)
+    const cached = getPreparedSpeech(text)
     if (cached) {
       preparedText = text
       preparedBlob = cached
@@ -472,18 +481,14 @@ export function useSpeechPlayback() {
       const blobs: Blob[] = []
       for (const segment of segments) {
         if (token !== seq) return false
-        blobs.push(await synthesizeSpeech(segment))
+        blobs.push(await fetchSegmentAudio(segment, SEGMENT_FETCH_TIMEOUT))
       }
       if (token !== seq) return false
       const merged = await mergeAudioBlobs(blobs)
       if (token !== seq) return false
       preparedText = text
       preparedBlob = merged
-      sharedPrepared.set(text, merged)
-      if (sharedPrepared.size > 10) {
-        const oldest = sharedPrepared.keys().next().value
-        if (oldest !== undefined) sharedPrepared.delete(oldest)
-      }
+      putPreparedSpeech(text, merged)
       duration.value = estimateSeconds(text)
       ready.value = true
       return true
@@ -497,7 +502,7 @@ export function useSpeechPlayback() {
   /** 优先拉取服务端整段语音（带缓存），失败回退客户端逐段合成。 */
   async function ensure(text: string, fetcher?: () => Promise<Blob>): Promise<boolean> {
     if (preparedText === text && preparedBlob) return true
-    const cached = sharedPrepared.get(text)
+    const cached = getPreparedSpeech(text)
     if (cached) {
       preparedText = text
       preparedBlob = cached
@@ -522,7 +527,7 @@ export function useSpeechPlayback() {
         if (token !== seq) return false
         preparedText = text
         preparedBlob = blob
-        sharedPrepared.set(text, blob)
+        putPreparedSpeech(text, blob)
         duration.value = estimateSeconds(text)
         ready.value = true
         return true
@@ -564,7 +569,7 @@ export function useSpeechPlayback() {
 
   async function play(text: string, meetingId?: string): Promise<void> {
     if (preparedText !== text || !preparedBlob) {
-      const cached = sharedPrepared.get(text)
+      const cached: Blob | null | undefined = getPreparedSpeech(text)
       if (cached) {
         preparedText = text
         preparedBlob = cached
@@ -583,7 +588,7 @@ export function useSpeechPlayback() {
               const blob = await getSpeechAudio(meetingId)
               preparedText = text
               preparedBlob = blob
-              sharedPrepared.set(text, blob)
+              putPreparedSpeech(text, blob)
               duration.value = estimateSeconds(text)
               currentTime.value = 0
               progress.value = 0
@@ -597,11 +602,9 @@ export function useSpeechPlayback() {
           }
         }
         if (preparedText !== text || !preparedBlob) {
-          // 缓存未命中 → 流水线流式播放（首段即出、无缝衔接），播完写回服务端缓存
-          const merged = await playStreamed(text, meetingId, leadBlob, leadText)
-          if (merged && meetingId) {
-            void saveSpeechAudioCache(meetingId, merged).catch(() => {})
-          }
+          // 缓存未命中 → 流水线流式播放（首段即出、无缝衔接）；
+          // 服务端缓存在音频收齐/合并完成时由 playStreamed 写回
+          await playStreamed(text, meetingId, leadBlob, leadText)
           return
         }
       }
@@ -610,12 +613,13 @@ export function useSpeechPlayback() {
   }
 
   /**
-   * 仅播放已有音频（会话缓存或服务端 wav），不触发任何合成。
-   * 返回是否成功开始播放（无缓存时返回 false，由调用方提示“语音尚未生成”）。
+   * 点名页播放：优先用已有音频秒开（会话缓存 / 服务端整段 wav）；
+   * 没有整段缓存时回退到正常播放——开场句缓存先秒出，剩余走实时流合成一次，
+   * 播完写回整段缓存，下次进来就是秒开。
    */
   async function playCached(text: string, meetingId?: string): Promise<boolean> {
     if (preparedText !== text || !preparedBlob) {
-      const cached = sharedPrepared.get(text)
+      const cached = getPreparedSpeech(text)
       if (cached) {
         preparedText = text
         preparedBlob = cached
@@ -630,47 +634,21 @@ export function useSpeechPlayback() {
             const blob = await getSpeechAudio(meetingId)
             preparedText = text
             preparedBlob = blob
-            sharedPrepared.set(text, blob)
+            putPreparedSpeech(text, blob)
             duration.value = estimateSeconds(text)
             currentTime.value = 0
             progress.value = 0
             ready.value = true
-          } else if (status.leadCached) {
-            // 整段未缓存：服务端已按断句逐段预热，用分段缓存拼接播放（不触发任何合成）。
-            // 预热按序进行，取“已缓存的最长前缀”先播，避免因缺后续段而整段不播。
-            const segments = splitSpeechText(text)
-            const blobs: Blob[] = []
-            for (let i = 0; i < segments.length; i++) {
-              try {
-                const blob = await getSpeechSegmentAudio(meetingId, i)
-                if (!blob || blob.size === 0) break
-                blobs.push(blob)
-              } catch {
-                break
-              }
-            }
-            if (blobs.length > 0) {
-              const merged = await mergeAudioBlobs(blobs)
-              if (blobs.length === segments.length) {
-                // 全量分段齐了：固化为 prepared，下次重播直接命中
-                preparedText = text
-                preparedBlob = merged
-                sharedPrepared.set(text, merged)
-                duration.value = estimateSeconds(text)
-                currentTime.value = 0
-                progress.value = 0
-                ready.value = true
-              }
-              // 前缀不完整：直接播当前已缓存前缀，不固化，下次重播会拿到更长的前缀
-              await playPreparedBlob(text, merged)
-              return true
-            }
           }
         } catch {
-          // 状态查询失败视为无缓存
+          // 状态查询失败按未缓存处理
         }
       }
-      if (preparedText !== text || !preparedBlob) return false
+      if (preparedText !== text || !preparedBlob) {
+        // 没有整段缓存（服务端分段预热未启用）：正常播放，避免只播开场句就停
+        void play(text, meetingId)
+        return true
+      }
     }
     await playPreparedBlob(text)
     return true
