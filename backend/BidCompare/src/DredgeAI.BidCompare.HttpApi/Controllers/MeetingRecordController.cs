@@ -207,7 +207,8 @@ public class MeetingRecordController : AbpControllerBase
         {
             return BadRequest();
         }
-        var audio = await _bot.TtsAsync(input.Text);
+        // 透传 RequestAborted：前端取消（如播放开始时停掉后台预取）能真正中止 DGX 合成、释放并发槽位
+        var audio = await _bot.TtsAsync(input.Text, HttpContext.RequestAborted);
         return File(audio, "audio/wav");
     }
 
@@ -220,10 +221,14 @@ public class MeetingRecordController : AbpControllerBase
             return;
         }
         Response.ContentType = "application/octet-stream";
-        // 输出 DGX Qwen3 原始 PCM 流（23040Hz/16bit/单声道），零加工直通（53fa 同款）；
+        // 输出 DGX Qwen3 原始 PCM 流（16bit/单声道），零加工直通（53fa 同款）；
+        // 采样率以 DGX 响应头为准，在首字节写出前回填给前端（写死会导致变速走音）；
         // 上游中断时异常冒泡中止响应，前端据此感知不完整并回退逐段合成
-        Response.Headers["x-sample-rate"] = "23040";
-        await _bot.StreamTtsAsync(input.Text, Response.Body, HttpContext.RequestAborted);
+        await _bot.StreamTtsAsync(
+            input.Text,
+            Response.Body,
+            HttpContext.RequestAborted,
+            sampleRate => Response.Headers["x-sample-rate"] = sampleRate.ToString());
     }
 
     [HttpPost("{id:guid}/recording")]
