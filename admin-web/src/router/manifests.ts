@@ -23,6 +23,10 @@ export const adminAppManifests: AppManifest[] = [
     defaultVisible: true,
     parentKeys: ['users'],
     requiredPermission: 'Base.Users',
+    actionPermissions: {
+      update: 'Base.Users.Update',
+      assignRoles: 'Base.Users.ManageRoles',
+    },
   },
   {
     id: 'permissions',
@@ -34,6 +38,13 @@ export const adminAppManifests: AppManifest[] = [
     defaultVisible: true,
     parentKeys: ['users'],
     requiredPermission: 'Base.Roles',
+    actionPermissions: {
+      create: 'Base.Roles.Create',
+      update: 'Base.Roles.Update',
+      delete: 'Base.Roles.Delete',
+      managePermissions: 'Base.Roles.ManagePermissions',
+      manageUsers: 'Base.Users.Update',
+    },
   },
   // ─── 开发管理（分组） ──────────────────────────────────
   {

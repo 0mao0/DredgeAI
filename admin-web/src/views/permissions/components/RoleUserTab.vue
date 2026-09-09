@@ -11,7 +11,7 @@
       :card="false"
     >
       <template #toolbarExtra>
-        <AppButton variant="primary" size="sm" @click="showAddModal = true">新增人员</AppButton>
+        <AppButton v-if="canManageUsers" variant="primary" size="sm" @click="showAddModal = true">新增人员</AppButton>
       </template>
       <template #bodyCell="{ column, record }">
         <template v-if="column.key === 'departments'">
@@ -19,6 +19,7 @@
         </template>
         <template v-else-if="column.key === 'action'">
           <a-popconfirm
+            v-if="canManageUsers"
             title="确认从该角色移除该用户？"
             placement="left"
             @confirm="emit('remove', record.id)"
@@ -56,6 +57,7 @@ const props = defineProps<{
   role: Role
   roleUsers: OrgUser[]
   loading: boolean
+  canManageUsers: boolean
 }>()
 
 const emit = defineEmits<{

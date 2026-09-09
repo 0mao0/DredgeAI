@@ -29,7 +29,7 @@
               </template>
               <span v-else class="no-role-label">未分配</span>
             </span>
-            <AppButton variant="link" size="sm" class="role-set-btn" @click="openRoleModal(record)"><SettingOutlined /></AppButton>
+            <AppButton v-if="can('assignRoles')" variant="link" size="sm" class="role-set-btn" @click="openRoleModal(record)"><SettingOutlined /></AppButton>
           </div>
         </template>
         <template v-else-if="column.key === 'action'">
@@ -66,14 +66,16 @@
 <script setup lang="ts">
 import { AppButton, DataTable } from '@shared/web'
 import type { DataTableColumn, DataTableFilter } from '@shared/web'
-import { ref, onMounted, watch } from 'vue'
+import { ref, computed, onMounted, watch } from 'vue'
 import { message } from 'ant-design-vue'
 import { ReloadOutlined, SettingOutlined } from '@ant-design/icons-vue'
 import PageHeader from '@shared/web/components/PageHeader.vue'
 import type { OrgUser, Role } from '@/types'
 import { getOrgUsers, setUserStatus, setUserRoles } from '@/api/modules/org-users'
 import { getRoles } from '@/api/modules/roles'
+import { usePagePermissions } from '@/composables/usePagePermissions'
 
+const { can } = usePagePermissions()
 const loading = ref(false)
 const refreshing = ref(false)
 const users = ref<(OrgUser & { _roleNames?: string[] })[]>([])
@@ -85,15 +87,18 @@ const filters: DataTableFilter[] = [
   { key: 'keyword', type: 'input', placeholder: '搜索姓名或手机号', width: 240 },
 ]
 
-const columns: DataTableColumn[] = [
-  { title: '序号', dataIndex: 'index', key: 'index', width: 80, minWidth: 60, resizable: true },
-  { title: '姓名', dataIndex: 'name', key: 'name', width: 120, minWidth: 100, resizable: true },
-  { title: '手机', dataIndex: 'phone', key: 'phone', width: 140, minWidth: 120, resizable: true },
-  { title: '部门', key: 'departments', width: 220, minWidth: 180, resizable: true },
-  // 操作列固定右侧；相邻“角色”列不参与拖拽（fixed-right 浮层会盖住其手柄）
-  { title: '角色', key: 'roles', width: 160, minWidth: 140 },
-  { title: '操作', key: 'action', width: 120, minWidth: 120, fixed: 'right', resizable: true },
-]
+const columns = computed<DataTableColumn[]>(() => {
+  const base: DataTableColumn[] = [
+    { title: '序号', dataIndex: 'index', key: 'index', width: 80, minWidth: 60, resizable: true },
+    { title: '姓名', dataIndex: 'name', key: 'name', width: 120, minWidth: 100, resizable: true },
+    { title: '手机', dataIndex: 'phone', key: 'phone', width: 140, minWidth: 120, resizable: true },
+    { title: '部门', key: 'departments', width: 220, minWidth: 180, resizable: true },
+    // 操作列固定右侧；相邻“角色”列不参与拖拽（fixed-right 浮层会盖住其手柄）
+    { title: '角色', key: 'roles', width: 160, minWidth: 140 },
+    { title: '操作', key: 'action', width: 120, minWidth: 120, fixed: 'right', resizable: true },
+  ]
+  return can('update') ? base : base.filter((c) => c.key !== 'action')
+})
 
 let filterTimer: ReturnType<typeof setTimeout> | undefined
 

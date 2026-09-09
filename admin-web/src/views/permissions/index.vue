@@ -2,7 +2,7 @@
   <div class="page-container">
     <PageHeader title="权限管理" description="管理系统角色和权限">
       <template #extra>
-        <AppButton variant="primary" size="sm" @click="openCreateModal">新增角色</AppButton>
+        <AppButton v-if="can('create')" variant="primary" size="sm" @click="openCreateModal">新增角色</AppButton>
       </template>
     </PageHeader>
 
@@ -26,8 +26,9 @@
             <AppButton variant="link" size="sm" @click="openDrawer(record)">{{ record.userCount }} 人</AppButton>
           </template>
           <template v-else-if="column.key === 'action'">
-            <AppButton variant="link" size="sm" @click="openDrawer(record)">编辑</AppButton>
+            <AppButton v-if="can('update')" variant="link" size="sm" @click="openDrawer(record)">编辑</AppButton>
             <a-popconfirm
+              v-if="can('delete')"
               title="确认删除该角色？"
               placement="left"
               @confirm="handleDelete(record.id)"
@@ -59,7 +60,7 @@
       @close="drawerVisible = false"
     >
       <template #extra>
-        <AppButton variant="primary" size="sm" :loading="savingAll" @click="handleSaveAll">保存</AppButton>
+        <AppButton v-if="canSaveAll" variant="primary" size="sm" :loading="savingAll" @click="handleSaveAll">保存</AppButton>
       </template>
       <template v-if="drawerRole">
         <div class="drawer-name-row">
@@ -72,6 +73,7 @@
               :role="drawerRole"
               :role-users="drawerRoleUsers"
               :loading="drawerLoading"
+              :can-manage-users="can('manageUsers')"
               @add="handleAddRoleUser"
               @remove="handleRemoveRoleUser"
             />
@@ -123,19 +125,26 @@ import RoleUserTab from './components/RoleUserTab.vue'
 import RoleMenuTab from './components/RoleMenuTab.vue'
 import RoleAppTab from './components/RoleAppTab.vue'
 import type { PermTreeNode } from './types'
+import { usePagePermissions } from '@/composables/usePagePermissions'
 
+const { can } = usePagePermissions()
+/** 抽屉「保存」同时提交角色名（updateRole）与菜单/应用权限（setRolePermissions），任一权限可用即可保存 */
+const canSaveAll = computed(() => can('update') || can('managePermissions'))
 const loading = ref(false)
 const roles = ref<(Role & { _index?: number })[]>([])
 
-const columns: DataTableColumn[] = [
-  { title: '序号', key: 'index', width: 80 },
-  { title: '角色', dataIndex: 'name', key: 'name', width: 140, minWidth: 120, resizable: true },
-  { title: '应用权限', key: 'appCount', width: 110, minWidth: 90, resizable: true },
-  { title: '人员', key: 'users', width: 90, minWidth: 80, resizable: true },
-  { title: '创建时间', dataIndex: 'createdAt', key: 'createdAt', width: 130, minWidth: 110 },
-  // 操作列固定右侧；相邻“创建时间”列不参与拖拽（fixed-right 浮层会盖住其手柄）
-  { title: '操作', key: 'action', width: 160, minWidth: 160, fixed: 'right', resizable: true },
-]
+const columns = computed<DataTableColumn[]>(() => {
+  const base: DataTableColumn[] = [
+    { title: '序号', key: 'index', width: 80 },
+    { title: '角色', dataIndex: 'name', key: 'name', width: 140, minWidth: 120, resizable: true },
+    { title: '应用权限', key: 'appCount', width: 110, minWidth: 90, resizable: true },
+    { title: '人员', key: 'users', width: 90, minWidth: 80, resizable: true },
+    { title: '创建时间', dataIndex: 'createdAt', key: 'createdAt', width: 130, minWidth: 110 },
+    // 操作列固定右侧；相邻“创建时间”列不参与拖拽（fixed-right 浮层会盖住其手柄）
+    { title: '操作', key: 'action', width: 160, minWidth: 160, fixed: 'right', resizable: true },
+  ]
+  return can('update') || can('delete') ? base : base.filter((c) => c.key !== 'action')
+})
 
 async function fetchRoles(): Promise<void> {
   loading.value = true
