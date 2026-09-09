@@ -26,6 +26,12 @@ public class MeetingBotClient : IMeetingBotClient, ITransientDependency
 {
     private const int TranscribeTimeoutSeconds = 180;
     private const int TranscribePollMs = 1500;
+    /// <summary>DGX TTS 并发闸门很小（实测 3），429 属瞬时拥塞：退避重试次数</summary>
+    private const int DgxBusyAttempts = 3;
+    /// <summary>429 重试耗尽后的错误码：调用方据此快速失败重试，而不是回退本地合成</summary>
+    private const string DgxBusyErrorCode = "DGX_TTS_BUSY";
+    /// <summary>DGX 未在响应头声明采样率时的兜底值（实测当前服务为 24000Hz）</summary>
+    private const int DefaultDgxSampleRate = 24000;
 
     private static readonly JsonSerializerOptions JsonOptions = new()
     {
@@ -104,6 +110,16 @@ public class MeetingBotClient : IMeetingBotClient, ITransientDependency
             {
                 return await DgxSynthesizeAsync(text, _options.DgxQwenTts, ct);
             }
+            catch (OperationCanceledException) when (ct.IsCancellationRequested)
+            {
+                // 调用方主动取消（前端停掉预取/断开）：不当作失败，更不能回退本地再合成一遍
+                throw;
+            }
+            catch (BusinessException ex) when (ex.Code == DgxBusyErrorCode)
+            {
+                // 上游并发已满：本地兜底更慢且开发环境常未启动，直接让调用方稍后重试
+                throw;
+            }
             catch (Exception ex)
             {
                 _logger.LogWarning(ex, "DGX Qwen3-TTS 合成失败，回退本地 CosyVoice（BaseUrl={BaseUrl}）", _options.BaseUrl);
@@ -129,25 +145,40 @@ public class MeetingBotClient : IMeetingBotClient, ITransientDependency
             response_format = "wav"
         };
 
-        using var request = new HttpRequestMessage(HttpMethod.Post, url)
-        {
-            Content = JsonContent.Create(payload, options: JsonOptions)
-        };
-        AddDgxAuth(request);
         // 裸客户端 + 长超时：工厂客户端带 resilience 60s AttemptTimeout，
         // 整段合成（长文本 3~4 分钟）会被超时强杀；裸客户端无重试/超时包装
         using var client = new HttpClient(CreateDgxStreamHandler())
         {
             Timeout = TimeSpan.FromSeconds(300)
         };
-        using var response = await client.SendAsync(request, HttpCompletionOption.ResponseContentRead, ct);
-        await EnsureDgxSuccessAsync(response, "TTS", ct);
-        var bytes = await response.Content.ReadAsByteArrayAsync(ct);
-        if (bytes.Length == 0)
+
+        // 429（并发闸门满）是瞬时拥塞：退避重试，比回退本地合成（更慢，开发环境常未启动）划算
+        for (var attempt = 1; ; attempt++)
         {
-            throw new BusinessException("DGX_TTS_EMPTY_AUDIO", "DGX TTS 返回空音频");
+            using var request = new HttpRequestMessage(HttpMethod.Post, url)
+            {
+                Content = JsonContent.Create(payload, options: JsonOptions)
+            };
+            AddDgxAuth(request);
+            using var response = await client.SendAsync(request, HttpCompletionOption.ResponseContentRead, ct);
+            if (response.StatusCode == System.Net.HttpStatusCode.TooManyRequests && attempt < DgxBusyAttempts)
+            {
+                _logger.LogWarning("DGX TTS 并发已满（429），第 {Attempt} 次退避重试", attempt);
+                await Task.Delay(TimeSpan.FromMilliseconds(400 * attempt), ct);
+                continue;
+            }
+            if (response.StatusCode == System.Net.HttpStatusCode.TooManyRequests)
+            {
+                throw new BusinessException(DgxBusyErrorCode, "语音合成服务繁忙，请稍后重试");
+            }
+            await EnsureDgxSuccessAsync(response, "TTS", ct);
+            var bytes = await response.Content.ReadAsByteArrayAsync(ct);
+            if (bytes.Length == 0)
+            {
+                throw new BusinessException("DGX_TTS_EMPTY_AUDIO", "DGX TTS 返回空音频");
+            }
+            return EnsureWavContainer(bytes, response);
         }
-        return bytes;
     }
 
     /// <summary>流式 TTS 直通（53fa 官方页同款）：POST {base}/audio/speech，
@@ -156,7 +187,11 @@ public class MeetingBotClient : IMeetingBotClient, ITransientDependency
     /// 上游 emit_frames=4 的句间停顿本来就自然，任何加工只会破坏节奏并引入拼接爆音。
     /// 客户端断开时静默结束；上游中断则异常自然冒泡，由 HTTP 层中止响应，
     /// 前端据此感知流不完整并回退逐段合成。</summary>
-    public async Task StreamTtsAsync(string text, Stream destination, CancellationToken ct = default)
+    public async Task StreamTtsAsync(
+        string text,
+        Stream destination,
+        CancellationToken ct = default,
+        Action<int>? onSampleRate = null)
     {
         var dgx = _options.DgxQwenTts;
         if (!IsDgxTtsConfigured(dgx))
@@ -173,12 +208,6 @@ public class MeetingBotClient : IMeetingBotClient, ITransientDependency
             emit_frames = 4,
         };
 
-        using var request = new HttpRequestMessage(HttpMethod.Post, url)
-        {
-            Content = JsonContent.Create(payload, options: JsonOptions)
-        };
-        AddDgxAuth(request);
-
         // 裸客户端：不走 IHttpClientFactory——resilience 的 60s AttemptTimeout 会强杀长文本流、
         // 重试会拼接两次响应产生满幅噪声；不复用连接池，避免旧 keep-alive 连接的脏状态。
         using var client = new HttpClient(CreateDgxStreamHandler())
@@ -186,25 +215,69 @@ public class MeetingBotClient : IMeetingBotClient, ITransientDependency
             Timeout = TimeSpan.FromSeconds(300)
         };
 
-        using var response = await client.SendAsync(request, HttpCompletionOption.ResponseHeadersRead, ct);
-        await EnsureDgxSuccessAsync(response, "TTS stream", ct);
-
-        await using var upstream = await response.Content.ReadAsStreamAsync(ct);
-        var buffer = new byte[8192];
-        try
+        // 429（并发闸门满）出现在响应头阶段：此时还没写出任何音频，退避重试是安全的
+        var watch = System.Diagnostics.Stopwatch.StartNew();
+        HttpResponseMessage response;
+        for (var attempt = 1; ; attempt++)
         {
-            int read;
-            while ((read = await upstream.ReadAsync(buffer.AsMemory(), ct)) > 0)
+            using var request = new HttpRequestMessage(HttpMethod.Post, url)
             {
-                await destination.WriteAsync(buffer.AsMemory(0, read), ct);
-                await destination.FlushAsync(ct);
+                Content = JsonContent.Create(payload, options: JsonOptions)
+            };
+            AddDgxAuth(request);
+            response = await client.SendAsync(request, HttpCompletionOption.ResponseHeadersRead, ct);
+            if (response.StatusCode == System.Net.HttpStatusCode.TooManyRequests && attempt < DgxBusyAttempts)
+            {
+                _logger.LogWarning("DGX TTS 流并发已满（429），第 {Attempt} 次退避重试", attempt);
+                response.Dispose();
+                await Task.Delay(TimeSpan.FromMilliseconds(400 * attempt), ct);
+                continue;
             }
+            break;
         }
-        catch (OperationCanceledException) when (ct.IsCancellationRequested)
+        var headersMs = watch.ElapsedMilliseconds;
+
+        using (response)
         {
-            // 客户端已断开/主动停止：静默结束，已播内容保留
+            await EnsureDgxSuccessAsync(response, "TTS stream", ct);
+            // 采样率以响应头为准（实测 24000Hz）：写死会让前端 4% 变速走音
+            var sampleRate = ReadSampleRate(response);
+            onSampleRate?.Invoke(sampleRate);
+
+            await using var upstream = await response.Content.ReadAsStreamAsync(ct);
+            var buffer = new byte[8192];
+            long? firstByteMs = null;
+            long totalBytes = 0;
+            try
+            {
+                int read;
+                while ((read = await upstream.ReadAsync(buffer.AsMemory(), ct)) > 0)
+                {
+                    firstByteMs ??= watch.ElapsedMilliseconds;
+                    totalBytes += read;
+                    await destination.WriteAsync(buffer.AsMemory(0, read), ct);
+                    await destination.FlushAsync(ct);
+                }
+            }
+            catch (OperationCanceledException) when (ct.IsCancellationRequested)
+            {
+                // 客户端已断开/主动停止：静默结束，已播内容保留
+            }
+            finally
+            {
+                // 便于定位上游抖动：响应头延迟、首块延迟与有效吞吐（24kHz·16bit 单声道下 48000B/s ≈ 1x 实时）
+                var audioSeconds = totalBytes / 2.0 / sampleRate;
+                _logger.LogInformation(
+                    "DGX TTS 流：响应头 {HeadersMs}ms，首块 {FirstByteMs}ms，{TotalBytes} 字节（{AudioSeconds:F1}s 音频），总耗时 {TotalMs}ms，约 {Speed:F2}x 实时",
+                    headersMs,
+                    firstByteMs ?? -1,
+                    totalBytes,
+                    audioSeconds,
+                    watch.ElapsedMilliseconds,
+                    watch.ElapsedMilliseconds > 0 ? audioSeconds * 1000 / watch.ElapsedMilliseconds : 0);
+            }
+            // 上游中断（EOF 提前/连接重置/超时）：不吞——冒泡中止响应，前端据此回退
         }
-        // 上游中断（EOF 提前/连接重置/超时）：不吞——冒泡中止响应，前端据此回退
     }
 
     /// <summary>
@@ -331,6 +404,66 @@ public class MeetingBotClient : IMeetingBotClient, ITransientDependency
 
     private static string Truncate(string value, int max)
         => value.Length <= max ? value : value[..max];
+
+    /// <summary>DGX /audio/speech 返回的音频：优先按 WAV 处理（response_format=wav 时），
+    /// 若上游给的是裸 PCM（历史行为/未按 wav 返回）则补 WAV 头，
+    /// 否则下游按 RIFF 解析会失败（缓存文件、HTMLAudio 播放、WAV 合并）。</summary>
+    private static byte[] EnsureWavContainer(byte[] payload, HttpResponseMessage response)
+    {
+        if (payload.Length >= 4
+            && payload[0] == (byte)'R' && payload[1] == (byte)'I'
+            && payload[2] == (byte)'F' && payload[3] == (byte)'F')
+        {
+            return payload;
+        }
+        return WrapPcmAsWav(payload, ReadSampleRate(response));
+    }
+
+    /// <summary>读取 DGX 响应头声明的采样率（缺省 24000，实测当前服务返回 24000Hz）。</summary>
+    private static int ReadSampleRate(HttpResponseMessage response)
+    {
+        if (response.Headers.TryGetValues("x-sample-rate", out var values)
+            && int.TryParse(values.FirstOrDefault(), out var sampleRate)
+            && sampleRate > 0)
+        {
+            return sampleRate;
+        }
+        return DefaultDgxSampleRate;
+    }
+
+    /// <summary>裸 PCM（16bit 单声道）包标准 WAV 头。</summary>
+    private static byte[] WrapPcmAsWav(byte[] pcm, int sampleRate)
+    {
+        const int bitsPerSample = 16;
+        const int channels = 1;
+        var header = new byte[44];
+        void WriteAscii(int offset, string text)
+        {
+            for (var i = 0; i < text.Length; i++)
+            {
+                header[offset + i] = (byte)text[i];
+            }
+        }
+
+        WriteAscii(0, "RIFF");
+        BitConverter.TryWriteBytes(header.AsSpan(4, 4), 36 + pcm.Length);
+        WriteAscii(8, "WAVE");
+        WriteAscii(12, "fmt ");
+        BitConverter.TryWriteBytes(header.AsSpan(16, 4), 16);
+        BitConverter.TryWriteBytes(header.AsSpan(20, 2), (short)1);
+        BitConverter.TryWriteBytes(header.AsSpan(22, 2), (short)channels);
+        BitConverter.TryWriteBytes(header.AsSpan(24, 4), sampleRate);
+        BitConverter.TryWriteBytes(header.AsSpan(28, 4), sampleRate * channels * bitsPerSample / 8);
+        BitConverter.TryWriteBytes(header.AsSpan(32, 2), (short)(channels * bitsPerSample / 8));
+        BitConverter.TryWriteBytes(header.AsSpan(34, 2), (short)bitsPerSample);
+        WriteAscii(36, "data");
+        BitConverter.TryWriteBytes(header.AsSpan(40, 4), pcm.Length);
+
+        var wav = new byte[44 + pcm.Length];
+        header.CopyTo(wav, 0);
+        pcm.CopyTo(wav, 44);
+        return wav;
+    }
 
     private static MultipartFormDataContent BuildForm()
     {

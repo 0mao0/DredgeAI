@@ -267,24 +267,6 @@ public class MeetingRecordAppServiceTests : BidCompareApplicationTestBase<BidCom
     }
 
     [Fact]
-    public async Task PreWarmSpeechLead_Should_Cache_Opening_Sentence()
-    {
-        var meeting = await _appService.CreateAsync(new PreInfoInput { Tasks = "临边防护检查" });
-        _llm.QueueResponse("各位工友，大家早上好！今天的主要任务是临边防护检查……");
-        await _appService.GenerateSpeechAsync(meeting.Id);
-
-        await _appService.PreWarmSpeechLeadAsync(meeting.Id);
-
-        (await _appService.IsSpeechLeadAudioCachedAsync(meeting.Id)).ShouldBeTrue();
-        (await _appService.GetSpeechLeadTextAsync(meeting.Id)).ShouldBe("各位工友，大家早上好！");
-
-        var audio = await _appService.GetSpeechLeadAudioAsync(meeting.Id);
-        audio.ShouldNotBeNull();
-        audio![0].ShouldBe((byte)'R');
-        _bot.TtsTexts.ShouldContain("各位工友，大家早上好！");
-    }
-
-    [Fact]
     public async Task Complete_Should_Enqueue_Background_Job_And_Return_Report()
     {
         var meeting = await _appService.CreateAsync(new PreInfoInput());

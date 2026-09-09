@@ -43,15 +43,21 @@ public class AiGatewayChatController : AbpControllerBase
             // 网关契约：X-API-Key 头（AI_GATEWAY_API_TOKEN），与 HttpLlmGateway 一致
             client.DefaultRequestHeaders.TryAddWithoutValidation("X-API-Key", _options.ApiToken);
         }
-        var upstream = await client.PostAsJsonAsync(
-            "v1/chat/stream",
-            input,
-            JsonOptions,
+        // ResponseHeadersRead：便捷方法默认 ResponseContentRead 会把整个 SSE 响应体读完才返回，
+        // 前端拿不到增量（与晨会稿流式是同一处问题）。
+        var requestMessage = new HttpRequestMessage(HttpMethod.Post, "v1/chat/stream")
+        {
+            Content = JsonContent.Create(input, options: JsonOptions)
+        };
+        var upstream = await client.SendAsync(
+            requestMessage,
+            HttpCompletionOption.ResponseHeadersRead,
             HttpContext.RequestAborted);
         upstream.EnsureSuccessStatusCode();
 
         HttpContext.Response.ContentType = "text/event-stream";
         HttpContext.Response.Headers.CacheControl = "no-cache";
+        HttpContext.Response.Headers["X-Accel-Buffering"] = "no";
         var stream = await upstream.Content.ReadAsStreamAsync(HttpContext.RequestAborted);
         return new OwnedStream(stream, upstream);
     }

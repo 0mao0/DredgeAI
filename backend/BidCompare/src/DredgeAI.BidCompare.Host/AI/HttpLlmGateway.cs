@@ -79,7 +79,18 @@ public class HttpLlmGateway : ILlmGateway, ITransientDependency
             business = "bid-compare"
         };
 
-        using var response = await client.PostAsJsonAsync("v1/chat/stream", request, JsonOptions, cancellationToken);
+        // 必须用 ResponseHeadersRead：PostAsJsonAsync 等便捷方法默认 ResponseContentRead，
+        // 会等整个 SSE 响应体读完才返回，上游流式会在本客户端被整体缓冲
+        // （表现为晨会稿一直等、生成结束后一次性出现全文）。
+        // 该客户端的 45s Timeout 只覆盖到响应头，响应体读取由 RequestAborted 取消。
+        using var requestMessage = new HttpRequestMessage(HttpMethod.Post, "v1/chat/stream")
+        {
+            Content = JsonContent.Create(request, options: JsonOptions)
+        };
+        using var response = await client.SendAsync(
+            requestMessage,
+            HttpCompletionOption.ResponseHeadersRead,
+            cancellationToken);
         if (!response.IsSuccessStatusCode)
         {
             throw await BuildGatewayExceptionAsync(response, cancellationToken);

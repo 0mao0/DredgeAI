@@ -41,13 +41,9 @@ public interface IMeetingRecordAppService : IApplicationService
 
     Task SaveSpeechAudioCacheAsync(Guid id, byte[] wav);
 
-    Task PreWarmSpeechLeadAsync(Guid id);
-
     Task<byte[]?> GetSpeechLeadAudioAsync(Guid id);
 
     Task<byte[]?> GetSpeechSegmentAudioAsync(Guid id, int index);
-
-    Task WarmSpeechSegmentsAsync(Guid id);
 
     Task<bool> IsSpeechLeadAudioCachedAsync(Guid id);
 

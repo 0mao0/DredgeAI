@@ -30,6 +30,7 @@
       v-else-if="current === 1"
       :plan="planResult"
       :loading="loading"
+      :parsing="parsing"
       @submit="handleCreate"
       @back="current = 0"
     />
@@ -155,13 +156,25 @@ function handleProjectDeleted(id: string): void {
   }
 }
 
+/**
+ * 点“下一步”立即进入确认页，用原始输入预填，AI 整理结果异步回填。
+ * 结构化解析要走一次 LLM（口述内容含大量无效文字，规则化不可靠），
+ * 但没必要让用户在第一页干等：先进页面边看边改，结果回来再替换未改动的字段。
+ */
 async function handleParse(planText: string): Promise<void> {
+  planResult.value = {
+    date: new Date().toISOString().slice(0, 10),
+    weather: '',
+    tasks: planText,
+    riskPoints: '',
+    city: '',
+  }
+  current.value = 1
   parsing.value = true
   try {
     planResult.value = await parsePlan(planText)
-    current.value = 1
   } catch (err) {
-    message.error(`整理失败：${extractErrorMessage(err)}`)
+    message.warning(`AI 整理失败，已保留你的原始输入：${extractErrorMessage(err)}`)
   } finally {
     parsing.value = false
   }
@@ -196,18 +209,23 @@ async function handleCreate(preInfo: PreInfo): Promise<void> {
   }
 }
 
-/** 流式生成晨会稿：边生成边渲染文字，结束后落库为正式 draft */
+/**
+ * 流式生成晨会稿：边生成边渲染文字。
+ * 语音不在这里预合成——TTS 服务并发闸门很小，后台预取会和播放流抢算力导致卡顿；
+ * 开场句由服务端 WarmSpeechAudioJob 预热，播放时走“开场句缓存 + 实时流”。
+ */
 async function streamSpeechDraftFlow(): Promise<void> {
   if (!meeting.value) return
+  const meetingId = meeting.value.id
   streaming.value = true
   streamingText.value = ''
   try {
-    await streamSpeechDraft(meeting.value.id, (delta) => {
+    await streamSpeechDraft(meetingId, (delta) => {
       streamingText.value += delta
     })
     const content = streamingText.value
     streamingText.value = ''
-    draft.value = { id: meeting.value.id, content, status: 'generated', updatedAt: new Date().toISOString() }
+    draft.value = { id: meetingId, content, status: 'generated', updatedAt: new Date().toISOString() }
   } catch (err) {
     streamingText.value = ''
     draft.value = null
