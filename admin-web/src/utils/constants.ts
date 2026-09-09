@@ -5,7 +5,8 @@ export const USE_MOCK = import.meta.env.DEV && import.meta.env.VITE_USE_MOCK !==
 /** 按模块控制 mock：设为 false 则该模块请求直连真实 API */
 export const MOCK_MODULES: Record<string, boolean> = {
   dashboard: true,
-  permissions: true,
+  // 应用配置直连真实后端（权限码唯一来源：ABP grantedPolicies）
+  appConfig: false,
   // 应用目录直连真实后端（admin 发布管理 / user-web 应用列表共享同一份数据）
   applications: false,
   datasource: true,

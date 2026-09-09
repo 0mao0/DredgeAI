@@ -110,7 +110,6 @@ export const urls = {
   adminAppOrderReset: '/bidcompare/app-order/reset',
   userAppOrder: '/bidcompare/app-order/user',
   userAppDefaultOrder: '/bidcompare/app-order/user',
-  permissions: '/permissions',
   orgUsers: '/org-users',
   orgUserStatus: '/org-users/:id/status',
   orgUserRoles: '/org-users/:id/roles',
@@ -120,6 +119,7 @@ export const urls = {
   rolePermissions: '/roles/:id/permissions',
   datasources: '/datasources',
   adminProfile: '/base/account/my-profile',
+  appConfig: '/base/application-configuration',
 
   // 知识库-标准规范（admin-web）
   adminStandards: '/standards',

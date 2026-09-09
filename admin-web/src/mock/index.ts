@@ -4,7 +4,6 @@ import type { AxiosHeaders, AxiosRequestConfig } from 'axios'
 import request from '@/api/request'
 import { API_BASE_URL, USE_MOCK, MOCK_MODULES } from '@/utils/constants'
 import { registerDashboardMock } from './routes/dashboard'
-import { registerPermissionMock } from './routes/permissions'
 import { registerApplicationMock } from './routes/applications'
 import { registerDatasourceMock } from './routes/datasource'
 import { registerAnalyticsMock } from './routes/analytics'
@@ -63,7 +62,7 @@ export function registerMock(): void {
   // 按模块注册 mock，模块开关关闭则该模块请求直连真实 API
   const modules: { key: string, register?: (m: MockAdapter, w: typeof wrap) => void, passthrough?: RegExp }[] = [
     { key: 'dashboard', register: registerDashboardMock },
-    { key: 'permissions', register: registerPermissionMock },
+    { key: 'appConfig', passthrough: /^\/base\/application-configuration/ },
     { key: 'applications', register: registerApplicationMock, passthrough: /^\/bidcompare\/app-catalog/ },
     { key: 'datasource', register: registerDatasourceMock },
     { key: 'analytics', register: registerAnalyticsMock },
