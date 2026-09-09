@@ -136,8 +136,18 @@ interface MenuItemNode {
   type?: 'divider'
 }
 
-const menuTree = manifestToMenu(adminAppManifests, adminMenuGroups)
-const manifestLeafKeys = collectMenuKeys(menuTree)
+// 完整树用于与动态应用列表去重；侧边栏用权限过滤后的树
+const fullMenuTree = manifestToMenu(adminAppManifests, adminMenuGroups)
+const manifestLeafKeys = collectMenuKeys(fullMenuTree)
+
+// 与路由守卫保持一致的权限语义：'*' 为超级管理员通配
+function canAccessMenu(permission: string): boolean {
+  return appStore.permissions.includes('*') || appStore.isGranted(permission)
+}
+
+const menuTree = computed(() =>
+  manifestToMenu(adminAppManifests, adminMenuGroups, canAccessMenu),
+)
 
 function resolveIcon(name?: string): (() => VNode) | undefined {
   if (!name) return undefined
@@ -173,7 +183,7 @@ function appToMenuItem(app: AppMenuItem): MenuItemNode {
 }
 
 const menuItems = computed<MenuItemNode[]>(() => {
-  const items = toMenuItems(menuTree)
+  const items = toMenuItems(menuTree.value)
 
   // 在基础配置组后插入分隔线
   const configIdx = items.findIndex((i) => i.key === 'base-config')

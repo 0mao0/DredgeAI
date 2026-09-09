@@ -2,7 +2,7 @@ import type { AxiosInstance, AxiosRequestConfig } from 'axios'
 
 /** 创建 request 实例的参数 */
 export interface CreateRequestOptions {
-  /** axios baseURL，例如 '/api' 或 '/api/admin' */
+  /** axios baseURL，例如 '/api' */
   baseURL: string
   /** localStorage 中存储 token 的 key */
   tokenKey: string

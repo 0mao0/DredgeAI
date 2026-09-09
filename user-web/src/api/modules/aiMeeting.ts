@@ -141,7 +141,7 @@ export function synthesizeSpeech(text: string, timeout = MediaTimeout): Promise<
  */
 export async function* streamSpeechAudio(text: string): AsyncGenerator<Uint8Array> {
   const token = getCookie(STORAGE_TOKEN_KEY)
-  const res = await fetch(`${API_BASE_URL}meeting/tts/stream`, {
+  const res = await fetch(`${API_BASE_URL}bidcompare/meeting-records/tts/stream`, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',

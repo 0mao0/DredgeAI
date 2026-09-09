@@ -35,10 +35,10 @@ export function registerMeetingMock(
   wrap: (h: () => unknown) => () => Promise<[number, unknown]>,
 ): void {
   const meetingId = (url: string | undefined): string =>
-    url?.match(/\/meeting\/records\/([^/]+)\//)?.[1] ?? ''
+    url?.match(/\/meeting-records\/([^/]+)\//)?.[1] ?? ''
 
-  mock.onPost('/api/meeting/records').reply((config) => [200, createMockMeeting(JSON.parse(config.data))])
-  mock.onPost('/api/meeting/parse-plan').reply((config) => {
+  mock.onPost('/api/bidcompare/meeting-records').reply((config) => [200, createMockMeeting(JSON.parse(config.data))])
+  mock.onPost('/api/bidcompare/meeting-records/parse-plan').reply((config) => {
     const text = JSON.parse(config.data).planText ?? ''
     return [
       200,
@@ -51,7 +51,7 @@ export function registerMeetingMock(
       },
     ]
   })
-  mock.onGet('/api/meeting/records').reply((config) => {
+  mock.onGet('/api/bidcompare/meeting-records').reply((config) => {
     const limit = Number(config.params?.maxCount ?? 20)
     return [
       200,
@@ -67,30 +67,30 @@ export function registerMeetingMock(
         })),
     ]
   })
-  mock.onGet(/\/api\/meeting\/records\/[^/]+\/speech\/audio$/).reply(() => {
+  mock.onGet(/\/api\/bidcompare\/meeting-records\/[^/]+\/speech\/audio$/).reply(() => {
     return [200, silenceWav]
   })
-  mock.onGet(/\/api\/meeting\/records\/[^/]+\/speech\/audio\/segment\/\d+$/).reply(() => [200, silenceWav])
-  mock.onPost('/api/meeting/tts').reply(() => [200, silenceWav])
-  mock.onPost('/api/meeting/asr').reply(() => [
+  mock.onGet(/\/api\/bidcompare\/meeting-records\/[^/]+\/speech\/audio\/segment\/\d+$/).reply(() => [200, silenceWav])
+  mock.onPost('/api/bidcompare/meeting-records/tts').reply(() => [200, silenceWav])
+  mock.onPost('/api/bidcompare/meeting-records/asr').reply(() => [
     200,
     '今日任务：基坑支护施工与临边防护检查，注意高处作业安全。',
   ])
-  mock.onPost('/api/meeting/knowledge/documents').reply(() => [
+  mock.onPost('/api/bidcompare/knowledge-documents').reply(() => [
     200,
     { docId: `doc-${Date.now()}`, status: { state: 'succeeded', progress: 100, stage: 'done', stageMessage: null } },
   ])
-  mock.onGet(/\/api\/meeting\/knowledge\/documents\/[^/]+\/status$/).reply(() => [
+  mock.onGet(/\/api\/bidcompare\/knowledge-documents\/[^/]+\/status$/).reply(() => [
     200,
     { state: 'succeeded', progress: 100, stage: 'done', stageMessage: null },
   ])
-  mock.onPost(/\/api\/meeting\/records\/[^/]+\/speech\/generate$/).reply((config) => {
+  mock.onPost(/\/api\/bidcompare\/meeting-records\/[^/]+\/speech\/generate$/).reply((config) => {
     return [200, generateMockSpeech(meetingId(config.url))]
   })
-  mock.onGet(/\/api\/meeting\/records\/[^/]+\/speech$/).reply((config) => {
+  mock.onGet(/\/api\/bidcompare\/meeting-records\/[^/]+\/speech$/).reply((config) => {
     return [200, mockMeetings.find((m) => m.id === meetingId(config.url))?.speechDraft ?? null]
   })
-  mock.onPut(/\/api\/meeting\/records\/[^/]+\/speech$/).reply((config) => {
+  mock.onPut(/\/api\/bidcompare\/meeting-records\/[^/]+\/speech$/).reply((config) => {
     const meeting = mockMeetings.find((m) => m.id === meetingId(config.url))
     if (meeting?.speechDraft) {
       meeting.speechDraft.content = JSON.parse(config.data).content
@@ -98,12 +98,12 @@ export function registerMeetingMock(
     }
     return [200, meeting?.speechDraft ?? null]
   })
-  mock.onPost(/\/api\/meeting\/records\/[^/]+\/start$/).reply((config) => {
+  mock.onPost(/\/api\/bidcompare\/meeting-records\/[^/]+\/start$/).reply((config) => {
     const meeting = mockMeetings.find((m) => m.id === meetingId(config.url))
     if (meeting) meeting.status = 'rollcall'
     return [200, meeting]
   })
-  mock.onPost(/\/api\/meeting\/records\/[^/]+\/attendance\/recognize$/).reply((config) => {
+  mock.onPost(/\/api\/bidcompare\/meeting-records\/[^/]+\/attendance\/recognize$/).reply((config) => {
     const meeting = mockMeetings.find((m) => m.id === meetingId(config.url))
     if (meeting) {
       meeting.attendance = [
@@ -113,10 +113,10 @@ export function registerMeetingMock(
     }
     return [200, { faces: meeting?.attendance ?? [] }]
   })
-  mock.onGet(/\/api\/meeting\/records\/[^/]+\/attendance$/).reply((config) => {
+  mock.onGet(/\/api\/bidcompare\/meeting-records\/[^/]+\/attendance$/).reply((config) => {
     return [200, mockMeetings.find((m) => m.id === meetingId(config.url))?.attendance ?? []]
   })
-  mock.onPost(/\/api\/meeting\/records\/[^/]+\/qa$/).reply((config) => {
+  mock.onPost(/\/api\/bidcompare\/meeting-records\/[^/]+\/qa$/).reply((config) => {
     const id = meetingId(config.url)
     const q = JSON.parse(config.data).question
     const rec: QaRecordDto = {
@@ -130,7 +130,7 @@ export function registerMeetingMock(
     mockMeetings.find((m) => m.id === id)?.qaRecords.push(rec)
     return [200, rec]
   })
-  mock.onPost(/\/api\/meeting\/records\/[^/]+\/qa\/audio$/).reply((config) => {
+  mock.onPost(/\/api\/bidcompare\/meeting-records\/[^/]+\/qa\/audio$/).reply((config) => {
     const id = meetingId(config.url)
     const rec: QaRecordDto = {
       id: `qa-${Date.now()}`,
@@ -143,10 +143,10 @@ export function registerMeetingMock(
     mockMeetings.find((m) => m.id === id)?.qaRecords.push(rec)
     return [200, rec]
   })
-  mock.onPost(/\/api\/meeting\/records\/[^/]+\/recording$/).reply((config) => {
+  mock.onPost(/\/api\/bidcompare\/meeting-records\/[^/]+\/recording$/).reply((config) => {
     return [200, mockMeetings.find((m) => m.id === meetingId(config.url)) ?? null]
   })
-  mock.onPost(/\/api\/meeting\/records\/[^/]+\/complete$/).reply((config) => {
+  mock.onPost(/\/api\/bidcompare\/meeting-records\/[^/]+\/complete$/).reply((config) => {
     const id = meetingId(config.url)
     const meeting = mockMeetings.find((m) => m.id === id)
     if (meeting) {
@@ -162,11 +162,11 @@ export function registerMeetingMock(
     }
     return [200, meeting]
   })
-  mock.onGet(/\/api\/meeting\/records\/[^/]+\/report$/).reply((config) => {
+  mock.onGet(/\/api\/bidcompare\/meeting-records\/[^/]+\/report$/).reply((config) => {
     return [200, mockMeetings.find((m) => m.id === meetingId(config.url))?.report ?? null]
   })
-  mock.onGet('/api/meeting/workers').reply(wrap(() => mockWorkers))
-  mock.onPost('/api/meeting/workers').reply((config) => {
+  mock.onGet('/api/bidcompare/meeting-workers').reply(wrap(() => mockWorkers))
+  mock.onPost('/api/bidcompare/meeting-workers').reply((config) => {
     const input = JSON.parse(config.data)
     const existing = mockWorkers.find((w) => w.employeeNo === input.employeeNo)
     if (existing) return [200, existing]
@@ -180,7 +180,7 @@ export function registerMeetingMock(
     mockWorkers.push(worker)
     return [200, worker]
   })
-  mock.onPost('/api/meeting/workers/recognize-id-card').reply(() => [
+  mock.onPost('/api/bidcompare/meeting-workers/recognize-id-card').reply(() => [
     200,
     {
       name: '张建国',
@@ -192,8 +192,8 @@ export function registerMeetingMock(
       rawText: '',
     },
   ])
-  mock.onPost(/\/api\/meeting\/workers\/[^/]+\/face$/).reply((config) => {
-    const id = config.url?.match(/\/api\/meeting\/workers\/([^/]+)\/face$/)?.[1] ?? ''
+  mock.onPost(/\/api\/bidcompare\/meeting-workers\/[^/]+\/face$/).reply((config) => {
+    const id = config.url?.match(/\/api\/bidcompare\/meeting-workers\/([^/]+)\/face$/)?.[1] ?? ''
     const worker = mockWorkers.find((w) => w.id === id)
     if (worker) worker.faceStatus = 'enrolled'
     return [200, worker ?? mockWorkers[0]]

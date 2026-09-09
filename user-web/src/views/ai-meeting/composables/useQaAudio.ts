@@ -5,7 +5,7 @@ import { getQaAudio } from '@/api/modules/aiMeeting'
 
 /**
  * 问答答案语音播放：语音提问后新记录到达自动播报；任意答案可手动重播。
- * 依赖 meeting-bot TTS（后端 GET /api/meeting/qa/{id}/audio 返回 WAV）。
+ * 依赖 meeting-bot TTS（后端 GET /api/bidcompare/meeting-records/qa/{id}/audio 返回 WAV）。
  */
 export function useQaAudio(
   qaRecords: Ref<QaRecordDto[]>,

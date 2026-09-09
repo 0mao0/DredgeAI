@@ -22,6 +22,7 @@ export const adminAppManifests: AppManifest[] = [
     component: () => import('@/views/org-users/index.vue'),
     defaultVisible: true,
     parentKeys: ['users'],
+    requiredPermission: 'Base.Users',
   },
   {
     id: 'permissions',
@@ -32,18 +33,9 @@ export const adminAppManifests: AppManifest[] = [
     component: () => import('@/views/permissions/index.vue'),
     defaultVisible: true,
     parentKeys: ['users'],
+    requiredPermission: 'Base.Roles',
   },
   // ─── 开发管理（分组） ──────────────────────────────────
-  {
-    id: 'menu-config',
-    route: '/menu-config',
-    name: 'MenuConfig',
-    title: '菜单配置',
-    icon: 'MenuOutlined',
-    component: () => import('@/views/dev/menu-config.vue'),
-    parentKeys: ['dev'],
-    requiredPermission: 'dev',
-  },
   {
     id: 'task-scheduler',
     route: '/task-scheduler',
@@ -52,7 +44,6 @@ export const adminAppManifests: AppManifest[] = [
     icon: 'ScheduleOutlined',
     component: () => import('@/views/dev/task-scheduler.vue'),
     parentKeys: ['dev'],
-    requiredPermission: 'dev',
   },
   {
     id: 'logs',
@@ -62,7 +53,7 @@ export const adminAppManifests: AppManifest[] = [
     icon: 'FileTextOutlined',
     component: () => import('@/views/dev/logs.vue'),
     parentKeys: ['dev'],
-    requiredPermission: 'dev',
+    requiredPermission: 'Base.AuditLogs',
   },
   {
     id: 'platform',
@@ -72,7 +63,6 @@ export const adminAppManifests: AppManifest[] = [
     icon: 'InfoCircleOutlined',
     component: () => import('@/views/dev/platform.vue'),
     parentKeys: ['dev'],
-    requiredPermission: 'dev',
   },
   // ─── 基础配置（分组） ─────────────────────────────────
   {
@@ -92,6 +82,7 @@ export const adminAppManifests: AppManifest[] = [
         icon: 'BookOutlined',
         component: () => import('@/views/base-config/dict.vue'),
         parentKeys: ['base-config'],
+        requiredPermission: 'Base.DictTypes',
       },
     ],
   },

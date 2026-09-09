@@ -19,7 +19,7 @@ class Settings(BaseSettings):
     # 入站校验令牌；空表示关闭（开发环境）
     api_token: str = ""
     # 用量上报（ABP ingest 端点）
-    usage_report_url: str = "http://localhost:44361/api/ai-gateway/usage-records"
+    usage_report_url: str = "http://localhost:44361/api/bidcompare/ai-gateway/usage-records"
     usage_report_enabled: bool = True
     ingest_token: str = ""
 

@@ -25,7 +25,7 @@ namespace DredgeAI.BidCompare.MeetingBot;
 /// <summary>
 /// AI 晨会编排：会前录入 → 晨会稿生成（AnGIneer 检索 + LLM）→ 点名 → 问答 → 会后报告。
 /// </summary>
-[RemoteService(false)] // 精确路由由 HttpApi 显式 Controller 暴露（/api/meeting/records）
+[RemoteService(false)] // 精确路由由 HttpApi 显式 Controller 暴露（/api/bidcompare/meeting-records）
 public class MeetingRecordAppService : ApplicationService, IMeetingRecordAppService
 {
     private const double RecognizeThreshold = 0.6;

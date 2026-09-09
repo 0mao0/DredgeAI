@@ -68,7 +68,7 @@ public class DredgeBlobContainer_Tests : DredgeAICoreDomainTestBase
         // 删除前取签名 URL：FileSystem provider 对已删对象返回 null。
         var url = await container.GetDownloadUrlAsync(blobName);
         url.ShouldNotBeNull();
-        url.ShouldStartWith("/api/compare/storage/file?key=");
+        url.ShouldStartWith("/api/bidcompare/storage/file?key=");
         url.ShouldContain(Uri.EscapeDataString(blobName));
 
         (await container.DeleteByPrefixAsync($"{run}/")).ShouldBe(1);

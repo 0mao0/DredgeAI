@@ -52,6 +52,9 @@ export interface MenuGroupMeta {
   icon?: string
 }
 
+/** 菜单权限检查函数：返回是否允许访问某个权限码 */
+export type MenuPermissionChecker = (permission: string) => boolean
+
 /**
  * 将 AppManifest 数组转换为菜单树，与 manifestToRoutes 共用同一份数据源，
  * 消除「路由 + Layout 菜单」双重维护。
@@ -62,8 +65,17 @@ export interface MenuGroupMeta {
  * - 仅带 parentKeys 的叶子 manifest 归入 parentKeys[0] 对应分组；
  *   分组无 manifest 定义者时从 groups 参数取元数据
  * - 输出顺序与 manifest 数组顺序一致，分组在首次遇到时插入
+ * - 可选 isGranted 按 manifest.requiredPermission 过滤可见菜单；过滤后
+ *   没有可见子节点的分组会被剪除。默认放行全部，供角色权限配置页展示完整树
  */
-export function manifestToMenu(manifests: AppManifest[], groups: Record<string, MenuGroupMeta> = {}): MenuNode[] {
+export function manifestToMenu(
+  manifests: AppManifest[],
+  groups: Record<string, MenuGroupMeta> = {},
+  isGranted: MenuPermissionChecker = () => true,
+): MenuNode[] {
+  const canAccess = (m: AppManifest): boolean =>
+    !m.requiredPermission || isGranted(m.requiredPermission)
+
   const isMenuEntry = (m: AppManifest): boolean =>
     (m.menuPlacement ?? 'main') === 'main' && !m.route.includes(':')
 
@@ -88,19 +100,22 @@ export function manifestToMenu(manifests: AppManifest[], groups: Record<string, 
   }
 
   function toNode(m: AppManifest): MenuNode | null {
-    if (!isMenuEntry(m)) return null
+    if (!isMenuEntry(m) || !canAccess(m)) return null
     if (m.children && m.children.length > 0) {
       const children = m.children.map(toNode).filter((n): n is MenuNode => n !== null)
+      if (children.length === 0) return null
       return { key: groupKeyOf(m), title: m.title, icon: m.icon, children }
     }
     return { key: m.route, title: m.title, icon: m.icon }
   }
 
   for (const m of manifests) {
-    if (!isMenuEntry(m)) continue
+    if (!isMenuEntry(m) || !canAccess(m)) continue
     if (m.children && m.children.length > 0) {
+      const children = m.children.map(toNode).filter((n): n is MenuNode => n !== null)
+      if (children.length === 0) continue
       const g = ensureGroup(groupKeyOf(m), { title: m.title, icon: m.icon })
-      g.children!.push(...m.children.map(toNode).filter((n): n is MenuNode => n !== null))
+      g.children!.push(...children)
     } else if (m.parentKeys && m.parentKeys.length > 0) {
       const g = ensureGroup(m.parentKeys[0], groups[m.parentKeys[0]])
       g.children!.push({ key: m.route, title: m.title, icon: m.icon })
@@ -109,7 +124,8 @@ export function manifestToMenu(manifests: AppManifest[], groups: Record<string, 
     }
   }
 
-  return roots
+  // 剪除没有可见子节点的分组
+  return roots.filter((n) => !n.children || n.children.length > 0)
 }
 
 /** 收集菜单树中所有叶子 key（路由路径），用于与动态菜单项去重 */

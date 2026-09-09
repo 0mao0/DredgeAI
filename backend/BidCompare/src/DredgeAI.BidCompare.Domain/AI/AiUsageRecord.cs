@@ -5,7 +5,7 @@ using Volo.Abp.Domain.Entities.Auditing;
 namespace DredgeAI.BidCompare.AI;
 
 /// <summary>
-/// LLM 调用用量记录：由 services/ai-gateway 经 POST /api/ai-gateway/usage-records 上报，
+/// LLM 调用用量记录：由 services/ai-gateway 经 POST /api/bidcompare/ai-gateway/usage-records 上报，
 /// 供 admin-web「调用记录 / 用量分析」与后续限额/告警使用。
 /// </summary>
 public class AiUsageRecord : FullAuditedEntity<Guid>

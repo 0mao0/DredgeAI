@@ -46,11 +46,18 @@ const router = createRouter({
 router.beforeEach(async (to) => {
   if (to.meta.requiresAuth === false) return true
   await useAuthStore().ensureFreshToken()
+  // 登录后第一时间拉取应用配置（幂等 + 单飞，仅首次受保护导航真正发请求）；
+  // 失败不阻塞导航：页面可降级运行，下一次导航自动重试
+  try {
+    await useAppStore().fetchAppConfig()
+  } catch (e) {
+    console.warn('[app] 应用配置加载失败', e)
+  }
   return true
 })
 
-// auth 守卫先于 permission 守卫注册（installGuards 内部顺序）：未登录先跳登录页，
-// 避免未带 token 触发 getPermissions 的 401 噪音。
+// 权限码唯一来源：应用配置 grantedPolicies（由上方守卫先行加载，注册顺序在
+// installGuards 的 permission 守卫之前，此处同步直读即可）。
 installGuards(router, {
   appName: '智浚AI',
   enableTitle: false,
@@ -58,15 +65,7 @@ installGuards(router, {
   tokenKey: STORAGE_TOKEN_KEY,
   loginPath: LOGIN_PATH,
   getToken: () => getCookie(STORAGE_TOKEN_KEY),
-  getPermissions: async () => {
-    const store = useAppStore()
-    try {
-      await store.fetchProfile()
-    } catch {
-      return []
-    }
-    return store.permissions
-  },
+  getPermissions: () => useAppStore().permissions,
 })
 
 export default router

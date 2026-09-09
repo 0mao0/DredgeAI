@@ -20,7 +20,7 @@ namespace DredgeAI.BidCompare.MeetingBot;
 /// <summary>
 /// 工人档案与人脸库：花名册批量导入（xlsx/zip）+ 现场补录人脸。
 /// </summary>
-[RemoteService(false)] // 精确路由由 HttpApi 显式 Controller 暴露（/api/meeting/workers）
+[RemoteService(false)] // 精确路由由 HttpApi 显式 Controller 暴露（/api/bidcompare/meeting-workers）
 public class WorkerProfileAppService : ApplicationService, IWorkerProfileAppService
 {
     private readonly IRepository<WorkerProfile, Guid> _workers;

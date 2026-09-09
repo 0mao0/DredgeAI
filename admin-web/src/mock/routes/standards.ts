@@ -125,12 +125,12 @@ function buildAnalysis(standard: StandardProperty): StandardAIAnalysis {
 export function registerStandardsMock(
   mock: MockAdapter,
 ): void {
-  mock.onGet('/api/admin/standard/document').reply((config) => {
+  mock.onGet('/api/standard/document').reply((config) => {
     const id = (config.params as Record<string, string>)?.id
     return [200, standardDocuments.find((d) => d.id === id) || null]
   })
 
-  mock.onGet('/api/admin/standards').reply((config) => {
+  mock.onGet('/api/standards').reply((config) => {
     const params = (config.params || {}) as Record<string, unknown>
     let items = [...adminStandards]
     const keyword = String(params.keyword || '').trim().toLowerCase()
@@ -150,7 +150,7 @@ export function registerStandardsMock(
     }]
   })
 
-  mock.onPost('/api/admin/standards/preview').reply(async (config) => {
+  mock.onPost('/api/standards/preview').reply(async (config) => {
     const file = formDataFile(config.data)
     if (!file) return [400, {}]
     const baseName = file.name.replace(/\.pdf$/i, '').trim() || '未命名标准'
@@ -172,7 +172,7 @@ export function registerStandardsMock(
     return [200, { name: baseName, code, uploader: '管理员', industry, nature, level, status, issuer, publishYear, description }]
   })
 
-  mock.onPost('/api/admin/standards').reply(async (config) => {
+  mock.onPost('/api/standards').reply(async (config) => {
     const file = formDataFile(config.data)
     const metadata = formDataMetadata(config.data)
     if (!file || !metadata) return [400, {}]
@@ -186,7 +186,7 @@ export function registerStandardsMock(
     return [200, record]
   })
 
-  mock.onPost('/api/admin/standards/batch-delete').reply((config) => {
+  mock.onPost('/api/standards/batch-delete').reply((config) => {
     const body = parseJsonBody(config.data)
     const ids: string[] = Array.isArray(body.ids) ? (body.ids as string[]) : []
     let deletedCount = 0
@@ -200,7 +200,7 @@ export function registerStandardsMock(
     return [200, deletedCount]
   })
 
-  mock.onPost('/api/admin/standards/batch-parse').reply((config) => {
+  mock.onPost('/api/standards/batch-parse').reply((config) => {
     const body = parseJsonBody(config.data)
     const ids: string[] = Array.isArray(body.ids) ? (body.ids as string[]) : []
     const results: StandardParseBatchResult[] = ids.map((id) => {
@@ -211,8 +211,8 @@ export function registerStandardsMock(
     return [200, results]
   })
 
-  mock.onDelete(/\/api\/admin\/standards\/.+$/).reply((config) => {
-    const id = matchPattern(config.url, '/api/admin/standards')
+  mock.onDelete(/\/api\/standards\/.+$/).reply((config) => {
+    const id = matchPattern(config.url, '/api/standards')
     if (!id) return [404, {}]
     const idx = adminStandards.findIndex((s) => s.id === id)
     if (idx === -1) return [404, {}]
@@ -220,8 +220,8 @@ export function registerStandardsMock(
     return [204]
   })
 
-  mock.onPut(/\/api\/admin\/standards\/.+$/).reply((config) => {
-    const id = matchPattern(config.url, '/api/admin/standards')
+  mock.onPut(/\/api\/standards\/.+$/).reply((config) => {
+    const id = matchPattern(config.url, '/api/standards')
     if (!id) return [404, {}]
     const idx = adminStandards.findIndex((s) => s.id === id)
     if (idx === -1) return [404, {}]
@@ -230,16 +230,16 @@ export function registerStandardsMock(
     return [200, adminStandards[idx]]
   })
 
-  mock.onPost(/\/api\/admin\/standards\/.+\/parse$/).reply((config) => {
-    const id = matchPattern(config.url, '/api/admin/standards')
+  mock.onPost(/\/api\/standards\/.+\/parse$/).reply((config) => {
+    const id = matchPattern(config.url, '/api/standards')
     if (!id) return [404, {}]
     const standard = adminStandards.find((s) => s.id === id)
     if (!standard) return [404, {}]
     return [200, buildAnalysis(standard)]
   })
 
-  mock.onPut(/\/api\/admin\/standards\/.+\/enabled$/).reply((config) => {
-    const id = matchPattern(config.url, '/api/admin/standards')?.split('/')[0]
+  mock.onPut(/\/api\/standards\/.+\/enabled$/).reply((config) => {
+    const id = matchPattern(config.url, '/api/standards')?.split('/')[0]
     if (!id) return [404, {}]
     const idx = adminStandards.findIndex((s) => s.id === id)
     if (idx === -1) return [404, {}]

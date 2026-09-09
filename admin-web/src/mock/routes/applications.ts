@@ -35,17 +35,17 @@ const defaultCategories = [
 ]
 
 export function registerApplicationMock(mock: MockAdapter, wrap: (handler: () => unknown) => () => Promise<[number, unknown]>): void {
-  mock.onGet('/api/admin/applications').reply(wrap(() => mockApplications))
+  mock.onGet('/api/bidcompare/app-catalog').reply(wrap(() => mockApplications))
 
-  mock.onGet('/api/admin/applications/categories').reply(wrap(() => defaultCategories))
+  mock.onGet('/api/bidcompare/app-catalog/categories').reply(wrap(() => defaultCategories))
 
-  mock.onGet('/api/admin/applications/sub').reply((config) => {
+  mock.onGet('/api/bidcompare/app-catalog/sub').reply((config) => {
     const appId = config.params?.appId as string | undefined
     const app = mockApplications.find((a) => a.id === appId)
     return [200, app?.subApps ?? []]
   })
 
-  mock.onPost('/api/admin/applications/sub/status').reply((config) => {
+  mock.onPost('/api/bidcompare/app-catalog/sub/status').reply((config) => {
     const body = parseBody(config.data) as { subId: string, status: '已发布' | '已下架' }
     for (const app of mockApplications) {
       const sub = app.subApps?.find((s) => s.id === body.subId)
@@ -54,21 +54,21 @@ export function registerApplicationMock(mock: MockAdapter, wrap: (handler: () =>
     return [200, null]
   })
 
-  mock.onPost('/api/admin/applications/status').reply((config) => {
+  mock.onPost('/api/bidcompare/app-catalog/status').reply((config) => {
     const body = parseBody(config.data) as { appId: string, status: '运营中' | '已下架' }
     const app = mockApplications.find((a) => a.id === body.appId)
     if (app) app.status = body.status
     return [200, null]
   })
 
-  mock.onPost('/api/admin/applications/category').reply((config) => {
+  mock.onPost('/api/bidcompare/app-catalog/category').reply((config) => {
     const body = parseBody(config.data) as { appId: string, category: string }
     const app = mockApplications.find((a) => a.id === body.appId)
     if (app) app.category = body.category as ApplicationItem['category']
     return [200, null]
   })
 
-  mock.onPost('/api/admin/applications/sub/category').reply((config) => {
+  mock.onPost('/api/bidcompare/app-catalog/sub/category').reply((config) => {
     const body = parseBody(config.data) as { subId: string, category: string }
     for (const app of mockApplications) {
       const sub = app.subApps?.find((s) => s.id === body.subId)
@@ -77,14 +77,14 @@ export function registerApplicationMock(mock: MockAdapter, wrap: (handler: () =>
     return [200, null]
   })
 
-  mock.onPost('/api/admin/applications/icon').reply((config) => {
+  mock.onPost('/api/bidcompare/app-catalog/icon').reply((config) => {
     const body = parseBody(config.data) as { appId: string, icon: string }
     const app = mockApplications.find((a) => a.id === body.appId)
     if (app) app.icon = body.icon
     return [200, null]
   })
 
-  mock.onPost('/api/admin/applications/sub/icon').reply((config) => {
+  mock.onPost('/api/bidcompare/app-catalog/sub/icon').reply((config) => {
     const body = parseBody(config.data) as { subId: string, icon: string }
     for (const app of mockApplications) {
       const sub = app.subApps?.find((s) => s.id === body.subId)
@@ -93,14 +93,14 @@ export function registerApplicationMock(mock: MockAdapter, wrap: (handler: () =>
     return [200, null]
   })
 
-  mock.onPost('/api/admin/applications/scope').reply((config) => {
+  mock.onPost('/api/bidcompare/app-catalog/scope').reply((config) => {
     const body = parseBody(config.data) as { appId: string, scope: '所有' | '部分' }
     const app = mockApplications.find((a) => a.id === body.appId)
     if (app) app.scope = body.scope
     return [200, null]
   })
 
-  mock.onPost('/api/admin/applications/sub/scope').reply((config) => {
+  mock.onPost('/api/bidcompare/app-catalog/sub/scope').reply((config) => {
     const body = parseBody(config.data) as { subId: string, scope: '所有' | '部分' }
     for (const app of mockApplications) {
       const sub = app.subApps?.find((s) => s.id === body.subId)
@@ -109,12 +109,12 @@ export function registerApplicationMock(mock: MockAdapter, wrap: (handler: () =>
     return [200, null]
   })
 
-  mock.onGet('/api/admin/applications/collection-categories').reply((config) => {
+  mock.onGet('/api/bidcompare/app-catalog/collection-categories').reply((config) => {
     const appId = config.params?.appId as string | undefined
     return [200, collectionCategories[appId ?? ''] ?? []]
   })
 
-  mock.onPost('/api/admin/applications/collection-categories/publish').reply((config) => {
+  mock.onPost('/api/bidcompare/app-catalog/collection-categories/publish').reply((config) => {
     const { appId, categoryKey } = parseBody(config.data) as { appId: string, categoryKey: string }
     const app = mockApplications.find((a) => a.id === appId)
     const cat = collectionCategories[appId]?.find((c) => c.key === categoryKey)

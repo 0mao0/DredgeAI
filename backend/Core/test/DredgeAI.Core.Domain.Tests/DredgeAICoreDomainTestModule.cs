@@ -32,7 +32,7 @@ public class DredgeAICoreDomainTestModule : AbpModule
         Configure<BlobFileSystemSigningOptions>(o =>
         {
             o.SigningSecret = "test-secret";
-            o.DownloadEndpointPath = "/api/compare/storage/file";
+            o.DownloadEndpointPath = "/api/bidcompare/storage/file";
         });
     }
 }

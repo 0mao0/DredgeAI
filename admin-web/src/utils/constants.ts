@@ -5,12 +5,13 @@ export const USE_MOCK = import.meta.env.DEV && import.meta.env.VITE_USE_MOCK !==
 /** 按模块控制 mock：设为 false 则该模块请求直连真实 API */
 export const MOCK_MODULES: Record<string, boolean> = {
   dashboard: true,
-  permissions: true,
+  // 应用配置直连真实后端（权限码唯一来源：ABP grantedPolicies）
+  appConfig: false,
   // 应用目录直连真实后端（admin 发布管理 / user-web 应用列表共享同一份数据）
   applications: false,
   datasource: true,
   analytics: true,
-  profile: true,
+  profile: false,
   apikey: true,
   dubbing: true,
   orgUsers: true,
@@ -20,7 +21,7 @@ export const MOCK_MODULES: Record<string, boolean> = {
   appOrder: false,
 }
 
-export const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || '/api/admin/'
+export const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || '/api/'
 
 // 登录态 cookie（唯一持久层；STORAGE_TOKEN_KEY 同时作为 access token 的 cookie 名）
 export const STORAGE_TOKEN_KEY = 'DREDGE_AI_ADMIN_TOKEN'
