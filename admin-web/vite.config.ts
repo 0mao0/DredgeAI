@@ -30,14 +30,14 @@ export default defineConfig(({ mode }) => {
       proxy: {
         // ABP 后端（真实接口，开发联调用；mock 关闭后生效）
         '/api': {
-          target: env.VITE_API_TARGET || 'https://localhost:44361',
+          target: env.VITE_API_TARGET || 'https://localhost:44364',
           changeOrigin: true,
           secure: false,
         },
         // OpenIddict 端点（登录密码流 /connect/token 与授权跳转 /connect/authorize，
         // 不在 /api 前缀下；authorize 为浏览器整页跳转，token 由 auth 模块 fetch）
         '/connect': {
-          target: env.VITE_API_TARGET || 'https://localhost:44362',
+          target: env.VITE_API_TARGET || 'https://localhost:44364',
           changeOrigin: true,
           secure: false,
         },
