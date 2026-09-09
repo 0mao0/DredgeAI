@@ -8,7 +8,6 @@ import { registerPermissionMock } from './routes/permissions'
 import { registerApplicationMock } from './routes/applications'
 import { registerDatasourceMock } from './routes/datasource'
 import { registerAnalyticsMock } from './routes/analytics'
-import { registerProfileMock } from './routes/profile'
 import { registerApiKeyMock } from './routes/apikey'
 import { registerDubbingMock } from './routes/dubbing'
 import { registerOrgUsersMock } from './routes/org-users'
@@ -68,7 +67,7 @@ export function registerMock(): void {
     { key: 'applications', register: registerApplicationMock, passthrough: /^\/bidcompare\/app-catalog/ },
     { key: 'datasource', register: registerDatasourceMock },
     { key: 'analytics', register: registerAnalyticsMock },
-    { key: 'profile', register: registerProfileMock },
+    { key: 'profile', passthrough: /^\/base\/account\/my-profile/ },
     { key: 'apikey', register: registerApiKeyMock },
     { key: 'dubbing', register: registerDubbingMock },
     { key: 'orgUsers', register: registerOrgUsersMock },

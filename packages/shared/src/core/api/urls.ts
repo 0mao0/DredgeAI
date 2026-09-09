@@ -119,7 +119,7 @@ export const urls = {
   roleUsers: '/roles/:id/users',
   rolePermissions: '/roles/:id/permissions',
   datasources: '/datasources',
-  adminProfile: '/profile',
+  adminProfile: '/base/account/my-profile',
 
   // 知识库-标准规范（admin-web）
   adminStandards: '/standards',

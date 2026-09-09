@@ -10,7 +10,7 @@ export const MOCK_MODULES: Record<string, boolean> = {
   applications: false,
   datasource: true,
   analytics: true,
-  profile: true,
+  profile: false,
   apikey: true,
   dubbing: true,
   orgUsers: true,

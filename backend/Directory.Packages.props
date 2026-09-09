@@ -66,6 +66,7 @@
     <PackageVersion Include="Volo.Abp.Swashbuckle" Version="10.5.0" />
     <PackageVersion Include="Volo.Abp.Account.Web.OpenIddict" Version="10.5.0" />
     <PackageVersion Include="Volo.Abp.Account.Application" Version="10.5.0" />
+    <PackageVersion Include="Volo.Abp.Account.Application.Contracts" Version="10.5.0" />
     <PackageVersion Include="Volo.Abp.Account.HttpApi" Version="10.5.0" />
     <PackageVersion Include="Volo.Abp.SettingManagement.Application" Version="10.5.0" />
     <PackageVersion Include="Volo.Abp.SettingManagement.Domain" Version="10.5.0" />

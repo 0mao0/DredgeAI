@@ -16,5 +16,7 @@ public class DredgeAIBaseApplicationModule : AbpModule
     public override void ConfigureServices(ServiceConfigurationContext context)
     {
         context.Services.AddMapperlyObjectMapper<DredgeAIBaseApplicationModule>();
+
+        Account.ProfileObjectExtensions.Configure();
     }
 }

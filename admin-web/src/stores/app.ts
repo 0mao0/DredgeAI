@@ -6,15 +6,10 @@ import { getProfile } from '@/api/modules/profile'
 export const useAppStore = defineStore('app', () => {
   const profile = ref<UserInfo | null>(null)
 
-  const isSuperAdmin = computed(() => profile.value?.role === 'super_admin')
+  const isSuperAdmin = computed(() => profile.value?.roles.includes('admin') ?? false)
 
   /** 角色 → 权限码集合（'*' 通配全部），供权限守卫消费 */
-  const permissions = computed<string[]>(() => {
-    const role = profile.value?.role
-    if (role === 'super_admin') return ['*']
-    if (role === 'admin') return ['dev']
-    return []
-  })
+  const permissions = computed<string[]>(() => (profile.value?.roles.includes('admin') ? ['*'] : []))
 
   function setProfile(user: UserInfo): void {
     profile.value = user
