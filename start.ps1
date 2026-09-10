@@ -2,12 +2,15 @@ param(
     [switch]$TailLogs,
     [switch]$NoBrowser,
     [switch]$OpenBrowser,
+    # 停止所有由本脚本启动的服务（按 PID 文件 + 端口兜底清理；配合 -NoPostgres 保留本地 PostgreSQL 容器）
+    [switch]$Stop,
     # 跳过本地 PostgreSQL（Docker）启动，假定实例已由外部提供（远程库或已运行的容器）
     [switch]$NoPostgres
 )
 
 # DredgeAI Startup Script（Auth + Base + BidCompare + Gateway 后端 + 算法服务 + 用户端/管理端前端；AnGIneer 仅检测）
-# 参数：-TailLogs 跟随日志；-OpenBrowser 启动后打开浏览器（-NoBrowser 强制关闭）；
+# 参数：-Stop 停止所有由本脚本启动的服务（配合 -NoPostgres 保留本地 PostgreSQL 容器）；
+#       -TailLogs 跟随日志；-OpenBrowser 启动后打开浏览器（-NoBrowser 强制关闭）；
 #       -NoPostgres 跳过本地 PostgreSQL（Docker）启动，使用外部/已运行的 PostgreSQL
 [Console]::OutputEncoding = [System.Text.Encoding]::UTF8
 
@@ -102,13 +105,14 @@ function Stop-ProcessTree {
     Stop-Process -Id $ProcessId -Force -ErrorAction SilentlyContinue
 }
 
-# 按 PID 文件停止服务进程
+# 按 PID 文件停止服务进程（Reason：stale=重启前清理残留，running=-Stop 主动停止）
 function Stop-ServiceProcess {
     param(
         [Parameter(Mandatory = $true)]
         [string]$ServiceName,
         [Parameter(Mandatory = $true)]
-        [string]$PidPath
+        [string]$PidPath,
+        [string]$Reason = "stale"
     )
 
     if (-not (Test-Path $PidPath)) { return }
@@ -117,7 +121,7 @@ function Stop-ServiceProcess {
     if ($pidText -match '^\d+$') {
         $existingProcess = Get-Process -Id ([int]$pidText) -ErrorAction SilentlyContinue
         if ($existingProcess) {
-            Write-Host "Stopping stale $ServiceName process tree: PID $pidText" -ForegroundColor DarkYellow
+            Write-Host "Stopping $Reason $ServiceName process tree: PID $pidText" -ForegroundColor DarkYellow
             Stop-ProcessTree -ProcessId $existingProcess.Id
         }
     }
@@ -291,6 +295,74 @@ function Watch-ServiceLogs {
     Write-Host "Following logs..." -ForegroundColor Cyan
     $existingLogs | ForEach-Object { Write-Host "  $_" -ForegroundColor DarkGray }
     Get-Content -Path $existingLogs -Tail 30 -Wait -Encoding UTF8
+}
+
+# 停止模式（.\start.ps1 -Stop）：停止所有由本脚本启动的服务；不做前置依赖检查，停止后退出
+if ($Stop) {
+    Write-Host "========================================" -ForegroundColor Cyan
+    Write-Host "   DredgeAI Shutdown" -ForegroundColor Cyan
+    Write-Host "========================================" -ForegroundColor Cyan
+
+    # 1. 按 PID 文件精确停止（含子进程树）
+    Write-Host "[1/3] Stopping services by PID files..." -ForegroundColor Yellow
+    Stop-ServiceProcess -ServiceName "Frontend" -PidPath $frontendPidPath -Reason "running"
+    Stop-ServiceProcess -ServiceName "Admin Web" -PidPath $adminPidPath -Reason "running"
+    Stop-ServiceProcess -ServiceName "Gateway" -PidPath $gatewayPidPath -Reason "running"
+    Stop-ServiceProcess -ServiceName "BidCompare" -PidPath $bidcomparePidPath -Reason "running"
+    Stop-ServiceProcess -ServiceName "Base" -PidPath $basePidPath -Reason "running"
+    Stop-ServiceProcess -ServiceName "Auth" -PidPath $authPidPath -Reason "running"
+    Stop-ServiceProcess -ServiceName "ai-gateway" -PidPath $aiGatewayPidPath -Reason "running"
+    Stop-ServiceProcess -ServiceName "compare-algo" -PidPath $compareAlgoPidPath -Reason "running"
+
+    # 2. 端口兜底清理（覆盖 PID 文件丢失或以其它方式启动的进程）
+    Write-Host "[2/3] Cleaning up processes on service ports..." -ForegroundColor Yellow
+    Stop-PortProcess -Label "compare-algo" -Port $compareAlgoPort
+    Stop-PortProcess -Label "ai-gateway" -Port $aiGatewayPort
+    Stop-PortProcess -Label "Auth" -Port $authPort
+    Stop-PortProcess -Label "Base" -Port $basePort
+    Stop-PortProcess -Label "BidCompare" -Port $bidcomparePort
+    Stop-PortProcess -Label "Gateway" -Port $gatewayPort
+    Stop-PortProcess -Label "Frontend" -Port $frontendPort
+    Stop-PortProcess -Label "Admin Web" -Port $adminPort
+
+    # 3. PostgreSQL（Docker）；-NoPostgres 时视为外部提供，不动本地容器
+    Write-Host "[3/3] PostgreSQL (Docker)..." -ForegroundColor Yellow
+    if ($NoPostgres) {
+        Write-Host "  Skipping PostgreSQL stop (-NoPostgres)." -ForegroundColor DarkGray
+    } elseif (Get-Command docker -ErrorAction SilentlyContinue) {
+        $existingContainer = docker ps -a --filter "name=^/$postgresContainer$" --format "{{.Names}}" 2>$null
+        if ($existingContainer) {
+            docker stop $postgresContainer | Out-Null
+            Write-Host "  Stopped container $postgresContainer" -ForegroundColor Green
+        } else {
+            Write-Host "  PostgreSQL container $postgresContainer not found (nothing to stop)." -ForegroundColor DarkGray
+        }
+    } else {
+        Write-Host "  Docker not found; skipping PostgreSQL stop." -ForegroundColor DarkGray
+    }
+
+    # 校验服务端口已全部释放
+    $servicePorts = @(
+        @{ Label = "compare-algo"; Port = $compareAlgoPort },
+        @{ Label = "ai-gateway"; Port = $aiGatewayPort },
+        @{ Label = "Auth"; Port = $authPort },
+        @{ Label = "Base"; Port = $basePort },
+        @{ Label = "BidCompare"; Port = $bidcomparePort },
+        @{ Label = "Gateway"; Port = $gatewayPort },
+        @{ Label = "Frontend"; Port = $frontendPort },
+        @{ Label = "Admin Web"; Port = $adminPort }
+    )
+    $remaining = @($servicePorts | Where-Object { Get-NetTCPConnection -LocalPort $_.Port -State Listen -ErrorAction SilentlyContinue })
+    if ($remaining.Count -gt 0) {
+        $remainingDesc = ($remaining | ForEach-Object { "$($_.Label):$($_.Port)" }) -join ", "
+        Write-Host "  WARNING: ports still listening: $remainingDesc" -ForegroundColor Red
+        Write-Host "All DredgeAI services stopped (with warnings)." -ForegroundColor DarkYellow
+        exit 1
+    }
+
+    Write-Host ""
+    Write-Host "All DredgeAI services stopped." -ForegroundColor Green
+    exit 0
 }
 
 Write-Host "========================================" -ForegroundColor Cyan
@@ -493,6 +565,7 @@ Write-Host "  Admin Web: $adminUrl" -ForegroundColor Cyan
 Write-Host "  AnGIneer: $angineerUrl" -ForegroundColor Cyan
 Write-Host "  Logs: $logsDir" -ForegroundColor DarkGray
 Write-Host "  Tail logs with: .\start.ps1 -TailLogs" -ForegroundColor DarkGray
+Write-Host "  Stop all with:  .\start.ps1 -Stop" -ForegroundColor DarkGray
 
 # 默认不自动打开浏览器；需要时显式加 -OpenBrowser（-NoBrowser 仍可强制关闭）
 if ($gatewayHealthy -and $OpenBrowser -and -not $NoBrowser) {

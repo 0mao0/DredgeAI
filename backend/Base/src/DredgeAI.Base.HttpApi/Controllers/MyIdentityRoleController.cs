@@ -1,3 +1,5 @@
+using DredgeAI.Permissions;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using Volo.Abp.Application.Dtos;
@@ -26,6 +28,7 @@ public class MyIdentityRoleController : IdentityRoleController
     /// <returns>全部角色列表。</returns>
     [HttpGet]
     [Route("all")]
+    [Authorize(DredgeAIBasePermissions.Roles.Default)]
     public override Task<ListResultDto<IdentityRoleDto>> GetAllListAsync()
     {
         return RoleAppService.GetAllListAsync();
@@ -37,6 +40,7 @@ public class MyIdentityRoleController : IdentityRoleController
     /// <param name="input">包含分页、排序和筛选条件的 <see cref="GetIdentityRolesInput"/> 对象。</param>
     /// <returns>分页的角色数据列表。</returns>
     [HttpGet]
+    [Authorize(DredgeAIBasePermissions.Roles.Default)]
     public override Task<PagedResultDto<IdentityRoleDto>> GetListAsync(GetIdentityRolesInput input)
     {
         return RoleAppService.GetListAsync(input);
@@ -49,6 +53,7 @@ public class MyIdentityRoleController : IdentityRoleController
     /// <returns>包含角色信息的 <see cref="IdentityRoleDto"/> 对象。</returns>
     [HttpGet]
     [Route("{id}")]
+    [Authorize(DredgeAIBasePermissions.Roles.Default)]
     public override Task<IdentityRoleDto> GetAsync(Guid id)
     {
         return RoleAppService.GetAsync(id);
@@ -60,6 +65,7 @@ public class MyIdentityRoleController : IdentityRoleController
     /// <param name="input">包含角色创建信息的 <see cref="IdentityRoleCreateDto"/> 对象。</param>
     /// <returns>创建成功的角色信息。</returns>
     [HttpPost]
+    [Authorize(DredgeAIBasePermissions.Roles.Create)]
     public override Task<IdentityRoleDto> CreateAsync(IdentityRoleCreateDto input)
     {
         return RoleAppService.CreateAsync(input);
@@ -73,6 +79,7 @@ public class MyIdentityRoleController : IdentityRoleController
     /// <returns>更新后的角色信息。</returns>
     [HttpPut]
     [Route("{id}")]
+    [Authorize(DredgeAIBasePermissions.Roles.Update)]
     public override Task<IdentityRoleDto> UpdateAsync(Guid id, IdentityRoleUpdateDto input)
     {
         return RoleAppService.UpdateAsync(id, input);
@@ -84,6 +91,7 @@ public class MyIdentityRoleController : IdentityRoleController
     /// <param name="id">要删除的角色ID。</param>
     [HttpDelete]
     [Route("{id}")]
+    [Authorize(DredgeAIBasePermissions.Roles.Delete)]
     public override Task DeleteAsync(Guid id)
     {
         return RoleAppService.DeleteAsync(id);

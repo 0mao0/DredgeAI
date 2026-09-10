@@ -76,6 +76,8 @@ export interface AppManifest {
   defaultVisible?: boolean
   /** 所需权限码（可选，路由守卫与菜单过滤消费） */
   requiredPermission?: string
+  /** 按钮/操作级权限：key 为页面内操作标识（如 'create'），value 为映射的权限码；随路由 meta 透传，页面经 usePagePermissions 消费 */
+  actionPermissions?: Record<string, string>
   /** 分类标签（用于侧边栏分组） */
   category?: '通用' | '经营' | '设计' | '施工'
   /** 可选：用于侧边栏菜单展开的父级 key 列表 */

@@ -45,4 +45,10 @@ public class RoleController : DredgeAIBaseController,IUserRoleAppService
     [Authorize(DredgeAIBasePermissions.Users.Update)]
     public Task RemoveRoleUserAsync([FromQuery] string roleName, [FromQuery] Guid userId)
         => _service.RemoveRoleUserAsync(roleName, userId);
+
+    /// <summary>获取所有角色的用户数量统计</summary>
+    [HttpGet("user-counts")]
+    [Authorize(DredgeAIBasePermissions.Roles.Default)]
+    public Task<List<RoleUserCountDto>> GetRoleUserCountsAsync()
+        => _service.GetRoleUserCountsAsync();
 }
