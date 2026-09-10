@@ -64,15 +64,15 @@ export const adminAppManifests: AppManifest[] = [
     },
   },
   // ─── 开发管理（分组） ──────────────────────────────────
-  {
-    id: 'task-scheduler',
-    route: '/task-scheduler',
-    name: 'TaskScheduler',
-    title: '任务调度',
-    icon: 'ScheduleOutlined',
-    component: () => import('@/views/dev/task-scheduler.vue'),
-    parentKeys: ['dev'],
-  },
+  // {
+  //   id: 'task-scheduler',
+  //   route: '/task-scheduler',
+  //   name: 'TaskScheduler',
+  //   title: '任务调度',
+  //   icon: 'ScheduleOutlined',
+  //   component: () => import('@/views/dev/task-scheduler.vue'),
+  //   parentKeys: ['dev'],
+  // },
   {
     id: 'logs',
     route: '/logs',
@@ -83,15 +83,15 @@ export const adminAppManifests: AppManifest[] = [
     parentKeys: ['dev'],
     requiredPermission: 'Base.AuditLogs',
   },
-  {
-    id: 'platform',
-    route: '/platform',
-    name: 'Platform',
-    title: '平台信息',
-    icon: 'InfoCircleOutlined',
-    component: () => import('@/views/dev/platform.vue'),
-    parentKeys: ['dev'],
-  },
+  // {
+  //   id: 'platform',
+  //   route: '/platform',
+  //   name: 'Platform',
+  //   title: '平台信息',
+  //   icon: 'InfoCircleOutlined',
+  //   component: () => import('@/views/dev/platform.vue'),
+  //   parentKeys: ['dev'],
+  // },
   // ─── 基础配置（分组） ─────────────────────────────────
   {
     id: 'base-config',

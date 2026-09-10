@@ -1,4 +1,5 @@
 using Microsoft.Extensions.DependencyInjection;
+using Shiw.Abp.AuditLogging.EntityFrameworkCore;
 using Shiw.Abp.BaseEntityFrameworkCore;
 using Volo.Abp.EntityFrameworkCore;
 using Volo.Abp.EntityFrameworkCore.PostgreSql;
@@ -9,7 +10,8 @@ namespace DredgeAI.Gateway.EntityFrameworkCore;
 [DependsOn(
     typeof(GatewayDomainModule),
     typeof(AbpEntityFrameworkCorePostgreSqlModule),
-    typeof(ShiwBaseEntityFrameworkCoreModule)
+    typeof(ShiwBaseEntityFrameworkCoreModule),
+    typeof(ShiwAuditLoggingEntityFrameworkCoreModule)
     )]
 public class GatewayEntityFrameworkCoreModule : AbpModule
 {

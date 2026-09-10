@@ -29,12 +29,14 @@ using Volo.Abp.BlobStoring;
 using Volo.Abp.BlobStoring.FileSystem;
 using Volo.Abp.BlobStoring.Minio;
 using Volo.Abp.AspNetCore.Mvc;
+using Volo.Abp.Auditing;
 using Volo.Abp.AspNetCore.Mvc.AntiForgery;
 using Volo.Abp.AspNetCore.Serilog;
 using Volo.Abp.Autofac;
 using Volo.Abp.BackgroundJobs;
 using Volo.Abp.BackgroundWorkers;
 using Volo.Abp.Caching;
+using Volo.Abp.Data;
 using Volo.Abp.EntityFrameworkCore.PostgreSql;
 using Volo.Abp.Localization;
 using Volo.Abp.Modularity;
@@ -61,6 +63,7 @@ public class BidCompareHostModule : AbpModule
     public override void PreConfigureServices(ServiceConfigurationContext context)
     {
         AbpBackgroundJobsDbProperties.DbTablePrefix = "tab_";
+        AbpCommonDbProperties.DbTablePrefix = "tab_";
     }
 
     public override void ConfigureServices(ServiceConfigurationContext context)
@@ -104,6 +107,12 @@ public class BidCompareHostModule : AbpModule
         // Shiw 后台任务分叉要求 ApplicationName 非空（f_application_name NOT NULL），
         // ABP 默认 null 会导致入队报 23502；多应用共用一库时按应用名隔离任务。
         Configure<AbpBackgroundJobWorkerOptions>(options => { options.ApplicationName = "BidCompare"; });
+
+        Configure<AbpAuditingOptions>(options =>
+        {
+            //options.IsEnabledForGetRequests = true;
+            options.ApplicationName = "BidCompare";
+        });
         Configure<AbpMultiTenancyOptions>(options => { options.IsEnabled = MultiTenancyConsts.IsEnabled; });
         Configure<AbpBlobStoringOptions>(options =>
         {

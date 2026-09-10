@@ -17,6 +17,7 @@ using Volo.Abp.Data;
 using Volo.Abp.EntityFrameworkCore.PostgreSql;
 using Volo.Abp.Modularity;
 using Volo.Abp.Threading;
+using Volo.Abp.Auditing;
 using Volo.Abp.Timing;
 using Volo.Abp.Swashbuckle;
 
@@ -38,10 +39,21 @@ public class DredgeAIGatewayHostModule : AbpModule
     /// <summary>代理端点统一使用的限流策略名（appsettings.json RateLimiting 节可调参）。</summary>
     public const string ProxyRateLimitPolicy = "proxy-fixed";
 
+    public override void PreConfigureServices(ServiceConfigurationContext context)
+    {
+        AbpCommonDbProperties.DbTablePrefix = "tab_";
+    }
+
     public override void ConfigureServices(ServiceConfigurationContext context)
     {
         var configuration = context.Services.GetConfiguration();
         Configure<AbpClockOptions>(options => { options.Kind = DateTimeKind.Utc; });
+
+        Configure<AbpAuditingOptions>(options =>
+        {
+            //options.IsEnabledForGetRequests = true;
+            options.ApplicationName = "Gateway";
+        });
 
         // 接入认证中心：验证 Auth 服务颁发的 JWT（配置与其他服务一致）
         context.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
@@ -167,6 +179,14 @@ public class DredgeAIGatewayHostModule : AbpModule
         app.UseAbpRequestLocalization(opt => { opt.SetDefaultCulture("zh-Hans"); });
         app.UseRateLimiter();
         app.UseAuthorization();
+
+        // 审计默认全关：仅采集代理配置管理的两个控制器（ProxyRoute/ProxyCluster），
+        // YARP 代理流量、Swagger 等其余端点一律不写审计日志。
+        app.UseWhen(
+            ctx =>
+                ctx.Request.Path.StartsWithSegments("/api/gateway/proxy-routes") ||
+                ctx.Request.Path.StartsWithSegments("/api/gateway/proxy-clusters"),
+            branch => branch.UseAuditing());
 
         app.UseSwagger();
         app.UseAbpSwaggerUI(options =>

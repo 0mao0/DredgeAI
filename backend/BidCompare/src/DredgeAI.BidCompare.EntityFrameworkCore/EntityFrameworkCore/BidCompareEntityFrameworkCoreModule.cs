@@ -1,6 +1,7 @@
 using System;
 using Microsoft.Extensions.DependencyInjection;
 using Shiw.Abp.BackgroundJobs.EntityFrameworkCore;
+using Shiw.Abp.AuditLogging.EntityFrameworkCore;
 using Shiw.Abp.BaseEntityFrameworkCore;
 using Volo.Abp.EntityFrameworkCore;
 using Volo.Abp.EntityFrameworkCore.PostgreSql;
@@ -12,7 +13,8 @@ namespace DredgeAI.BidCompare.EntityFrameworkCore;
     typeof(BidCompareDomainModule),
     typeof(AbpEntityFrameworkCorePostgreSqlModule),
     typeof(ShiwBackgroundJobsEntityFrameworkCoreModule),
-    typeof(ShiwBaseEntityFrameworkCoreModule)
+    typeof(ShiwBaseEntityFrameworkCoreModule),
+    typeof(ShiwAuditLoggingEntityFrameworkCoreModule)
     )]
 public class BidCompareEntityFrameworkCoreModule : AbpModule
 {
