@@ -4,6 +4,14 @@
 在本文件顶部插入新版本段：若该版本段已存在（手工精修过）则保留不覆盖，
 否则按上个 tag 以来的提交自动生成。
 
+## 0.2.4
+
+- docs(patches): 更新 docs-ui 现状到 v0.2.2 并补 0.2.x 升级须知
+- chore(deps): 升级 pnpm 到 11.7.0 并移除非法的 @shared 依赖
+- fix(meeting): 晨会稿标注句不再送 TTS，避免念出“本段依据无知识库证据”
+- refactor(ci): 发版通知收敛为「推 master」单触发
+- fix(ci): 发版同时推 master 与 tag 时只发一条通知
+
 ## 0.2.3
 
 - feat(release): 一键发版脚本 + CHANGELOG（对齐 Angineer 发版方式）
