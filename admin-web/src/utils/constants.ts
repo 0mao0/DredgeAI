@@ -21,6 +21,8 @@ export const MOCK_MODULES: Record<string, boolean> = {
   // 审计日志直连真实后端（/base/audit-logs）
   logs: false,
   orgUnits: false,
+  // 字典管理直连真实后端（/base/dict-types + /base/dict-data）
+  dict: false,
   standards: true,
   // 应用顺序直连真实后端（admin / user-web 共享同一后端进程）
   appOrder: false,

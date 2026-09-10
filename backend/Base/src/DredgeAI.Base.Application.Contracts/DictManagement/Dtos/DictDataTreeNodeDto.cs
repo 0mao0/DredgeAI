@@ -20,6 +20,15 @@ public class DictDataTreeNodeDto
     /// <summary>父级 ID</summary>
     public Guid? ParentId { get; set; }
 
+    /// <summary>排序号，越小越靠前</summary>
+    public int Sort { get; set; }
+
+    /// <summary>是否启用</summary>
+    public bool IsEnabled { get; set; }
+
+    /// <summary>备注</summary>
+    public string? Remark { get; set; }
+
     /// <summary>子级节点列表</summary>
     public List<DictDataTreeNodeDto> Children { get; set; } = [];
 

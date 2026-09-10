@@ -128,6 +128,12 @@ export const urls = {
   datasources: '/datasources',
   adminProfile: '/base/account/my-profile',
   appConfig: '/base/application-configuration',
+  dictTypes: '/base/dict-types',
+  dictTypeDetail: '/base/dict-types/:id',
+  dictTypeTree: '/base/dict-types/tree',
+  dictData: '/base/dict-data',
+  dictDataDetail: '/base/dict-data/:id',
+  dictDataTree: '/base/dict-data/tree/:typeId',
 
   // 知识库-标准规范（admin-web）
   adminStandards: '/standards',

@@ -72,6 +72,7 @@ export function registerMock(): void {
     { key: 'roles', passthrough: /^\/base\/(identity\/roles|roles|permission-management\/permissions)/ },
     { key: 'logs', passthrough: /^\/base\/audit-logs/ },
     { key: 'orgUnits', register: registerOrgUnitsMock, passthrough: /^\/base\/organization-units/ },
+    { key: 'dict', passthrough: /^\/base\/dict-/ },
     { key: 'standards', register: registerStandardsMock },
     { key: 'appOrder', passthrough: /^\/bidcompare\/app-order/ },
   ]
