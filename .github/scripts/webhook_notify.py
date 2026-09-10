@@ -35,14 +35,19 @@ MAX_BYTES = 3500
 COMMIT_RE = re.compile(r"^(?P<type>[a-zA-Z]+)(?:\((?P<scope>[^)]*)\))?!?:\s*(?P<desc>.+)$")
 
 
-def git(*args: str) -> str:
+def git(*args: str, allow_fail: bool = False) -> str:
+    """执行 git 并返回 stdout；失败返回空串（allow_fail 标记无 tag 仓库等预期内探测）。"""
     proc = subprocess.run(
         ["git", *args],
         cwd=repo,
         stdout=subprocess.PIPE,
         stderr=subprocess.DEVNULL,
     )
-    return proc.stdout.decode(errors="replace").strip() if proc.returncode == 0 else ""
+    if proc.returncode != 0:
+        if not allow_fail:
+            print(f"git {' '.join(args)} 退出码 {proc.returncode}，按空值处理", file=sys.stderr)
+        return ""
+    return proc.stdout.decode(errors="replace").strip()
 
 
 def git_ok(*args: str) -> bool:
@@ -69,7 +74,7 @@ def read_version() -> str:
 
 def resolve_refs() -> tuple[str, str, str]:
     """返回 (版本号, 版本区间起点描述, 提交范围起点)。"""
-    exact_tag = git("describe", "--tags", "--exact-match", "HEAD")
+    exact_tag = git("describe", "--tags", "--exact-match", "HEAD", allow_fail=True)
     version = exact_tag.lstrip("vV") if exact_tag else read_version()
 
     prev_sha = os.environ.get("PREV_SHA", "").strip()
@@ -79,14 +84,14 @@ def resolve_refs() -> tuple[str, str, str]:
         base = prev_sha
         base_from_prev_sha = True
     elif exact_tag:
-        base = git("describe", "--tags", "--abbrev=0", f"{exact_tag}^")
+        base = git("describe", "--tags", "--abbrev=0", f"{exact_tag}^", allow_fail=True)
     else:
-        base = git("describe", "--tags", "--abbrev=0", "HEAD")
+        base = git("describe", "--tags", "--abbrev=0", "HEAD", allow_fail=True)
 
     if base and base_from_prev_sha:
         base_desc = base[:7]
     elif base:
-        base_desc = git("describe", "--tags", "--abbrev=0", base) or base[:7]
+        base_desc = git("describe", "--tags", "--abbrev=0", base, allow_fail=True) or base[:7]
     else:
         base_desc = git("rev-list", "--max-parents=0", "HEAD")[:7]
     return version, base_desc, base
@@ -172,6 +177,15 @@ dry_run = os.environ.get("DRY_RUN", "").strip() not in ("", "0", "false")
 if not webhook and not dry_run:
     print("WEBHOOK not set, skipping")
     sys.exit(0)
+
+# 发版会同时推 master 与 v* tag，两个 push 事件都会触发本流程：
+# 分支事件若发现该提交已带 tag，说明由 tag 事件负责发布通知，跳过以免重复。
+ref_type = os.environ.get("GITHUB_REF_TYPE", "")
+if ref_type == "branch":
+    head_tag = git("describe", "--tags", "--exact-match", "HEAD", allow_fail=True)
+    if head_tag:
+        print(f"HEAD 已带 tag {head_tag}，交由 tag 事件通知，跳过重复的分支通知")
+        sys.exit(0)
 
 run_url = os.environ.get("RUN_URL", "")
 version, base_desc, base = resolve_refs()
