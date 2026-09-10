@@ -1,6 +1,9 @@
 """Send WeCom webhook notification for DredgeAI release.
 
-消息内容：版本号 + 版本区间 + 按类型聚合的 CHANGELOG（conventional commits）。
+触发方式：推 master（`pnpm release` 会同时推 master 与 v* tag，只由 master 那条通知，
+见 .github/workflows/release-notify.yml），一次推送一条消息。
+
+消息内容：版本号 + 版本区间 + CHANGELOG 该版本段（无该段则按类型聚合提交）。
 本地预览：DRY_RUN=1 python .github/scripts/webhook_notify.py
 """
 import json
@@ -73,7 +76,13 @@ def read_version() -> str:
 
 
 def resolve_refs() -> tuple[str, str, str]:
-    """返回 (版本号, 版本区间起点描述, 提交范围起点)。"""
+    """返回 (版本号, 版本区间起点描述, 提交范围起点)。
+
+    版本号：HEAD 恰好带 tag 时取 tag（发版提交本来就带 tag），否则取根 package.json
+    ——两者口径一致，CI 也是从 package.json 读版本拼镜像号。
+    提交范围：优先用 GITHUB 给的 PREV_SHA（普通 master 推送即本次推送的提交）；
+    手动 dispatch 没有 PREV_SHA 时退化为「上一个 tag → HEAD」。
+    """
     exact_tag = git("describe", "--tags", "--exact-match", "HEAD", allow_fail=True)
     version = exact_tag.lstrip("vV") if exact_tag else read_version()
 
@@ -177,15 +186,6 @@ dry_run = os.environ.get("DRY_RUN", "").strip() not in ("", "0", "false")
 if not webhook and not dry_run:
     print("WEBHOOK not set, skipping")
     sys.exit(0)
-
-# 发版会同时推 master 与 v* tag，两个 push 事件都会触发本流程：
-# 分支事件若发现该提交已带 tag，说明由 tag 事件负责发布通知，跳过以免重复。
-ref_type = os.environ.get("GITHUB_REF_TYPE", "")
-if ref_type == "branch":
-    head_tag = git("describe", "--tags", "--exact-match", "HEAD", allow_fail=True)
-    if head_tag:
-        print(f"HEAD 已带 tag {head_tag}，交由 tag 事件通知，跳过重复的分支通知")
-        sys.exit(0)
 
 run_url = os.environ.get("RUN_URL", "")
 version, base_desc, base = resolve_refs()

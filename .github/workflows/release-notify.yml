@@ -1,9 +1,10 @@
 name: Release Notify
 
+# 只在推 master 时通知（一次推送一条）：发版由 pnpm release 同时推 master 与 v* tag，
+# 若 tag 也触发就会重复，因此 tag 不单独通知；需要补发时用 workflow_dispatch。
 on:
   push:
     branches: [master]
-    tags: ['v*']
   workflow_dispatch:
 
 jobs:
