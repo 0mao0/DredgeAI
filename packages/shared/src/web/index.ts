@@ -30,6 +30,8 @@ export { APP_ICONS, resolveAppIcon } from './utils/appIcons'
 // 共享 composables
 export { useCssVar } from './composables/useCssVar'
 export { useTheme } from './composables/useTheme'
+export { isActionGranted, usePagePermissions } from './composables/usePagePermissions'
+export type { PagePermissionChecker } from './composables/usePagePermissions'
 
 // 共享 stores
 export * from './stores'

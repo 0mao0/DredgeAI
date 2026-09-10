@@ -1,40 +1,98 @@
 import request from '@/api/request'
 import { urls } from '@shared/core/api'
-import type { Role, OrgUser } from '@/types'
+import type { PagedResult } from '@shared/core/types'
+import type { OrgUserItem } from './org-users'
+import { getOrgUsers } from './org-users'
 
-export function getRoles(): Promise<Role[]> {
-  return request.get<Role[]>(urls.roles)
+/** 角色列表项（对应后端 IdentityRoleDto + user-counts 合并） */
+export interface RoleItem {
+  id: string
+  name: string
+  isDefault: boolean
+  isStatic: boolean
+  isPublic: boolean
+  concurrencyStamp: string
+  creationTime: string
+  userCount: number
 }
 
-export function createRole(data: Pick<Role, 'name'>): Promise<Role> {
-  return request.post<Role>(urls.roles, data)
+export interface RoleListParams {
+  filter?: string
+  skipCount: number
+  maxResultCount: number
 }
 
-export function updateRole(id: string, data: Partial<Pick<Role, 'name'>>): Promise<void> {
-  return request.put(urls.roleDetail.replace(':id', id), data)
+export function getRoles(params: RoleListParams): Promise<PagedResult<RoleItem>> {
+  return request.get<PagedResult<RoleItem>>(urls.roles, { params })
+}
+
+export function createRole(name: string): Promise<RoleItem> {
+  return request.post<RoleItem>(urls.roles, { name, isDefault: false, isPublic: true })
+}
+
+export function updateRole(role: RoleItem, name: string): Promise<RoleItem> {
+  return request.put<RoleItem>(urls.roleDetail.replace(':id', role.id), {
+    name,
+    isDefault: role.isDefault,
+    isPublic: role.isPublic,
+    concurrencyStamp: role.concurrencyStamp,
+  })
 }
 
 export function deleteRole(id: string): Promise<void> {
   return request.delete(urls.roleDetail.replace(':id', id))
 }
 
-export function getRoleUsers(roleId: string): Promise<OrgUser[]> {
-  return request.get<OrgUser[]>(urls.roleUsers.replace(':id', roleId))
+export interface RoleUserCount {
+  roleName: string
+  userCount: number
 }
 
-export function addRoleUsers(roleId: string, userIds: string[]): Promise<void> {
-  return request.post(urls.roleUsers.replace(':id', roleId), { userIds })
+export function getRoleUserCounts(): Promise<RoleUserCount[]> {
+  return request.get<RoleUserCount[]>(urls.roleUserCounts)
 }
 
-export function removeRoleUser(roleId: string, userId: string): Promise<void> {
-  return request.delete(`${urls.roleUsers.replace(':id', roleId)}/${userId}`)
+export function getRoleUsers(roleName: string): Promise<OrgUserItem[]> {
+  return getOrgUsers({ roleName, maxResultCount: 1000 }).then((res) => res.items)
 }
 
-export interface RolePermissions {
-  menuKeys: string[]
-  appIds: string[]
+/** 全量替换角色成员（按角色名；后端做差量增删） */
+export function setRoleUsers(roleName: string, userIds: string[]): Promise<void> {
+  return request.post(urls.roleBatchSetUsers, { roleName, userIds })
 }
 
-export function setRolePermissions(roleId: string, data: RolePermissions): Promise<void> {
-  return request.put(urls.rolePermissions.replace(':id', roleId), data)
+export function removeRoleUser(roleName: string, userId: string): Promise<void> {
+  return request.delete(urls.roleRemoveUser, { params: { roleName, userId } })
+}
+
+// ---- 菜单/按钮权限（ABP 授权） ----
+
+export interface PermissionGrantItem {
+  name: string
+  isGranted: boolean
+}
+
+interface PermissionListResult {
+  entityDisplayName: string
+  groups: { name: string, permissions: PermissionGrantItem[] }[]
+}
+
+/** 读取角色已授予的权限码列表（providerName=R，providerKey=角色名） */
+export async function getRoleGrantedPermissions(roleName: string): Promise<string[]> {
+  const res = await request.get<PermissionListResult>(urls.rolePermissions, {
+    params: { providerName: 'R', providerKey: roleName },
+  })
+  return res.groups
+    .flatMap((g) => g.permissions)
+    .filter((p) => p.isGranted)
+    .map((p) => p.name)
+}
+
+/** 全量提交角色授权（granted 须覆盖所有已知权限码，未授予的传 isGranted=false） */
+export function setRolePermissions(roleName: string, granted: PermissionGrantItem[]): Promise<void> {
+  return request.put(
+    urls.rolePermissions,
+    { permissions: granted },
+    { params: { providerName: 'R', providerKey: roleName } },
+  )
 }

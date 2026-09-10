@@ -9,6 +9,8 @@ declare module 'vue-router' {
     requiresPermission?: string
     /** 是否需要登录（默认 true） */
     requiresAuth?: boolean
+    /** 页面按钮/操作权限映射：操作标识 → 权限码（usePagePermissions 消费） */
+    actionPermissions?: Record<string, string>
   }
 }
 

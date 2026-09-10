@@ -62,10 +62,7 @@
         </template>
         <template v-else-if="column.key === 'scope'">
           <div class="cell-left">
-            <span class="scope-tags">
-              <a-tag v-for="n in roleTags(record)" :key="n" color="blue">{{ n }}</a-tag>
-              <span v-if="roleTags(record).length === 0" class="no-scope">-</span>
-            </span>
+            <span class="no-scope">暂未对接</span>
           </div>
         </template>
         <template v-else-if="column.key === 'setting'">
@@ -128,7 +125,7 @@ import { ref, computed, onMounted } from 'vue'
 import { message } from 'ant-design-vue'
 import { ArrowDownOutlined, ArrowUpOutlined, ReloadOutlined } from '@ant-design/icons-vue'
 import PageHeader from '@shared/web/components/PageHeader.vue'
-import type { ApplicationItem, Role } from '@/types'
+import type { ApplicationItem } from '@/types'
 import {
   getApplications,
   getCategoryConfig,
@@ -144,7 +141,6 @@ import {
   setSubAppIcon,
 } from '@/api/modules/applications'
 import { sortAppsByOrder } from '@/utils/appOrder'
-import { getRoles } from '@/api/modules/roles'
 import type { CategoryConfig } from '@/api/modules/applications'
 
 interface TreeRow {
@@ -158,19 +154,6 @@ interface TreeRow {
   parentId?: string
   appId: string
   subId?: string
-}
-
-const roles = ref<Role[]>([])
-
-function roleTags(row: TreeRow): string[] {
-  const id = row.subId || row.appId
-  const names: string[] = []
-  for (const r of roles.value) {
-    if (r.appIds.includes('*') || r.appIds.includes(id)) {
-      names.push(r.name)
-    }
-  }
-  return names
 }
 
 const apps = ref<ApplicationItem[]>([])
@@ -435,10 +418,9 @@ async function saveSetting(): Promise<void> {
 onMounted(async () => {
   loading.value = true
   try {
-    const [appData, catData, roleData] = await Promise.all([getApplications(), getCategoryConfig(), getRoles()])
+    const [appData, catData] = await Promise.all([getApplications(), getCategoryConfig()])
     apps.value = appData
     categories.value = catData
-    roles.value = roleData
     await loadOrder()
     expandedRowKeys.value = apps.value.filter((a) => a.subApps?.length).map((a) => `app-${a.id}`)
   } finally {
@@ -524,12 +506,6 @@ onMounted(async () => {
   }
 }
 
-.scope-tags {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 2px;
-  justify-content: center;
-}
 .no-scope {
   color: @text-tertiary;
 }

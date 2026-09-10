@@ -26,6 +26,7 @@ export function manifestToRoutes(manifests: AppManifest[], parentPath = ''): Rou
         category: m.category,
         parentKeys: m.parentKeys,
         requiresPermission: m.requiredPermission,
+        actionPermissions: m.actionPermissions,
       },
     }
 
