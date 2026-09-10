@@ -92,6 +92,35 @@ def resolve_refs() -> tuple[str, str, str]:
     return version, base_desc, base
 
 
+def changelog_bullets(version: str, max_items: int = 8) -> list[str]:
+    """取 CHANGELOG.md 中该版本的条目；作者精修过就用它，否则回退到自动聚合。"""
+    if not version:
+        return []
+    path = os.path.join(repo, "CHANGELOG.md")
+    if not os.path.isfile(path):
+        return []
+    try:
+        with open(path, encoding="utf-8-sig") as f:
+            text = f.read()
+    except OSError:
+        return []
+    heading = re.compile(rf"^##\s+v?{re.escape(version)}\s*$")
+    items: list[str] = []
+    inside = False
+    for raw in text.splitlines():
+        line = raw.strip()
+        if line.startswith("## "):
+            inside = bool(heading.match(line))
+            continue
+        if inside and line.startswith("- "):
+            item = line[2:].strip()
+            if item and not item.startswith("…"):
+                items.append(item)
+            if len(items) >= max_items:
+                break
+    return items
+
+
 def collect_changelog(base: str) -> tuple[list[str], int]:
     """聚合 base..HEAD 的提交为分类 CHANGELOG 行，返回 (行列表, 提交总数)。"""
     rng = f"{base}..HEAD" if base else "HEAD"
@@ -146,7 +175,14 @@ if not webhook and not dry_run:
 
 run_url = os.environ.get("RUN_URL", "")
 version, base_desc, base = resolve_refs()
-changelog_lines, total = collect_changelog(base)
+auto_lines, total = collect_changelog(base)
+curated = changelog_bullets(version)
+if curated:
+    changelog_lines = [f"**📋 CHANGELOG（v{version}）**"]
+    changelog_lines += [f"> - {item}" for item in curated]
+    changelog_lines = trim_to_bytes(changelog_lines)
+else:
+    changelog_lines = auto_lines
 sha = git("log", "-1", "--format=%h")
 ref = os.environ.get("GITHUB_REF_NAME") or git("rev-parse", "--abbrev-ref", "HEAD")
 

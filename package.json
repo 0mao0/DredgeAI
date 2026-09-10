@@ -19,7 +19,8 @@
     "publish-all": "pwsh publish.ps1 all .cicd/aspire-output",
     "publish-frontend": "pwsh publish.ps1 frontend .cicd/aspire-output -NoDashboard",
     "publish-python": "pwsh publish.ps1 python .cicd/aspire-output -NoDashboard",
-    "publish-dotnet": "pwsh publish.ps1 dotnet .cicd/aspire-output"
+    "publish-dotnet": "pwsh publish.ps1 dotnet .cicd/aspire-output",
+    "release": "node scripts/release.mjs"
   },
   "lint-staged": {
     "*.{ts,vue,mts}": "node node_modules/eslint/bin/eslint.js --fix"
