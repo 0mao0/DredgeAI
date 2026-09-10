@@ -15,6 +15,8 @@ bin/
 # 日志文件
 logs/
 **/logs/
+# 例外：管理端“日志管理”页面目录（曾被上面的 **/logs/ 误吞，导致页面未入库、构建失败）
+!admin-web/src/views/logs/
 *.log
 npm-debug.log*
 yarn-debug.log*
