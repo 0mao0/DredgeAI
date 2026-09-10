@@ -1,3 +1,4 @@
+using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Threading;
@@ -30,9 +31,10 @@ public class FakeMeetingBotClient : IMeetingBotClient
         return Task.FromResult(new byte[] { 0x52, 0x49, 0x46, 0x46, 0x00 });
     }
 
-    public Task StreamTtsAsync(string text, Stream destination, CancellationToken ct = default)
+    public Task StreamTtsAsync(string text, Stream destination, CancellationToken ct = default, Action<int>? onSampleRate = null)
     {
-        throw new System.NotImplementedException();
+        onSampleRate?.Invoke(24000);
+        return Task.CompletedTask;
     }
 
     public Task<List<FaceMatchDto>> RecognizeAsync(byte[] image, CancellationToken ct = default)

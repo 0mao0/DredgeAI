@@ -2,28 +2,23 @@
   <div class="speech-player">
     <AudioPlayer :controlled="controlled" class="speech-player__player">
       <template #extra>
-        <span v-if="synthesizing" class="speech-player__hint">正在生成语音… 第 {{ synthesisProgress }} 段</span>
+        <span v-if="synthesizing" class="speech-player__hint">{{ synthesizingHint }}</span>
         <span v-else-if="preparingMore" class="speech-player__hint">合成后续段落… 第 {{ synthesisProgress }} 段</span>
-        <template v-else-if="playCachedOnly && notReady">
-          <span class="speech-player__hint">语音尚未生成</span>
-          <AppButton size="sm" variant="text" @click="onRetryCached">重试</AppButton>
-        </template>
       </template>
     </AudioPlayer>
   </div>
 </template>
 
 <script setup lang="ts">
-import { computed, onScopeDispose, ref, watch } from 'vue'
+import { computed, onScopeDispose, watch } from 'vue'
 import { AudioPlayer } from '@shared/web'
-import AppButton from '@shared/web/components/AppButton.vue'
 import { useSpeechPlayback } from '../composables/useSpeechPlayback'
 import { splitSubtitleText } from '@/utils/speechText'
 
 const props = defineProps<{
   text: string
   autoPlay?: boolean
-  /** 仅播放已有音频（服务端 wav / 会话缓存），不触发任何合成 */
+  /** 点名页：优先用已有音频秒开，没有整段缓存时回退到正常播放 */
   playCachedOnly?: boolean
   /** 会议 id：用于读取服务端缓存的整段 wav */
   meetingId?: string
@@ -44,7 +39,9 @@ const {
   playCached,
   stop,
 } = useSpeechPlayback()
-const notReady = ref(false)
+const synthesizingHint = computed(() => (
+  synthesisProgress.value ? `正在生成语音… 第 ${synthesisProgress.value} 段` : '正在生成语音…'
+))
 const segments = computed(() => splitSubtitleText(props.text))
 const segmentDurations = computed(() =>
   segments.value.map((s) => Math.max(0.5, s.replace(/\s/g, '').length / 4)),
@@ -100,16 +97,10 @@ watch(
 async function startPlayback(): Promise<void> {
   if (!props.text) return
   if (props.playCachedOnly) {
-    const ok = await playCached(props.text, props.meetingId)
-    notReady.value = !ok
+    await playCached(props.text, props.meetingId)
     return
   }
-  notReady.value = false
   void play(props.text, props.meetingId)
-}
-
-function onRetryCached(): void {
-  void startPlayback()
 }
 
 onScopeDispose(() => stop())

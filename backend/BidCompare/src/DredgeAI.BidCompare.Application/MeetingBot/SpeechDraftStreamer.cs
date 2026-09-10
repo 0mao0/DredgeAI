@@ -7,12 +7,10 @@ using System.Threading;
 using System.Threading.Tasks;
 using DredgeAI.BidCompare.AI;
 using DredgeAI.BidCompare.AnGineer;
-using DredgeAI.BidCompare.BackgroundJobs;
 using DredgeAI.BidCompare.Storage;
 using DredgeAI.BlobStoring;
 using Microsoft.Extensions.Logging;
 using Volo.Abp;
-using Volo.Abp.BackgroundJobs;
 using Volo.Abp.DependencyInjection;
 using Volo.Abp.Domain.Repositories;
 using Volo.Abp.Guids;
@@ -39,7 +37,6 @@ public class SpeechDraftStreamer : ISpeechDraftStreamer, ITransientDependency
     private readonly IAnGineerClient _anGineer;
     private readonly ILlmGateway _llmGateway;
     private readonly IDredgeBlobContainer<BidCompareFileContainer> _container;
-    private readonly IBackgroundJobManager _backgroundJobManager;
     private readonly IGuidGenerator _guidGenerator;
     private readonly ILogger<SpeechDraftStreamer> _logger;
 
@@ -49,7 +46,6 @@ public class SpeechDraftStreamer : ISpeechDraftStreamer, ITransientDependency
         IAnGineerClient anGineer,
         ILlmGateway llmGateway,
         IDredgeBlobContainer<BidCompareFileContainer> blobContainer,
-        IBackgroundJobManager backgroundJobManager,
         IGuidGenerator guidGenerator,
         ILogger<SpeechDraftStreamer> logger)
     {
@@ -58,7 +54,6 @@ public class SpeechDraftStreamer : ISpeechDraftStreamer, ITransientDependency
         _anGineer = anGineer;
         _llmGateway = llmGateway;
         _container = blobContainer;
-        _backgroundJobManager = backgroundJobManager;
         _guidGenerator = guidGenerator;
         _logger = logger;
     }
@@ -146,6 +141,8 @@ public class SpeechDraftStreamer : ISpeechDraftStreamer, ITransientDependency
 
     private async Task PersistAsync(MeetingRecord meeting, string content)
     {
+        // 语音不做后台预合成：TTS 并发闸门很小，后台同步合成会和用户点播放的实时流抢算力，
+        // 反而把首音拖慢（实测 4s → 9s）；统一由播放时的流式合成按需产出，播完写回整段缓存。
         SpeechDraft draft;
         if (meeting.SpeechDraftId is null)
         {
@@ -155,7 +152,6 @@ public class SpeechDraftStreamer : ISpeechDraftStreamer, ITransientDependency
             meeting.MarkPrepared();
             await _meetings.UpdateAsync(meeting);
             await InvalidateSpeechAudioCacheAsync(meeting.Id);
-            await _backgroundJobManager.EnqueueAsync(new WarmSpeechAudioArgs { MeetingRecordId = meeting.Id });
         }
         else
         {
@@ -165,7 +161,6 @@ public class SpeechDraftStreamer : ISpeechDraftStreamer, ITransientDependency
             meeting.MarkPrepared();
             await _meetings.UpdateAsync(meeting);
             await InvalidateSpeechAudioCacheAsync(meeting.Id);
-            await _backgroundJobManager.EnqueueAsync(new WarmSpeechAudioArgs { MeetingRecordId = meeting.Id });
         }
     }
 

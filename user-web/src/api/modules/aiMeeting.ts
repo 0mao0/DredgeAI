@@ -72,8 +72,12 @@ export async function streamSpeechDraft(
   for (;;) {
     const { done, value } = await reader.read()
     if (done) break
-    onDelta(decoder.decode(value, { stream: true }))
+    const delta = decoder.decode(value, { stream: true })
+    if (delta) onDelta(delta)
   }
+  // 收尾：冲掉解码器残留的多字节字符，避免末字被截断
+  const tail = decoder.decode()
+  if (tail) onDelta(tail)
 }
 
 export function getSpeechDraft(id: string): Promise<SpeechDraftDto | null> {
@@ -129,17 +133,26 @@ export function transcribeAudio(audio: Blob): Promise<string> {
   return request.post<string>(urls.meetingAsr, form, { timeout: MediaTimeout })
 }
 
-export function synthesizeSpeech(text: string, timeout = MediaTimeout): Promise<Blob> {
-  return request.post<Blob>(urls.meetingTts, { text }, { responseType: 'blob', timeout })
+/** 整段合成；signal 用于取消（页面离开等场景及时释放 TTS 并发槽位）。 */
+export function synthesizeSpeech(text: string, timeout = MediaTimeout, signal?: AbortSignal): Promise<Blob> {
+  return request.post<Blob>(urls.meetingTts, { text }, { responseType: 'blob', timeout, signal })
+}
+
+export interface SpeechStreamMeta {
+  /** 上游声明的 PCM 采样率（响应头 x-sample-rate，缺省 24000） */
+  sampleRate: number
 }
 
 /**
- * 流式 TTS：整段文本一次请求，返回原始字节流（无帧协议）。
- * - DGX 流：audio/pcm 原始 PCM（23040Hz/16bit/单声道，停顿已压缩）；
- * - 降级腾讯云：完整 WAV 文件；
- * 调用方按首块 RIFF 探测格式，PCM 用 evenLen 取偶消费（与 DGX 官方测试页一致）。
+ * 流式 TTS：整段文本一次请求，上游按句返回原始字节流（16bit 单声道 PCM，无帧协议）。
+ * 采样率从响应头 x-sample-rate 读取（缺省 24000），调用方按原生率建 AudioBuffer；
+ * 调用方需偶数对齐消费（与上游官方测试页一致）。
  */
-export async function* streamSpeechAudio(text: string): AsyncGenerator<Uint8Array> {
+export async function* streamSpeechAudio(
+  text: string,
+  onMeta?: (meta: SpeechStreamMeta) => void,
+  signal?: AbortSignal,
+): AsyncGenerator<Uint8Array> {
   const token = getCookie(STORAGE_TOKEN_KEY)
   const res = await fetch(`${API_BASE_URL}bidcompare/meeting-records/tts/stream`, {
     method: 'POST',
@@ -148,10 +161,13 @@ export async function* streamSpeechAudio(text: string): AsyncGenerator<Uint8Arra
       ...(token ? { Authorization: `Bearer ${token}` } : {}),
     },
     body: JSON.stringify({ text }),
+    signal,
   })
   if (!res.ok || !res.body) {
     throw new Error(`TTS 流式接口不可用（HTTP ${res.status}）`)
   }
+  const declaredRate = Number.parseInt(res.headers.get('x-sample-rate') ?? '', 10)
+  onMeta?.({ sampleRate: Number.isFinite(declaredRate) && declaredRate > 0 ? declaredRate : 24000 })
   const reader = res.body.getReader()
   for (;;) {
     const { done, value } = await reader.read()
