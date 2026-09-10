@@ -79,7 +79,7 @@ export const adminAppManifests: AppManifest[] = [
     name: 'Logs',
     title: '日志管理',
     icon: 'FileTextOutlined',
-    component: () => import('@/views/dev/logs.vue'),
+    component: () => import('@/views/logs/index.vue'),
     parentKeys: ['dev'],
     requiredPermission: 'Base.AuditLogs',
   },

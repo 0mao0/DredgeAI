@@ -123,6 +123,8 @@ export const urls = {
   roleBatchSetUsers: '/base/roles/batch-set-user',
   roleRemoveUser: '/base/roles/remove-role-user',
   rolePermissions: '/base/permission-management/permissions',
+  auditLogs: '/base/audit-logs',
+  auditLogDetail: '/base/audit-logs/:id',
   datasources: '/datasources',
   adminProfile: '/base/account/my-profile',
   appConfig: '/base/application-configuration',

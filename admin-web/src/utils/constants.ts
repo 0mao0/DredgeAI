@@ -18,6 +18,8 @@ export const MOCK_MODULES: Record<string, boolean> = {
   orgUsers: false,
   // 角色/权限直连真实后端（/base/identity/roles + /base/roles + /base/permission-management）
   roles: false,
+  // 审计日志直连真实后端（/base/audit-logs）
+  logs: false,
   orgUnits: false,
   standards: true,
   // 应用顺序直连真实后端（admin / user-web 共享同一后端进程）

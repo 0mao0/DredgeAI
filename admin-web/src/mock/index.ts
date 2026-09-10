@@ -70,6 +70,7 @@ export function registerMock(): void {
     { key: 'dubbing', register: registerDubbingMock },
     { key: 'orgUsers', passthrough: /^\/base\/(users|identity\/roles)/ },
     { key: 'roles', passthrough: /^\/base\/(identity\/roles|roles|permission-management\/permissions)/ },
+    { key: 'logs', passthrough: /^\/base\/audit-logs/ },
     { key: 'orgUnits', register: registerOrgUnitsMock, passthrough: /^\/base\/organization-units/ },
     { key: 'standards', register: registerStandardsMock },
     { key: 'appOrder', passthrough: /^\/bidcompare\/app-order/ },
