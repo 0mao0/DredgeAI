@@ -10,4 +10,7 @@ public interface IUserRoleAppService : IApplicationService
 
     /// <summary>从角色中移除单个用户</summary>
     Task RemoveRoleUserAsync(string roleName, Guid userId);
+
+    /// <summary>获取所有角色的用户数量统计</summary>
+    Task<List<RoleUserCountDto>> GetRoleUserCountsAsync();
 }

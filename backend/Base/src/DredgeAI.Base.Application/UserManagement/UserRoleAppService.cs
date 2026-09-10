@@ -8,13 +8,16 @@ public class UserRoleAppService : DredgeAIBaseAppService, IUserRoleAppService
 {
     private readonly IdentityRoleManager _identityRoleManager;
     private readonly IdentityUserManager _identityUserManager;
+    private readonly IIdentityRoleRepository _identityRoleRepository;
 
     public UserRoleAppService(
         IdentityRoleManager identityRoleManager,
-        IdentityUserManager identityUserManager)
+        IdentityUserManager identityUserManager,
+        IIdentityRoleRepository identityRoleRepository)
     {
         _identityRoleManager = identityRoleManager;
         _identityUserManager = identityUserManager;
+        _identityRoleRepository = identityRoleRepository;
     }
 
     public async Task BatchSetRoleUsersAsync(BatchSetRoleUsersInput input)
@@ -68,5 +71,18 @@ public class UserRoleAppService : DredgeAIBaseAppService, IUserRoleAppService
         }
 
         await _identityUserManager.RemoveFromRoleAsync(user, role.Name);
+    }
+
+    public async Task<List<RoleUserCountDto>> GetRoleUserCountsAsync()
+    {
+        var roles = await _identityRoleRepository.GetListAsync();
+        var result = new List<RoleUserCountDto>();
+        foreach (var role in roles)
+        {
+            var users = await _identityUserManager.GetUsersInRoleAsync(role.Name);
+            result.Add(new RoleUserCountDto { RoleName = role.Name, UserCount = users.Count });
+        }
+
+        return result;
     }
 }

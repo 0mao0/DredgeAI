@@ -24,6 +24,7 @@ export interface OrgUserItem {
 
 export interface OrgUserListParams {
   keyword?: string
+  roleName?: string
   isActive?: boolean
   skipCount?: number
   maxResultCount?: number

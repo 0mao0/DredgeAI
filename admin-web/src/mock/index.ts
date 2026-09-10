@@ -9,7 +9,6 @@ import { registerDatasourceMock } from './routes/datasource'
 import { registerAnalyticsMock } from './routes/analytics'
 import { registerApiKeyMock } from './routes/apikey'
 import { registerDubbingMock } from './routes/dubbing'
-import { registerRolesMock } from './routes/roles'
 import { registerOrgUnitsMock } from './routes/org-units'
 import { registerStandardsMock } from './routes/standards'
 
@@ -70,7 +69,7 @@ export function registerMock(): void {
     { key: 'apikey', register: registerApiKeyMock },
     { key: 'dubbing', register: registerDubbingMock },
     { key: 'orgUsers', passthrough: /^\/base\/(users|identity\/roles)/ },
-    { key: 'roles', register: registerRolesMock },
+    { key: 'roles', passthrough: /^\/base\/(identity\/roles|roles|permission-management\/permissions)/ },
     { key: 'orgUnits', register: registerOrgUnitsMock, passthrough: /^\/base\/organization-units/ },
     { key: 'standards', register: registerStandardsMock },
     { key: 'appOrder', passthrough: /^\/bidcompare\/app-order/ },

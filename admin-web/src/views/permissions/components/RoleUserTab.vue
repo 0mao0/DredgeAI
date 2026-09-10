@@ -15,7 +15,7 @@
       </template>
       <template #bodyCell="{ column, record }">
         <template v-if="column.key === 'departments'">
-          <a-tag v-for="d in record.departments" :key="d" color="default">{{ d }}</a-tag>
+          <a-tag v-for="d in record.organizationUnits" :key="d.key" color="default">{{ d.name }}</a-tag>
         </template>
         <template v-else-if="column.key === 'action'">
           <a-popconfirm
@@ -38,7 +38,7 @@
     >
       <a-checkbox-group v-model:value="selectedUserIds" class="user-check-group">
         <a-checkbox v-for="u in addableUsers" :key="u.id" :value="u.id">
-          {{ u.name }} — {{ u.departments.join(', ') }}
+          {{ u.name }} — {{ u.organizationUnits.map((x) => x.name).join(', ') || '未分配' }}
         </a-checkbox>
       </a-checkbox-group>
       <a-empty v-if="addableUsers.length === 0" description="没有可添加的用户" />
@@ -51,11 +51,13 @@ import { AppButton, DataTable } from '@shared/web'
 import type { DataTableColumn, DataTableFilter } from '@shared/web'
 import { ref, computed } from 'vue'
 import { message } from 'ant-design-vue'
-import type { OrgUser, Role } from '@/types'
+import type { RoleItem } from '@/api/modules/roles'
+import type { OrgUserItem } from '@/api/modules/org-users'
 
 const props = defineProps<{
-  role: Role
-  roleUsers: OrgUser[]
+  role: RoleItem
+  roleUsers: OrgUserItem[]
+  addableUsers: OrgUserItem[]
   loading: boolean
   canManageUsers: boolean
 }>()
@@ -84,14 +86,13 @@ const filteredUsers = computed(() => {
 
 const columns: DataTableColumn[] = [
   { title: '姓名', dataIndex: 'name', key: 'name', width: 120, minWidth: 100, resizable: true },
-  { title: '手机', dataIndex: 'phone', key: 'phone', width: 140, minWidth: 120, resizable: true },
+  { title: '手机', dataIndex: 'phoneNumber', key: 'phoneNumber', width: 140, minWidth: 120, resizable: true },
   { title: '部门', key: 'departments', width: 200, minWidth: 160 },
   // 操作列固定右侧；相邻“部门”列不参与拖拽（fixed-right 浮层会盖住其手柄）
   { title: '操作', key: 'action', width: 90, minWidth: 90, fixed: 'right', resizable: true },
 ]
 
 const showAddModal = ref(false)
-const addableUsers = ref<OrgUser[]>([])
 const selectedUserIds = ref<string[]>([])
 
 async function handleAdd(): Promise<void> {
