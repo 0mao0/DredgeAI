@@ -13,7 +13,7 @@
 import { computed, onScopeDispose, watch } from 'vue'
 import { AudioPlayer } from '@shared/web'
 import { useSpeechPlayback } from '../composables/useSpeechPlayback'
-import { splitSubtitleText } from '@/utils/speechText'
+import { splitDraftAnnotations, splitSubtitleText } from '@/utils/speechText'
 
 const props = defineProps<{
   text: string
@@ -42,7 +42,9 @@ const {
 const synthesizingHint = computed(() => (
   synthesisProgress.value ? `正在生成语音… 第 ${synthesisProgress.value} 段` : '正在生成语音…'
 ))
-const segments = computed(() => splitSubtitleText(props.text))
+/** 朗读与字幕统一用剥掉元信息标注的正文，标注句不合成语音 */
+const spokenText = computed(() => splitDraftAnnotations(props.text).text)
+const segments = computed(() => splitSubtitleText(spokenText.value))
 const segmentDurations = computed(() =>
   segments.value.map((s) => Math.max(0.5, s.replace(/\s/g, '').length / 4)),
 )
@@ -56,7 +58,7 @@ const controlled = computed(() => ({
   onToggle: () => {
     if (playing.value) {
       stop()
-    } else if (props.text) {
+    } else if (spokenText.value) {
       void startPlayback()
     }
   },
@@ -85,7 +87,7 @@ watch(
 )
 
 watch(
-  () => [props.text, props.autoPlay] as const,
+  () => [spokenText.value, props.autoPlay] as const,
   ([text, autoPlay]) => {
     if (text && autoPlay) {
       void startPlayback()
@@ -95,12 +97,13 @@ watch(
 )
 
 async function startPlayback(): Promise<void> {
-  if (!props.text) return
+  const text = spokenText.value
+  if (!text) return
   if (props.playCachedOnly) {
-    await playCached(props.text, props.meetingId)
+    await playCached(text, props.meetingId)
     return
   }
-  void play(props.text, props.meetingId)
+  void play(text, props.meetingId)
 }
 
 onScopeDispose(() => stop())

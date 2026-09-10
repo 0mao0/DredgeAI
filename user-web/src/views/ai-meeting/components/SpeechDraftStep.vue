@@ -86,6 +86,7 @@ import SectionCard from '@shared/web/components/SectionCard.vue'
 import AppButton from '@shared/web/components/AppButton.vue'
 import type { SpeechDraftDto } from '@/types'
 import SpeechPlayer from './SpeechPlayer.vue'
+import { splitDraftAnnotations } from '@/utils/speechText'
 
 const props = defineProps<{
   draft: SpeechDraftDto | null
@@ -102,8 +103,6 @@ const emit = defineEmits<{
   confirm: []
 }>()
 
-const NO_EVIDENCE_NOTE = '本段依据无知识库证据'
-
 const editing = ref(false)
 const content = ref('')
 const snapshot = ref<string | null>(null)
@@ -119,20 +118,9 @@ watch(
 
 const displayText = computed(() => (props.streaming && !props.draft ? props.streamingText ?? '' : content.value))
 const parsed = computed(() => {
-  const lines: string[] = []
-  let note = ''
-  for (const raw of displayText.value.split('\n')) {
-    const line = raw.trim()
-    if (!line) continue
-    if (line.includes(NO_EVIDENCE_NOTE)) {
-      note = NO_EVIDENCE_NOTE
-      const rest = line.split(NO_EVIDENCE_NOTE).join('').replace(/[()（）【】[\]]/g, '').trim()
-      if (rest) lines.push(rest)
-      continue
-    }
-    lines.push(line)
-  }
-  return { lines, note }
+  // 标注句单独交给界面提示（见 noEvidenceNote），正文行用于渲染
+  const { text, notes } = splitDraftAnnotations(displayText.value)
+  return { lines: text ? text.split('\n') : [], note: notes[0] ?? '' }
 })
 const paragraphs = computed(() => parsed.value.lines)
 const noEvidenceNote = computed(() => parsed.value.note)
