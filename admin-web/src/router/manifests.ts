@@ -24,8 +24,9 @@ export const adminAppManifests: AppManifest[] = [
     parentKeys: ['users'],
     requiredPermission: 'Base.Users',
     actionPermissions: {
+      create: 'Base.Users.Create',
       update: 'Base.Users.Update',
-      assignRoles: 'Base.Users.ManageRoles',
+      delete: 'Base.Users.Delete',
     },
   },
   {
