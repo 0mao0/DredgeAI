@@ -18,7 +18,8 @@
     "vue-router": "^4.2.0"
   },
   "dependencies": {
-    "@angineer/docs-ui": "file:../../vendor/angineer-docs-ui"
+    "@angineer/docs-ui": "file:../../vendor/angineer-docs-ui",
+    "dayjs": "^1.11.13"
   },
   "devDependencies": {
     "@ant-design/icons-vue": "7.0.1",

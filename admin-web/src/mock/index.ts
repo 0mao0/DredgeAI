@@ -11,6 +11,7 @@ import { registerApiKeyMock } from './routes/apikey'
 import { registerDubbingMock } from './routes/dubbing'
 import { registerOrgUsersMock } from './routes/org-users'
 import { registerRolesMock } from './routes/roles'
+import { registerOrgUnitsMock } from './routes/org-units'
 import { registerStandardsMock } from './routes/standards'
 
 /** 注册所有 mock 路由（按模块开关控制） */
@@ -71,6 +72,7 @@ export function registerMock(): void {
     { key: 'dubbing', register: registerDubbingMock },
     { key: 'orgUsers', register: registerOrgUsersMock },
     { key: 'roles', register: registerRolesMock },
+    { key: 'orgUnits', register: registerOrgUnitsMock, passthrough: /^\/base\/organization-units/ },
     { key: 'standards', register: registerStandardsMock },
     { key: 'appOrder', passthrough: /^\/bidcompare\/app-order/ },
   ]

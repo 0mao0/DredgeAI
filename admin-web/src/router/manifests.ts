@@ -29,6 +29,22 @@ export const adminAppManifests: AppManifest[] = [
     },
   },
   {
+    id: 'org-units',
+    route: '/org-units',
+    name: 'OrgUnits',
+    title: '组织机构',
+    icon: 'ApartmentOutlined',
+    component: () => import('@/views/org-units/index.vue'),
+    defaultVisible: true,
+    parentKeys: ['users'],
+    requiredPermission: 'Base.OrganizationUnits',
+    actionPermissions: {
+      create: 'Base.OrganizationUnits.Create',
+      update: 'Base.OrganizationUnits.Update',
+      delete: 'Base.OrganizationUnits.Delete',
+    },
+  },
+  {
     id: 'permissions',
     route: '/permissions',
     name: 'Permissions',

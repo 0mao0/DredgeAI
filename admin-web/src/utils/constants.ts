@@ -14,8 +14,10 @@ export const MOCK_MODULES: Record<string, boolean> = {
   profile: false,
   apikey: true,
   dubbing: true,
+  // 组织用户前端仍调用 mock 专用 /org-users（后端用户 API 为 /base/users，契约未对接），保持 mock
   orgUsers: true,
   roles: true,
+  orgUnits: false,
   standards: true,
   // 应用顺序直连真实后端（admin / user-web 共享同一后端进程）
   appOrder: false,
