@@ -14,7 +14,6 @@
     "@angineer/aichat-ui": "file:../vendor/angineer-aichat-ui",
     "@angineer/docs-ui": "file:../vendor/angineer-docs-ui",
     "@ant-design/icons-vue": "7.0.1",
-    "@shared": "link:../packages/shared/src",
     "ant-design-vue": "4.2.6",
     "axios": "^1.7.9",
     "echarts": "^5.6.0",

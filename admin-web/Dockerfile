@@ -23,7 +23,7 @@ FROM registry.cn-shanghai.aliyuncs.com/cyf7950/node:22.18.0-alpine3.21 AS builde
 WORKDIR /repo
 
 # 安装 pnpm（与根 package.json packageManager 对齐）
-RUN npm install -g pnpm@9.1.4 --registry=https://registry.npmmirror.com
+RUN npm install -g pnpm@11.7.0 --registry=https://registry.npmmirror.com
 
 # 根 package.json 的 prepare 脚本为 husky，容器内无 .git，禁用避免 install 失败
 ENV HUSKY=0

@@ -10,7 +10,7 @@ importers:
     devDependencies:
       '@antfu/eslint-config':
         specifier: ^9.2.0
-        version: 9.2.0(@typescript-eslint/typescript-estree@8.65.0(typescript@5.7.3))(@typescript-eslint/utils@8.65.0(eslint@10.8.0(jiti@2.7.0))(typescript@5.7.3))(@vue/compiler-sfc@3.5.41)(eslint@10.8.0(jiti@2.7.0))(typescript@5.7.3)(vitest@3.2.7(jiti@2.7.0))
+        version: 9.2.0(@typescript-eslint/typescript-estree@8.65.0(typescript@5.7.3))(@typescript-eslint/utils@8.65.0(eslint@10.8.0(jiti@2.7.0))(typescript@5.7.3))(@vue/compiler-sfc@3.5.41)(eslint@10.8.0(jiti@2.7.0))(typescript@5.7.3)(vitest@3.2.7(@types/debug@4.1.13)(@types/node@26.1.1)(jiti@2.7.0)(less@4.6.7)(yaml@2.9.0))
       concurrently:
         specifier: ^9.1.0
         version: 9.2.4
@@ -142,9 +142,6 @@ importers:
       '@ant-design/icons-vue':
         specifier: 7.0.1
         version: 7.0.1(vue@3.5.41(typescript@5.7.3))
-      '@shared':
-        specifier: link:../packages/shared/src
-        version: link:../packages/shared/src
       ant-design-vue:
         specifier: 4.2.6
         version: 4.2.6(vue@3.5.41(typescript@5.7.3))
@@ -3161,7 +3158,7 @@ snapshots:
       '@ant-design/icons-svg': 4.5.0
       vue: 3.5.41(typescript@5.7.3)
 
-  '@antfu/eslint-config@9.2.0(@typescript-eslint/typescript-estree@8.65.0(typescript@5.7.3))(@typescript-eslint/utils@8.65.0(eslint@10.8.0(jiti@2.7.0))(typescript@5.7.3))(@vue/compiler-sfc@3.5.41)(eslint@10.8.0(jiti@2.7.0))(typescript@5.7.3)(vitest@3.2.7(jiti@2.7.0))':
+  '@antfu/eslint-config@9.2.0(@typescript-eslint/typescript-estree@8.65.0(typescript@5.7.3))(@typescript-eslint/utils@8.65.0(eslint@10.8.0(jiti@2.7.0))(typescript@5.7.3))(@vue/compiler-sfc@3.5.41)(eslint@10.8.0(jiti@2.7.0))(typescript@5.7.3)(vitest@3.2.7(@types/debug@4.1.13)(@types/node@26.1.1)(jiti@2.7.0)(less@4.6.7)(yaml@2.9.0))':
     dependencies:
       '@antfu/install-pkg': 1.1.0
       '@clack/prompts': 1.7.0
@@ -3171,7 +3168,7 @@ snapshots:
       '@stylistic/eslint-plugin': 5.10.0(eslint@10.8.0(jiti@2.7.0))
       '@typescript-eslint/eslint-plugin': 8.65.0(@typescript-eslint/parser@8.65.0(eslint@10.8.0(jiti@2.7.0))(typescript@5.7.3))(eslint@10.8.0(jiti@2.7.0))(typescript@5.7.3)
       '@typescript-eslint/parser': 8.65.0(eslint@10.8.0(jiti@2.7.0))(typescript@5.7.3)
-      '@vitest/eslint-plugin': 1.6.24(@typescript-eslint/eslint-plugin@8.65.0(@typescript-eslint/parser@8.65.0(eslint@10.8.0(jiti@2.7.0))(typescript@5.7.3))(eslint@10.8.0(jiti@2.7.0))(typescript@5.7.3))(eslint@10.8.0(jiti@2.7.0))(typescript@5.7.3)(vitest@3.2.7(jiti@2.7.0))
+      '@vitest/eslint-plugin': 1.6.24(@typescript-eslint/eslint-plugin@8.65.0(@typescript-eslint/parser@8.65.0(eslint@10.8.0(jiti@2.7.0))(typescript@5.7.3))(eslint@10.8.0(jiti@2.7.0))(typescript@5.7.3))(eslint@10.8.0(jiti@2.7.0))(typescript@5.7.3)(vitest@3.2.7(@types/debug@4.1.13)(@types/node@26.1.1)(jiti@2.7.0)(less@4.6.7)(yaml@2.9.0))
       ansis: 4.3.1
       cac: 7.0.0
       eslint: 10.8.0(jiti@2.7.0)
@@ -3978,7 +3975,7 @@ snapshots:
       vite: 6.4.3(@types/node@26.1.1)(jiti@2.7.0)(less@4.6.7)(yaml@2.9.0)
       vue: 3.5.41(typescript@5.7.3)
 
-  '@vitest/eslint-plugin@1.6.24(@typescript-eslint/eslint-plugin@8.65.0(@typescript-eslint/parser@8.65.0(eslint@10.8.0(jiti@2.7.0))(typescript@5.7.3))(eslint@10.8.0(jiti@2.7.0))(typescript@5.7.3))(eslint@10.8.0(jiti@2.7.0))(typescript@5.7.3)(vitest@3.2.7(jiti@2.7.0))':
+  '@vitest/eslint-plugin@1.6.24(@typescript-eslint/eslint-plugin@8.65.0(@typescript-eslint/parser@8.65.0(eslint@10.8.0(jiti@2.7.0))(typescript@5.7.3))(eslint@10.8.0(jiti@2.7.0))(typescript@5.7.3))(eslint@10.8.0(jiti@2.7.0))(typescript@5.7.3)(vitest@3.2.7(@types/debug@4.1.13)(@types/node@26.1.1)(jiti@2.7.0)(less@4.6.7)(yaml@2.9.0))':
     dependencies:
       '@typescript-eslint/scope-manager': 8.65.0
       '@typescript-eslint/utils': 8.65.0(eslint@10.8.0(jiti@2.7.0))(typescript@5.7.3)
