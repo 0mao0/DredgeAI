@@ -16,8 +16,5 @@
     <PackageReference Include="Volo.Abp.AspNetCore.Mvc" />
   </ItemGroup>
 
-  <ItemGroup>
-    <None Update="Resources\seed-app-catalog.json" CopyToOutputDirectory="PreserveNewest" />
-  </ItemGroup>
 
 </Project>

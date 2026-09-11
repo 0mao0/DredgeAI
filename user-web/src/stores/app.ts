@@ -1,7 +1,7 @@
 import { defineStore } from 'pinia'
 import { ref, computed } from 'vue'
 import type { AppCard, TaskItem, FileItem } from '@/types'
-import { getAppDefaultOrder, getAppList, getUserAppOrder, saveUserAppOrder } from '@/api/modules/app'
+import { getAppList, getUserAppOrder, saveUserAppOrder } from '@/api/modules/app'
 import { getRecentTasks, getQuickTasks } from '@/api/modules/task'
 import { getRecentFiles } from '@/api/modules/file'
 import { cachedFetch, invalidateRequest } from '@shared/web/composables/useRequest'
@@ -19,26 +19,23 @@ export const useAppStore = defineStore('app', () => {
   const quickTasks = ref<{ id: string, title: string, tag: string, route: string, icon: string }[]>([])
   const files = ref<FileItem[]>([])
   const visibleAppRoutes = ref<string[]>([])
-  /** admin 全局默认顺序（应用 id 列表，来自后端顺序服务） */
-  const adminOrder = ref<string[]>([])
-  /** admin 各母项下的子应用默认顺序（母项 id → 子应用 id 列表） */
-  const subOrders = ref<Record<string, string[]>>({})
-  /** 当前用户个性化顺序（route 列表；null = 未个性化，跟随 admin 默认） */
+  /** 当前用户个性化顺序（route 列表；null = 未个性化，跟随目录全局顺序） */
   const userOrder = ref<string[] | null>(null)
 
   const authorizedApps = computed(() =>
     apps.value.filter((a) => a.status === '已授权'),
   )
 
-  /** 合并顺序：个性化优先；未个性化按 admin 默认；新应用按 admin 顺序稳定插入，不破坏已有相对顺序 */
+  /** 合并顺序：个性化优先；未个性化按目录返回顺序（后端已按全局排序行排序）；新应用按目录顺序稳定插入，不破坏已有相对顺序 */
   function mergeVisibleOrder(visible: AppCard[]): AppCard[] {
-    const adminPos = new Map(adminOrder.value.map((id, index) => [id, index]))
+    // 默认顺序基准：apps 数组顺序（/list 已按全局排序行排序，且同母项子应用卡片相邻）
+    const adminPos = new Map(apps.value.map((a, i) => [a.parentAppId ?? a.id, i]))
     const adminKeyOf = (a: AppCard): string => a.parentAppId ?? a.id
     const subIdxOf = (a: AppCard): number => {
       if (!a.parentAppId) return 0
-      const list = subOrders.value[a.parentAppId]
-      if (!list) return Number.MAX_SAFE_INTEGER
-      const i = list.indexOf(a.id)
+      // 同母项卡片在 apps 中的相对下标
+      const siblings = apps.value.filter((x) => x.parentAppId === a.parentAppId)
+      const i = siblings.findIndex((x) => x.id === a.id)
       return i === -1 ? Number.MAX_SAFE_INTEGER : i
     }
     const compareByOrder = (a: AppCard, b: AppCard): number => {
@@ -107,19 +104,12 @@ export const useAppStore = defineStore('app', () => {
   /** 默认勾选应用显示在侧边栏：通用3 + 施工3(含AI晨会) + 经营2(情报采集子应用) */
   const DEFAULT_VISIBLE_ROUTES = ['/standard-query', '/ai-video', '/ai-dubbing', '/dredge-efficiency', '/ai-bid', '/ai-meeting', '/intelligence/dredge', '/intelligence/tech']
 
-  /** 拉取 admin 默认顺序与当前用户个性化顺序；后端不可用时退化为本地顺序 */
+  /** 拉取当前用户个性化顺序；后端不可用时退化为本地顺序 */
   async function refreshAppOrders(): Promise<void> {
-    const [adminRes, userRes] = await Promise.allSettled([
-      getAppDefaultOrder(),
-      getUserAppOrder(),
-    ])
-    if (adminRes.status === 'fulfilled') {
-      adminOrder.value = adminRes.value.appIds ?? []
-      subOrders.value = adminRes.value.subOrders ?? {}
-    }
-    if (userRes.status === 'fulfilled') {
-      userOrder.value = userRes.value.routeIds ?? null
-    } else {
+    try {
+      const userRes = await getUserAppOrder()
+      userOrder.value = userRes.routeIds ?? null
+    } catch {
       // 顺序服务未启动：用本地 visibleAppRoutes 作为个性化顺序，保持原有行为
       userOrder.value = visibleAppRoutes.value.length > 0 ? [...visibleAppRoutes.value] : null
     }
@@ -161,8 +151,6 @@ export const useAppStore = defineStore('app', () => {
     quickTasks,
     files,
     visibleAppRoutes,
-    adminOrder,
-    subOrders,
     userOrder,
     authorizedApps,
     sidebarApps,

@@ -97,11 +97,11 @@ import {
 } from '@ant-design/icons-vue'
 import * as Icons from '@ant-design/icons-vue'
 import { ShipAiLogo, SidebarToggleIcon } from '@shared/web'
+import type { AppCategory } from '@/types'
 import { useAppStore } from '@/stores/app'
 import { useSidebarStore, useThemeStore } from '@shared/web/stores'
-import { getAppOrder, getApplications } from '@/api/modules/applications'
-import { sortAppsByOrder } from '@/utils/appOrder'
-import { getCategoryColor, getCategoryAlphaBg } from '@shared/core/utils'
+import { getApplications } from '@/api/modules/applications'
+import { APP_CATEGORY_LABELS, getCategoryColor, getCategoryAlphaBg } from '@shared/core/utils'
 import ThemeToggle from '@shared/web/components/ThemeToggle.vue'
 import { adminAppManifests, adminMenuGroups } from '@/router/manifests'
 import { manifestToMenu, collectMenuKeys } from '@shared/web/router/manifest'
@@ -176,7 +176,7 @@ function appToMenuItem(app: AppMenuItem): MenuItemNode {
           borderColor: getCategoryColor(app.category),
           background: getCategoryAlphaBg(app.category),
         },
-      }, app.category),
+      }, APP_CATEGORY_LABELS[app.category as AppCategory] ?? app.category),
       h('span', { class: 'app-menu-label' }, app.name),
     ]),
   }
@@ -220,13 +220,9 @@ onMounted(async () => {
     message.warning('获取用户信息失败，使用默认配置')
   }
   try {
-    const [apps, orderRes] = await Promise.all([
-      getApplications(),
-      getAppOrder().catch(() => null),
-    ])
-    // 应用菜单与发布管理的顺序保持一致（按 admin 默认顺序排序）
-    const orderedApps = sortAppsByOrder(apps, orderRes?.appIds ?? [])
-    appMenuItems.value = orderedApps.map((a) => ({
+    // 后端已按全局排序行返回顺序，应用菜单与发布管理的顺序保持一致
+    const apps = await getApplications()
+    appMenuItems.value = apps.map((a) => ({
       id: a.id,
       name: a.name,
       category: a.category,
@@ -236,11 +232,11 @@ onMounted(async () => {
   } catch {
     message.warning('应用列表加载失败，使用默认菜单')
     appMenuItems.value = [
-      { id: '1', name: '规范问答', category: '通用', route: '/applications/standard', icon: 'BookOutlined' },
-      { id: '2', name: 'AI视频', category: '通用', route: '/applications/ai-video', icon: 'VideoCameraOutlined' },
-      { id: '3', name: 'AI 配音', category: '通用', route: '/applications/dubbing', icon: 'CustomerServiceOutlined' },
-      { id: '4', name: '设计经验', category: '设计', route: '/applications/design-experience', icon: 'BulbOutlined' },
-      { id: '5', name: '施工经验', category: '施工', route: '/applications/construction-experience', icon: 'ToolOutlined' },
+      { id: 'ff1e69b2-ddfd-4406-b8f9-024db34081cd', name: '规范问答', category: 'general', route: '/applications/standard', icon: 'BookOutlined' },
+      { id: '70b2ce01-f400-4947-bcf4-0d5f01568783', name: 'AI视频', category: 'general', route: '/applications/ai-video', icon: 'VideoCameraOutlined' },
+      { id: '9076f8d6-53a3-490e-b28b-43f69eadf11e', name: 'AI 配音', category: 'general', route: '/applications/dubbing', icon: 'CustomerServiceOutlined' },
+      { id: '293781c9-841b-428f-ab9d-f3c3117ce138', name: '设计经验', category: 'design', route: '/applications/design-experience', icon: 'BulbOutlined' },
+      { id: 'fc005209-8641-4fd9-95f9-9acb632912b6', name: '施工经验', category: 'construction', route: '/applications/construction-experience', icon: 'ToolOutlined' },
     ]
   }
 })

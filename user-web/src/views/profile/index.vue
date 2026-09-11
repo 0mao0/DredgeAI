@@ -138,7 +138,7 @@
                 </div>
                 <div class="app-card-body">
                   <div class="app-card-name-row">
-                    <span class="app-cat-pill" :style="catPillStyle(app.category)">{{ app.category }}</span>
+                    <span class="app-cat-pill" :style="catPillStyle(app.category)">{{ APP_CATEGORY_LABELS[app.category] ?? app.category }}</span>
                     <span class="app-card-name" :style="{ color: getCategoryColor(app.category) }">{{ app.title }}</span>
                   </div>
                   <span class="app-card-desc">{{ app.description }}</span>
@@ -173,7 +173,8 @@ import { useUserStore } from '@/stores/user'
 import { useAppStore } from '@/stores/app'
 import { useThemeStore } from '@shared/web/stores'
 import { resolveAppIcon } from '@shared/web'
-import { getCategoryColor, getCategoryAlphaBg } from '@shared/core/utils'
+import type { AppCategory } from '@/types'
+import { APP_CATEGORY_LABELS, getCategoryColor, getCategoryAlphaBg } from '@shared/core/utils'
 
 const userStore = useUserStore()
 const appStore = useAppStore()
@@ -207,14 +208,14 @@ const notifOptions = [
 ]
 
 // 分类定义（顺序固定：通用 | 设计 | 施工 | 经营），计数动态计算
-const CATEGORY_DEFS: Array<'通用' | '设计' | '施工' | '经营'> = ['通用', '设计', '施工', '经营']
+const CATEGORY_DEFS: AppCategory[] = ['general', 'design', 'construction', 'operation']
 
 // 分类选项（含各分类下的应用数量）
 const categoryOptions = computed(() => {
   const apps = appStore.authorizedApps.filter((a) => a.route)
   return CATEGORY_DEFS.map((key) => ({
     key,
-    label: key,
+    label: APP_CATEGORY_LABELS[key],
     count: apps.filter((a) => a.category === key).length,
   }))
 })

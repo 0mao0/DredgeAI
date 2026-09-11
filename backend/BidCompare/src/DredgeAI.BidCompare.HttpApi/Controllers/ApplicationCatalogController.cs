@@ -1,4 +1,5 @@
 using System.Collections.Generic;
+using System.Threading.Tasks;
 using DredgeAI.BidCompare.Applications;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Http;
@@ -9,8 +10,8 @@ using Volo.Abp.AspNetCore.Mvc;
 namespace DredgeAI.BidCompare.Controllers;
 
 /// <summary>
-/// 应用目录服务：admin 发布管理（发布/下架、分类、图标）与 user-web 应用列表
-/// 读写同一份后端目录（JSON 文件持久化），保证两端联动。
+/// 应用目录服务：admin 发布管理（发布/下架、分类、图标、全局排序）与 user-web 应用列表
+/// 读写同一份后端目录（DB 持久化），保证两端联动。
 /// </summary>
 [Authorize]
 [Route("api/bidcompare/app-catalog")]
@@ -19,146 +20,78 @@ namespace DredgeAI.BidCompare.Controllers;
 [Tags("应用目录")]
 public class ApplicationCatalogController : BidCompareController
 {
-    private readonly ApplicationCatalogStore _store;
+    private readonly IApplicationCatalogAppService _catalogAppService;
 
-    public ApplicationCatalogController(ApplicationCatalogStore store)
+    public ApplicationCatalogController(IApplicationCatalogAppService catalogAppService)
     {
-        _store = store;
+        _catalogAppService = catalogAppService;
     }
 
-    /// <summary>GET /api/bidcompare/app-catalog 应用目录（含子应用）</summary>
+    /// <summary>GET /api/bidcompare/app-catalog 应用目录（含子应用，按全局排序行排序）</summary>
     /// <returns>应用目录列表</returns>
     [HttpGet]
-    public List<CatalogApp> GetAsync()
-        => _store.GetAll();
+    public Task<List<AppCatalogDto>> GetAsync()
+        => _catalogAppService.GetListAsync();
 
     /// <summary>GET /api/bidcompare/app-catalog/categories 分类配置</summary>
     /// <returns>分类配置列表</returns>
     [HttpGet("categories")]
-    public List<CategoryConfigDto> GetCategoriesAsync()
-        => _store.GetCategories();
+    public Task<List<CategoryConfigDto>> GetCategoriesAsync()
+        => _catalogAppService.GetCategoriesAsync();
 
     /// <summary>GET /api/bidcompare/app-catalog/list user-web 应用列表（按发布状态实时推导）</summary>
     /// <returns>已发布应用卡片列表</returns>
     [HttpGet("list")]
-    public List<UserAppCardDto> GetUserListAsync()
-        => _store.GetUserApps();
+    public Task<List<UserAppCardDto>> GetUserListAsync()
+        => _catalogAppService.GetUserListAsync();
 
     /// <summary>POST /api/bidcompare/app-catalog/status 发布/下架主应用</summary>
     /// <param name="input">应用 ID + 目标状态</param>
     [HttpPost("status")]
-    public void SetStatusAsync([FromBody] SetAppStatusInput input)
-    {
-        if (string.IsNullOrWhiteSpace(input.AppId))
-        {
-            throw new BusinessException("AppCatalog:InvalidAppId", "缺少应用 id");
-        }
-
-        if (!_store.SetAppStatus(input.AppId, input.Status))
-        {
-            throw new BusinessException("AppCatalog:AppNotFound", $"未找到应用 {input.AppId}");
-        }
-    }
+    public Task SetStatusAsync([FromBody] SetAppStatusInput input)
+        => _catalogAppService.SetAppStatusAsync(input);
 
     /// <summary>POST /api/bidcompare/app-catalog/sub/status 发布/下架子应用</summary>
     /// <param name="input">子应用 ID + 目标状态</param>
     [HttpPost("sub/status")]
-    public void SetSubStatusAsync([FromBody] SetSubStatusInput input)
-    {
-        if (string.IsNullOrWhiteSpace(input.SubId))
-        {
-            throw new BusinessException("AppCatalog:InvalidSubId", "缺少子应用 id");
-        }
-
-        if (!_store.SetSubStatus(input.SubId, input.Status))
-        {
-            throw new BusinessException("AppCatalog:SubAppNotFound", $"未找到子应用 {input.SubId}");
-        }
-    }
+    public Task SetSubStatusAsync([FromBody] SetSubStatusInput input)
+        => _catalogAppService.SetSubStatusAsync(input);
 
     /// <summary>POST /api/bidcompare/app-catalog/category 设置主应用分类</summary>
     /// <param name="input">应用 ID + 分类</param>
     [HttpPost("category")]
-    public void SetCategoryAsync([FromBody] SetAppFieldInput input)
-    {
-        if (!_store.SetCategory(input.AppId, input.Category))
-        {
-            throw new BusinessException("AppCatalog:AppNotFound", $"未找到应用 {input.AppId}");
-        }
-    }
+    public Task SetCategoryAsync([FromBody] SetAppFieldInput input)
+        => _catalogAppService.SetAppCategoryAsync(input);
 
     /// <summary>POST /api/bidcompare/app-catalog/sub/category 设置子应用分类</summary>
     /// <param name="input">子应用 ID + 分类</param>
     [HttpPost("sub/category")]
-    public void SetSubCategoryAsync([FromBody] SetSubFieldInput input)
-    {
-        if (!_store.SetCategory(input.SubId, input.Category))
-        {
-            throw new BusinessException("AppCatalog:SubAppNotFound", $"未找到子应用 {input.SubId}");
-        }
-    }
+    public Task SetSubCategoryAsync([FromBody] SetSubFieldInput input)
+        => _catalogAppService.SetSubCategoryAsync(input);
 
     /// <summary>POST /api/bidcompare/app-catalog/icon 设置主应用图标</summary>
     /// <param name="input">应用 ID + 图标</param>
     [HttpPost("icon")]
-    public void SetIconAsync([FromBody] SetAppIconInput input)
-    {
-        if (!_store.SetIcon(input.AppId, input.Icon))
-        {
-            throw new BusinessException("AppCatalog:AppNotFound", $"未找到应用 {input.AppId}");
-        }
-    }
+    public Task SetIconAsync([FromBody] SetAppIconInput input)
+        => _catalogAppService.SetAppIconAsync(input);
 
     /// <summary>POST /api/bidcompare/app-catalog/sub/icon 设置子应用图标</summary>
     /// <param name="input">子应用 ID + 图标</param>
     [HttpPost("sub/icon")]
-    public void SetSubIconAsync([FromBody] SetSubIconInput input)
-    {
-        if (!_store.SetIcon(input.SubId, input.Icon))
-        {
-            throw new BusinessException("AppCatalog:SubAppNotFound", $"未找到子应用 {input.SubId}");
-        }
-    }
-}
+    public Task SetSubIconAsync([FromBody] SetSubIconInput input)
+        => _catalogAppService.SetSubIconAsync(input);
 
-public class SetAppStatusInput
-{
-    public string AppId { get; set; } = string.Empty;
+    /// <summary>POST /api/bidcompare/app-catalog/move 上移/下移主应用（交换全局排序行的 SortOrder），返回重排后的目录</summary>
+    /// <param name="input">应用 ID + 移动方向（up|down）</param>
+    /// <returns>重排后的应用目录</returns>
+    [HttpPost("move")]
+    public Task<List<AppCatalogDto>> MoveAsync([FromBody] MoveAppOrderInput input)
+        => _catalogAppService.MoveAppAsync(input);
 
-    public string Status { get; set; } = string.Empty;
-}
-
-public class SetSubStatusInput
-{
-    public string SubId { get; set; } = string.Empty;
-
-    public string Status { get; set; } = string.Empty;
-}
-
-public class SetAppFieldInput
-{
-    public string AppId { get; set; } = string.Empty;
-
-    public string Category { get; set; } = string.Empty;
-}
-
-public class SetSubFieldInput
-{
-    public string SubId { get; set; } = string.Empty;
-
-    public string Category { get; set; } = string.Empty;
-}
-
-public class SetAppIconInput
-{
-    public string AppId { get; set; } = string.Empty;
-
-    public string Icon { get; set; } = string.Empty;
-}
-
-public class SetSubIconInput
-{
-    public string SubId { get; set; } = string.Empty;
-
-    public string Icon { get; set; } = string.Empty;
+    /// <summary>POST /api/bidcompare/app-catalog/sub/move 上移/下移子应用（母项组内），返回重排后的目录</summary>
+    /// <param name="input">子应用 ID + 移动方向（up|down）</param>
+    /// <returns>重排后的应用目录</returns>
+    [HttpPost("sub/move")]
+    public Task<List<AppCatalogDto>> MoveSubAsync([FromBody] MoveSubAppOrderInput input)
+        => _catalogAppService.MoveSubAppAsync(input);
 }

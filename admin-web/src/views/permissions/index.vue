@@ -112,7 +112,7 @@ import type { DataTableColumn } from '@shared/web'
 import { ref, computed, onMounted, h } from 'vue'
 import { message } from 'ant-design-vue'
 import PageHeader from '@shared/web/components/PageHeader.vue'
-import type { ApplicationItem } from '@/types'
+import type { AppCategory, ApplicationItem } from '@/types'
 import type { AppManifest } from '@shared/core/types/application'
 import {
   getRoles,
@@ -133,7 +133,7 @@ import { getApplications } from '@/api/modules/applications'
 import { adminAppManifests, adminMenuGroups } from '@/router/manifests'
 import { manifestToMenu } from '@shared/web/router/manifest'
 import type { MenuNode } from '@shared/web/router/manifest'
-import { getCategoryColor, getCategoryAlphaBg } from '@shared/core/utils'
+import { APP_CATEGORY_LABELS, getCategoryColor, getCategoryAlphaBg } from '@shared/core/utils'
 import { formatDateTime, resolveAppConfigTimeZone } from '@shared/web/utils/format'
 import { useAppStore } from '@/stores/app'
 import RoleUserTab from './components/RoleUserTab.vue'
@@ -304,11 +304,11 @@ const appTreeLoading = ref(false)
 const apps = ref<ApplicationItem[]>([])
 
 const appPermTree = computed<PermTreeNode[]>(() => {
-  const catOrder = ['通用', '经营', '设计', '施工']
+  const catOrder: AppCategory[] = ['general', 'operation', 'design', 'construction']
 
   const catGroups = new Map<string, ApplicationItem[]>()
   for (const app of apps.value) {
-    const cat = app.category || '通用'
+    const cat = app.category || 'general'
     if (!catGroups.has(cat)) catGroups.set(cat, [])
     catGroups.get(cat)!.push(app)
   }
@@ -318,7 +318,7 @@ const appPermTree = computed<PermTreeNode[]>(() => {
     return h('span', {
       class: 'cat-tag-inline',
       style: { color, borderColor: color, background: getCategoryAlphaBg(cat) },
-    }, cat)
+    }, APP_CATEGORY_LABELS[cat as AppCategory] ?? cat)
   }
 
   const appLabel = (cat: string, name: string) =>

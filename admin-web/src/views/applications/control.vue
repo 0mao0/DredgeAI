@@ -42,7 +42,7 @@
           </div>
         </template>
         <template v-else-if="column.key === 'category'">
-          <a-tag :color="catColor(record.category)">{{ record.category }}</a-tag>
+          <a-tag :color="catColor(record.category)">{{ APP_CATEGORY_LABELS[record.category as AppCategory] ?? record.category }}</a-tag>
         </template>
         <template v-else-if="column.key === 'status'">
           <div class="cell-center">
@@ -94,7 +94,7 @@
         <a-form-item label="应用类型">
           <a-select v-model:value="settingCategory" style="width:200px">
             <a-select-option v-for="c in categories" :key="c.name" :value="c.name">
-              <a-tag :color="c.color">{{ c.name }}</a-tag>
+              <a-tag :color="c.color">{{ APP_CATEGORY_LABELS[c.name as AppCategory] ?? c.name }}</a-tag>
             </a-select-option>
           </a-select>
         </a-form-item>
@@ -125,14 +125,13 @@ import { ref, computed, onMounted } from 'vue'
 import { message } from 'ant-design-vue'
 import { ArrowDownOutlined, ArrowUpOutlined, ReloadOutlined } from '@ant-design/icons-vue'
 import PageHeader from '@shared/web/components/PageHeader.vue'
-import type { ApplicationItem } from '@/types'
+import type { AppCategory, ApplicationItem } from '@/types'
 import {
   getApplications,
   getCategoryConfig,
-  getAppOrder,
-  moveAppOrder,
+  moveApplication,
+  moveSubApplication,
   resetUserOrders,
-  seedAppOrder,
   setSubAppStatus,
   setApplicationStatus,
   setApplicationCategory,
@@ -140,14 +139,14 @@ import {
   setApplicationIcon,
   setSubAppIcon,
 } from '@/api/modules/applications'
-import { sortAppsByOrder } from '@/utils/appOrder'
+import { APP_CATEGORY_LABELS } from '@shared/core/utils'
 import type { CategoryConfig } from '@/api/modules/applications'
 
 interface TreeRow {
   key: string
   index: string
   name: string
-  category: string
+  category: AppCategory
   level: 0 | 1
   published: boolean
   icon: string
@@ -157,13 +156,9 @@ interface TreeRow {
 }
 
 const apps = ref<ApplicationItem[]>([])
-const orderIds = ref<string[]>([])
-const subOrders = ref<Record<string, string[]>>({})
 const movingId = ref('')
 const resetting = ref(false)
 const movedKey = ref('')
-let movedTimer: number | undefined
-const ORDER_STORAGE_KEY = 'dredge-admin-app-order'
 const categories = ref<CategoryConfig[]>([])
 const catColorMap = computed(() => {
   const m: Record<string, string> = {}
@@ -178,42 +173,30 @@ function catColor(c: string): string {
 const iconOptions = Object.entries(APP_ICONS).map(([value, comp]) => ({ value, comp }))
 const iconOptionsMap: Record<string, unknown> = APP_ICONS
 
-const orderedApps = computed(() => {
-  return sortAppsByOrder(apps.value, orderIds.value)
-})
-
+// 后端已按全局排序行返回顺序，直接使用
 const treeRows = computed<TreeRow[]>(() => {
   const rows: TreeRow[] = []
   let appIdx = 0
-  for (const app of orderedApps.value) {
+  for (const app of apps.value) {
     appIdx++
-    const subs = app.subApps || []
-    const parentOrder = subOrders.value[app.id]
-    const sortedSubs = parentOrder?.length
-      ? [...subs].sort((x, y) => {
-          const xi = parentOrder.indexOf(x.id)
-          const yi = parentOrder.indexOf(y.id)
-          return (xi === -1 ? Number.MAX_SAFE_INTEGER : xi) - (yi === -1 ? Number.MAX_SAFE_INTEGER : yi)
-        })
-      : subs
     rows.push({
       key: `app-${app.id}`,
       index: String(appIdx),
       name: app.name,
       category: app.category,
       level: 0,
-      published: app.status === '运营中',
+      published: app.status === 'online',
       icon: app.icon || 'AppstoreOutlined',
       appId: app.id,
     })
-    sortedSubs.forEach((sub, si) => {
+    ;(app.subApps ?? []).forEach((sub, si) => {
       rows.push({
         key: `sub-${sub.id}`,
         index: `${appIdx}.${si + 1}`,
         name: sub.name,
         category: sub.category,
         level: 1,
-        published: sub.status === '已发布',
+        published: sub.status === 'published',
         icon: sub.icon,
         parentId: app.id,
         appId: app.id,
@@ -225,112 +208,33 @@ const treeRows = computed<TreeRow[]>(() => {
 })
 
 function canMove(record: TreeRow, direction: 'up' | 'down'): boolean {
-  const key = record.subId ?? record.appId
-  const list = record.level === 0
-    ? orderIds.value
-    : (subOrders.value[record.parentId ?? ''] ?? [])
-  const index = list.indexOf(key)
-  if (index === -1) return true
+  const index = record.level === 0
+    ? apps.value.findIndex((a) => a.id === record.appId)
+    : (apps.value.find((a) => a.id === record.parentId)?.subApps ?? []).findIndex((s) => s.id === record.subId)
+  const length = record.level === 0
+    ? apps.value.length
+    : (apps.value.find((a) => a.id === record.parentId)?.subApps ?? []).length
+  if (index === -1) return false
   if (direction === 'up') return index > 0
-  return index < list.length - 1
+  return index < length - 1
 }
-
-function subOrdersPayload(): Record<string, string[]> {
-  const out: Record<string, string[]> = {}
-  for (const a of apps.value) {
-    if (a.subApps?.length) out[a.id] = a.subApps.map((s) => s.id)
-  }
-  return out
-}
-
-async function loadOrder(): Promise<void> {
-  try {
-    let order = await getAppOrder()
-    const ids = apps.value.map((a) => a.id)
-    const subsComplete = apps.value.every((a) => {
-      const subIds = (a.subApps ?? []).map((s) => s.id)
-      if (subIds.length === 0) return true
-      const known = order.subOrders?.[a.id] ?? []
-      return subIds.every((id) => known.includes(id))
-    })
-    if (!ids.every((id) => order.appIds.includes(id)) || !subsComplete) {
-      // 后端 seed 为合并语义：保留已有位置，仅追加新应用/子应用
-      order = await seedAppOrder(ids, subOrdersPayload())
-    }
-    orderIds.value = order.appIds
-    subOrders.value = order.subOrders ?? {}
-  } catch {
-    // 后端顺序服务不可用：优先恢复本地保存的顺序，保证刷新后不回到目录顺序
-    const local = readLocalOrder()
-    if (local) {
-      orderIds.value = local.appIds
-      subOrders.value = local.subOrders ?? {}
-    } else {
-      orderIds.value = apps.value.map((a) => a.id)
-      subOrders.value = subOrdersPayload()
-    }
-    message.warning('应用顺序服务未启动，顺序调整仅保存在当前浏览器')
-  }
-}
-
-function readLocalOrder(): { appIds: string[], subOrders?: Record<string, string[]> } | null {
-  try {
-    const raw = localStorage.getItem(ORDER_STORAGE_KEY)
-    if (!raw) return null
-    const parsed = JSON.parse(raw) as { appIds?: unknown, subOrders?: Record<string, string[]> }
-    if (!Array.isArray(parsed?.appIds)) return null
-    return { appIds: parsed.appIds as string[], subOrders: parsed.subOrders }
-  } catch {
-    return null
-  }
-}
-
-function saveLocalOrder(): void {
-  try {
-    localStorage.setItem(ORDER_STORAGE_KEY, JSON.stringify({ appIds: orderIds.value, subOrders: subOrders.value }))
-  } catch {
-    // localStorage 不可用时忽略
-  }
-}
-
 async function moveApp(record: TreeRow, direction: 'up' | 'down'): Promise<void> {
   if (movingId.value) return
   const key = record.subId ?? record.appId
   movingId.value = key
   try {
-    const order = await moveAppOrder(key, direction)
-    orderIds.value = order.appIds
-    subOrders.value = order.subOrders ?? {}
+    // 返回重排后的完整目录（含子应用组内顺序）
+    apps.value = record.level === 0
+      ? await moveApplication(key, direction)
+      : await moveSubApplication(key, direction)
   } catch {
-    // 后端不可用时本地交换（子项在母项组内交换）
-    if (record.level === 0) {
-      const index = orderIds.value.indexOf(key)
-      const target = direction === 'up' ? index - 1 : index + 1
-      if (index >= 0 && target >= 0 && target < orderIds.value.length) {
-        const next = [...orderIds.value]
-        ;[next[index], next[target]] = [next[target], next[index]]
-        orderIds.value = next
-        saveLocalOrder()
-      }
-    } else {
-      const parentId = record.parentId
-      if (!parentId) return
-      const list = [...(subOrders.value[parentId] ?? [])]
-      const index = list.indexOf(key)
-      const target = direction === 'up' ? index - 1 : index + 1
-      if (index >= 0 && target >= 0 && target < list.length) {
-        ;[list[index], list[target]] = [list[target], list[index]]
-        subOrders.value = { ...subOrders.value, [parentId]: list }
-        saveLocalOrder()
-      }
-    }
+    message.error('顺序调整失败，请稍后重试')
   } finally {
     movingId.value = ''
   }
   // 移动后短暂高亮该行，方便看到落点
   movedKey.value = record.key
-  if (movedTimer) window.clearTimeout(movedTimer)
-  movedTimer = window.setTimeout(() => {
+  window.setTimeout(() => {
     if (movedKey.value === record.key) movedKey.value = ''
   }, 2000)
 }
@@ -377,9 +281,9 @@ const loading = ref(false)
 
 async function onToggle(row: TreeRow, val: boolean): Promise<void> {
   if (row.level === 1 && row.subId) {
-    await setSubAppStatus(row.subId, val ? '已发布' : '已下架')
+    await setSubAppStatus(row.subId, val ? 'published' : 'unpublished')
   } else {
-    await setApplicationStatus(row.appId, val ? '运营中' : '已下架')
+    await setApplicationStatus(row.appId, val ? 'online' : 'offline')
   }
   // 重新拉取以同步状态
   apps.value = await getApplications()
@@ -391,7 +295,7 @@ async function onToggle(row: TreeRow, val: boolean): Promise<void> {
 const settingVisible = ref(false)
 const settingTarget = ref<TreeRow | null>(null)
 const settingIcon = ref<string>('AppstoreOutlined')
-const settingCategory = ref<string>('')
+const settingCategory = ref<AppCategory | ''>('')
 function openSetting(row: TreeRow): void {
   settingTarget.value = row
   settingIcon.value = row.icon || 'AppstoreOutlined'
@@ -405,7 +309,7 @@ async function saveSetting(): Promise<void> {
   const subId = row.level === 1 ? row.subId : undefined
   await Promise.all([
     subId ? setSubAppIcon(subId, settingIcon.value) : setApplicationIcon(row.appId, settingIcon.value),
-    settingCategory.value !== row.category
+    settingCategory.value !== '' && settingCategory.value !== row.category
       ? (subId ? setSubAppCategory(subId, settingCategory.value) : setApplicationCategory(row.appId, settingCategory.value))
       : Promise.resolve(),
   ])
@@ -421,7 +325,6 @@ onMounted(async () => {
     const [appData, catData] = await Promise.all([getApplications(), getCategoryConfig()])
     apps.value = appData
     categories.value = catData
-    await loadOrder()
     expandedRowKeys.value = apps.value.filter((a) => a.subApps?.length).map((a) => `app-${a.id}`)
   } finally {
     loading.value = false

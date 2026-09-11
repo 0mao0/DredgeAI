@@ -3,22 +3,22 @@ import { mockApplications } from './applications'
 
 /**
  * user-web 可见的应用目录：由 admin 模块发布状态推导。
- * - 若模块定义了 subApps：仅 status==='已发布' 的子应用进入用户端目录
+ * - 若模块定义了 subApps：仅 status==='published' 的子应用进入用户端目录
  * - 若模块无 subApps：模块本身即作为用户端应用
  * 这样 admin 应用控制里的发布/下架开关会直接决定 user-web 能否看到该应用。
  */
 
 // 普通模块（无子应用）在 user-web 侧边栏对应的路由
 const MODULE_ROUTES: Record<string, string> = {
-  1: '/standard-query',
-  2: '/ai-video',
-  3: '/ai-dubbing',
-  4: '/design-experience',
-  5: '/construction-experience',
-  6: '/construction-review',
-  7: '/dredge-efficiency',
-  9: '/ai-bid',
-  10: '/ai-meeting',
+  'ff1e69b2-ddfd-4406-b8f9-024db34081cd': '/standard-query',
+  '70b2ce01-f400-4947-bcf4-0d5f01568783': '/ai-video',
+  '9076f8d6-53a3-490e-b28b-43f69eadf11e': '/ai-dubbing',
+  '293781c9-841b-428f-ab9d-f3c3117ce138': '/design-experience',
+  'fc005209-8641-4fd9-95f9-9acb632912b6': '/construction-experience',
+  '0283801c-7a32-4dc0-96d3-eaee1b1f4ee2': '/construction-review',
+  '6dd9583d-169d-43d1-acd0-c1432248b898': '/dredge-efficiency',
+  '8da83abb-fdc5-480a-87cc-dca712243ffd': '/ai-bid',
+  '50e3cb9e-76a1-40ca-8034-060e7255bf5f': '/ai-meeting',
 }
 
 function buildUserApps(): AppCard[] {
@@ -26,7 +26,7 @@ function buildUserApps(): AppCard[] {
   for (const app of mockApplications) {
     if (app.subApps && app.subApps.length > 0) {
       for (const sub of app.subApps) {
-        if (sub.status !== '已发布') continue
+        if (sub.status !== 'published') continue
         cards.push({
           id: sub.id,
           parentAppId: sub.parentAppId,
@@ -47,7 +47,7 @@ function buildUserApps(): AppCard[] {
         description: `${app.name}应用模块`,
         category: app.category,
         icon: app.icon,
-        status: app.status === '已下架' ? '已下架' : '已授权',
+        status: app.status === 'offline' ? '已下架' : '已授权',
         route: MODULE_ROUTES[app.id] || '',
         version: app.version,
         pinned: false,

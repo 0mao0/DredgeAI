@@ -1,14 +1,6 @@
 import type MockAdapter from 'axios-mock-adapter'
 import { mockApplications } from '@shared/mock/data/applications'
-import type { ApplicationItem, SubApp } from '@shared/types'
-
-interface CollectionCategory {
-  key: string
-  name: string
-  description: string
-  published: boolean
-  subAppId?: string
-}
+import type { AppCategory, AppMainStatus, SubAppStatus } from '@shared/types'
 
 /** axios-mock-adapter 的 config.data 为 JSON 字符串，按需解析 */
 function parseBody(data: unknown): Record<string, unknown> {
@@ -18,20 +10,11 @@ function parseBody(data: unknown): Record<string, unknown> {
   return (data as Record<string, unknown>) ?? {}
 }
 
-// 情报采集模块可发布的采集分类配置（发布后生成对应子应用）
-const collectionCategories: Record<string, CollectionCategory[]> = {
-  8: [
-    { key: 'dredge', name: '疏浚情报', description: '聚焦疏浚行业的科技与工程情报', published: true, subAppId: '8-1' },
-    { key: 'tech', name: '科技情报', description: '通用科技前沿情报，支持订阅推送', published: true, subAppId: '8-2' },
-    { key: 'policy', name: '政策情报', description: '行业政策与标准动态追踪', published: false },
-  ],
-}
-
 const defaultCategories = [
-  { name: '通用', color: 'blue' },
-  { name: '经营', color: 'green' },
-  { name: '设计', color: 'purple' },
-  { name: '施工', color: 'gold' },
+  { name: 'general', color: 'blue' },
+  { name: 'operation', color: 'green' },
+  { name: 'design', color: 'purple' },
+  { name: 'construction', color: 'gold' },
 ]
 
 export function registerApplicationMock(mock: MockAdapter, wrap: (handler: () => unknown) => () => Promise<[number, unknown]>): void {
@@ -46,7 +29,7 @@ export function registerApplicationMock(mock: MockAdapter, wrap: (handler: () =>
   })
 
   mock.onPost('/api/bidcompare/app-catalog/sub/status').reply((config) => {
-    const body = parseBody(config.data) as { subId: string, status: '已发布' | '已下架' }
+    const body = parseBody(config.data) as { subId: string, status: SubAppStatus }
     for (const app of mockApplications) {
       const sub = app.subApps?.find((s) => s.id === body.subId)
       if (sub) sub.status = body.status
@@ -55,7 +38,7 @@ export function registerApplicationMock(mock: MockAdapter, wrap: (handler: () =>
   })
 
   mock.onPost('/api/bidcompare/app-catalog/status').reply((config) => {
-    const body = parseBody(config.data) as { appId: string, status: '运营中' | '已下架' }
+    const body = parseBody(config.data) as { appId: string, status: AppMainStatus }
     const app = mockApplications.find((a) => a.id === body.appId)
     if (app) app.status = body.status
     return [200, null]
@@ -64,7 +47,7 @@ export function registerApplicationMock(mock: MockAdapter, wrap: (handler: () =>
   mock.onPost('/api/bidcompare/app-catalog/category').reply((config) => {
     const body = parseBody(config.data) as { appId: string, category: string }
     const app = mockApplications.find((a) => a.id === body.appId)
-    if (app) app.category = body.category as ApplicationItem['category']
+    if (app) app.category = body.category as AppCategory
     return [200, null]
   })
 
@@ -72,7 +55,7 @@ export function registerApplicationMock(mock: MockAdapter, wrap: (handler: () =>
     const body = parseBody(config.data) as { subId: string, category: string }
     for (const app of mockApplications) {
       const sub = app.subApps?.find((s) => s.id === body.subId)
-      if (sub) sub.category = body.category as SubApp['category']
+      if (sub) sub.category = body.category as AppCategory
     }
     return [200, null]
   })
@@ -93,51 +76,27 @@ export function registerApplicationMock(mock: MockAdapter, wrap: (handler: () =>
     return [200, null]
   })
 
-  mock.onPost('/api/bidcompare/app-catalog/scope').reply((config) => {
-    const body = parseBody(config.data) as { appId: string, scope: '所有' | '部分' }
-    const app = mockApplications.find((a) => a.id === body.appId)
-    if (app) app.scope = body.scope
-    return [200, null]
+  mock.onPost('/api/bidcompare/app-catalog/move').reply((config) => {
+    const body = parseBody(config.data) as { appId: string, direction: 'up' | 'down' }
+    const index = mockApplications.findIndex((a) => a.id === body.appId)
+    const target = body.direction === 'up' ? index - 1 : index + 1
+    if (index >= 0 && target >= 0 && target < mockApplications.length) {
+      ;[mockApplications[index], mockApplications[target]] = [mockApplications[target], mockApplications[index]]
+    }
+    return [200, mockApplications]
   })
 
-  mock.onPost('/api/bidcompare/app-catalog/sub/scope').reply((config) => {
-    const body = parseBody(config.data) as { subId: string, scope: '所有' | '部分' }
+  mock.onPost('/api/bidcompare/app-catalog/sub/move').reply((config) => {
+    const body = parseBody(config.data) as { subId: string, direction: 'up' | 'down' }
     for (const app of mockApplications) {
-      const sub = app.subApps?.find((s) => s.id === body.subId)
-      if (sub) sub.scope = body.scope
+      const subs = app.subApps
+      if (!subs) continue
+      const index = subs.findIndex((s) => s.id === body.subId)
+      const target = body.direction === 'up' ? index - 1 : index + 1
+      if (index >= 0 && target >= 0 && target < subs.length) {
+        ;[subs[index], subs[target]] = [subs[target], subs[index]]
+      }
     }
-    return [200, null]
-  })
-
-  mock.onGet('/api/bidcompare/app-catalog/collection-categories').reply((config) => {
-    const appId = config.params?.appId as string | undefined
-    return [200, collectionCategories[appId ?? ''] ?? []]
-  })
-
-  mock.onPost('/api/bidcompare/app-catalog/collection-categories/publish').reply((config) => {
-    const { appId, categoryKey } = parseBody(config.data) as { appId: string, categoryKey: string }
-    const app = mockApplications.find((a) => a.id === appId)
-    const cat = collectionCategories[appId]?.find((c) => c.key === categoryKey)
-    if (!app || !cat) return [404, { message: '未找到采集分类' }]
-    const subId = `${appId}-${categoryKey}`
-    const subApp = {
-      id: subId,
-      name: cat.name,
-      category: app.category,
-      parentAppId: app.id,
-      parentAppName: app.name,
-      route: `/intelligence/${categoryKey}`,
-      icon: 'ExperimentOutlined',
-      version: 'v1.0.0',
-      status: '已发布' as const,
-      description: cat.description,
-    }
-    app.subApps = app.subApps ?? []
-    const existing = app.subApps.find((s) => s.id === subId)
-    if (existing) existing.status = '已发布'
-    else app.subApps.push(subApp)
-    cat.published = true
-    cat.subAppId = subId
-    return [200, subApp]
+    return [200, mockApplications]
   })
 }
