@@ -40,9 +40,8 @@ export function parsePlan(planText: string): Promise<PlanParseResult> {
   return request.post<PlanParseResult>(urls.meetingParsePlan, { planText }, { timeout: MediaTimeout })
 }
 
-export function generateSpeech(id: string): Promise<SpeechDraftDto> {
-  return request.post<SpeechDraftDto>(fillUrl(urls.meetingSpeechGenerate, { id }), undefined, { timeout: MediaTimeout })
-}
+// 生成晨会稿只有流式一条路（streamSpeechDraft）：整包 generateSpeech 已删除，
+// 非流式端点不再被前端引用（DGX 优化单 A3，避免任何回退）。
 
 /**
  * 流式生成晨会稿：服务端按 LLM 增量逐段推送纯文本（text/plain），

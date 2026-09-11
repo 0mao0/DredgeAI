@@ -151,7 +151,7 @@ export const urls = {
   meetingRecord: '/bidcompare/meeting-records',
   meetingHistory: '/bidcompare/meeting-records',
   meetingParsePlan: '/bidcompare/meeting-records/parse-plan',
-  meetingSpeechGenerate: '/bidcompare/meeting-records/:id/speech/generate',
+  // 晨会稿生成只有流式端点（DGX 优化单 A3：整包路径已下线，防止旧调用回退到非流式）
   meetingSpeechGenerateStream: '/bidcompare/meeting-records/:id/speech/generate/stream',
   meetingSpeechDraft: '/bidcompare/meeting-records/:id/speech',
   meetingSpeechAudio: '/bidcompare/meeting-records/:id/speech/audio',
