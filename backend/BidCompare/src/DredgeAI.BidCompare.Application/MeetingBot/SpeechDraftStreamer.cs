@@ -72,7 +72,8 @@ public class SpeechDraftStreamer : ISpeechDraftStreamer, ITransientDependency
 
     public async Task<string> GenerateAsync(Guid id, CancellationToken cancellationToken = default)
     {
-        var (meeting, userPrompt) = await BuildAsync(id, cancellationToken);
+        // 非流式路径无进度展示（整包生成，进度无意义）
+        var (meeting, userPrompt) = await BuildAsync(id, null, cancellationToken);
         var content = await _llmGateway.CompleteAsync(SpeechSystemPrompt, userPrompt, cancellationToken);
         await PersistAsync(meeting, content);
         return content;
@@ -81,9 +82,12 @@ public class SpeechDraftStreamer : ISpeechDraftStreamer, ITransientDependency
     public async Task<string> GenerateStreamAsync(
         Guid id,
         Func<string, CancellationToken, Task> onDelta,
+        Func<SpeechDraftProgress, CancellationToken, Task>? onProgress = null,
         CancellationToken cancellationToken = default)
     {
-        var (meeting, userPrompt) = await BuildAsync(id, cancellationToken);
+        var (meeting, userPrompt) = await BuildAsync(id, onProgress, cancellationToken);
+        await EmitProgressAsync(
+            onProgress, new SpeechDraftProgress("generate", "AI 正在逐字生成晨会稿…"), cancellationToken);
         var builder = new StringBuilder();
         try
         {
@@ -113,13 +117,18 @@ public class SpeechDraftStreamer : ISpeechDraftStreamer, ITransientDependency
         return content;
     }
 
-    private async Task<(MeetingRecord Meeting, string UserPrompt)> BuildAsync(Guid id, CancellationToken ct)
+    private async Task<(MeetingRecord Meeting, string UserPrompt)> BuildAsync(
+        Guid id,
+        Func<SpeechDraftProgress, CancellationToken, Task>? onProgress,
+        CancellationToken ct)
     {
         var meeting = await _meetings.GetAsync(id, cancellationToken: ct);
         var preInfo = ParsePreInfo(meeting.PreInfoJson);
+        await EmitProgressAsync(onProgress, new SpeechDraftProgress("load", "已加载会议信息"), ct);
 
         var query = $"晨会安全交底、今日任务：{preInfo.Tasks}；风险点：{preInfo.RiskPoints}" +
             (string.IsNullOrWhiteSpace(preInfo.ProjectName) ? "" : $"；项目：{preInfo.ProjectName}");
+        await EmitProgressAsync(onProgress, new SpeechDraftProgress("search", "正在检索晨会知识库…"), ct);
         IReadOnlyList<AnGineerHit> hits;
         try
         {
@@ -130,6 +139,13 @@ public class SpeechDraftStreamer : ISpeechDraftStreamer, ITransientDependency
             _logger.LogWarning(ex, "晨会稿检索失败，降级为纯 LLM 生成");
             hits = [];
         }
+
+        await EmitProgressAsync(
+            onProgress,
+            hits.Count > 0
+                ? new SpeechDraftProgress("evidence", $"知识库命中 {hits.Count} 条证据")
+                : new SpeechDraftProgress("evidence", "知识库无有效证据，按通用安全交底继续生成"),
+            ct);
 
         var evidence = hits.Count > 0
             ? string.Join("\n", hits.Select(h => $"- [{h.Title}]({h.DocId}) {Clip(h.Text, EvidenceTextMaxChars)}"))
@@ -189,6 +205,13 @@ public class SpeechDraftStreamer : ISpeechDraftStreamer, ITransientDependency
             _logger.LogWarning(ex, "清理晨会稿语音缓存失败（{MeetingId}）", meetingId);
         }
     }
+
+    /// <summary>进度事件透出（回调为空则跳过）；回调异常按调用方取消语义原样上抛，不吞。</summary>
+    private static Task EmitProgressAsync(
+        Func<SpeechDraftProgress, CancellationToken, Task>? onProgress,
+        SpeechDraftProgress progress,
+        CancellationToken ct)
+        => onProgress is null ? Task.CompletedTask : onProgress(progress, ct);
 
     /// <summary>超长截断并标注省略，防止单段长文本把 prompt 撑爆（见 A1/A2 常量注释）。</summary>
     private static string Clip(string text, int maxChars)

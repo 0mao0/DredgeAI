@@ -31,6 +31,40 @@
         <div class="speech-draft-step__scroll">
           <div class="speech-draft-step__card">
             <template v-if="!editing">
+              <!-- 生成中：管线进度展开为「思考过程」步骤列表，每步显示耗时（进行中每 0.1s 动态刷新） -->
+              <div v-if="showSteps" class="speech-draft-step__steps">
+                <div
+                  v-for="(step, index) in stepViews"
+                  :key="step.key"
+                  class="speech-draft-step__step"
+                  :class="{ 'is-active': index === spinnerIndex }"
+                >
+                  <LoadingOutlined v-if="index === spinnerIndex" spin class="speech-draft-step__step-icon" />
+                  <CheckCircleFilled v-else class="speech-draft-step__step-icon is-done" />
+                  <span>{{ step.label }}</span>
+                  <span class="speech-draft-step__step-dur">{{ step.dur }}s</span>
+                </div>
+              </div>
+              <!-- 生成结束：步骤收起为「生成过程」摘要行，点击展开回看各步耗时 -->
+              <div v-else-if="visibleSteps.length > 0" class="speech-draft-step__runmeta">
+                <button
+                  type="button"
+                  class="speech-draft-step__runmeta-toggle"
+                  @click="toggleStepsExpanded"
+                >
+                  <span class="speech-draft-step__runmeta-caret" aria-hidden="true">{{ stepsExpanded ? '▾' : '▸' }}</span>
+                  <span>生成过程 · 共 {{ runTotalText }}</span>
+                  <span class="speech-draft-step__runmeta-count">{{ visibleSteps.length }} 步</span>
+                  <span class="speech-draft-step__runmeta-hint">{{ stepsExpanded ? '收起' : '展开' }}</span>
+                </button>
+                <div v-if="stepsExpanded" class="speech-draft-step__steps is-archived">
+                  <div v-for="step in stepViews" :key="step.key" class="speech-draft-step__step">
+                    <CheckCircleFilled class="speech-draft-step__step-icon is-done" />
+                    <span>{{ step.label }}</span>
+                    <span class="speech-draft-step__step-dur">{{ step.dur }}s</span>
+                  </div>
+                </div>
+              </div>
               <p
                 v-for="(para, index) in paragraphs"
                 :key="index"
@@ -39,7 +73,7 @@
               >
                 {{ para }}
               </p>
-              <p v-if="streaming && paragraphs.length === 0" class="speech-draft-step__typing-hint">
+              <p v-if="streaming && paragraphs.length === 0 && !showSteps" class="speech-draft-step__typing-hint">
                 正在组织语言…
               </p>
               <span v-if="streaming" class="speech-draft-step__cursor" />
@@ -80,8 +114,8 @@
 </template>
 
 <script setup lang="ts">
-import { computed, ref, watch } from 'vue'
-import { CalendarOutlined } from '@ant-design/icons-vue'
+import { computed, onBeforeUnmount, ref, watch } from 'vue'
+import { CalendarOutlined, CheckCircleFilled, LoadingOutlined } from '@ant-design/icons-vue'
 import SectionCard from '@shared/web/components/SectionCard.vue'
 import AppButton from '@shared/web/components/AppButton.vue'
 import type { SpeechDraftDto } from '@/types'
@@ -94,6 +128,8 @@ const props = defineProps<{
   /** 流式生成中（草稿尚未落库，直接渲染 streamingText） */
   streaming?: boolean
   streamingText?: string
+  /** 流式生成中的管线进度步骤（SSE status，at 为到达时刻 ms）；每步耗时按相邻到达时刻差值计算 */
+  streamStatuses?: { key: string, label: string, at: number }[]
   date?: string
   meetingId?: string
 }>()
@@ -123,6 +159,56 @@ const parsed = computed(() => {
   return { lines: text ? text.split('\n') : [], note: notes[0] ?? '' }
 })
 const paragraphs = computed(() => parsed.value.lines)
+const visibleSteps = computed(() => props.streamStatuses ?? [])
+/** 正文是否已开始流出（决定还有没有「进行中」步骤） */
+const textStarted = computed(() => (props.streamingText?.length ?? 0) > 0)
+/** 生成结束后「生成过程」是否展开（默认折叠为摘要行；新一轮生成自动收起） */
+const stepsExpanded = ref(false)
+function toggleStepsExpanded(): void {
+  stepsExpanded.value = !stepsExpanded.value
+}
+/** 整轮生成耗时：首步到达 → 末步（首个字到达）时刻差 */
+const runTotalText = computed(() => {
+  const steps = visibleSteps.value
+  if (steps.length < 2) return '—'
+  return `${((steps[steps.length - 1].at - steps[0].at) / 1000).toFixed(1)}s`
+})
+/** 正文开始流出后不再有「进行中」步骤（最后一步由「首个字到达」事件定格 TTFT） */
+const spinnerIndex = computed(() => (textStarted.value ? -1 : visibleSteps.value.length - 1))
+/** 流式期间持续展示步骤列表（正文流出后定格耗时、保留在正文上方） */
+const showSteps = computed(() => Boolean(props.streaming) && visibleSteps.value.length > 0)
+
+// 进行中步骤的耗时靠本地时钟每 100ms 推进；停止流式即停表，避免空转
+const nowTick = ref(Date.now())
+let tickTimer: ReturnType<typeof setInterval> | null = null
+watch(
+  () => props.streaming,
+  (on) => {
+    if (on) {
+      nowTick.value = Date.now()
+      stepsExpanded.value = false
+      if (!tickTimer) tickTimer = setInterval(() => { nowTick.value = Date.now() }, 100)
+    } else if (tickTimer) {
+      clearInterval(tickTimer)
+      tickTimer = null
+    }
+  },
+  { immediate: true },
+)
+onBeforeUnmount(() => {
+  if (tickTimer) clearInterval(tickTimer)
+  tickTimer = null
+})
+
+// 步骤 i 的耗时 = 下一步到达时刻 − 本步到达时刻；进行中的末步用本地时钟实时推进
+const stepViews = computed(() =>
+  visibleSteps.value.map((step, index) => {
+    const next = visibleSteps.value[index + 1]
+    // 正文流出后末步按其自身到达时刻定格（其后即「首个字到达」事件，耗时 0.0s）
+    const end = next ? next.at : index === spinnerIndex.value ? nowTick.value : step.at
+    return { ...step, dur: Math.max(0, (end - step.at) / 1000).toFixed(1) }
+  }),
+)
 const noEvidenceNote = computed(() => parsed.value.note)
 const charCount = computed(() => displayText.value.replace(/\s/g, '').length)
 const minutes = computed(() => Math.max(1, Math.ceil(charCount.value / 4 / 60)))
@@ -275,6 +361,73 @@ function onConfirm(): void {
 
 .speech-draft-step__card {
   margin-bottom: @spacing-md;
+}
+.speech-draft-step__steps {
+  display: flex;
+  flex-direction: column;
+  gap: @spacing-sm;
+  margin-bottom: @spacing-md;
+}
+.speech-draft-step__step {
+  display: flex;
+  align-items: center;
+  gap: @spacing-sm;
+  font-size: @font-size-sm;
+  color: @text-tertiary;
+
+  &.is-active {
+    color: @text-primary;
+  }
+}
+.speech-draft-step__step-icon {
+  font-size: @font-size-sm;
+
+  &.is-done {
+    color: @success;
+  }
+}
+.speech-draft-step__step-dur {
+  color: @text-tertiary;
+  font-size: @font-size-xs;
+  font-variant-numeric: tabular-nums;
+}
+
+.speech-draft-step__runmeta {
+  margin-bottom: @spacing-md;
+}
+.speech-draft-step__runmeta-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: @spacing-sm;
+  padding: @spacing-xs @spacing-base;
+  border: 1px solid @divider-color;
+  border-radius: @radius-sm;
+  background: color-mix(in srgb, var(--color-text-tertiary) 6%, transparent);
+  cursor: pointer;
+  font-size: @font-size-sm;
+  color: @text-secondary;
+
+  &:hover {
+    color: @brand-primary;
+    border-color: @brand-primary;
+  }
+}
+.speech-draft-step__runmeta-caret {
+  font-size: @font-size-sm;
+  color: @text-secondary;
+}
+.speech-draft-step__runmeta-count {
+  font-size: @font-size-xs;
+  color: @text-tertiary;
+}
+.speech-draft-step__runmeta-hint {
+  font-size: @font-size-xs;
+  color: @brand-primary;
+}
+.speech-draft-step__steps.is-archived {
+  margin-top: @spacing-sm;
+  margin-bottom: 0;
+  padding-left: @spacing-lg;
 }
 .speech-draft-step__typing-hint {
   margin: 0;

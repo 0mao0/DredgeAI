@@ -43,14 +43,21 @@ export function parsePlan(planText: string): Promise<PlanParseResult> {
 // 生成晨会稿只有流式一条路（streamSpeechDraft）：整包 generateSpeech 已删除，
 // 非流式端点不再被前端引用（DGX 优化单 A3，避免任何回退）。
 
+/** 晨会稿生成进度事件（SSE status）：首字到达前的管线步骤，key 唯一、按到达顺序渲染 */
+export interface SpeechDraftStatus {
+  key: string
+  label: string
+}
+
 /**
- * 流式生成晨会稿：服务端按 LLM 增量逐段推送纯文本（text/plain），
- * 客户端边收边渲染，避免整稿 30-50s 干等。
- * 请求正常结束即代表已落库；中途断开/报错会抛出，由调用方按失败处理。
+ * 流式生成晨会稿（SSE）：首字前服务端以 event:status 推送管线进度（检索知识库等步骤），
+ * LLM 增量以 event:delta 逐段推送（data 内换行按 SSE 规范拆行重组），边收边渲染。
+ * 请求正常结束即代表已落库；error 事件或中途断开会抛出，由调用方按失败处理。
  */
 export async function streamSpeechDraft(
   id: string,
   onDelta: (delta: string) => void,
+  onStatus?: (status: SpeechDraftStatus) => void,
   signal?: AbortSignal,
 ): Promise<void> {
   const token = getCookie(STORAGE_TOKEN_KEY)
@@ -68,15 +75,48 @@ export async function streamSpeechDraft(
   }
   const reader = res.body.getReader()
   const decoder = new TextDecoder('utf-8')
+
+  const handleFrame = (frame: string): void => {
+    let event = 'message'
+    const dataLines: string[] = []
+    for (const line of frame.split('\n')) {
+      if (line.startsWith('event:')) event = line.slice(6).trim()
+      else if (line.startsWith('data:')) dataLines.push(line.slice(5).replace(/^ /, ''))
+    }
+    const data = dataLines.join('\n')
+    if (event === 'delta') {
+      if (data) onDelta(data)
+    } else if (event === 'status') {
+      try {
+        onStatus?.(JSON.parse(data) as SpeechDraftStatus)
+      } catch {
+        // 坏帧忽略，不打断渲染
+      }
+    } else if (event === 'error') {
+      throw new Error(data || '晨会稿生成失败')
+    }
+  }
+
+  let buffer = ''
+  const drainFrames = (): void => {
+    for (;;) {
+      const sep = buffer.indexOf('\n\n')
+      if (sep < 0) return
+      const frame = buffer.slice(0, sep)
+      buffer = buffer.slice(sep + 2)
+      if (frame.trim()) handleFrame(frame)
+    }
+  }
   for (;;) {
     const { done, value } = await reader.read()
     if (done) break
-    const delta = decoder.decode(value, { stream: true })
-    if (delta) onDelta(delta)
+    buffer += decoder.decode(value, { stream: true })
+    drainFrames()
   }
-  // 收尾：冲掉解码器残留的多字节字符，避免末字被截断
-  const tail = decoder.decode()
-  if (tail) onDelta(tail)
+  // 收尾：冲掉解码器残留的多字节字符与最后一帧，避免末字被截断
+  buffer += decoder.decode()
+  drainFrames()
+  if (buffer.trim()) handleFrame(buffer)
 }
 
 export function getSpeechDraft(id: string): Promise<SpeechDraftDto | null> {
