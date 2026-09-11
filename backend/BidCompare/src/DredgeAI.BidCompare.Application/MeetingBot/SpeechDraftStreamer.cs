@@ -32,6 +32,18 @@ public class SpeechDraftStreamer : ISpeechDraftStreamer, ITransientDependency
 
     private const string SpeechAudioCachePrefix = "meeting/speech";
 
+    // —— Prompt 体量控制（DGX 2026-09-11 优化单 A1/A2）——
+    // 实测：未截断的 RAG 证据块把晨会稿 prompt 推到 ~28k token（prefill 4.7s，端到端 ~15s）；
+    // 截断后 ~3k token，prefill ≈0.5s。晨会稿只需 300-500 字口语稿，长证据并不增加可用信息。
+    /// <summary>RAG 检索条数：5→3，与证据截断配合把 prompt 压到千级 token。</summary>
+    private const int EvidenceTopK = 3;
+
+    /// <summary>单条证据拼入 prompt 的最大字数。</summary>
+    private const int EvidenceTextMaxChars = 500;
+
+    /// <summary>施工方案摘要拼入 prompt 的最大字数（另一个不限长口）。</summary>
+    private const int ProjectSummaryMaxChars = 800;
+
     private readonly IRepository<MeetingRecord, Guid> _meetings;
     private readonly IRepository<SpeechDraft, Guid> _drafts;
     private readonly IAnGineerClient _anGineer;
@@ -111,7 +123,7 @@ public class SpeechDraftStreamer : ISpeechDraftStreamer, ITransientDependency
         IReadOnlyList<AnGineerHit> hits;
         try
         {
-            hits = await _anGineer.SearchAsync(query, topK: 5);
+            hits = await _anGineer.SearchAsync(query, topK: EvidenceTopK);
         }
         catch (Exception ex)
         {
@@ -120,7 +132,7 @@ public class SpeechDraftStreamer : ISpeechDraftStreamer, ITransientDependency
         }
 
         var evidence = hits.Count > 0
-            ? string.Join("\n", hits.Select(h => $"- [{h.Title}]({h.DocId}) {h.Text}"))
+            ? string.Join("\n", hits.Select(h => $"- [{h.Title}]({h.DocId}) {Clip(h.Text, EvidenceTextMaxChars)}"))
             : "（无知识库证据）";
 
         var projectContext = string.IsNullOrWhiteSpace(preInfo.ProjectName)
@@ -128,7 +140,7 @@ public class SpeechDraftStreamer : ISpeechDraftStreamer, ITransientDependency
             : $"当前项目：{preInfo.ProjectName}。" +
               (string.IsNullOrWhiteSpace(preInfo.ProjectSummary)
                   ? ""
-                  : $"施工方案要点：{preInfo.ProjectSummary}。") +
+                  : $"施工方案要点：{Clip(preInfo.ProjectSummary, ProjectSummaryMaxChars)}。") +
               "\n";
         var userPrompt =
             $"前置信息：日期 {preInfo.Date:yyyy-MM-dd}，天气 {preInfo.Weather}，" +
@@ -177,6 +189,12 @@ public class SpeechDraftStreamer : ISpeechDraftStreamer, ITransientDependency
             _logger.LogWarning(ex, "清理晨会稿语音缓存失败（{MeetingId}）", meetingId);
         }
     }
+
+    /// <summary>超长截断并标注省略，防止单段长文本把 prompt 撑爆（见 A1/A2 常量注释）。</summary>
+    private static string Clip(string text, int maxChars)
+        => string.IsNullOrEmpty(text) || text.Length <= maxChars
+            ? text
+            : text[..maxChars] + "……（截断）";
 
     internal static PreInfoSnapshot ParsePreInfo(string json)
     {
