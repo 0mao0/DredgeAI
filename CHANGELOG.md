@@ -4,6 +4,12 @@
 在本文件顶部插入新版本段：若该版本段已存在（手工精修过）则保留不覆盖，
 否则按上个 tag 以来的提交自动生成。
 
+## 0.2.5
+
+- refactor(user-web): 晨会稿生成仅保留流式路径
+- perf(meeting): 晨会稿 prompt 瘦身（DGX 优化单 A1/A2）
+- perf(llm): 夜间批 prompt 前缀缓存改造（DGX 优化单 B）
+
 ## 0.2.4
 
 - docs(patches): 更新 docs-ui 现状到 v0.2.2 并补 0.2.x 升级须知
