@@ -11,12 +11,9 @@ namespace DredgeAI.BidCompare.TenderReadings.Extractors;
 /// <summary>P2 技术参数规格表 LLM 抽取：参数名、要求值、单位、是否实质性。</summary>
 public class TechnicalParametersExtractor : LlmFieldExtractorBase, IBaselineFieldExtractor, ITransientDependency
 {
-    private const string SystemPrompt =
-        "你是招投标文件分析助手。从招标文件全文中提取技术参数规格要求，包括参数名、要求值、单位与是否实质性条款。" +
-        "只返回 JSON 数组，不要输出任何其他文字。";
-
-    private const string UserPromptTemplate =
-        "以下是招标文件全文：\n\n{{DOCUMENT}}\n\n" +
+    /// <summary>提取任务说明（拼在文档全文之后；前缀部分见 <see cref="LlmFieldExtractorBase.SharedSystemPrompt"/>，改动会破坏当晚前缀缓存命中）。</summary>
+    private const string QuestionPrompt =
+        "从上述招标文件全文中提取技术参数规格要求，包括参数名、要求值、单位与是否实质性条款。" +
         "请以 JSON 数组返回技术参数，每项格式：" +
         "{\"fieldKey\":\"technical_parameter_序号\",\"value\":{\"name\":\"参数名\",\"requiredValue\":\"要求值\",\"unit\":\"单位\",\"substantive\":true},\"rawText\":\"命中原文的逐字引用\"}。" +
         "rawText 必须是招标文件原文的逐字引用（不得转述或概括），可直接在原文中检索到；跨多行/多单元格时取其中最完整的一段，不超过 120 字。" +
@@ -36,8 +33,7 @@ public class TechnicalParametersExtractor : LlmFieldExtractorBase, IBaselineFiel
         var index = 0;
         return await ExtractByLlmAsync(
             context,
-            SystemPrompt,
-            UserPromptTemplate,
+            QuestionPrompt,
             element =>
             {
                 index++;
