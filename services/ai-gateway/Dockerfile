@@ -7,8 +7,8 @@ ENV DEBIAN_FRONTEND=noninteractive \
     UV_HTTP_TIMEOUT=600 \
     PATH="/root/.local/bin:/app/services/ai-gateway/.venv/bin:$PATH"
 
-# 区别于 compare-algo：angineer-ai-inference 为 git 依赖（uv.lock 锁定 v0.1.0），
-# uv sync 需要系统 git 拉取 github 仓库；其余依赖均为 manylinux wheel，无需额外系统库
+# 区别于 compare-algo：angineer-ai-inference 历史上为 git 依赖，现经 PyPI wheel 分发
+# （uv.lock 锁定 v0.2.1）；git 保留作 uv 源码依赖兜底，其余依赖均为 manylinux wheel，无需额外系统库
 RUN sed -i 's|deb.debian.org|mirrors.aliyun.com|g; s|security.debian.org|mirrors.aliyun.com|g' /etc/apt/sources.list.d/debian.sources \
     && apt-get update && apt-get install -y --no-install-recommends \
         curl ca-certificates git \

@@ -39,7 +39,7 @@ dev = [
 
 [[package]]
 name = "angineer-ai-inference"
-version = "0.2.0"
+version = "0.2.1"
 source = { registry = "https://pypi.tuna.tsinghua.edu.cn/simple/" }
 dependencies = [
     { name = "httpx" },
@@ -47,9 +47,9 @@ dependencies = [
     { name = "pydantic" },
     { name = "python-dotenv" },
 ]
-sdist = { url = "https://pypi.tuna.tsinghua.edu.cn/packages/90/ca/32283b9c1602fdd2e9ff9d50a7cd75cf1547fdbcf93403b5fd031ea45879/angineer_ai_inference-0.2.0.tar.gz", hash = "sha256:36fea5e74f240055ef278073e1c59993a07839fa4be1c6522c980d7c131d152c", size = 32633, upload-time = "2026-08-31T06:17:54.289Z" }
+sdist = { url = "https://pypi.tuna.tsinghua.edu.cn/packages/1e/39/9c3cec1a86497df2879008983e9008a89365b246e461ddad7e3b93c7544b/angineer_ai_inference-0.2.1.tar.gz", hash = "sha256:ba35ed79848a2b058920516f7fc13958d846afdd1af86703fb4ed539996414aa", size = 35457, upload-time = "2026-09-12T07:24:29.581Z" }
 wheels = [
-    { url = "https://pypi.tuna.tsinghua.edu.cn/packages/1c/54/793a7df584776e695c00cc5a7d8aa6907485d8876cf07ea624daa7ecdce9/angineer_ai_inference-0.2.0-py3-none-any.whl", hash = "sha256:b13f9f3c738a560e5c7ab9c02317ba9e52c72ded4651aec4a90f07075abab3cd", size = 23405, upload-time = "2026-08-31T06:17:53.167Z" },
+    { url = "https://pypi.tuna.tsinghua.edu.cn/packages/73/ad/3de80a864c1c21e1ac1913eadcb9fc1692306fc94b0925b31d8924b94131/angineer_ai_inference-0.2.1-py3-none-any.whl", hash = "sha256:6db4263807f3a2e903bff533f77876857bbb51c78caa87c28f767ab8ff9558cd", size = 24611, upload-time = "2026-09-12T07:24:28.228Z" },
 ]
 
 [[package]]
