@@ -9,6 +9,15 @@
     "Permission:BidCompare.Tasks": "Compare tasks",
     "Permission:BidCompare.Drafts": "Upload drafts",
     "Permission:BidCompare.ClauseTemplates": "Clause templates",
+    "Permission:BidCompare.AiMeeting": "AI meeting",
+    "Permission:BidCompare.AiMeeting.ManageProjects": "Manage meeting projects",
+    "Permission:BidCompare.AiMeeting.ManageWorkers": "Manage worker profiles",
+    "Permission:BidCompare.AppCatalog": "App catalog",
+    "Permission:BidCompare.AppCatalog.Manage": "Manage app publishing",
+    "Permission:BidCompare.AppCatalog.ManagePermissions": "Manage app permissions",
+    "Permission:BidCompare.AppCatalog.Resources.View": "View app",
+    "Permission:BidCompare.AppCatalog.Resources.Edit": "Edit app",
+    "Permission:BidCompare.AppCatalog.Resources.Delete": "Delete app",
     "BidCompare:UnsupportedFileType": "Unsupported file type",
     "BidCompare:DocumentCountOutOfRange": "Too many bid documents"
   }

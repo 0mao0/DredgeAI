@@ -3,6 +3,7 @@ using System;
 using DredgeAI.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 using Volo.Abp.EntityFrameworkCore;
@@ -12,9 +13,11 @@ using Volo.Abp.EntityFrameworkCore;
 namespace DredgeAI.Migrations
 {
     [DbContext(typeof(BaseServerDbContext))]
-    partial class BaseServerDbContextModelSnapshot : ModelSnapshot
+    [Migration("20260914044324_update_permission_group_name_allow_null")]
+    partial class update_permission_group_name_allow_null
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder

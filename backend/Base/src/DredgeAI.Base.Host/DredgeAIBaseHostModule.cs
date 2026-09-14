@@ -1,3 +1,4 @@
+using DredgeAI.BidCompare;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.Cors;
 using Microsoft.Extensions.DependencyInjection.Extensions;
@@ -69,7 +70,8 @@ namespace DredgeAI;
     typeof(DredgeAIBaseHttpApiModule),
     typeof(DredgeAIBaseEntityFrameworkCoreModule),
     typeof(AbpAspNetCoreSerilogModule),
-    typeof(AbpSwashbuckleModule)
+    typeof(AbpSwashbuckleModule),
+    typeof(BidCompareApplicationContractsModule)
 )]
 public class DredgeAIBaseHostModule : AbpModule
 {
@@ -100,7 +102,6 @@ public class DredgeAIBaseHostModule : AbpModule
         
         Configure<PermissionManagementOptions>(options =>
         {
-            
             options.ProviderPolicies["R"] = DredgeAIBasePermissions.Roles.ManagePermissions;
             options.ProviderPolicies["U"] = DredgeAIBasePermissions.Users.ManagePermissions;
         });
