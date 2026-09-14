@@ -2,10 +2,12 @@
 import json
 import logging
 import threading
+from contextlib import asynccontextmanager
 
 from ai_inference import LLMClient, achat_result_guarded, load_llm_config_from_env
 from ai_inference.errors import LLMError
 from fastapi import Depends, FastAPI, Request
+from fastapi.encoders import jsonable_encoder
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse, StreamingResponse
 
@@ -29,7 +31,22 @@ def _configure_logging() -> None:
 
 _configure_logging()
 
-app = FastAPI(title="ai-gateway", version="0.1.0")
+
+@asynccontextmanager
+async def lifespan(_app: FastAPI):
+    """启动期配置自检：把配置错误从「首次请求才暴露」提前到启动可见。
+
+    只告警不拦启动——进程起得来、/healthz 可探活，配置问题由运维在日志里定位；
+    请求路径上的配置异常仍按 500 上报（不再冒充客户端 400）。
+    """
+    try:
+        logger.info("LLM 配置自检通过：%d 个模型", len(llm_client().configs))
+    except Exception as exc:
+        logger.warning("LLM 配置自检失败（服务仍启动，请检查 LLM_CONFIGS / ANGINEER_*）：%s", exc)
+    yield
+
+
+app = FastAPI(title="ai-gateway", version="0.1.0", lifespan=lifespan)
 
 
 def require_api_token(request: Request) -> None:
@@ -67,13 +84,19 @@ async def validation_exception_handler(request: Request, exc: RequestValidationE
         content=ErrorResponse(
             code="INVALID_REQUEST",
             message="请求体校验失败",
-            details={"errors": exc.errors()},
+            # 必须经 jsonable_encoder：字段校验器抛 ValueError 时 pydantic 会把该异常对象
+            # 放进 errors() 的 ctx.error，直接塞进 JSONResponse 会 TypeError（400 变 500）
+            details={"errors": jsonable_encoder(exc.errors())},
         ).model_dump(),
     )
 
 
 @app.exception_handler(ValueError)
 async def value_error_handler(request: Request, exc: ValueError) -> JSONResponse:
+    # 客户端请求体校验由 RequestValidationError 处理器负责；能走到这里的 ValueError
+    # 属服务端配置/内部错误（LLM_CONFIGS 非法 JSON、pydantic ValidationError 等），
+    # 不能冒充客户端错误：调用方对 4xx 不重试，会把服务端配置问题当自身请求非法排查
+    logger.warning("服务端 ValueError on %s: %s", request.url.path, exc)
     status, code = error_status(exc)
     return JSONResponse(
         status_code=status,

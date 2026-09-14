@@ -1,3 +1,35 @@
+/** 稿子里的元信息标注：只给界面提示，不参与朗读。与后端 SpeechDraftStreamer 的 prompt 约定一致。 */
+export const NO_EVIDENCE_NOTE = '本段依据无知识库证据'
+
+/** 括号包裹写法（（…）【…】[…]）优先整体吃掉，避免残留空括号 */
+const NOTE_BRACKETED = /[（(【[]\s*本段依据无知识库证据\s*[）)】\]]/g
+/** 裸写法：连同紧跟的句末标点一起吃掉（“散会。本段依据无知识库证据。” → “散会。”） */
+const NOTE_BARE = /本段依据无知识库证据[。．.]?/g
+/** 整行只剩这些符号（标点/空括号）时视为无内容 */
+const LEFTOVER_ONLY = /^[\s。．.,，、;；:：!！?？~～()（）【】[\]-]+$/
+
+/**
+ * 剥离元信息标注，返回可朗读正文 + 标注列表。
+ * 这类句子混在正文里会被 TTS 原样念出来（“本段依据无知识库证据。”现场很出戏），
+ * 所以朗读与字幕统一走返回的 text，标注单独交给界面提示；
+ * 兼容括号包裹、同行混排、句末带标点等模型输出的各种写法。
+ */
+export function splitDraftAnnotations(text: string): { text: string, notes: string[] } {
+  const notes: string[] = []
+  const lines: string[] = []
+  for (const raw of (text ?? '').split('\n')) {
+    if (!raw.includes(NO_EVIDENCE_NOTE)) {
+      const line = raw.trim()
+      if (line) lines.push(line)
+      continue
+    }
+    notes.push(NO_EVIDENCE_NOTE)
+    const rest = raw.replace(NOTE_BRACKETED, '').replace(NOTE_BARE, '').replace(/\s+/g, ' ').trim()
+    if (rest && !LEFTOVER_ONLY.test(rest)) lines.push(rest)
+  }
+  return { text: lines.join('\n'), notes }
+}
+
 /**
  * 晨会稿按“断句”拆分（不再按 60 字合并）：
  * - 首段仍是开场句（<=18 字，与服务端开场句缓存一致，命中后秒出）；

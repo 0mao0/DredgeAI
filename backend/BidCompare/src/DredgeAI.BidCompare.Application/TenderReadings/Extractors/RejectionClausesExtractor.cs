@@ -13,12 +13,9 @@ namespace DredgeAI.BidCompare.TenderReadings.Extractors;
 /// <summary>P2 废标 / 无效投标条款 LLM 抽取。</summary>
 public class RejectionClausesExtractor : LlmFieldExtractorBase, IBaselineFieldExtractor, ITransientDependency
 {
-    private const string SystemPrompt =
-        "你是招投标文件分析助手。从招标文件全文中提取所有废标、无效投标、否决投标相关的强制性条款。" +
-        "只返回 JSON 数组，不要输出任何其他文字。";
-
-    private const string UserPromptTemplate =
-        "以下是招标文件全文：\n\n{{DOCUMENT}}\n\n" +
+    /// <summary>提取任务说明（拼在文档全文之后；前缀部分见 <see cref="LlmFieldExtractorBase.SharedSystemPrompt"/>，改动会破坏当晚前缀缓存命中）。</summary>
+    private const string QuestionPrompt =
+        "从上述招标文件全文中提取所有废标、无效投标、否决投标相关的强制性条款。" +
         "请以 JSON 数组返回废标/无效投标条款，每项格式：" +
         "{\"fieldKey\":\"标准英文术语\",\"value\":{\"text\":\"条款原文\",\"mandatory\":true,\"category\":\"资质/报价/技术/工期/格式等\"},\"rawText\":\"条款原文的逐字引用\"}。" +
         "rawText 必须是招标文件原文的逐字引用（不得转述或概括），可直接在原文中检索到；跨多行/多单元格时取其中最完整的一段，不超过 120 字。" +
@@ -45,8 +42,7 @@ public class RejectionClausesExtractor : LlmFieldExtractorBase, IBaselineFieldEx
         var index = 0;
         var drafts = await ExtractByLlmAsync(
             context,
-            SystemPrompt,
-            UserPromptTemplate,
+            QuestionPrompt,
             element =>
             {
                 index++;

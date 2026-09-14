@@ -9,6 +9,7 @@ using System.Threading;
 using System.Threading.Tasks;
 using DredgeAI.BidCompare.Documents;
 using DredgeAI.BidCompare.Storage;
+using DredgeAI.BidCompare.TenderReadings.Extractors;
 using DredgeAI.BlobStoring;
 using Microsoft.Extensions.Logging;
 using Volo.Abp.DependencyInjection;
@@ -21,6 +22,12 @@ public class BaselineExtractionService : ITransientDependency
 {
     /// <summary>任务级进程内互斥：抽取整体「删旧重建」，并发执行会导致字段与锚点错配（多实例部署需换分布式锁）。</summary>
     private static readonly ConcurrentDictionary<Guid, SemaphoreSlim> TaskGates = new();
+
+    /// <summary>
+    /// DGX 前缀缓存错峰间隔：LLM 抽取器对同一文档共享 [指令+文档] 前缀，
+    /// 首条请求发出后等前缀写入 KV 缓存（DGX 侧实测 ~3s）再放其余请求，避免并发同时未命中重复 prefill。
+    /// </summary>
+    private static readonly TimeSpan PrefixCacheLeadInDelay = TimeSpan.FromSeconds(3);
     private readonly IRepository<BaselineField, Guid> _fieldRepository;
     private readonly IRepository<SourceMapItem, Guid> _sourceRepository;
     private readonly IRepository<TenderReadingTask, Guid> _taskRepository;
@@ -256,18 +263,30 @@ public class BaselineExtractionService : ITransientDependency
 
         // 并行执行各分类提取器：耗时主要在 LLM 网络调用上，串行会放大单任务耗时；
         // 校验/落库仍在主流程按顺序执行，避免并发写冲突。
+        // DGX 前缀缓存（调优建议 #2/#3）：LLM 抽取器共享文档前缀，第 1 条立即发出把前缀写入 KV 缓存，
+        // ~3s 后再一起放行其余 LLM 请求（3 路并发保留，只错峰不同时）；正则/本地抽取器不打 LLM，不等待。
+        var llmOrdinal = -1;
+        var dispatchPlan = _extractors
+            .Select(extractor => (Extractor: extractor, LlmOrder: extractor is LlmFieldExtractorBase ? ++llmOrdinal : -1))
+            .ToList();
+
         var extractorResults = await Task.WhenAll(
-            _extractors.Select(async extractor =>
+            dispatchPlan.Select(async item =>
             {
                 try
                 {
-                    var drafts = await extractor.ExtractAsync(context, cancellationToken);
-                    return (Extractor: extractor, Drafts: drafts, Error: (string?)null);
+                    if (item.LlmOrder > 0)
+                    {
+                        await Task.Delay(PrefixCacheLeadInDelay * item.LlmOrder, cancellationToken);
+                    }
+
+                    var drafts = await item.Extractor.ExtractAsync(context, cancellationToken);
+                    return (Extractor: item.Extractor, Drafts: drafts, Error: (string?)null);
                 }
                 catch (Exception ex) when (ex is not OperationCanceledException)
                 {
-                    _logger.LogWarning(ex, "抽取器 {Category} 执行失败", extractor.Category);
-                    return (Extractor: extractor, Drafts: (IReadOnlyList<BaselineFieldDraft>)Array.Empty<BaselineFieldDraft>(), Error: ex.Message);
+                    _logger.LogWarning(ex, "抽取器 {Category} 执行失败", item.Extractor.Category);
+                    return (Extractor: item.Extractor, Drafts: (IReadOnlyList<BaselineFieldDraft>)Array.Empty<BaselineFieldDraft>(), Error: ex.Message);
                 }
             }));
 

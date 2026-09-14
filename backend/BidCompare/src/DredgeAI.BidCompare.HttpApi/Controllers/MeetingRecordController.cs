@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
+using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
 using DredgeAI.BidCompare.MeetingBot;
@@ -67,28 +68,46 @@ public class MeetingRecordController : BidCompareController
     public Task<SpeechDraftDto> GenerateSpeechAsync(Guid id)
         => _service.GenerateSpeechAsync(id);
 
+    /// <summary>SSE status 事件负载：camelCase JSON（前端按 key/label 渲染步骤）。</summary>
+    private static readonly JsonSerializerOptions StatusJsonOptions = new()
+    {
+        PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
+    };
+
     /// <summary>
-    /// 流式生成晨会稿：text/plain 逐段推送 LLM 增量文本。
-    /// 请求正常结束即代表已落库；中途断开/报错则前端按失败处理，可重试。
+    /// 流式生成晨会稿（SSE，text/event-stream）：首字到达前先以 event:status 推送管线进度
+    /// （加载会议 → 检索知识库 → 证据结果 → 开始生成），LLM 增量以 event:delta 逐段推送，
+    /// 检索与等待首 token 阶段用户不再黑屏干等。
+    /// 请求正常结束即代表已落库；未推送任何内容时报 500；已开始推送后异常按正常收尾（部分文本已展示）。
     /// 走 ISpeechDraftStreamer（普通服务，不经 ABP 校验/审计拦截器序列化参数）。
     /// </summary>
     /// <param name="id">会议记录 ID</param>
-    /// <returns>无返回值；响应体为逐段推送的增量文本流</returns>
+    /// <returns>无返回值；响应体为 SSE 事件流（event: status / event: delta）</returns>
     [HttpPost("{id}/speech/generate/stream")]
     public async Task GenerateSpeechStreamAsync(Guid id)
     {
         var ct = HttpContext.RequestAborted;
-        Response.ContentType = "text/plain; charset=utf-8";
+        Response.ContentType = "text/event-stream; charset=utf-8";
         Response.Headers["X-Accel-Buffering"] = "no";
+
+        // SSE 帧：含换行的 data（LLM 段落增量）按规范拆多行 data:，前端以 \n 重组
+        async Task WriteEventAsync(string ev, string data)
+        {
+            await Response.WriteAsync($"event: {ev}\n", ct);
+            foreach (var line in data.Split('\n'))
+            {
+                await Response.WriteAsync($"data: {line.Replace("\r", string.Empty)}\n", ct);
+            }
+            await Response.WriteAsync("\n", ct);
+            await Response.Body.FlushAsync(ct);
+        }
+
         try
         {
             await _streamer.GenerateStreamAsync(
                 id,
-                async (delta, token) =>
-                {
-                    await Response.WriteAsync(delta, token);
-                    await Response.Body.FlushAsync(token);
-                },
+                (delta, token) => WriteEventAsync("delta", delta),
+                (progress, token) => WriteEventAsync("status", JsonSerializer.Serialize(progress, StatusJsonOptions)),
                 ct);
         }
         catch (OperationCanceledException) when (ct.IsCancellationRequested)
@@ -97,7 +116,7 @@ public class MeetingRecordController : BidCompareController
         }
         catch (Exception)
         {
-            // 尚未写任何内容时返回 500（text/plain 无 output formatter，
+            // 尚未写任何内容时返回 500（text/event-stream 无 output formatter，
             // 直接抛会变 406）；已开始推送则响应正常结束（部分文本已展示）
             if (!Response.HasStarted)
             {

@@ -1,3 +1,5 @@
+import logging
+
 import pytest
 from ai_inference import (
     AllProvidersFailedError,
@@ -65,6 +67,37 @@ def test_chat_invalid_body():
     r = client.post("/v1/chat", json={"messages": []})
     assert r.status_code == 400
     assert r.json()["code"] == "INVALID_REQUEST"
+
+
+def test_chat_invalid_mode_still_400():
+    # 请求体级 ValueError（mode 白名单）仍由 RequestValidationError 处理器报 400
+    r = client.post("/v1/chat", json={"messages": [{"role": "user", "content": "hi"}], "mode": "bogus"})
+    assert r.status_code == 400
+    assert r.json()["code"] == "INVALID_REQUEST"
+
+
+def test_chat_config_error_maps_500(monkeypatch):
+    # 服务端配置类异常不得冒充客户端 400：LLM_CONFIGS 非法 JSON 的 JSONDecodeError 与
+    # 字段非法的 pydantic ValidationError 都是 ValueError 子类，400 只代表请求体非法
+    def _boom():
+        raise ValueError("LLM_CONFIGS 不是合法 JSON")
+
+    monkeypatch.setattr("app.main.llm_client", _boom)
+    r = client.post("/v1/chat", json={"messages": [{"role": "user", "content": "hi"}]})
+    assert r.status_code == 500
+    assert r.json()["code"] == "INTERNAL_ERROR"
+
+
+def test_startup_config_selfcheck_warns(monkeypatch, caplog):
+    # lifespan 自检：配置加载失败只 WARNING，不拦启动（测试端需 with TestClient 才触发 lifespan）
+    def _boom():
+        raise ValueError("LLM_CONFIGS 不是合法 JSON")
+
+    monkeypatch.setattr("app.main.llm_client", _boom)
+    with caplog.at_level(logging.WARNING):
+        with TestClient(app) as c:
+            assert c.get("/healthz").status_code == 200
+    assert any("LLM 配置自检失败" in record.getMessage() for record in caplog.records)
 
 
 def test_chat_no_models_503(fake_client, monkeypatch):

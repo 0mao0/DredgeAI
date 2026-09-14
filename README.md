@@ -108,7 +108,7 @@ graph TB
 |---|---|---|---|
 | AnGIneer docs-api | 外部解析服务（:8790） | 仓库外 | 文档解析为 `doc_blocks_graph.jsonl` + meta，ABP 经 `HttpAnGineerClient` 调用 |
 | angineer-docs-ui | git submodule | `vendor/angineer-docs-ui` | 前端文档展示组件库（`@angineer/docs-ui`），user-web 的 DocViewer / PDF_Viewer 消费 |
-| angineer-ai-inference | Python 库（v0.1.0） | ai-gateway 依赖 | LLM 推理库：多模型路由 / 重试 / 熔断 / SSE，ai-gateway 包装为 OpenAI 兼容接口 |
+| angineer-ai-inference | Python 库（v0.2.2） | ai-gateway 依赖 | LLM 推理库：多模型路由 / 重试 / 熔断 / SSE，ai-gateway 包装为 OpenAI 兼容接口 |
 
 ```mermaid
 graph LR

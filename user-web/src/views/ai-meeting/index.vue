@@ -40,6 +40,7 @@
       :loading="loading"
       :streaming="streaming"
       :streaming-text="streamingText"
+      :stream-statuses="streamStatuses"
       :date="meeting?.date"
       :meeting-id="meeting?.id"
       @generate="handleGenerateSpeech"
@@ -96,7 +97,8 @@ import {
   uploadUnrecognizedFaces,
   uploadMeetingRecording,
 } from '@/api/modules/aiMeeting'
-import type { UnrecognizedFaceCrop } from '@/api/modules/aiMeeting'
+import type { SpeechDraftStatus, UnrecognizedFaceCrop } from '@/api/modules/aiMeeting'
+
 import MeetingInfoStep from './components/MeetingInfoStep.vue'
 import PlanConfirmStep from './components/PlanConfirmStep.vue'
 import SpeechDraftStep from './components/SpeechDraftStep.vue'
@@ -116,6 +118,8 @@ const draft = ref<SpeechDraftDto | null>(null)
 /** 晨会稿流式生成中（边生成边显示文字） */
 const streaming = ref(false)
 const streamingText = ref('')
+/** 流式生成中已到达的管线进度步骤（SSE status + 本地到达时刻），渲染为带耗时的「思考过程」列表 */
+const streamStatuses = ref<(SpeechDraftStatus & { at: number })[]>([])
 const attendance = ref<AttendanceItemDto[]>([])
 const unrecognizedFaces = ref<AttendanceItemDto[]>([])
 const qaRecords = ref<QaRecordDto[]>([])
@@ -219,15 +223,31 @@ async function streamSpeechDraftFlow(): Promise<void> {
   const meetingId = meeting.value.id
   streaming.value = true
   streamingText.value = ''
+  streamStatuses.value = []
   try {
-    await streamSpeechDraft(meetingId, (delta) => {
-      streamingText.value += delta
-    })
+    await streamSpeechDraft(
+      meetingId,
+      (delta) => {
+        // 首个增量到达 = TTFT 终点：合成一个步骤把「AI 正在逐字生成」的等待时长定格
+        if (!streamingText.value) {
+          streamStatuses.value.push({ key: 'first-char', label: '首个字到达', at: Date.now() })
+        }
+        streamingText.value += delta
+      },
+      (status) => {
+        const timed = { ...status, at: Date.now() }
+        const idx = streamStatuses.value.findIndex((s) => s.key === status.key)
+        if (idx >= 0) streamStatuses.value[idx] = timed
+        else streamStatuses.value.push(timed)
+      },
+    )
     const content = streamingText.value
     streamingText.value = ''
+    // 完成后不清步骤列表：收起为「生成过程」摘要，点击可回看各步耗时
     draft.value = { id: meetingId, content, status: 'generated', updatedAt: new Date().toISOString() }
   } catch (err) {
     streamingText.value = ''
+    streamStatuses.value = []
     draft.value = null
     throw err
   } finally {
@@ -243,6 +263,7 @@ async function handleLoadHistory(id: string): Promise<void> {
     uploadedFaceSignatures.clear()
     streaming.value = false
     streamingText.value = ''
+    streamStatuses.value = []
     draft.value = record.speechDraft ?? null
     const { recognized, unrecognized } = splitAttendance(record.attendance)
     attendance.value = recognized

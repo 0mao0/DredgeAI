@@ -6,3 +6,13 @@ packages:
   - user-web
   - admin-web
   - 'packages/*'
+
+# pnpm ≥11 默认禁止依赖执行 install/postinstall 脚本（安全策略），需逐个显式表态。
+# 下面的 false 是明确判定，不是漏配：
+#   esbuild   → 必需：安装平台二进制，不放行 vite build 直接失败
+#   vue-demi  → 必需：按当前 Vue 版本切换包入口
+#   core-js   → 不需要：postinstall 只是打印赞助提示
+allowBuilds:
+  esbuild: true
+  vue-demi: true
+  core-js: false

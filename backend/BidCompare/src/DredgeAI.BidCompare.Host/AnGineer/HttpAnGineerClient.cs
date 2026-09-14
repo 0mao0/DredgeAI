@@ -32,6 +32,12 @@ public class HttpAnGineerClient : IAnGineerClient, ITransientDependency
 {
     private const int MaxAttempts = 3;
 
+    /// <summary>
+    /// 知识检索时间预算：检索在晨会稿首字同步路径上（实测暖机 ~1.6s、服务冷启动/双请求并发时 3~5s），
+    /// 超预算取消本次检索、按「无知识库证据」降级生成（DGX 2026-09-11 A/B：无证据块端到端 3.8s，质量可接受）。
+    /// </summary>
+    private static readonly TimeSpan KnowledgeSearchBudget = TimeSpan.FromSeconds(3);
+
     private readonly IHttpClientFactory _httpClientFactory;
     private readonly AnGineerOptions _options;
     private readonly ILogger<HttpAnGineerClient> _logger;
@@ -151,28 +157,45 @@ public class HttpAnGineerClient : IAnGineerClient, ITransientDependency
             task_type = "content_qa",
             mode = "text"
         };
-        using var response = await client.PostAsJsonAsync(
-            "/api/knowledge/internal/retrieve", request, cancellationToken);
-        if (!response.IsSuccessStatusCode)
+        // 预算降级：超预算只取消本次检索请求，不误伤调用方自身的取消语义
+        using var budget = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+        budget.CancelAfter(KnowledgeSearchBudget);
+
+        IReadOnlyList<AnGineerHit> hits;
+        try
+        {
+            using var response = await client.PostAsJsonAsync(
+                "/api/knowledge/internal/retrieve", request, budget.Token);
+            if (!response.IsSuccessStatusCode)
+            {
+                _logger.LogWarning(
+                    "AnGIneer 知识检索失败（{Status}），返回空结果供上层降级",
+                    (int)response.StatusCode);
+                return [];
+            }
+
+            var payload = await response.Content.ReadFromJsonAsync<RetrieveResponse>(
+                new JsonSerializerOptions { PropertyNamingPolicy = JsonNamingPolicy.CamelCase },
+                budget.Token);
+            if (payload?.Items == null)
+            {
+                return [];
+            }
+
+            hits = payload.Items
+                .Where(i => !string.IsNullOrWhiteSpace(i.Text))
+                .Select(i => new AnGineerHit(i.Text!, i.Title ?? "", i.Score, i.DocId ?? ""))
+                .ToList();
+        }
+        catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested)
         {
             _logger.LogWarning(
-                "AnGIneer 知识检索失败（{Status}），返回空结果供上层降级",
-                (int)response.StatusCode);
+                "AnGIneer 知识检索超过 {Budget}s 预算，已取消并按无证据降级生成",
+                (int)KnowledgeSearchBudget.TotalSeconds);
             return [];
         }
 
-        var payload = await response.Content.ReadFromJsonAsync<RetrieveResponse>(
-            new JsonSerializerOptions { PropertyNamingPolicy = JsonNamingPolicy.CamelCase },
-            cancellationToken);
-        if (payload?.Items == null)
-        {
-            return [];
-        }
-
-        return payload.Items
-            .Where(i => !string.IsNullOrWhiteSpace(i.Text))
-            .Select(i => new AnGineerHit(i.Text!, i.Title ?? "", i.Score, i.DocId ?? ""))
-            .ToList();
+        return hits;
     }
 
     /// <summary>流式打开产物（ResponseHeadersRead + 响应随流释放），带有限次退避重试。</summary>

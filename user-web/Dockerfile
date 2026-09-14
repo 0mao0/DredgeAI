@@ -4,7 +4,7 @@
 # 本仓库是 pnpm workspace 单体仓库，user-web 的构建依赖仓库根多处内容：
 #   - file:../vendor/angineer-aichat-ui、angineer-docs-ui（git submodule，
 #     源码形态本地包，pnpm 安装时整体物化进 node_modules）
-#   - @shared 依赖 link:../packages/shared/src（vite alias 同样指向该源码）
+#   - @shared 别名指向 ../packages/shared 源码（vite alias + tsconfig paths）
 #   - 根 pnpm-workspace.yaml / pnpm-lock.yaml / tsconfig.base.json
 # 因此与单仓项目不同，构建上下文必须是仓库根目录（而非 user-web 子目录）：
 #   docker build -f user-web/Dockerfile -t dredge-ai-user-web .
@@ -23,7 +23,7 @@ FROM registry.cn-shanghai.aliyuncs.com/cyf7950/node:22.18.0-alpine3.21 AS builde
 WORKDIR /repo
 
 # 安装 pnpm（与根 package.json packageManager 对齐）
-RUN npm install -g pnpm@9.1.4 --registry=https://registry.npmmirror.com
+RUN npm install -g pnpm@11.7.0 --registry=https://registry.npmmirror.com
 
 # 根 package.json 的 prepare 脚本为 husky，容器内无 .git，禁用避免 install 失败
 ENV HUSKY=0
