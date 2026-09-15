@@ -1,5 +1,6 @@
 using Microsoft.EntityFrameworkCore;
 using DredgeAI.BidCompare.AI;
+using DredgeAI.BidCompare.Applications;
 using DredgeAI.BidCompare.Clauses;
 using DredgeAI.BidCompare.CompareTasks;
 using DredgeAI.BidCompare.Documents;
@@ -34,4 +35,6 @@ public interface IBidCompareDbContext : IEfCoreDbContext
     DbSet<UnrecognizedFace> UnrecognizedFaces { get; set; }
     DbSet<QaRecord> QaRecords { get; set; }
     DbSet<WorkerProfile> WorkerProfiles { get; set; }
+    DbSet<AppCatalog> AppCatalogs { get; set; }
+    DbSet<AppOrder> AppOrders { get; set; }
 }

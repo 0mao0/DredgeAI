@@ -87,7 +87,7 @@ public class StuckTaskWatchdogWorkerTests : BidCompareApplicationTestBase<BidCom
         {
             var dbContext = await dbContextProvider.GetDbContextAsync();
             await dbContext.Database.ExecuteSqlRawAsync(
-                "UPDATE BcTenderReadingTasks SET LastModificationTime = datetime('now', 'localtime', '-10 minutes') WHERE Id = {0}",
+                "UPDATE tab_tender_reading_task SET f_last_modification_time = datetime('now', 'localtime', '-10 minutes') WHERE f_id = {0}",
                 created.Id);
         });
 
@@ -150,7 +150,7 @@ public class StuckTaskWatchdogWorkerTests : BidCompareApplicationTestBase<BidCom
         {
             var dbContext = await dbContextProvider.GetDbContextAsync();
             await dbContext.Database.ExecuteSqlRawAsync(
-                "UPDATE BcTenderReadingTasks SET LastModificationTime = datetime('now', 'localtime', '-10 minutes') WHERE Id = {0}",
+                "UPDATE tab_tender_reading_task SET f_last_modification_time = datetime('now', 'localtime', '-10 minutes') WHERE f_id = {0}",
                 created.Id);
         });
 

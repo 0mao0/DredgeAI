@@ -7,6 +7,7 @@ using Shiw.Abp.PermissionManagement.EntityFrameworkCore;
 using Shiw.Abp.SettingManagement.EntityFrameworkCore;
 using Shiw.Abp.TenantManagement.EntityFrameworkCore;
 using Volo.Abp.EntityFrameworkCore;
+using Volo.Abp.PermissionManagement;
 
 namespace DredgeAI.EntityFrameworkCore;
 

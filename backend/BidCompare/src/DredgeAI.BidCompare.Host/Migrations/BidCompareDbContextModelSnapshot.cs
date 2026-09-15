@@ -19,7 +19,7 @@ namespace DredgeAI.BidCompare.Migrations
 #pragma warning disable 612, 618
             modelBuilder
                 .HasAnnotation("_Abp_DatabaseProvider", EfCoreDatabaseProvider.PostgreSql)
-                .HasAnnotation("ProductVersion", "10.0.9")
+                .HasAnnotation("ProductVersion", "10.0.11")
                 .HasAnnotation("Relational:MaxIdentifierLength", 63);
 
             NpgsqlModelBuilderExtensions.UseIdentityByDefaultColumns(modelBuilder);
@@ -157,6 +157,221 @@ namespace DredgeAI.BidCompare.Migrations
                     b.HasIndex("Success", "CreationTime");
 
                     b.ToTable("tab_ai_usage_record", (string)null);
+                });
+
+            modelBuilder.Entity("DredgeAI.BidCompare.Applications.AppCatalog", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uuid")
+                        .HasColumnName("f_id")
+                        .HasComment("主键Id");
+
+                    b.Property<int?>("ApiCalls")
+                        .HasColumnType("integer")
+                        .HasColumnName("f_api_calls")
+                        .HasComment("API 调用量（仅主应用，展示指标）");
+
+                    b.Property<byte>("Category")
+                        .HasColumnType("smallint")
+                        .HasColumnName("f_category")
+                        .HasComment("应用分类");
+
+                    b.Property<string>("ConcurrencyStamp")
+                        .IsConcurrencyToken()
+                        .IsRequired()
+                        .HasMaxLength(40)
+                        .HasColumnType("character varying(40)")
+                        .HasColumnName("f_concurrency_stamp")
+                        .HasComment("并发标识");
+
+                    b.Property<DateTime>("CreationTime")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("f_creation_time")
+                        .HasComment("创建时间");
+
+                    b.Property<Guid?>("CreatorId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("f_creator_id")
+                        .HasComment("创建人ID");
+
+                    b.Property<Guid?>("DeleterId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("f_deleter_id")
+                        .HasComment("删除者ID");
+
+                    b.Property<DateTime?>("DeletionTime")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("f_deletion_time")
+                        .HasComment("删除时间");
+
+                    b.Property<string>("Description")
+                        .HasMaxLength(512)
+                        .HasColumnType("character varying(512)")
+                        .HasColumnName("f_description")
+                        .HasComment("子应用描述（仅子应用）");
+
+                    b.Property<string>("ExtraProperties")
+                        .IsRequired()
+                        .HasColumnType("text")
+                        .HasColumnName("f_extra_properties")
+                        .HasComment("拓展字段");
+
+                    b.Property<string>("Icon")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)")
+                        .HasColumnName("f_icon")
+                        .HasComment("antd 图标名");
+
+                    b.Property<bool>("IsDeleted")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("boolean")
+                        .HasDefaultValue(false)
+                        .HasColumnName("f_is_deleted")
+                        .HasComment("是否删除 0.否 1.是");
+
+                    b.Property<DateTime?>("LastModificationTime")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("f_last_modification_time")
+                        .HasComment("修改时间");
+
+                    b.Property<Guid?>("LastModifierId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("f_last_modifier_id")
+                        .HasComment("修改者ID");
+
+                    b.Property<string>("Manager")
+                        .HasMaxLength(32)
+                        .HasColumnType("character varying(32)")
+                        .HasColumnName("f_manager")
+                        .HasComment("负责人（仅主应用）");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)")
+                        .HasColumnName("f_name")
+                        .HasComment("应用名称");
+
+                    b.Property<Guid?>("ParentAppId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("f_parent_app_id")
+                        .HasComment("所属主应用 id；null = 主应用");
+
+                    b.Property<string>("Route")
+                        .HasMaxLength(128)
+                        .HasColumnType("character varying(128)")
+                        .HasColumnName("f_route")
+                        .HasComment("路由：主应用为 admin 侧路由，子应用为 user-web 路由（可空）");
+
+                    b.Property<byte>("Scope")
+                        .HasColumnType("smallint")
+                        .HasColumnName("f_scope")
+                        .HasComment("授权范围：Public（默认）/Private");
+
+                    b.Property<byte>("Status")
+                        .HasColumnType("smallint")
+                        .HasColumnName("f_status")
+                        .HasComment("状态：主应用 Online/Offline，子应用 Published/Unpublished");
+
+                    b.Property<int?>("UserCount")
+                        .HasColumnType("integer")
+                        .HasColumnName("f_user_count")
+                        .HasComment("使用人数（仅主应用，展示指标）");
+
+                    b.Property<string>("UserRoute")
+                        .HasMaxLength(128)
+                        .HasColumnType("character varying(128)")
+                        .HasColumnName("f_user_route")
+                        .HasComment("user-web 侧边栏路由（仅无子应用的主应用）");
+
+                    b.Property<string>("Version")
+                        .IsRequired()
+                        .HasMaxLength(32)
+                        .HasColumnType("character varying(32)")
+                        .HasColumnName("f_version")
+                        .HasComment("版本号（如 v2.1.0）");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("ParentAppId");
+
+                    b.ToTable("tab_app_catalog", (string)null);
+                });
+
+            modelBuilder.Entity("DredgeAI.BidCompare.Applications.AppOrder", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uuid")
+                        .HasColumnName("f_id")
+                        .HasComment("主键Id");
+
+                    b.Property<DateTime>("CreationTime")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("f_creation_time")
+                        .HasComment("创建时间");
+
+                    b.Property<Guid?>("CreatorId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("f_creator_id")
+                        .HasComment("创建人ID");
+
+                    b.Property<Guid?>("DeleterId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("f_deleter_id")
+                        .HasComment("删除者ID");
+
+                    b.Property<DateTime?>("DeletionTime")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("f_deletion_time")
+                        .HasComment("删除时间");
+
+                    b.Property<bool>("IsDeleted")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("boolean")
+                        .HasDefaultValue(false)
+                        .HasColumnName("f_is_deleted")
+                        .HasComment("是否删除 0.否 1.是");
+
+                    b.Property<DateTime?>("LastModificationTime")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("f_last_modification_time")
+                        .HasComment("修改时间");
+
+                    b.Property<Guid?>("LastModifierId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("f_last_modifier_id")
+                        .HasComment("修改者ID");
+
+                    b.Property<byte>("Level")
+                        .HasColumnType("smallint")
+                        .HasColumnName("f_level")
+                        .HasComment("排序级别：Global 全局 / User 用户");
+
+                    b.Property<int>("SortOrder")
+                        .HasColumnType("integer")
+                        .HasColumnName("f_sort_order")
+                        .HasComment("顺序，小在前");
+
+                    b.Property<string>("TargetId")
+                        .IsRequired()
+                        .HasMaxLength(128)
+                        .HasColumnType("character varying(128)")
+                        .HasColumnName("f_target_id")
+                        .HasComment("排序目标：全局=应用目录条目 id，用户=应用路由");
+
+                    b.Property<Guid>("UserId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("f_user_id")
+                        .HasComment("用户 id；全局行为 Guid.Empty");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("Level", "UserId", "TargetId")
+                        .IsUnique()
+                        .HasFilter("f_is_deleted = false");
+
+                    b.ToTable("tab_app_order", (string)null);
                 });
 
             modelBuilder.Entity("DredgeAI.BidCompare.Clauses.ClauseTemplate", b =>

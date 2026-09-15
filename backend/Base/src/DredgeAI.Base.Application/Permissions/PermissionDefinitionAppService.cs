@@ -24,7 +24,6 @@ public class PermissionDefinitionAppService : DredgeAIBaseAppService, IPermissio
     public async Task<List<PermissionGroupTreeDto>> GetTreeAsync(string? providerName, string? providerKey)
     {
         var groups = await _permissionDefinitionManager.GetGroupsAsync();
-
         HashSet<string>? grantedNames = null;
         if (!string.IsNullOrWhiteSpace(providerName) && !string.IsNullOrWhiteSpace(providerKey))
         {
@@ -51,6 +50,17 @@ public class PermissionDefinitionAppService : DredgeAIBaseAppService, IPermissio
         }
 
         return result;
+    }
+
+    public async Task<List<string>> GetResourceNamesAsync()
+    {
+        var resourcePermissions = await _permissionDefinitionManager.GetResourcePermissionsAsync();
+        return resourcePermissions
+            .Select(p => p.ResourceName)
+            .Where(n => !string.IsNullOrWhiteSpace(n))
+            .Distinct()
+            .OrderBy(n => n, StringComparer.Ordinal)
+            .ToList()!;
     }
 
     private PermissionTreeDto BuildPermissionNode(

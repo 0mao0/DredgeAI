@@ -46,6 +46,7 @@
     </ItemGroup>
 
     <ItemGroup>
+      <ProjectReference Include="..\..\..\BidCompare\src\DredgeAI.BidCompare.Application.Contracts\DredgeAI.BidCompare.Application.Contracts.csproj" />
       <ProjectReference Include="..\..\..\DredgeAI.Host.Shared\DredgeAI.Host.Shared.csproj" />
       <ProjectReference Include="..\..\..\DredgeAI.ServiceDefaults\DredgeAI.ServiceDefaults.csproj" />
       <ProjectReference Include="..\DredgeAI.Base.Application.Contracts\DredgeAI.Base.Application.Contracts.csproj" />

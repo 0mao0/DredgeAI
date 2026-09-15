@@ -23,7 +23,7 @@ public class DredgeAIBasePermissionDefinitionProvider:PermissionDefinitionProvid
         dictData.AddChild(DredgeAIBasePermissions.DictData.Create, L("Permission:DictData.Create"));
         dictData.AddChild(DredgeAIBasePermissions.DictData.Update, L("Permission:DictData.Update"));
         dictData.AddChild(DredgeAIBasePermissions.DictData.Delete, L("Permission:DictData.Delete"));
-
+        
         var menus = myGroup.AddPermission(DredgeAIBasePermissions.Menus.Default, L("Permission:Menus"));
         menus.AddChild(DredgeAIBasePermissions.Menus.Create, L("Permission:Menus.Create"));
         menus.AddChild(DredgeAIBasePermissions.Menus.Update, L("Permission:Menus.Update"));

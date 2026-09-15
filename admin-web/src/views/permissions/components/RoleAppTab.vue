@@ -2,13 +2,14 @@
   <div class="role-app-tab">
     <a-spin :spinning="loading">
       <a-tree
-        v-model:checked-keys="localKeys"
+        :checked-keys="localKeys"
         checkable
         :tree-data="tree"
         :replace-fields="{ key: 'key', title: 'title', children: 'children' }"
         selectable
         :check-strictly="false"
         default-expand-all
+        @check="onCheck"
       />
     </a-spin>
   </div>
@@ -34,9 +35,12 @@ watch(() => props.checkedKeys, (v) => {
   localKeys.value = [...v]
 })
 
-watch(localKeys, (v) => {
-  emit('change', [...v])
-})
+/** 只在用户勾选动作（@check）时抛出；watch localKeys 抛出会与父级回写 props 形成回声循环 */
+function onCheck(checked: unknown): void {
+  const keys = (Array.isArray(checked) ? checked : (checked as { checked: string[] }).checked) as string[]
+  localKeys.value = [...keys]
+  emit('change', [...keys])
+}
 </script>
 
 <style scoped lang="less">

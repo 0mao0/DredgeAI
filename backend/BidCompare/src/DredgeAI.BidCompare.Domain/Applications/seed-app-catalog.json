@@ -1,6 +1,6 @@
 [
   {
-    "id": "1",
+    "id": "ff1e69b2-ddfd-4406-b8f9-024db34081cd",
     "name": "规范问答",
     "category": "通用",
     "manager": "李文",
@@ -14,7 +14,7 @@
     "userRoute": "/standard-query"
   },
   {
-    "id": "2",
+    "id": "70b2ce01-f400-4947-bcf4-0d5f01568783",
     "name": "AI视频",
     "category": "通用",
     "manager": "周晓",
@@ -28,7 +28,7 @@
     "userRoute": "/ai-video"
   },
   {
-    "id": "3",
+    "id": "9076f8d6-53a3-490e-b28b-43f69eadf11e",
     "name": "AI 配音",
     "category": "通用",
     "manager": "陈晨",
@@ -42,7 +42,7 @@
     "userRoute": "/ai-dubbing"
   },
   {
-    "id": "4",
+    "id": "293781c9-841b-428f-ab9d-f3c3117ce138",
     "name": "设计经验",
     "category": "设计",
     "manager": "吴敏",
@@ -56,7 +56,7 @@
     "userRoute": "/design-experience"
   },
   {
-    "id": "5",
+    "id": "fc005209-8641-4fd9-95f9-9acb632912b6",
     "name": "施工经验",
     "category": "施工",
     "manager": "赵磊",
@@ -70,7 +70,7 @@
     "userRoute": "/construction-experience"
   },
   {
-    "id": "6",
+    "id": "0283801c-7a32-4dc0-96d3-eaee1b1f4ee2",
     "name": "施组审核",
     "category": "施工",
     "manager": "孙浩",
@@ -84,7 +84,7 @@
     "userRoute": "/construction-review"
   },
   {
-    "id": "7",
+    "id": "6dd9583d-169d-43d1-acd0-c1432248b898",
     "name": "耙吸效率",
     "category": "施工",
     "manager": "郑涛",
@@ -98,7 +98,7 @@
     "userRoute": "/dredge-efficiency"
   },
   {
-    "id": "8",
+    "id": "951ee79b-247e-4473-88a1-19e91c6d40ed",
     "name": "情报采集",
     "category": "经营",
     "manager": "王琳",
@@ -111,10 +111,10 @@
     "route": "/applications/intelligence",
     "subApps": [
       {
-        "id": "8-1",
+        "id": "5c264893-1107-4de1-800a-52c178b9923f",
         "name": "疏浚情报",
         "category": "经营",
-        "parentAppId": "8",
+        "parentAppId": "951ee79b-247e-4473-88a1-19e91c6d40ed",
         "parentAppName": "情报采集",
         "route": "/intelligence/dredge",
         "icon": "RadarChartOutlined",
@@ -124,10 +124,10 @@
         "description": "聚焦疏浚行业的科技与工程情报，由后台采集并结构化后发布"
       },
       {
-        "id": "8-2",
+        "id": "a7a9b0d2-ebcf-48da-9931-b236ef721c44",
         "name": "科技情报",
         "category": "经营",
-        "parentAppId": "8",
+        "parentAppId": "951ee79b-247e-4473-88a1-19e91c6d40ed",
         "parentAppName": "情报采集",
         "route": "/intelligence/tech",
         "icon": "ExperimentOutlined",
@@ -139,7 +139,7 @@
     ]
   },
   {
-    "id": "9",
+    "id": "8da83abb-fdc5-480a-87cc-dca712243ffd",
     "name": "AI投标",
     "category": "经营",
     "manager": "冯杰",
@@ -153,7 +153,7 @@
     "userRoute": "/ai-bid"
   },
   {
-    "id": "10",
+    "id": "50e3cb9e-76a1-40ca-8034-060e7255bf5f",
     "name": "AI晨会",
     "category": "施工",
     "manager": "刘洋",

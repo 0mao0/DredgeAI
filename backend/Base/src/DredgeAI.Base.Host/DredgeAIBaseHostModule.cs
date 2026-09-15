@@ -1,3 +1,4 @@
+using DredgeAI.BidCompare;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.Cors;
 using Microsoft.Extensions.DependencyInjection.Extensions;
@@ -9,6 +10,7 @@ using Shiw.Abp.PermissionManagement.EntityFrameworkCore;
 using Shiw.Abp.SettingManagement.EntityFrameworkCore;
 using Shiw.Abp.TenantManagement.EntityFrameworkCore;
 using DredgeAI.Permissions;
+using Volo.Abp.Application.Services;
 using Volo.Abp;
 using Volo.Abp.Account;
 using Volo.Abp.AspNetCore.Mvc;
@@ -69,7 +71,8 @@ namespace DredgeAI;
     typeof(DredgeAIBaseHttpApiModule),
     typeof(DredgeAIBaseEntityFrameworkCoreModule),
     typeof(AbpAspNetCoreSerilogModule),
-    typeof(AbpSwashbuckleModule)
+    typeof(AbpSwashbuckleModule),
+    typeof(BidCompareApplicationContractsModule)
 )]
 public class DredgeAIBaseHostModule : AbpModule
 {
@@ -78,12 +81,22 @@ public class DredgeAIBaseHostModule : AbpModule
         AbpCommonDbProperties.DbTablePrefix = "tab";
         AbpIdentityDbProperties.DbTablePrefix="tab_identity";
         DredgeAIBaseDbProperties.DbTablePrefix="tab";
+        PreConfigure<AbpAspNetCoreMvcOptions>(options =>
+        {
+            // 只为集成服务生成自动 API 控制器（/integration-api 前缀）；Base 普通服务仍走显式控制器
+            options.ConventionalControllers.Create(
+                typeof(DredgeAIBaseApplicationModule).Assembly,
+                setting => setting.ApplicationServiceTypes = ApplicationServiceTypes.IntegrationServices);
+        });
     }
 
     public override void ConfigureServices(ServiceConfigurationContext context)
     {
         var hostingEnvironment = context.Services.GetHostingEnvironment();
         var configuration = context.Services.GetConfiguration();
+        // 暴露集成服务（默认隐藏：AbpServiceConvention 会把集成控制器整体移除）；外部隔离靠网关无 /integration-api 路由
+        Configure<AbpAspNetCoreMvcOptions>(options => options.ExposeIntegrationServices = true);
+
         Configure<AbpClockOptions>(options =>
         {
             options.Kind = DateTimeKind.Utc;
@@ -100,7 +113,6 @@ public class DredgeAIBaseHostModule : AbpModule
         
         Configure<PermissionManagementOptions>(options =>
         {
-            
             options.ProviderPolicies["R"] = DredgeAIBasePermissions.Roles.ManagePermissions;
             options.ProviderPolicies["U"] = DredgeAIBasePermissions.Users.ManagePermissions;
         });

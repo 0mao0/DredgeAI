@@ -6,6 +6,7 @@ using DredgeAI.BidCompare.Drafts;
 using DredgeAI.BidCompare.Evidences;
 using DredgeAI.BidCompare.Exports;
 using DredgeAI.BidCompare.MeetingBot;
+using DredgeAI.BidCompare.Applications;
 using DredgeAI.BidCompare.TenderReadings;
 using Microsoft.EntityFrameworkCore;
 using Shiw.Abp.BaseEntityFrameworkCore;
@@ -975,6 +976,114 @@ public static class BidCompareDbContextModelCreatingExtensions
             {
                 employeeNoIndex.HasFilter($"{handler.FieldNameHandler(nameof(ISoftDelete.IsDeleted))} = false");
             }
+        });
+
+        // AppCatalog — 应用目录条目（ParentAppId 为空为主应用，否则为子应用；展示顺序由 AppOrder 全局行承担）
+        builder.Entity<AppCatalog>(b =>
+        {
+            b.ToTable(
+                handler.TableNameHandler($"{BidCompareDbProperties.DbTablePrefix}{nameof(AppCatalog)}"),
+                BidCompareDbProperties.DbSchema);
+            b.ConfigureByConvention(handler);
+
+            b.Property(x => x.Id)
+                .HasColumnName(handler.FieldNameHandler(nameof(AppCatalog.Id)));
+
+            b.Property(x => x.ParentAppId)
+                .HasColumnName(handler.FieldNameHandler(nameof(AppCatalog.ParentAppId)))
+                .HasComment("所属主应用 id；null = 主应用");
+
+            b.Property(x => x.Name)
+                .HasColumnName(handler.FieldNameHandler(nameof(AppCatalog.Name)))
+                .IsRequired()
+                .HasMaxLength(64)
+                .HasComment("应用名称");
+
+            b.Property(x => x.Category)
+                .HasColumnName(handler.FieldNameHandler(nameof(AppCatalog.Category)))
+                .HasComment("应用分类");
+
+            b.Property(x => x.Icon)
+                .HasColumnName(handler.FieldNameHandler(nameof(AppCatalog.Icon)))
+                .IsRequired()
+                .HasMaxLength(64)
+                .HasComment("antd 图标名");
+
+            b.Property(x => x.Version)
+                .HasColumnName(handler.FieldNameHandler(nameof(AppCatalog.Version)))
+                .IsRequired()
+                .HasMaxLength(32)
+                .HasComment("版本号（如 v2.1.0）");
+
+            b.Property(x => x.Status)
+                .HasColumnName(handler.FieldNameHandler(nameof(AppCatalog.Status)))
+                .HasComment("状态：主应用 Online/Offline，子应用 Published/Unpublished");
+
+            b.Property(x => x.Route)
+                .HasColumnName(handler.FieldNameHandler(nameof(AppCatalog.Route)))
+                .HasMaxLength(128)
+                .HasComment("路由：主应用为 admin 侧路由，子应用为 user-web 路由（可空）");
+
+            b.Property(x => x.Scope)
+                .HasColumnName(handler.FieldNameHandler(nameof(AppCatalog.Scope)))
+                .HasComment("授权范围：Public（默认）/Private");
+
+            b.Property(x => x.Manager)
+                .HasColumnName(handler.FieldNameHandler(nameof(AppCatalog.Manager)))
+                .HasMaxLength(32)
+                .HasComment("负责人（仅主应用）");
+
+            b.Property(x => x.UserCount)
+                .HasColumnName(handler.FieldNameHandler(nameof(AppCatalog.UserCount)))
+                .HasComment("使用人数（仅主应用，展示指标）");
+
+            b.Property(x => x.ApiCalls)
+                .HasColumnName(handler.FieldNameHandler(nameof(AppCatalog.ApiCalls)))
+                .HasComment("API 调用量（仅主应用，展示指标）");
+
+            b.Property(x => x.UserRoute)
+                .HasColumnName(handler.FieldNameHandler(nameof(AppCatalog.UserRoute)))
+                .HasMaxLength(128)
+                .HasComment("user-web 侧边栏路由（仅无子应用的主应用）");
+
+            b.Property(x => x.Description)
+                .HasColumnName(handler.FieldNameHandler(nameof(AppCatalog.Description)))
+                .HasMaxLength(512)
+                .HasComment("子应用描述（仅子应用）");
+
+            b.HasIndex(x => x.ParentAppId);
+        });
+
+        // AppOrder — 应用展示顺序（Global 全局默认 / User 用户个性化，替代 app-order.json）
+        builder.Entity<AppOrder>(b =>
+        {
+            b.ToTable(
+                handler.TableNameHandler($"{BidCompareDbProperties.DbTablePrefix}{nameof(AppOrder)}"),
+                BidCompareDbProperties.DbSchema);
+            b.ConfigureByConvention(handler);
+
+            b.Property(x => x.Level)
+                .HasColumnName(handler.FieldNameHandler(nameof(AppOrder.Level)))
+                .HasComment("排序级别：Global 全局 / User 用户");
+
+            b.Property(x => x.UserId)
+                .HasColumnName(handler.FieldNameHandler(nameof(AppOrder.UserId)))
+                .IsRequired()
+                .HasComment("用户 id；全局行为 Guid.Empty");
+
+            b.Property(x => x.TargetId)
+                .HasColumnName(handler.FieldNameHandler(nameof(AppOrder.TargetId)))
+                .IsRequired()
+                .HasMaxLength(128)
+                .HasComment("排序目标：全局=应用目录条目 id，用户=应用路由");
+
+            b.Property(x => x.SortOrder)
+                .HasColumnName(handler.FieldNameHandler(nameof(AppOrder.SortOrder)))
+                .HasComment("顺序，小在前");
+
+            // 软删行不参与唯一约束（SetUserOrder 先软删再重插同 key）
+            var orderIndex = b.HasIndex(x => new { x.Level, x.UserId, x.TargetId }).IsUnique();
+            orderIndex.HasFilter($"{handler.FieldNameHandler(nameof(ISoftDelete.IsDeleted))} = false");
         });
     }
 }

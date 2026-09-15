@@ -1,3 +1,15 @@
+/** 应用分类（后端 AppCatalogCategory 的 snake_case wire 值） */
+export type AppCategory = 'general' | 'operation' | 'design' | 'construction'
+
+/** 主应用状态（后端 AppCatalogStatus 的 wire 值） */
+export type AppMainStatus = 'online' | 'offline'
+
+/** 子应用状态（后端 AppCatalogStatus 的 wire 值） */
+export type SubAppStatus = 'published' | 'unpublished'
+
+/** 授权范围（后端 AppCatalogScope 的 wire 值） */
+export type AppScope = 'public' | 'private'
+
 /**
  * 子应用：由 admin 模块按采集/业务分类发布后，面向 user-web 的具体可订阅单元。
  * 仅当模块存在多个面向用户的形态时才定义（如「情报采集」发布为疏浚情报/科技情报）。
@@ -6,26 +18,27 @@
 export interface SubApp {
   id: string
   name: string
-  category: '通用' | '经营' | '设计' | '施工'
+  category: AppCategory
   parentAppId: string
-  parentAppName: string
   route: string
   icon: string
   version: string
-  status: '已发布' | '已下架'
+  status: SubAppStatus
   description?: string
-  /** 授权范围：所有用户可见，或按角色指定部分人 */
-  scope?: '所有' | '部分'
+  /** 授权范围：公开（默认）/ 私有（按角色授权，待对接） */
+  scope?: AppScope
+  /** 拥有 View 权限的角色名（后端 grantedRoles；mock/旧后端可能缺省） */
+  grantedRoles?: string[]
 }
 
 /** 应用目录（admin 模块，作为发布来源；user 端实际可见的是其发布的子应用或模块本身） */
 export interface ApplicationItem {
   id: string
   name: string
-  category: '通用' | '经营' | '设计' | '施工'
+  category: AppCategory
   manager: string
   version: string
-  status: '运营中' | '已下架' | '开发中'
+  status: AppMainStatus
   userCount: number
   apiCalls: number
   createdAt: string
@@ -35,19 +48,22 @@ export interface ApplicationItem {
   route?: string
   /** 按分类发布出的子应用；为空时模块直接作为用户端应用 */
   subApps?: SubApp[]
-  /** 授权范围：所有用户可见，或按角色指定部分人 */
-  scope?: '所有' | '部分'
+  /** 授权范围：公开（默认）/ 私有（按角色授权，待对接） */
+  scope?: AppScope
+  /** 拥有 View 权限的角色名（后端 grantedRoles；mock/旧后端可能缺省） */
+  grantedRoles?: string[]
 }
 
 /** user-web 侧应用卡片（由 ApplicationItem/SubApp 推导） */
 export interface AppCard {
   id: string
-  /** 子应用所属主应用 id（用于映射 admin 全局默认顺序）；主应用缺省时用 id */
+  /** 子应用所属主应用 id（用于映射全局默认顺序）；主应用缺省时用 id */
   parentAppId?: string
   title: string
   description: string
-  category: '通用' | '设计' | '施工' | '经营'
+  category: AppCategory
   icon: string
+  /** 卡片派生展示串（非实体枚举） */
   status: '已授权' | '待申请' | '已下架'
   route?: string
   version?: string
@@ -88,4 +104,11 @@ export interface AppManifest {
   children?: AppManifest[]
   /** 是否重定向（redirect 路径） */
   redirect?: string
+}
+
+/** 应用权限树节点（GET /bidcompare/app-catalog/permission-tree）：类型→主应用→子应用 */
+export interface AppPermissionTreeNode {
+  key: string
+  title: string
+  children?: AppPermissionTreeNode[]
 }

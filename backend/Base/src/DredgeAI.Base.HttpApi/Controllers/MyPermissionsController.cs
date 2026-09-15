@@ -1,3 +1,4 @@
+using DredgeAI.Permissions;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using Volo.Abp.DependencyInjection;
@@ -15,8 +16,11 @@ namespace DredgeAI.Controllers;
 [Tags("权限管理")]
 public class MyPermissionsController : PermissionsController
 {
-    public MyPermissionsController(IPermissionAppService permissionAppService) : base(permissionAppService)
+    protected IMyPermissionAppService MyPermissionAppService { get; }
+
+    public MyPermissionsController(IMyPermissionAppService permissionAppService) : base(permissionAppService)
     {
+        MyPermissionAppService = permissionAppService;
     }
 
     /// <summary>
@@ -132,6 +136,33 @@ public class MyPermissionsController : PermissionsController
     public override Task UpdateResourceAsync(string resourceName, string resourceKey, UpdateResourcePermissionsDto input)
     {
         return PermissionAppService.UpdateResourceAsync(resourceName, resourceKey, input);
+    }
+
+    /// <summary>
+    /// 批量更新同一资源下多个 Key 的权限授予状态（同一组 Provider 授权应用到每个 Key）。
+    /// </summary>
+    /// <param name="resourceName">资源名称。</param>
+    /// <param name="resourceKeys">资源 Key 列表（重复查询参数：?resourceKeys=k1&amp;resourceKeys=k2）。</param>
+    /// <param name="input">包含待更新权限的 DTO。</param>
+    [HttpPut]
+    [Route("resource/batch")]
+    public virtual Task UpdateResourcesAsync(string resourceName, [FromQuery] List<string> resourceKeys, UpdateResourcePermissionsDto input)
+    {
+        return MyPermissionAppService.UpdateResourceAsync(resourceName, resourceKeys, input);
+    }
+
+    /// <summary>
+    /// 按资源名 + Provider + 权限名查询已授权的资源 Key 列表。
+    /// </summary>
+    /// <param name="resourceName">资源名称。</param>
+    /// <param name="providerName">权限提供者名称（如 "R"）。</param>
+    /// <param name="providerKey">权限提供者 Key（如角色名）。</param>
+    /// <param name="permissionName">资源权限名。</param>
+    [HttpGet]
+    [Route("resource/keys")]
+    public virtual Task<List<string>> GetResourceKeysAsync(string resourceName, string providerName, string providerKey, string permissionName)
+    {
+        return MyPermissionAppService.GetResourceKeysAsync(resourceName, providerName, providerKey, permissionName);
     }
 
     /// <summary>

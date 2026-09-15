@@ -34,4 +34,11 @@ public class PermissionDefinitionController : DredgeAIBaseController, IPermissio
     [Authorize]
     public Task<List<PermissionGroupTreeDto>> GetTreeAsync(string? providerName, string? providerKey)
         => _service.GetTreeAsync(providerName, providerKey);
+
+    /// <summary>获取全部资源名称列表</summary>
+    /// <returns>系统中所有资源权限涉及的资源名称（去重、按字典序排序）</returns>
+    [HttpGet("resource-names")]
+    [Authorize]
+    public Task<List<string>> GetResourceNamesAsync()
+        => _service.GetResourceNamesAsync();
 }

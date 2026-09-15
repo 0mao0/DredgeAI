@@ -11,6 +11,7 @@
   <ItemGroup>
     <ProjectReference Include="..\DredgeAI.BidCompare.Domain\DredgeAI.BidCompare.Domain.csproj" />
     <ProjectReference Include="..\DredgeAI.BidCompare.Application.Contracts\DredgeAI.BidCompare.Application.Contracts.csproj" />
+    <ProjectReference Include="..\..\..\Base\src\DredgeAI.Base.Application.Contracts\DredgeAI.Base.Application.Contracts.csproj" />
   </ItemGroup>
 
   <ItemGroup>
@@ -19,6 +20,7 @@
     <PackageReference Include="Volo.Abp.BackgroundWorkers" />
     <PackageReference Include="DocumentFormat.OpenXml" />
     <PackageReference Include="Microsoft.Extensions.Http" />
+    <PackageReference Include="Volo.Abp.Http.Client" />
   </ItemGroup>
 
 </Project>

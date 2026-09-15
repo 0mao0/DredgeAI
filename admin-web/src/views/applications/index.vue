@@ -23,18 +23,19 @@ import { AppButton } from '@shared/web'
 import { ref, onMounted } from 'vue'
 import PageHeader from '@shared/web/components/PageHeader.vue'
 import SectionCard from '@shared/web/components/SectionCard.vue'
-import type { ApplicationItem } from '@/types'
+import type { ApplicationItem, AppCategory, AppMainStatus } from '@/types'
 import { getApplications } from '@/api/modules/applications'
+import { APP_CATEGORY_LABELS, APP_MAIN_STATUS_LABELS } from '@shared/core/utils'
 
 const loading = ref(false)
 const applications = ref<ApplicationItem[]>([])
 
 const columns = [
   { title: '应用名称', dataIndex: 'name', key: 'name' },
-  { title: '分类', dataIndex: 'category', key: 'category', width: 100 },
+  { title: '分类', dataIndex: 'category', key: 'category', width: 100, customRender: ({ text }: { text: string }) => APP_CATEGORY_LABELS[text as AppCategory] ?? text },
   { title: '负责人', dataIndex: 'manager', key: 'manager', width: 80 },
   { title: '版本', dataIndex: 'version', key: 'version', width: 80 },
-  { title: '状态', dataIndex: 'status', key: 'status', width: 80 },
+  { title: '状态', dataIndex: 'status', key: 'status', width: 80, customRender: ({ text }: { text: string }) => APP_MAIN_STATUS_LABELS[text as AppMainStatus] ?? text },
   { title: '用户数', dataIndex: 'userCount', key: 'userCount', width: 80 },
   { title: 'API 调用', dataIndex: 'apiCalls', key: 'apiCalls', width: 100 },
   { title: '创建时间', dataIndex: 'createdAt', key: 'createdAt', width: 100 },

@@ -12,6 +12,10 @@ public class BidCompareApplicationAutoMapperProfile : Profile
 
         CreateMap<Clauses.ClauseTemplate, ClauseTemplates.ClauseTemplateDto>();
         CreateMap<AI.AiUsageRecord, AI.AiUsageRecordDto>();
+        CreateMap<Applications.AppCatalog, Applications.AppCatalogDto>()
+            .ForMember(d => d.SubApps, o => o.Ignore()) // 实体无导航，服务层分组填充
+            .ForMember(d => d.CreatedAt, o => o.MapFrom(s => s.CreationTime.ToString("yyyy-MM-dd")));
+        CreateMap<Applications.AppCatalog, Applications.AppCatalogSubAppDto>(); // 同一实体映射到子应用 DTO
 
         CreateMap<MeetingBot.MeetingRecord, MeetingBot.MeetingRecordDto>();
         CreateMap<MeetingBot.SpeechDraft, MeetingBot.SpeechDraftDto>();

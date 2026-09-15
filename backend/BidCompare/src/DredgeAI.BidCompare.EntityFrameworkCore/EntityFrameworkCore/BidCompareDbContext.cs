@@ -7,6 +7,7 @@ using DredgeAI.BidCompare.Drafts;
 using DredgeAI.BidCompare.Evidences;
 using DredgeAI.BidCompare.Exports;
 using DredgeAI.BidCompare.AI;
+using DredgeAI.BidCompare.Applications;
 using DredgeAI.BidCompare.MeetingBot;
 using DredgeAI.BidCompare.TenderReadings;
 using Shiw.Abp.BackgroundJobs.EntityFrameworkCore;
@@ -40,6 +41,8 @@ public class BidCompareDbContext :
     public DbSet<UnrecognizedFace> UnrecognizedFaces { get; set; }
     public DbSet<QaRecord> QaRecords { get; set; }
     public DbSet<WorkerProfile> WorkerProfiles { get; set; }
+    public DbSet<AppCatalog> AppCatalogs { get; set; }
+    public DbSet<AppOrder> AppOrders { get; set; }
 
     private readonly IShiwDbContextHandler _handler;
 

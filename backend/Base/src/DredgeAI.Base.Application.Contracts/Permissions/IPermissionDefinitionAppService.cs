@@ -6,6 +6,7 @@ namespace DredgeAI.Permissions;
 /// <remarks>
 /// 提供系统所有通过 PermissionDefinitionProvider 注册的权限组的树形结构查询能力。
 /// 支持三个场景：纯定义树（无参数）、角色授权树（providerName=R）、用户授权树（providerName=U）。
+/// 另提供资源名称列表查询，供资源权限管理界面选择资源。
 /// </remarks>
 public interface IPermissionDefinitionAppService : IApplicationService
 {
@@ -20,4 +21,8 @@ public interface IPermissionDefinitionAppService : IApplicationService
     /// </param>
     /// <returns>权限组树形结构列表</returns>
     Task<List<PermissionGroupTreeDto>> GetTreeAsync(string? providerName, string? providerKey);
+
+    /// <summary>获取全部资源名称列表</summary>
+    /// <returns>系统中所有资源权限涉及的资源名称（去重、按字典序排序）</returns>
+    Task<List<string>> GetResourceNamesAsync();
 }
