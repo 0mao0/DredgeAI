@@ -76,6 +76,7 @@
     <PackageVersion Include="Volo.Abp.PermissionManagement.Application" Version="10.5.0" />
     <PackageVersion Include="Volo.Abp.PermissionManagement.Domain" Version="10.5.0" />
     <PackageVersion Include="Volo.Abp.PermissionManagement.HttpApi" Version="10.5.0" />
+    <PackageVersion Include="Volo.Abp.PermissionManagement.Application.Contracts" Version="10.5.0" />
     <PackageVersion Include="Volo.Abp.Identity.Application" Version="10.5.0" />
     <PackageVersion Include="Volo.Abp.Identity.HttpApi" Version="10.5.0" />
     <PackageVersion Include="Volo.Abp.PermissionManagement.Domain.Identity" Version="10.5.0" />
