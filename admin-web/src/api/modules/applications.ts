@@ -10,6 +10,11 @@ export function getApplications(): Promise<ApplicationItem[]> {
   return request.get<ApplicationItem[]>(urls.applications)
 }
 
+/** 当前用户已授权且已发布的应用目录（侧边栏动态应用菜单用） */
+export function getAuthorizedApplications(): Promise<ApplicationItem[]> {
+  return request.get<ApplicationItem[]>(urls.authorizedApplications)
+}
+
 /** 上移/下移主应用，返回重排后的应用目录 */
 export function moveApplication(appId: string, direction: 'up' | 'down'): Promise<ApplicationItem[]> {
   return request.post<ApplicationItem[]>(urls.adminAppMove, { appId, direction })

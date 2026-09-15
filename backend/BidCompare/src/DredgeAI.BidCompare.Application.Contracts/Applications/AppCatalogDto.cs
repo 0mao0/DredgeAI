@@ -38,5 +38,8 @@ public class AppCatalogDto
     /// <summary>授权范围（默认 public）。</summary>
     public AppCatalogScope Scope { get; set; }
 
+    /// <summary>拥有该应用 View 权限的角色名列表（仅角色 R 授权，去重排序；空数组=未授权任何角色）。</summary>
+    public List<string> GrantedRoles { get; set; } = [];
+
     public List<AppCatalogSubAppDto>? SubApps { get; set; }
 }

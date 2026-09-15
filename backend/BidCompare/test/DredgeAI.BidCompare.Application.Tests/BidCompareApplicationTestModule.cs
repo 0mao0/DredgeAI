@@ -1,8 +1,10 @@
 using System.Linq;
 using DredgeAI.BlobStoring;
+using DredgeAI.Permissions;
 using DredgeAI.BidCompare.EntityFrameworkCore;
 using Shiw.Abp.BaseEntityFrameworkCore;
 using DredgeAI.BidCompare.AnGineer;
+using DredgeAI.BidCompare.Applications;
 using DredgeAI.BidCompare.Analysis;
 using DredgeAI.BidCompare.AI;
 using DredgeAI.BidCompare.Storage;
@@ -66,6 +68,7 @@ public class BidCompareApplicationTestModule : AbpModule
         context.Services.Replace(ServiceDescriptor.Singleton<IWordReportRenderer, FakeWordReportRenderer>());
         context.Services.Replace(ServiceDescriptor.Singleton<IMeetingBotClient, FakeMeetingBotClient>());
         context.Services.Replace(ServiceDescriptor.Singleton<IWeatherClient, FakeWeatherClient>());
+        context.Services.Replace(ServiceDescriptor.Singleton<IInternalPermissionQueryAppService, FakeInternalPermissionQueryAppService>());
         // [Task8] IAnGineerClient / [Task9] ICompareAlgoClient / [Task11] ILlmGateway / [Task14] IPdfConverter 的 Fake 在此追加
 
         ConfigureInMemorySqlite(context.Services);

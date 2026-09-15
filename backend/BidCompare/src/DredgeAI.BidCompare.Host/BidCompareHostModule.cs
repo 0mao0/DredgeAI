@@ -55,7 +55,8 @@ namespace DredgeAI.BidCompare;
     typeof(BidCompareHttpApiModule),
     typeof(BidCompareEntityFrameworkCoreModule),
     typeof(AbpAspNetCoreSerilogModule),
-    typeof(AbpSwashbuckleModule)
+    typeof(AbpSwashbuckleModule),
+    typeof(DredgeAIBaseHttpApiClientModule)
 )]
 public class BidCompareHostModule : AbpModule
 {

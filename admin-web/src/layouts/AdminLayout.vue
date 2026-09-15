@@ -100,7 +100,7 @@ import { ShipAiLogo, SidebarToggleIcon } from '@shared/web'
 import type { AppCategory } from '@/types'
 import { useAppStore } from '@/stores/app'
 import { useSidebarStore, useThemeStore } from '@shared/web/stores'
-import { getApplications } from '@/api/modules/applications'
+import { getAuthorizedApplications } from '@/api/modules/applications'
 import { APP_CATEGORY_LABELS, getCategoryColor, getCategoryAlphaBg } from '@shared/core/utils'
 import ThemeToggle from '@shared/web/components/ThemeToggle.vue'
 import { adminAppManifests, adminMenuGroups } from '@/router/manifests'
@@ -220,8 +220,8 @@ onMounted(async () => {
     message.warning('获取用户信息失败，使用默认配置')
   }
   try {
-    // 后端已按全局排序行返回顺序，应用菜单与发布管理的顺序保持一致
-    const apps = await getApplications()
+    // 后端已按授权+发布状态过滤并按全局排序返回，应用菜单与发布管理的顺序保持一致
+    const apps = await getAuthorizedApplications()
     appMenuItems.value = apps.map((a) => ({
       id: a.id,
       name: a.name,

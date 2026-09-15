@@ -61,8 +61,11 @@
           </div>
         </template>
         <template v-else-if="column.key === 'scope'">
-          <div class="cell-left">
-            <span class="no-scope">暂未对接</span>
+          <div class="cell-left scope-tags">
+            <template v-if="record.grantedRoles.length">
+              <a-tag v-for="role in record.grantedRoles" :key="role">{{ role }}</a-tag>
+            </template>
+            <span v-else class="no-scope">未授权</span>
           </div>
         </template>
         <template v-else-if="column.key === 'setting'">
@@ -150,6 +153,7 @@ interface TreeRow {
   level: 0 | 1
   published: boolean
   icon: string
+  grantedRoles: string[]
   parentId?: string
   appId: string
   subId?: string
@@ -187,6 +191,7 @@ const treeRows = computed<TreeRow[]>(() => {
       level: 0,
       published: app.status === 'online',
       icon: app.icon || 'AppstoreOutlined',
+      grantedRoles: app.grantedRoles ?? [],
       appId: app.id,
     })
     ;(app.subApps ?? []).forEach((sub, si) => {
@@ -198,6 +203,7 @@ const treeRows = computed<TreeRow[]>(() => {
         level: 1,
         published: sub.status === 'published',
         icon: sub.icon,
+        grantedRoles: sub.grantedRoles ?? [],
         parentId: app.id,
         appId: app.id,
         subId: sub.id,
@@ -411,6 +417,11 @@ onMounted(async () => {
 
 .no-scope {
   color: @text-tertiary;
+}
+.scope-tags {
+  flex-wrap: wrap;
+  gap: @spacing-xs;
+  :deep(.ant-tag) { margin-inline-end: 0; }
 }
 .cell-center {
   display: flex;

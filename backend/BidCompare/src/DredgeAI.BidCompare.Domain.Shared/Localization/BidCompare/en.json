@@ -23,6 +23,7 @@
     "Enum:AppCatalogCategory.Design": "Design",
     "Enum:AppCatalogCategory.Construction": "Construction",
     "BidCompare:UnsupportedFileType": "Unsupported file type",
-    "BidCompare:DocumentCountOutOfRange": "Too many bid documents"
+    "BidCompare:DocumentCountOutOfRange": "Too many bid documents",
+    "BidCompare:BaseServiceFailed": "Permission service unavailable"
   }
 }

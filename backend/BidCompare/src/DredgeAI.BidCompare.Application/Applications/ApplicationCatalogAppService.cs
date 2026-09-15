@@ -3,8 +3,12 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Threading.Tasks;
 using System.Text.Json;
+using DredgeAI.Permissions;
+using DredgeAI.BidCompare.Permissions;
+using Microsoft.Extensions.Logging;
 using Volo.Abp;
 using Volo.Abp.Domain.Repositories;
+using Volo.Abp.Http.Client;
 
 namespace DredgeAI.BidCompare.Applications;
 
@@ -13,13 +17,16 @@ public class ApplicationCatalogAppService : BidCompareAppService, IApplicationCa
 {
     private readonly IRepository<AppCatalog, Guid> _catalogRepository;
     private readonly IRepository<AppOrder, Guid> _orderRepository;
+    private readonly IInternalPermissionQueryAppService _internalPermissionQueryAppService;
 
     public ApplicationCatalogAppService(
         IRepository<AppCatalog, Guid> catalogRepository,
-        IRepository<AppOrder, Guid> orderRepository)
+        IRepository<AppOrder, Guid> orderRepository,
+        IInternalPermissionQueryAppService internalPermissionQueryAppService)
     {
         _catalogRepository = catalogRepository;
         _orderRepository = orderRepository;
+        _internalPermissionQueryAppService = internalPermissionQueryAppService;
     }
 
     public async Task<List<AppCatalogDto>> GetListAsync()
@@ -31,6 +38,15 @@ public class ApplicationCatalogAppService : BidCompareAppService, IApplicationCa
             if (subsByParent.TryGetValue(dto.Id, out var subs))
             {
                 dto.SubApps = subs.Select(x => ObjectMapper.Map<AppCatalog, AppCatalogSubAppDto>(x)).ToList();
+            }
+        }
+        var grantedRolesByKey = await LoadGrantedRolesByKeyAsync();
+        foreach (var dto in result)
+        {
+            dto.GrantedRoles = grantedRolesByKey.GetValueOrDefault(dto.Id.ToString()) ?? [];
+            foreach (var sub in dto.SubApps ?? [])
+            {
+                sub.GrantedRoles = grantedRolesByKey.GetValueOrDefault(sub.Id.ToString()) ?? [];
             }
         }
         return result;
@@ -66,6 +82,58 @@ public class ApplicationCatalogAppService : BidCompareAppService, IApplicationCa
                 }).ToList(),
             })
             .ToList();
+    }
+
+    /// <summary>当前用户拥有 View 权限且已发布的应用：无子应用主应用要求 Online+授权；含子应用主应用按子应用过滤（Published+授权），有任一满足即带出。授权条目经 Base 集成服务实时查询（无缓存陈旧），Provider 只看角色(R)/用户(U)。</summary>
+    public async Task<List<AppCatalogDto>> GetAuthorizedListAsync()
+    {
+        var (mains, subsByParent) = await LoadOrderedAsync();
+        List<ResourcePermissionGrantItemDto> grants;
+        try
+        {
+            grants = await _internalPermissionQueryAppService.GetResourceGrantsAsync(
+                BidComparePermissions.AppCatalog.Resources.Name,
+                BidComparePermissions.AppCatalog.Resources.View);
+        }
+        catch (AbpRemoteCallException ex)
+        {
+            Logger.LogWarning(ex, "Base 集成服务调用失败");
+            throw new BusinessException("BidCompare:BaseServiceFailed");
+        }
+        var userId = CurrentUser.Id?.ToString();
+        var roles = CurrentUser.Roles;
+        var grantedKeys = grants
+            .Where(g => (g.ProviderName == "R" && roles.Contains(g.ProviderKey))
+                        || (g.ProviderName == "U" && userId != null && g.ProviderKey == userId))
+            .Select(g => g.ResourceKey)
+            .ToHashSet();
+
+        var result = new List<AppCatalogDto>();
+        foreach (var app in mains)
+        {
+            if (subsByParent.TryGetValue(app.Id, out var subs) && subs.Count > 0)
+            {
+                var grantedSubs = subs
+                    .Where(s => s.Status == AppCatalogStatus.Published && grantedKeys.Contains(s.Id.ToString()))
+                    .ToList();
+                if (grantedSubs.Count == 0)
+                {
+                    continue;
+                }
+                var dto = ObjectMapper.Map<AppCatalog, AppCatalogDto>(app);
+                dto.SubApps = grantedSubs.Select(x => ObjectMapper.Map<AppCatalog, AppCatalogSubAppDto>(x)).ToList();
+                result.Add(dto);
+            }
+            else
+            {
+                if (app.Status != AppCatalogStatus.Online || !grantedKeys.Contains(app.Id.ToString()))
+                {
+                    continue;
+                }
+                result.Add(ObjectMapper.Map<AppCatalog, AppCatalogDto>(app));
+            }
+        }
+        return result;
     }
 
     public async Task<List<UserAppCardDto>> GetUserListAsync()
@@ -225,6 +293,27 @@ public class ApplicationCatalogAppService : BidCompareAppService, IApplicationCa
         right.SetSortOrder(temp);
         await _orderRepository.UpdateAsync(left, autoSave: true);
         await _orderRepository.UpdateAsync(right, autoSave: true);
+    }
+
+    /// <summary>全量授权条目按 ResourceKey 聚合成角色名列表（仅 R；去重排序）。Base 集成服务不可达时降级为空（发布管理页核心操作不受角色列影响），记警告日志。</summary>
+    private async Task<Dictionary<string, List<string>>> LoadGrantedRolesByKeyAsync()
+    {
+        List<ResourcePermissionGrantItemDto> grants;
+        try
+        {
+            grants = await _internalPermissionQueryAppService.GetResourceGrantsAsync(
+                BidComparePermissions.AppCatalog.Resources.Name,
+                BidComparePermissions.AppCatalog.Resources.View);
+        }
+        catch (AbpRemoteCallException ex)
+        {
+            Logger.LogWarning(ex, "Base 集成服务调用失败，授权角色列降级为空");
+            return [];
+        }
+        return grants
+            .Where(g => g.ProviderName == "R")
+            .GroupBy(g => g.ResourceKey)
+            .ToDictionary(g => g.Key, g => g.Select(x => x.ProviderKey).Distinct().OrderBy(x => x, StringComparer.Ordinal).ToList());
     }
 
     /// <summary>加载目录并按全局排序行排序：主应用全局排序、子应用按母项分组组内排序；缺排序行排末尾。</summary>

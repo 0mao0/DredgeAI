@@ -104,6 +104,7 @@ export const urls = {
   analyticsUserGrowth: '/analytics/user-growth',
   analyticsErrorRate: '/analytics/error-rate',
   applications: '/bidcompare/app-catalog',
+  authorizedApplications: '/bidcompare/app-catalog/authorized',
   adminAppMove: '/bidcompare/app-catalog/move',
   adminSubAppMove: '/bidcompare/app-catalog/sub/move',
   adminAppOrderReset: '/bidcompare/app-order/reset',

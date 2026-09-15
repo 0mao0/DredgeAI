@@ -36,6 +36,7 @@
     "BidCompare:ExportFailed": "报告导出失败",
     "BidCompare:AlgoServiceFailed": "比对算法服务不可用",
     "BidCompare:AiGatewayFailed": "AI 服务暂不可用",
+    "BidCompare:BaseServiceFailed": "权限服务暂不可用",
     "TenderRead:InvalidTaskState": "任务状态不允许该操作",
     "TenderRead:UnsupportedFileType": "不支持的文件类型",
     "TenderRead:DocumentNotFound": "文档不存在",

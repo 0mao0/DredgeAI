@@ -32,6 +32,7 @@
     <ProjectReference Include="..\DredgeAI.BidCompare.EntityFrameworkCore\DredgeAI.BidCompare.EntityFrameworkCore.csproj" />
     <ProjectReference Include="..\DredgeAI.BidCompare.HttpApi\DredgeAI.BidCompare.HttpApi.csproj" />
     <ProjectReference Include="..\..\..\DredgeAI.ServiceDefaults\DredgeAI.ServiceDefaults.csproj" />
+    <ProjectReference Include="..\..\..\Base\src\DredgeAI.Base.HttpApi.Client\DredgeAI.Base.HttpApi.Client.csproj" />
   </ItemGroup>
 
   <ItemGroup>

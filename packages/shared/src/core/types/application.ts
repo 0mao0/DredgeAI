@@ -27,6 +27,8 @@ export interface SubApp {
   description?: string
   /** 授权范围：公开（默认）/ 私有（按角色授权，待对接） */
   scope?: AppScope
+  /** 拥有 View 权限的角色名（后端 grantedRoles；mock/旧后端可能缺省） */
+  grantedRoles?: string[]
 }
 
 /** 应用目录（admin 模块，作为发布来源；user 端实际可见的是其发布的子应用或模块本身） */
@@ -48,6 +50,8 @@ export interface ApplicationItem {
   subApps?: SubApp[]
   /** 授权范围：公开（默认）/ 私有（按角色授权，待对接） */
   scope?: AppScope
+  /** 拥有 View 权限的角色名（后端 grantedRoles；mock/旧后端可能缺省） */
+  grantedRoles?: string[]
 }
 
 /** user-web 侧应用卡片（由 ApplicationItem/SubApp 推导） */

@@ -45,6 +45,12 @@ public class ApplicationCatalogController : BidCompareController
     public Task<List<AppPermissionTreeNodeDto>> GetPermissionTreeAsync()
         => _catalogAppService.GetPermissionTreeAsync();
 
+    /// <summary>GET /api/bidcompare/app-catalog/authorized 当前用户已授权且已发布的应用目录（侧边栏动态应用菜单用）</summary>
+    /// <returns>授权应用目录列表（主应用 SubApps 已按授权过滤）</returns>
+    [HttpGet("authorized")]
+    public Task<List<AppCatalogDto>> GetAuthorizedListAsync()
+        => _catalogAppService.GetAuthorizedListAsync();
+
     /// <summary>GET /api/bidcompare/app-catalog/list user-web 应用列表（按发布状态实时推导）</summary>
     /// <returns>已发布应用卡片列表</returns>
     [HttpGet("list")]
