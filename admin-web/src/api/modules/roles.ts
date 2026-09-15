@@ -96,3 +96,28 @@ export function setRolePermissions(roleName: string, granted: PermissionGrantIte
     { params: { providerName: 'R', providerKey: roleName } },
   )
 }
+
+// ---- 应用权限（资源授权，providerName=R，resourceKey=应用 ID） ----
+
+/** 应用目录资源名与查看权限码（对应后端 BidComparePermissions.AppCatalog.Resources） */
+export const APP_CATALOG_RESOURCE_NAME = 'DredgeAI.BidCompare.Applications.AppCatalog'
+export const APP_CATALOG_VIEW_PERMISSION = `${APP_CATALOG_RESOURCE_NAME}.View`
+
+/** 查询角色已授权的应用 ID 列表 */
+export function getRoleAppIds(roleName: string): Promise<string[]> {
+  return request.get<string[]>(urls.resourcePermissionKeys, {
+    params: { resourceName: APP_CATALOG_RESOURCE_NAME, providerName: 'R', providerKey: roleName, permissionName: APP_CATALOG_VIEW_PERMISSION },
+  })
+}
+
+/** 批量授予/撤销角色对一组应用 ID 的查看权限（空列表直接跳过；URLSearchParams 保证 resourceKeys 重复参数序列化） */
+export function updateRoleAppPermissions(roleName: string, appIds: string[], granted: boolean): Promise<void> {
+  if (appIds.length === 0) return Promise.resolve()
+  const params = new URLSearchParams({ resourceName: APP_CATALOG_RESOURCE_NAME })
+  appIds.forEach((id) => params.append('resourceKeys', id))
+  return request.put(
+    urls.resourcePermissionBatch,
+    { providerName: 'R', providerKey: roleName, permissions: granted ? [APP_CATALOG_VIEW_PERMISSION] : [] },
+    { params },
+  )
+}

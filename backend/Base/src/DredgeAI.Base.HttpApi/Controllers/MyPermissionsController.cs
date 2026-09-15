@@ -152,6 +152,20 @@ public class MyPermissionsController : PermissionsController
     }
 
     /// <summary>
+    /// 按资源名 + Provider + 权限名查询已授权的资源 Key 列表。
+    /// </summary>
+    /// <param name="resourceName">资源名称。</param>
+    /// <param name="providerName">权限提供者名称（如 "R"）。</param>
+    /// <param name="providerKey">权限提供者 Key（如角色名）。</param>
+    /// <param name="permissionName">资源权限名。</param>
+    [HttpGet]
+    [Route("resource/keys")]
+    public virtual Task<List<string>> GetResourceKeysAsync(string resourceName, string providerName, string providerKey, string permissionName)
+    {
+        return MyPermissionAppService.GetResourceKeysAsync(resourceName, providerName, providerKey, permissionName);
+    }
+
+    /// <summary>
     /// 删除指定资源在特定 Provider 下的所有权限授予。
     /// </summary>
     /// <param name="resourceName">资源名称。</param>

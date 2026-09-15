@@ -10,6 +10,8 @@ public interface IApplicationCatalogAppService : IApplicationService
 
     Task<List<CategoryConfigDto>> GetCategoriesAsync();
 
+    Task<List<AppPermissionTreeNodeDto>> GetPermissionTreeAsync();
+
     Task<List<UserAppCardDto>> GetUserListAsync();
 
     Task SetAppStatusAsync(SetAppStatusInput input);

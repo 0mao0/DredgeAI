@@ -14,6 +14,8 @@ namespace DredgeAI.Permissions;
 [ExposeServices(typeof(IPermissionAppService), typeof(IMyPermissionAppService))]
 public class MyPermissionAppService : PermissionAppService, IMyPermissionAppService
 {
+    private readonly IResourcePermissionGrantRepository _resourcePermissionGrantRepository;
+
     public MyPermissionAppService(
         IPermissionManager permissionManager,
         IPermissionChecker permissionChecker,
@@ -31,6 +33,7 @@ public class MyPermissionAppService : PermissionAppService, IMyPermissionAppServ
             options,
             simpleStateCheckerManager)
     {
+        _resourcePermissionGrantRepository = resourcePermissionGrantRepository;
     }
 
     public override async Task UpdateResourceAsync(string resourceName, string resourceKey, UpdateResourcePermissionsDto input)
@@ -91,5 +94,22 @@ public class MyPermissionAppService : PermissionAppService, IMyPermissionAppServ
                 input.ProviderKey,
                 isGranted);
         }
+    }
+
+    /// <summary>按资源名 + Provider + 权限名查询已授权的资源 Key 列表（去重）。</summary>
+    public virtual async Task<List<string>> GetResourceKeysAsync(string resourceName, string providerName, string providerKey, string permissionName)
+    {
+        var manageable = await GetManageableResourcePermissionsAsync(resourceName);
+        if (manageable.All(p => p.Name != permissionName))
+        {
+            return [];
+        }
+
+        var grants = await _resourcePermissionGrantRepository.GetResourceKeys(resourceName, permissionName);
+        return grants
+            .Where(g => g.ProviderName == providerName && g.ProviderKey == providerKey)
+            .Select(g => g.ResourceKey)
+            .Distinct()
+            .ToList();
     }
 }

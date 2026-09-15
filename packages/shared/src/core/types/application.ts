@@ -101,3 +101,10 @@ export interface AppManifest {
   /** 是否重定向（redirect 路径） */
   redirect?: string
 }
+
+/** 应用权限树节点（GET /bidcompare/app-catalog/permission-tree）：类型→主应用→子应用 */
+export interface AppPermissionTreeNode {
+  key: string
+  title: string
+  children?: AppPermissionTreeNode[]
+}

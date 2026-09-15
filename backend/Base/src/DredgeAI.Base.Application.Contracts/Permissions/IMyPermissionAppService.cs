@@ -13,4 +13,7 @@ public interface IMyPermissionAppService : IPermissionAppService
     /// <param name="resourceKeys">资源 Key 列表；为空或 null 时不做任何操作。</param>
     /// <param name="input">授权内容（ProviderName/ProviderKey/授予的权限名列表），对每个 Key 全量覆盖。</param>
     Task UpdateResourceAsync(string resourceName, List<string> resourceKeys, UpdateResourcePermissionsDto input);
+
+    /// <summary>按资源名 + Provider + 权限名查询已授权的资源 Key 列表；当前用户无该权限的管理权限（ManagementPermissionName）时返回空列表。</summary>
+    Task<List<string>> GetResourceKeysAsync(string resourceName, string providerName, string providerKey, string permissionName);
 }

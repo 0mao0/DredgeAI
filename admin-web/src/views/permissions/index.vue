@@ -20,7 +20,7 @@
             {{ (page - 1) * pageSize + index + 1 }}
           </template>
           <template v-else-if="column.key === 'appCount'">
-            <span class="app-count-pending">暂未对接</span>
+            {{ roleAppCounts.get(record.name) ?? 0 }}
           </template>
           <template v-else-if="column.key === 'users'">
             <AppButton variant="link" size="sm" @click="openDrawer(record)">{{ record.userCount }} 人</AppButton>
@@ -60,7 +60,9 @@
       @close="drawerVisible = false"
     >
       <template #extra>
-        <AppButton v-if="canSaveAll" variant="primary" size="sm" :loading="savingAll" @click="handleSaveAll">保存</AppButton>
+        <AppButton v-if="canSaveAll" variant="primary" size="sm" :loading="savingAll" @click="handleSaveAll">
+          保存
+        </AppButton>
       </template>
       <template v-if="drawerRole">
         <div class="drawer-name-row">
@@ -87,12 +89,6 @@
             />
           </a-tab-pane>
           <a-tab-pane key="apps" :tab="appTabLabel">
-            <a-alert
-              type="info"
-              show-icon
-              message="应用权限暂未对接，勾选仅当前会话有效，保存不会提交"
-              style="margin-bottom: 12px"
-            />
             <RoleAppTab
               :checked-keys="drawerPendingAppIds"
               :tree="appPermTree"
@@ -112,7 +108,7 @@ import type { DataTableColumn } from '@shared/web'
 import { ref, computed, onMounted, h } from 'vue'
 import { message } from 'ant-design-vue'
 import PageHeader from '@shared/web/components/PageHeader.vue'
-import type { AppCategory, ApplicationItem } from '@/types'
+import type { AppPermissionTreeNode } from '@/types'
 import type { AppManifest } from '@shared/core/types/application'
 import {
   getRoles,
@@ -125,15 +121,17 @@ import {
   removeRoleUser,
   getRoleGrantedPermissions,
   setRolePermissions,
+  getRoleAppIds,
+  updateRoleAppPermissions,
 } from '@/api/modules/roles'
 import type { RoleItem } from '@/api/modules/roles'
 import { getOrgUsers } from '@/api/modules/org-users'
 import type { OrgUserItem } from '@/api/modules/org-users'
-import { getApplications } from '@/api/modules/applications'
+import { getAppPermissionTree } from '@/api/modules/applications'
 import { adminAppManifests, adminMenuGroups } from '@/router/manifests'
 import { manifestToMenu } from '@shared/web/router/manifest'
 import type { MenuNode } from '@shared/web/router/manifest'
-import { APP_CATEGORY_LABELS, getCategoryColor, getCategoryAlphaBg } from '@shared/core/utils'
+import { getCategoryColor, getCategoryAlphaBg } from '@shared/core/utils'
 import { formatDateTime, resolveAppConfigTimeZone } from '@shared/web/utils/format'
 import { useAppStore } from '@/stores/app'
 import RoleUserTab from './components/RoleUserTab.vue'
@@ -183,8 +181,19 @@ async function fetchRoles(): Promise<void> {
       userCount: countMap.get(r.name) ?? 0,
     }))
     total.value = res.totalCount
+    const entries = await Promise.all(
+      roles.value.map(async (r) => {
+        try {
+          return [r.name, (await getRoleAppIds(r.name)).length] as const
+        } catch {
+          return [r.name, 0] as const
+        }
+      }),
+    )
+    // eslint-disable-next-line ts/no-use-before-define
+    roleAppCounts.value = new Map(entries)
   } catch {
-    message.error('加载角色列表失败')
+    await message.error('加载角色列表失败')
   } finally {
     loading.value = false
   }
@@ -205,26 +214,26 @@ function openCreateModal(): void {
 
 async function handleSaveForm(): Promise<void> {
   if (!formName.value.trim()) {
-    message.warning('请输入角色名称')
+    await message.warning('请输入角色名称')
     return
   }
   try {
     await createRole(formName.value.trim())
-    message.success('已创建')
+    await message.success('已创建')
     formModalVisible.value = false
-    fetchRoles()
+    await fetchRoles()
   } catch {
-    message.error('操作失败')
+    await message.error('操作失败')
   }
 }
 
 async function handleDelete(id: string): Promise<void> {
   try {
     await deleteRole(id)
-    message.success('已删除')
-    fetchRoles()
+    await message.success('已删除')
+    await fetchRoles()
   } catch {
-    message.error('删除失败')
+    await message.error('删除失败')
   }
 }
 
@@ -237,6 +246,12 @@ const ACTION_LABELS: Record<string, string> = {
   delete: '删除',
   managePermissions: '分配权限',
   manageUsers: '分配人员',
+  createType: '新增类型',
+  updateType: '编辑类型',
+  deleteType: '删除类型',
+  createData: '新增数据',
+  updateData: '编辑数据',
+  deleteData: '删除数据',
 }
 
 /** manifest 递归拍平：route → manifest（查 requiredPermission / actionPermissions） */
@@ -298,78 +313,63 @@ const knownPermCodes = computed<Set<string>>(() => {
   return codes
 })
 
-// ---- 应用权限树（暂未对接，仅本地态渲染） ----
+// ---- 应用权限树（GET permission-tree：类型→主应用→子应用） ----
 
 const appTreeLoading = ref(false)
-const apps = ref<ApplicationItem[]>([])
+const appTree = ref<AppPermissionTreeNode[]>([])
 
-const appPermTree = computed<PermTreeNode[]>(() => {
-  const catOrder: AppCategory[] = ['general', 'operation', 'design', 'construction']
+function catLabel(cat: string, title: string) {
+  const color = getCategoryColor(cat)
+  return h('span', {
+    class: 'cat-tag-inline',
+    style: { color, borderColor: color, background: getCategoryAlphaBg(cat) },
+  }, title)
+}
 
-  const catGroups = new Map<string, ApplicationItem[]>()
-  for (const app of apps.value) {
-    const cat = app.category || 'general'
-    if (!catGroups.has(cat)) catGroups.set(cat, [])
-    catGroups.get(cat)!.push(app)
-  }
+function appLabel(cat: string, name: string) {
+  return h('span', { class: 'app-tree-label' }, [catLabel(cat, name), h('span', { class: 'app-name-text' }, name)])
+}
 
-  const catLabel = (cat: string) => {
-    const color = getCategoryColor(cat)
-    return h('span', {
-      class: 'cat-tag-inline',
-      style: { color, borderColor: color, background: getCategoryAlphaBg(cat) },
-    }, APP_CATEGORY_LABELS[cat as AppCategory] ?? cat)
-  }
-
-  const appLabel = (cat: string, name: string) =>
-    h('span', { class: 'app-tree-label' }, [catLabel(cat), h('span', { class: 'app-name-text' }, name)])
-
-  const makeChildren = (cat: string, app: ApplicationItem): PermTreeNode[] => {
-    const subs = app.subApps || []
-    if (subs.length === 0) return []
-    return subs.map((sub) => ({
-      title: appLabel(cat, sub.name),
-      key: sub.id,
-      selectable: true,
-    }))
-  }
-
-  const nodes: PermTreeNode[] = []
-  const seenCats = new Set<string>()
-  for (const cat of catOrder) {
-    const group = catGroups.get(cat)
-    if (!group || group.length === 0) continue
-    seenCats.add(cat)
-    nodes.push({
-      title: catLabel(cat),
-      key: `__cat__${cat}`,
-      selectable: false,
-      children: group.map((app) => {
-        const subs = app.subApps || []
-        return {
-          title: appLabel(cat, app.name),
-          key: app.id,
-          selectable: subs.length === 0,
-          children: subs.length > 0 ? makeChildren(cat, app) : undefined,
-        }
-      }),
-    })
-  }
-  for (const [cat, group] of catGroups) {
-    if (seenCats.has(cat)) continue
-    nodes.push({
-      title: catLabel(cat),
-      key: `__cat__${cat}`,
-      selectable: false,
-      children: group.map((app) => ({
-        title: appLabel(cat, app.name),
-        key: app.id,
-        selectable: !app.subApps || app.subApps.length === 0,
-        children: app.subApps ? makeChildren(cat, app) : undefined,
+const appPermTree = computed<PermTreeNode[]>(() =>
+  appTree.value.map((cat) => ({
+    title: catLabel(cat.key, cat.title),
+    key: `__cat__${cat.key}`,
+    selectable: false,
+    children: (cat.children ?? []).map((app) => ({
+      title: appLabel(cat.key, app.title),
+      key: app.key,
+      selectable: !app.children?.length,
+      children: app.children?.map((sub) => ({
+        title: appLabel(cat.key, sub.title),
+        key: sub.key,
+        selectable: true,
       })),
-    })
+    })),
+  })),
+)
+
+/** 树中全部主/子应用 ID 集合（过滤 __cat__ 类型节点的依据） */
+const knownAppIds = computed<Set<string>>(() => {
+  const ids = new Set<string>()
+  for (const cat of appTree.value) {
+    for (const app of cat.children ?? []) {
+      ids.add(app.key)
+      for (const sub of app.children ?? []) ids.add(sub.key)
+    }
   }
-  return nodes
+  return ids
+})
+
+/** 树的叶子：子应用 ID + 无子应用的主应用 ID（加载已授权时只勾叶子，父节点勾选态由 a-tree 传导推导） */
+const knownLeafIds = computed<Set<string>>(() => {
+  const ids = new Set<string>()
+  for (const cat of appTree.value) {
+    for (const app of cat.children ?? []) {
+      if (app.children?.length) app.children.forEach((s) => ids.add(s.key))
+      else ids.add(app.key)
+    }
+  }
+  return ids
 })
 
 // ---- 抽屉 ----
@@ -385,6 +385,12 @@ const savingAll = ref(false)
 const drawerPendingMenuKeys = ref<string[]>([])
 const drawerHalfCheckedKeys = ref<string[]>([])
 const drawerPendingAppIds = ref<string[]>([])
+/** 打开抽屉时已授权的应用 ID 快照（保存时 diff 用） */
+const drawerGrantedAppIds = ref<Set<string>>(new Set())
+/** 角色名 → 已授权应用数（列表页「应用权限」列） */
+const roleAppCounts = ref<Map<string, number>>(new Map())
+/** 当前勾选中的真实应用 ID（剔除 __cat__ 类型节点） */
+const checkedAppIds = computed<string[]>(() => drawerPendingAppIds.value.filter((id) => knownAppIds.value.has(id)))
 
 /** 已勾选 + 半选（部分按钮被勾的菜单）权限码全集 ∩ 已知权限码 */
 const drawerGrantedCodes = computed<Set<string>>(() => {
@@ -403,25 +409,29 @@ const addableUsers = computed<OrgUserItem[]>(() => {
 
 const userTabLabel = computed(() => `人员 (${drawerRole.value?.userCount ?? 0})`)
 const menuTabLabel = computed(() => `菜单权限 (${drawerGrantedCodes.value.size})`)
-const appTabLabel = computed(() => '应用权限 (未对接)')
+const appTabLabel = computed(() => `应用权限 (${checkedAppIds.value.length})`)
 
 async function openDrawer(role: RoleItem): Promise<void> {
   drawerRole.value = role
   drawerFormName.value = role.name
   drawerPendingMenuKeys.value = []
   drawerHalfCheckedKeys.value = []
+  drawerGrantedAppIds.value = new Set()
   drawerPendingAppIds.value = []
   drawerTab.value = 'users'
   drawerVisible.value = true
   drawerLoading.value = true
   try {
-    const [users, granted, all] = await Promise.all([
+    const [users, granted, all, appIds] = await Promise.all([
       getRoleUsers(role.name),
       getRoleGrantedPermissions(role.name),
       getOrgUsers({ maxResultCount: 1000 }),
+      getRoleAppIds(role.name),
     ])
     drawerRoleUsers.value = users
     drawerPendingMenuKeys.value = granted.filter((c) => knownPermCodes.value.has(c))
+    drawerGrantedAppIds.value = new Set(appIds.filter((id) => knownAppIds.value.has(id)))
+    drawerPendingAppIds.value = appIds.filter((id) => knownLeafIds.value.has(id))
     allUsers.value = all.items
   } catch {
     message.error('加载角色详情失败')
@@ -445,10 +455,10 @@ async function handleAddRoleUser(userIds: string[]): Promise<void> {
   if (!role) return
   try {
     await setRoleUsers(role.name, [...drawerRoleUsers.value.map((u) => u.id), ...userIds])
-    message.success('已添加')
+    await message.success('已添加')
     await refreshDrawerUsers()
   } catch {
-    message.error('添加失败')
+    await message.error('添加失败')
   }
 }
 
@@ -457,16 +467,16 @@ async function handleRemoveRoleUser(userId: string): Promise<void> {
   if (!role) return
   try {
     await removeRoleUser(role.name, userId)
-    message.success('已移除')
+    await message.success('已移除')
     await refreshDrawerUsers()
   } catch {
-    message.error('移除失败')
+    await message.error('移除失败')
   }
 }
 
 /**
  * 保存：先改名后授权 —— ABP 角色授权 providerKey 为角色名，改名后必须用新名提交授权。
- * 应用权限不对接，不提交。
+ * 应用权限与打开时快照 diff，授予/撤销两批分别提交。
  */
 async function handleSaveAll(): Promise<void> {
   const role = drawerRole.value
@@ -479,6 +489,11 @@ async function handleSaveAll(): Promise<void> {
       newName,
       [...knownPermCodes.value].map((name) => ({ name, isGranted: drawerGrantedCodes.value.has(name) })),
     )
+    const prev = drawerGrantedAppIds.value
+    const curr = new Set(checkedAppIds.value)
+    await updateRoleAppPermissions(newName, [...curr].filter((id) => !prev.has(id)), true)
+    await updateRoleAppPermissions(newName, [...prev].filter((id) => !curr.has(id)), false)
+    drawerGrantedAppIds.value = new Set(curr)
     role.name = newName
     message.success('已保存')
     fetchRoles()
@@ -490,12 +505,12 @@ async function handleSaveAll(): Promise<void> {
 }
 
 onMounted(async () => {
-  fetchRoles()
+  await fetchRoles()
   appTreeLoading.value = true
   try {
-    apps.value = await getApplications()
+    appTree.value = await getAppPermissionTree()
   } catch {
-    message.error('加载应用列表失败')
+    await message.error('加载应用权限树失败')
   } finally {
     appTreeLoading.value = false
   }
@@ -510,13 +525,12 @@ onMounted(async () => {
   align-items: baseline;
   gap: @spacing-sm;
 }
+
 .page-container :deep(.page-desc) {
   margin-top: 0;
   color: @text-tertiary;
 }
-.app-count-pending {
-  color: @text-tertiary;
-}
+
 .page-container :deep(.page-header) {
   margin-bottom: @spacing-md;
 }
@@ -527,6 +541,7 @@ onMounted(async () => {
   gap: @spacing-sm;
   margin-bottom: @spacing-base;
 }
+
 .drawer-name-label {
   white-space: nowrap;
   color: @text-primary;
@@ -536,6 +551,7 @@ onMounted(async () => {
 .drawer-tabs :deep(.ant-tabs-nav) {
   margin-bottom: @spacing-sm;
 }
+
 .drawer-tabs :deep(.ant-tabs-tab) {
   padding: 6px 10px;
 }
@@ -549,6 +565,7 @@ onMounted(async () => {
   align-items: center;
   gap: 6px;
 }
+
 .cat-tag-inline {
   display: inline-flex;
   align-items: center;
@@ -561,6 +578,7 @@ onMounted(async () => {
   border-radius: 3px;
   white-space: nowrap;
 }
+
 .app-name-text {
   overflow: hidden;
   text-overflow: ellipsis;

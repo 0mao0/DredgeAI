@@ -18,6 +18,10 @@
     "Permission:BidCompare.AppCatalog.Resources.View": "View app",
     "Permission:BidCompare.AppCatalog.Resources.Edit": "Edit app",
     "Permission:BidCompare.AppCatalog.Resources.Delete": "Delete app",
+    "Enum:AppCatalogCategory.General": "General",
+    "Enum:AppCatalogCategory.Operation": "Operation",
+    "Enum:AppCatalogCategory.Design": "Design",
+    "Enum:AppCatalogCategory.Construction": "Construction",
     "BidCompare:UnsupportedFileType": "Unsupported file type",
     "BidCompare:DocumentCountOutOfRange": "Too many bid documents"
   }

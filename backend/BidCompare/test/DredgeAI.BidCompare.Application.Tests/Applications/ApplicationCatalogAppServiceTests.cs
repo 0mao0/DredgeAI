@@ -39,6 +39,27 @@ public class ApplicationCatalogAppServiceTests : BidCompareApplicationTestBase<B
     }
 
     [Fact]
+    public async Task PermissionTree_Should_Group_By_Category()
+    {
+        var tree = await _appService.GetPermissionTreeAsync();
+
+        // 第一层：类型分组按枚举值升序，Key 为 snake_case wire 值，Title 为本地化描述（非空且不等于 Key）
+        var categories = tree.Select(x => Enum.Parse<AppCatalogCategory>(x.Key, ignoreCase: true)).ToList();
+        categories.ShouldBe(categories.OrderBy(x => x).ToList());
+        tree.ShouldAllBe(x => !string.IsNullOrEmpty(x.Title) && x.Title != x.Key);
+
+        // 第二层/第三层：Key 为应用 Id，含子应用的主应用带出子应用列表，无子应用的 Children 为 null
+        var catalog = await _appService.GetListAsync();
+        var intel = catalog.Single(x => x.Name == "情报采集");
+        var intelNode = tree.SelectMany(x => x.Children!).Single(x => x.Key == intel.Id.ToString());
+        intelNode.Title.ShouldBe("情报采集");
+        intelNode.Children!.Select(x => x.Key).ShouldBe(intel.SubApps!.Select(x => x.Id.ToString()).ToList());
+
+        var plain = catalog.Single(x => x.Name == "规范问答");
+        tree.SelectMany(x => x.Children!).Single(x => x.Key == plain.Id.ToString()).Children.ShouldBeNull();
+    }
+
+    [Fact]
     public async Task UserList_Should_Reflect_Publish_Status()
     {
         var cards = await _appService.GetUserListAsync();

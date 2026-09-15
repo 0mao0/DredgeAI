@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Threading.Tasks;
+using System.Text.Json;
 using Volo.Abp;
 using Volo.Abp.Domain.Repositories;
 
@@ -43,6 +44,29 @@ public class ApplicationCatalogAppService : BidCompareAppService, IApplicationCa
             new() { Name = "design", Color = "purple" },
             new() { Name = "construction", Color = "gold" },
         });
+
+    /// <summary>应用权限树：类型 → 主应用 → 子应用；类型名本地化（Enum:AppCatalogCategory.*），应用顺序沿用 AppOrder 全局排序行；含全部状态应用（授权不受发布状态影响）。</summary>
+    public async Task<List<AppPermissionTreeNodeDto>> GetPermissionTreeAsync()
+    {
+        var (mains, subsByParent) = await LoadOrderedAsync();
+        return mains
+            .GroupBy(x => x.Category)
+            .OrderBy(g => g.Key)
+            .Select(g => new AppPermissionTreeNodeDto
+            {
+                Key = JsonNamingPolicy.SnakeCaseLower.ConvertName(g.Key.ToString()),
+                Title = L[$"Enum:AppCatalogCategory.{g.Key}"].Value,
+                Children = g.Select(app => new AppPermissionTreeNodeDto
+                {
+                    Key = app.Id.ToString(),
+                    Title = app.Name,
+                    Children = subsByParent.TryGetValue(app.Id, out var subs)
+                        ? subs.Select(sub => new AppPermissionTreeNodeDto { Key = sub.Id.ToString(), Title = sub.Name }).ToList()
+                        : null,
+                }).ToList(),
+            })
+            .ToList();
+    }
 
     public async Task<List<UserAppCardDto>> GetUserListAsync()
     {

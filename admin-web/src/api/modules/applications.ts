@@ -1,6 +1,6 @@
 import request from '@/api/request'
 import { urls } from '@shared/core/api'
-import type { AppCategory, AppMainStatus, ApplicationItem, SubApp, SubAppStatus } from '@/types'
+import type { AppCategory, AppMainStatus, AppPermissionTreeNode, ApplicationItem, SubApp, SubAppStatus } from '@/types'
 
 export interface ResetUserOrdersResult {
   count: number
@@ -67,4 +67,9 @@ export interface CategoryConfig {
 
 export function getCategoryConfig(): Promise<CategoryConfig[]> {
   return request.get<CategoryConfig[]>('/bidcompare/app-catalog/categories')
+}
+
+/** 应用权限树（类型→主应用→子应用；类型名已由后端本地化） */
+export function getAppPermissionTree(): Promise<AppPermissionTreeNode[]> {
+  return request.get<AppPermissionTreeNode[]>(urls.appPermissionTree)
 }
