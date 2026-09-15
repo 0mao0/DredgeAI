@@ -1,0 +1,19 @@
+{
+  "culture": "en",
+  "texts": {
+    "Permission:Gateway": "Gateway configuration",
+    "Permission:Gateway.ProxyRoutes": "Proxy routes",
+    "Permission:Gateway.ProxyRoutes.Create": "Create route",
+    "Permission:Gateway.ProxyRoutes.Update": "Edit route",
+    "Permission:Gateway.ProxyRoutes.Delete": "Delete route",
+    "Permission:Gateway.ProxyClusters": "Proxy clusters",
+    "Permission:Gateway.ProxyClusters.Create": "Create cluster",
+    "Permission:Gateway.ProxyClusters.Update": "Edit cluster",
+    "Permission:Gateway.ProxyClusters.Delete": "Delete cluster",
+    "Gateway:DuplicateRouteId": "The route ID already exists",
+    "Gateway:DuplicateClusterId": "The cluster ID already exists",
+    "Gateway:ClusterNotFound": "The target cluster does not exist",
+    "Gateway:ClusterInUse": "The cluster is still referenced by routes and cannot be deleted",
+    "Gateway:InvalidDestinationAddress": "Invalid destination address: must be an absolute http/https URL"
+  }
+}

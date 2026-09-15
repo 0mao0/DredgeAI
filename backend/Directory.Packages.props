@@ -21,6 +21,7 @@
     <PackageVersion Include="Volo.Abp.Data" Version="10.5.0" />
     <PackageVersion Include="Volo.Abp.Http.Client.IdentityModel.Web" Version="10.5.0" />
     <PackageVersion Include="Volo.Abp.Http.Client.IdentityModel" Version="10.5.0" />
+    <PackageVersion Include="Volo.Abp.Identity.HttpApi.Client" Version="10.5.0" />
     <PackageVersion Include="Volo.Abp.ObjectExtending" Version="10.5.0" />
     <PackageVersion Include="Yarp.ReverseProxy" Version="2.3.0" />
     <PackageVersion Include="Volo.Abp.Ddd.Application" Version="10.5.0" />

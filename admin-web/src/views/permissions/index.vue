@@ -252,6 +252,12 @@ const ACTION_LABELS: Record<string, string> = {
   createData: '新增数据',
   updateData: '编辑数据',
   deleteData: '删除数据',
+  createRoute: '新增路由',
+  updateRoute: '编辑路由',
+  deleteRoute: '删除路由',
+  createCluster: '新增集群',
+  updateCluster: '编辑集群',
+  deleteCluster: '删除集群',
 }
 
 /** manifest 递归拍平：route → manifest（查 requiredPermission / actionPermissions） */

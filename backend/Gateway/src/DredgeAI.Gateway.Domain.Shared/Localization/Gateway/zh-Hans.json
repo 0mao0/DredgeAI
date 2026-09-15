@@ -1,0 +1,19 @@
+{
+  "culture": "zh-Hans",
+  "texts": {
+    "Permission:Gateway": "网关配置",
+    "Permission:Gateway.ProxyRoutes": "代理路由",
+    "Permission:Gateway.ProxyRoutes.Create": "新增路由",
+    "Permission:Gateway.ProxyRoutes.Update": "编辑路由",
+    "Permission:Gateway.ProxyRoutes.Delete": "删除路由",
+    "Permission:Gateway.ProxyClusters": "代理集群",
+    "Permission:Gateway.ProxyClusters.Create": "新增集群",
+    "Permission:Gateway.ProxyClusters.Update": "编辑集群",
+    "Permission:Gateway.ProxyClusters.Delete": "删除集群",
+    "Gateway:DuplicateRouteId": "路由 ID 已存在",
+    "Gateway:DuplicateClusterId": "集群 ID 已存在",
+    "Gateway:ClusterNotFound": "目标集群不存在",
+    "Gateway:ClusterInUse": "集群仍被路由引用，无法删除",
+    "Gateway:InvalidDestinationAddress": "目标地址无效：必须是 http/https 绝对地址"
+  }
+}

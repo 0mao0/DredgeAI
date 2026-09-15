@@ -1,5 +1,6 @@
 using System;
 using System.Threading.Tasks;
+using DredgeAI.Gateway.Permissions;
 using DredgeAI.Gateway.Proxying;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
@@ -10,7 +11,7 @@ namespace DredgeAI.Gateway.Controllers;
 
 [Area("gateway")]
 [Route("api/gateway/proxy-clusters")]
-[Authorize]
+[Authorize(GatewayPermissions.ProxyClusters.Default)]
 public class ProxyClusterController : AbpControllerBase
 {
     private readonly IProxyClusterAppService _appService;
@@ -31,16 +32,19 @@ public class ProxyClusterController : AbpControllerBase
 
     /// <summary>POST /api/gateway/proxy-clusters 新增代理集群</summary>
     [HttpPost]
+    [Authorize(GatewayPermissions.ProxyClusters.Create)]
     public Task<ProxyClusterDto> CreateAsync([FromBody] ProxyClusterCreateUpdateDto input)
         => _appService.CreateAsync(input);
 
     /// <summary>PUT /api/gateway/proxy-clusters/{id} 全量更新代理集群</summary>
     [HttpPut("{id}")]
+    [Authorize(GatewayPermissions.ProxyClusters.Update)]
     public Task<ProxyClusterDto> UpdateAsync(Guid id, [FromBody] ProxyClusterCreateUpdateDto input)
         => _appService.UpdateAsync(id, input);
 
     /// <summary>DELETE /api/gateway/proxy-clusters/{id}</summary>
     [HttpDelete("{id}")]
+    [Authorize(GatewayPermissions.ProxyClusters.Delete)]
     public async Task<IActionResult> DeleteAsync(Guid id)
     {
         await _appService.DeleteAsync(id);

@@ -75,6 +75,7 @@ export function registerMock(): void {
     { key: 'dict', passthrough: /^\/base\/dict-/ },
     { key: 'standards', register: registerStandardsMock },
     { key: 'appOrder', passthrough: /^\/bidcompare\/app-order/ },
+    { key: 'gateway', passthrough: /^\/gateway\// },
   ]
 
   for (const mod of modules) {

@@ -26,6 +26,8 @@ export const MOCK_MODULES: Record<string, boolean> = {
   standards: true,
   // 应用顺序直连真实后端（admin / user-web 共享同一后端进程）
   appOrder: false,
+  // 网关配置直连真实后端（/gateway/proxy-routes + /gateway/proxy-clusters）
+  gateway: false,
 }
 
 export const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || '/api/'

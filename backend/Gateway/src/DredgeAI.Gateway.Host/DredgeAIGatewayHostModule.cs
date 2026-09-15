@@ -8,12 +8,15 @@ using Microsoft.OpenApi;
 using Volo.Abp;
 using Volo.Abp.AspNetCore.Authentication.JwtBearer;
 using Volo.Abp.AspNetCore.Mvc;
+using Volo.Abp.AspNetCore.Mvc.AntiForgery;
+using Volo.Abp.AspNetCore.Mvc.Client;
 using Volo.Abp.AspNetCore.Serilog;
 using Volo.Abp.Autofac;
 using Volo.Abp.Data;
 using Volo.Abp.EntityFrameworkCore.PostgreSql;
 using Volo.Abp.Modularity;
 using Volo.Abp.Auditing;
+using Volo.Abp.Http.Client.IdentityModel.Web;
 using Volo.Abp.Timing;
 using Volo.Abp.Swashbuckle;
 
@@ -24,6 +27,8 @@ namespace DredgeAI;
     typeof(AbpAspNetCoreSerilogModule),
     typeof(AbpAutofacModule),
     typeof(AbpAspNetCoreMvcModule),
+    typeof(AbpAspNetCoreMvcClientModule),
+    typeof(AbpHttpClientIdentityModelWebModule),
     typeof(AbpEntityFrameworkCorePostgreSqlModule),
     typeof(GatewayApplicationModule),
     typeof(GatewayHttpApiModule),
@@ -49,6 +54,18 @@ public class DredgeAIGatewayHostModule : AbpModule
         {
             //options.IsEnabledForGetRequests = true;
             options.ApplicationName = "Gateway";
+        });
+
+        // 远程权限判定缓存：角色授权变更最长 60s 后在网关生效（ABP 默认 300s）
+        Configure<AbpAspNetCoreMvcClientCacheOptions>(options =>
+        {
+            options.ApplicationConfigurationDtoCacheAbsoluteExpiration = TimeSpan.FromSeconds(60);
+        });
+
+        // 纯 JWT Bearer 的 API 服务（无 Cookie 会话），CSRF 不适用；与 Base Host 一致关闭 ABP 自动防伪校验
+        Configure<AbpAntiForgeryOptions>(options =>
+        {
+            options.AutoValidate = false;
         });
 
         // 接入认证中心：验证 Auth 服务颁发的 JWT（配置与其他服务一致）

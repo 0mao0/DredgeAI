@@ -1,5 +1,6 @@
 using System;
 using System.Threading.Tasks;
+using DredgeAI.Gateway.Permissions;
 using DredgeAI.Gateway.Proxying;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
@@ -10,7 +11,7 @@ namespace DredgeAI.Gateway.Controllers;
 
 [Area("gateway")]
 [Route("api/gateway/proxy-routes")]
-[Authorize]
+[Authorize(GatewayPermissions.ProxyRoutes.Default)]
 public class ProxyRouteController : AbpControllerBase
 {
     private readonly IProxyRouteAppService _appService;
@@ -31,16 +32,19 @@ public class ProxyRouteController : AbpControllerBase
 
     /// <summary>POST /api/gateway/proxy-routes 新增代理路由</summary>
     [HttpPost]
+    [Authorize(GatewayPermissions.ProxyRoutes.Create)]
     public Task<ProxyRouteDto> CreateAsync([FromBody] ProxyRouteCreateUpdateDto input)
         => _appService.CreateAsync(input);
 
     /// <summary>PUT /api/gateway/proxy-routes/{id} 全量更新代理路由</summary>
     [HttpPut("{id}")]
+    [Authorize(GatewayPermissions.ProxyRoutes.Update)]
     public Task<ProxyRouteDto> UpdateAsync(Guid id, [FromBody] ProxyRouteCreateUpdateDto input)
         => _appService.UpdateAsync(id, input);
 
     /// <summary>DELETE /api/gateway/proxy-routes/{id}</summary>
     [HttpDelete("{id}")]
+    [Authorize(GatewayPermissions.ProxyRoutes.Delete)]
     public async Task<IActionResult> DeleteAsync(Guid id)
     {
         await _appService.DeleteAsync(id);

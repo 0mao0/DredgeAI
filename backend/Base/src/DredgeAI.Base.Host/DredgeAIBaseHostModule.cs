@@ -1,4 +1,5 @@
 using DredgeAI.BidCompare;
+using DredgeAI.Gateway;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.Cors;
 using Microsoft.Extensions.DependencyInjection.Extensions;
@@ -72,7 +73,8 @@ namespace DredgeAI;
     typeof(DredgeAIBaseEntityFrameworkCoreModule),
     typeof(AbpAspNetCoreSerilogModule),
     typeof(AbpSwashbuckleModule),
-    typeof(BidCompareApplicationContractsModule)
+    typeof(BidCompareApplicationContractsModule),
+    typeof(GatewayApplicationContractsModule)
 )]
 public class DredgeAIBaseHostModule : AbpModule
 {
