@@ -41,7 +41,15 @@
         </div>
       </a-form-item>
       <a-form-item label="授权策略" name="authorizationPolicy">
-        <a-input v-model:value="form.authorizationPolicy" placeholder="YARP AuthorizationPolicy，如 authenticated" />
+        <a-select
+          v-model:value="form.authorizationPolicy"
+          :options="POLICY_OPTIONS"
+          allow-clear
+          placeholder="留空则不做授权限制"
+        />
+        <div v-if="selectedPolicyDescription" class="route-form__policy-desc">
+          {{ selectedPolicyDescription }}
+        </div>
       </a-form-item>
       <a-form-item label="启用" name="isEnabled">
         <a-switch v-model:checked="form.isEnabled" />
@@ -51,7 +59,7 @@
 </template>
 
 <script setup lang="ts">
-import { reactive, ref, watch } from 'vue'
+import { computed, reactive, ref, watch } from 'vue'
 import type { FormInstance } from 'ant-design-vue'
 import type { ProxyRouteFormData, ProxyRouteItem } from '@/api/modules/gateway'
 
@@ -75,9 +83,24 @@ const form = reactive({
   matchPath: '',
   matchHosts: [] as string[],
   order: 0,
-  authorizationPolicy: '',
+  authorizationPolicy: undefined as string | undefined,
   isEnabled: true,
 })
+
+/** YARP 内置授权策略（与 Yarp.ReverseProxy 约定值一致） */
+const POLICY_OPTIONS = [
+  { value: 'anonymous', label: 'anonymous' },
+  { value: 'default', label: 'default' },
+]
+
+const POLICY_DESCRIPTIONS: Record<string, string> = {
+  anonymous: '匿名访问：允许未登录请求通过该路由（YARP AnonymousAuthorizationPolicy）',
+  default: '默认策略：要求请求已完成认证（YARP DefaultAuthorizationPolicy，未登录返回 401/403）',
+}
+
+const selectedPolicyDescription = computed(() =>
+  form.authorizationPolicy ? POLICY_DESCRIPTIONS[form.authorizationPolicy] : undefined,
+)
 
 const rules = {
   routeId: [{ required: true, message: '请输入路由 ID', trigger: 'blur' }],
@@ -94,7 +117,7 @@ watch(() => props.open, (open) => {
   form.matchPath = r?.match.path ?? ''
   form.matchHosts = [...(r?.match.hosts ?? [])]
   form.order = r?.order ?? 0
-  form.authorizationPolicy = r?.authorizationPolicy ?? ''
+  form.authorizationPolicy = r?.authorizationPolicy ?? undefined
   form.isEnabled = r?.isEnabled ?? true
   formRef.value?.clearValidate()
 })
@@ -109,7 +132,7 @@ async function handleOk(): Promise<void> {
     routeId: form.routeId.trim(),
     description: form.description.trim() || undefined,
     clusterId: form.clusterId!,
-    authorizationPolicy: form.authorizationPolicy.trim() || undefined,
+    authorizationPolicy: form.authorizationPolicy || undefined,
     order: form.order ?? 0,
     match: {
       path: form.matchPath.trim(),
@@ -132,5 +155,12 @@ async function handleOk(): Promise<void> {
     color: @text-tertiary;
     font-size: @font-size-xs;
   }
+}
+
+.route-form__policy-desc {
+  margin-top: 4px;
+  color: @text-tertiary;
+  font-size: @font-size-xs;
+  line-height: 1.5;
 }
 </style>
