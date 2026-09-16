@@ -14,6 +14,8 @@
         <PackageReference Include="Serilog.Sinks.OpenTelemetry" />
         <PackageReference Include="Volo.Abp.AspNetCore.Authentication.JwtBearer" />
         <PackageReference Include="Volo.Abp.AspNetCore.Mvc" />
+        <PackageReference Include="Volo.Abp.AspNetCore.Mvc.Client" />
+        <PackageReference Include="Volo.Abp.Http.Client.IdentityModel.Web" />
         <PackageReference Include="Volo.Abp.AspNetCore.Serilog" />
         <PackageReference Include="Volo.Abp.Autofac" />
         <PackageReference Include="Volo.Abp.EntityFrameworkCore.PostgreSql" />

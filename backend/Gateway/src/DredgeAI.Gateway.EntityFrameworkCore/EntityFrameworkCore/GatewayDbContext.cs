@@ -1,4 +1,5 @@
 using DredgeAI.Gateway.Proxying;
+using DredgeAI.Gateway.RateLimiting;
 using Microsoft.EntityFrameworkCore;
 using Shiw.Abp.BaseEntityFrameworkCore;
 using Volo.Abp.Data;
@@ -11,6 +12,7 @@ public class GatewayDbContext : AbpDbContext<GatewayDbContext>
 {
     public DbSet<ProxyRoute> ProxyRoutes { get; set; }
     public DbSet<ProxyCluster> ProxyClusters { get; set; }
+    public DbSet<RateLimitPolicy> RateLimitPolicies { get; set; }
 
     private readonly IShiwDbContextHandler _handler;
 

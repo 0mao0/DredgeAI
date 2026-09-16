@@ -2,6 +2,7 @@ using System.Collections.Generic;
 using System.Linq;
 using AutoMapper;
 using DredgeAI.Gateway.Proxying;
+using DredgeAI.Gateway.RateLimiting;
 using Yarp.ReverseProxy.Configuration;
 
 namespace DredgeAI.Gateway;
@@ -24,6 +25,8 @@ public class GatewayApplicationAutoMapperProfile : Profile
 
         CreateMap<ProxyCluster, ProxyClusterDto>()
             .ForMember(d => d.Destinations, o => o.MapFrom(s => ToDestinationsDto(s.ToClusterConfig())));
+
+        CreateMap<RateLimitPolicy, RateLimitPolicyDto>();
     }
 
     private static ProxyRouteMatchDto ToMatchDto(RouteMatch? match) => new()

@@ -1,0 +1,28 @@
+{
+  "culture": "en",
+  "texts": {
+    "Permission:Gateway": "Gateway configuration",
+    "Permission:Gateway.ProxyRoutes": "Proxy routes",
+    "Permission:Gateway.ProxyRoutes.Create": "Create route",
+    "Permission:Gateway.ProxyRoutes.Update": "Edit route",
+    "Permission:Gateway.ProxyRoutes.Delete": "Delete route",
+    "Permission:Gateway.ProxyClusters": "Proxy clusters",
+    "Permission:Gateway.ProxyClusters.Create": "Create cluster",
+    "Permission:Gateway.ProxyClusters.Update": "Edit cluster",
+    "Permission:Gateway.ProxyClusters.Delete": "Delete cluster",
+    "Gateway:DuplicateRouteId": "The route ID already exists",
+    "Gateway:DuplicateClusterId": "The cluster ID already exists",
+    "Gateway:ClusterNotFound": "The target cluster does not exist",
+    "Gateway:ClusterInUse": "The cluster is still referenced by routes and cannot be deleted",
+    "Gateway:InvalidDestinationAddress": "Invalid destination address: must be an absolute http/https URL",
+    "Permission:Gateway.RateLimitPolicies": "Rate limit policies",
+    "Permission:Gateway.RateLimitPolicies.Create": "Create policy",
+    "Permission:Gateway.RateLimitPolicies.Update": "Edit policy",
+    "Permission:Gateway.RateLimitPolicies.Delete": "Delete policy",
+    "Gateway:DuplicateRateLimitPolicyName": "The policy name already exists",
+    "Gateway:GlobalRateLimitPolicyExists": "A global rate limit policy already exists; only one is allowed",
+    "Gateway:RouteRateLimitPolicyExists": "A route-level rate limit policy already exists for this route; only one is allowed",
+    "Gateway:RouteNotFound": "The target route does not exist",
+    "Gateway:InvalidRateLimitParameters": "Invalid rate limit parameters: check the required parameters for the selected algorithm (all must be positive; queue limit cannot be negative)"
+  }
+}

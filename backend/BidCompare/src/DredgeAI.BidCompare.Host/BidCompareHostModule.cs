@@ -78,12 +78,9 @@ public class BidCompareHostModule : AbpModule
         ConfigureCors(context, configuration);
         ConfigureSwaggerServices(context, configuration);
 
-        if (hostingEnvironment.IsDevelopment())
-        {
-            // 本地联调：user-web 尚无登录/权限链路，关闭 ABP 自动防伪校验；
-            // 生产环境仍走完整认证与防伪流程。
-            Configure<AbpAntiForgeryOptions>(options => options.AutoValidate = false);
-        }
+        // 生产环境仍走完整认证与防伪流程。
+        Configure<AbpAntiForgeryOptions>(options => options.AutoValidate = false);
+     
 
         Configure<Microsoft.AspNetCore.Mvc.JsonOptions>(options =>
         {

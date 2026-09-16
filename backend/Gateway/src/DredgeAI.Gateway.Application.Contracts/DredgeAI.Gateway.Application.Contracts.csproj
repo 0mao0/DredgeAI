@@ -13,6 +13,7 @@
   </ItemGroup>
 
   <ItemGroup>
+    <PackageReference Include="Volo.Abp.Authorization" />
     <PackageReference Include="Volo.Abp.Ddd.Application.Contracts" />
     <PackageReference Include="Yarp.ReverseProxy" />
   </ItemGroup>

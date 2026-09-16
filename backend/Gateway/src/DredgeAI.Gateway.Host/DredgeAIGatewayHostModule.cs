@@ -1,19 +1,22 @@
-using System.Threading.RateLimiting;
 using DredgeAI.Gateway;
 using DredgeAI.Gateway.EntityFrameworkCore;
 using DredgeAI.Gateway.Proxying;
+using DredgeAI.Gateway.RateLimiting;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.Cors;
 using Microsoft.OpenApi;
 using Volo.Abp;
 using Volo.Abp.AspNetCore.Authentication.JwtBearer;
 using Volo.Abp.AspNetCore.Mvc;
+using Volo.Abp.AspNetCore.Mvc.AntiForgery;
+using Volo.Abp.AspNetCore.Mvc.Client;
 using Volo.Abp.AspNetCore.Serilog;
 using Volo.Abp.Autofac;
 using Volo.Abp.Data;
 using Volo.Abp.EntityFrameworkCore.PostgreSql;
 using Volo.Abp.Modularity;
 using Volo.Abp.Auditing;
+using Volo.Abp.Http.Client.IdentityModel.Web;
 using Volo.Abp.Timing;
 using Volo.Abp.Swashbuckle;
 
@@ -24,6 +27,8 @@ namespace DredgeAI;
     typeof(AbpAspNetCoreSerilogModule),
     typeof(AbpAutofacModule),
     typeof(AbpAspNetCoreMvcModule),
+    typeof(AbpAspNetCoreMvcClientModule),
+    typeof(AbpHttpClientIdentityModelWebModule),
     typeof(AbpEntityFrameworkCorePostgreSqlModule),
     typeof(GatewayApplicationModule),
     typeof(GatewayHttpApiModule),
@@ -32,8 +37,8 @@ namespace DredgeAI;
 )]
 public class DredgeAIGatewayHostModule : AbpModule
 {
-    /// <summary>代理端点统一使用的限流策略名（appsettings.json RateLimiting 节可调参）。</summary>
-    public const string ProxyRateLimitPolicy = "proxy-fixed";
+    /// <summary>代理端点统一限流策略名；策略参数来自 DB（RateLimiterManager 动态解析，路由级优先全局）。</summary>
+    public const string ProxyRateLimitPolicy = "gateway-dynamic";
 
     public override void PreConfigureServices(ServiceConfigurationContext context)
     {
@@ -49,6 +54,18 @@ public class DredgeAIGatewayHostModule : AbpModule
         {
             //options.IsEnabledForGetRequests = true;
             options.ApplicationName = "Gateway";
+        });
+
+        // 远程权限判定缓存：角色授权变更最长 60s 后在网关生效（ABP 默认 300s）
+        Configure<AbpAspNetCoreMvcClientCacheOptions>(options =>
+        {
+            options.ApplicationConfigurationDtoCacheAbsoluteExpiration = TimeSpan.FromSeconds(60);
+        });
+
+        // 纯 JWT Bearer 的 API 服务（无 Cookie 会话），CSRF 不适用；与 Base Host 一致关闭 ABP 自动防伪校验
+        Configure<AbpAntiForgeryOptions>(options =>
+        {
+            options.AutoValidate = false;
         });
 
         // 接入认证中心：验证 Auth 服务颁发的 JWT（配置与其他服务一致）
@@ -91,23 +108,12 @@ public class DredgeAIGatewayHostModule : AbpModule
         // appsettings 的 ReverseProxy 节仅作为首次启动的种子数据源
         context.Services.AddReverseProxy();
 
-        // 请求限流：按客户端 IP 分区的固定窗口；仅作用于代理端点（不健康检查），不设 GlobalLimiter
-        var permitLimit = configuration.GetValue("RateLimiting:PermitLimit", 100);
-        var windowSeconds = configuration.GetValue("RateLimiting:WindowSeconds", 10);
-        var queueLimit = configuration.GetValue("RateLimiting:QueueLimit", 0);
+        // 请求限流：策略参数来自 DB（RateLimitPolicy 表），按客户端 IP 分区，路由级优先全局；仅作用于代理端点
         context.Services.AddRateLimiter(options =>
         {
             options.RejectionStatusCode = StatusCodes.Status429TooManyRequests;
-            options.AddPolicy(ProxyRateLimitPolicy, httpContext =>
-                RateLimitPartition.GetFixedWindowLimiter(
-                    partitionKey: httpContext.Connection.RemoteIpAddress?.ToString() ?? "unknown",
-                    factory: _ => new FixedWindowRateLimiterOptions
-                    {
-                        PermitLimit = permitLimit,
-                        Window = TimeSpan.FromSeconds(windowSeconds),
-                        QueueProcessingOrder = QueueProcessingOrder.OldestFirst,
-                        QueueLimit = queueLimit
-                    }));
+            options.AddPolicy<string>(ProxyRateLimitPolicy, httpContext =>
+                httpContext.RequestServices.GetRequiredService<RateLimiterManager>().GetPartition(httpContext));
         });
 
         // CORS：网关作为前端入口，CORS 策略与现有服务同构（WithAbpExposedHeaders 来自 Volo.Abp.AspNetCore）
@@ -181,7 +187,8 @@ public class DredgeAIGatewayHostModule : AbpModule
         app.UseWhen(
             ctx =>
                 ctx.Request.Path.StartsWithSegments("/api/gateway/proxy-routes") ||
-                ctx.Request.Path.StartsWithSegments("/api/gateway/proxy-clusters"),
+                ctx.Request.Path.StartsWithSegments("/api/gateway/proxy-clusters") ||
+                ctx.Request.Path.StartsWithSegments("/api/gateway/rate-limit-policies"),
             branch => branch.UseAuditing());
 
         app.UseSwagger();
