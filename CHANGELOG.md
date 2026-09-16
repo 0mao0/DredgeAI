@@ -4,6 +4,22 @@
 在本文件顶部插入新版本段：若该版本段已存在（手工精修过）则保留不覆盖，
 否则按上个 tag 以来的提交自动生成。
 
+## 0.2.7
+
+- fix(layout): 明暗主题改为侧边菜单行，收起态也能看到并用
+- feat(dredge): 疏浚机理（耙吸效率）模块落成 user-web
+- feat(gateway): 增加动态限流策略管理功能支持
+- feat(gateway): 优化授权策略选择逻辑
+- feat(gateway): 增加网关管理模块支持
+- feat(permission): 集成权限服务支持及动态授权应用菜单
+- feat(permission): 修复角色应用权限树回声循环问题
+- feat(permission): 增加应用权限树及角色应用权限管理支持
+- feat(permissions): 扩展权限批量更新功能
+- feat(permission): 增加获取资源名称列表接口
+- feat:提交
+- feat(permission) 增加 BidCompare 模块权限定义和集成支持 新增 BidCompare 模块权限配置 (AiMeeting 和 AppCatalog)，删除文件相关表结构，更新权限组名字段为可空属性。
+- …（另有 4 项，见提交记录）
+
 ## 0.2.6
 
 - feat(meeting): 晨会稿生成过程 SSE 进度可视化
