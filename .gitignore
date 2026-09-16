@@ -55,6 +55,9 @@ lerna-debug.log*
 # 运行时数据总目录（基础数据/业务文件/PostgreSQL/日志/备份，统一不入库）
 /data/
 
+# 设计原型（单文件 HTML 演示，只作设计来源，不入库）
+docs/prototypes/
+
 # 包管理器锁文件（项目使用 pnpm，忽略其他包管理器的锁文件）
 package-lock.json
 **/package-lock.json
