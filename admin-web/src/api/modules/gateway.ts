@@ -98,3 +98,67 @@ export function updateProxyCluster(id: string, data: ProxyClusterFormData): Prom
 export function deleteProxyCluster(id: string): Promise<void> {
   return request.delete(urls.gatewayProxyCluster.replace(':id', id))
 }
+
+// ---- 限流策略 ----
+
+/** 限流作用域：0=全局 1=路由级（对应后端 RateLimitScope，数字枚举） */
+export type RateLimitScopeValue = 0 | 1
+/** 限流算法：0=固定窗口 1=滑动窗口 2=令牌桶 */
+export type RateLimitAlgorithmValue = 0 | 1 | 2
+
+/** 限流策略列表项（对应后端 RateLimitPolicyDto） */
+export interface RateLimitPolicyItem {
+  id: string
+  name: string
+  scope: RateLimitScopeValue
+  routeId?: string
+  algorithm: RateLimitAlgorithmValue
+  permitLimit?: number
+  windowSeconds?: number
+  segmentsPerWindow?: number
+  tokenLimit?: number
+  tokensPerPeriod?: number
+  replenishmentPeriodSeconds?: number
+  queueLimit: number
+  isEnabled: boolean
+}
+
+/** 限流策略新增/编辑表单（对应后端 RateLimitPolicyCreateUpdateDto） */
+export interface RateLimitPolicyFormData {
+  name: string
+  scope: RateLimitScopeValue
+  routeId?: string
+  algorithm: RateLimitAlgorithmValue
+  permitLimit?: number
+  windowSeconds?: number
+  segmentsPerWindow?: number
+  tokenLimit?: number
+  tokensPerPeriod?: number
+  replenishmentPeriodSeconds?: number
+  queueLimit: number
+  isEnabled: boolean
+}
+
+export interface RateLimitPolicyListParams {
+  keyword?: string
+  scope?: RateLimitScopeValue
+  routeId?: string
+  skipCount: number
+  maxResultCount: number
+}
+
+export function getRateLimitPolicies(params: RateLimitPolicyListParams): Promise<PagedResult<RateLimitPolicyItem>> {
+  return request.get<PagedResult<RateLimitPolicyItem>>(urls.gatewayRateLimitPolicies, { params })
+}
+
+export function createRateLimitPolicy(data: RateLimitPolicyFormData): Promise<RateLimitPolicyItem> {
+  return request.post<RateLimitPolicyItem>(urls.gatewayRateLimitPolicies, data)
+}
+
+export function updateRateLimitPolicy(id: string, data: RateLimitPolicyFormData): Promise<RateLimitPolicyItem> {
+  return request.put<RateLimitPolicyItem>(urls.gatewayRateLimitPolicy.replace(':id', id), data)
+}
+
+export function deleteRateLimitPolicy(id: string): Promise<void> {
+  return request.delete(urls.gatewayRateLimitPolicy.replace(':id', id))
+}

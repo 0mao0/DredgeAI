@@ -19,6 +19,11 @@ public class GatewayPermissionDefinitionProvider : PermissionDefinitionProvider
         clusters.AddChild(GatewayPermissions.ProxyClusters.Create, L("Permission:Gateway.ProxyClusters.Create"));
         clusters.AddChild(GatewayPermissions.ProxyClusters.Update, L("Permission:Gateway.ProxyClusters.Update"));
         clusters.AddChild(GatewayPermissions.ProxyClusters.Delete, L("Permission:Gateway.ProxyClusters.Delete"));
+
+        var policies = group.AddPermission(GatewayPermissions.RateLimitPolicies.Default, L("Permission:Gateway.RateLimitPolicies"));
+        policies.AddChild(GatewayPermissions.RateLimitPolicies.Create, L("Permission:Gateway.RateLimitPolicies.Create"));
+        policies.AddChild(GatewayPermissions.RateLimitPolicies.Update, L("Permission:Gateway.RateLimitPolicies.Update"));
+        policies.AddChild(GatewayPermissions.RateLimitPolicies.Delete, L("Permission:Gateway.RateLimitPolicies.Delete"));
     }
 
     private static LocalizableString L(string name)

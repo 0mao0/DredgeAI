@@ -1,6 +1,6 @@
 <template>
   <div class="page-container">
-    <PageHeader title="网关配置" description="管理 YARP 代理路由与目标集群，保存后即时生效" />
+    <PageHeader title="网关配置" description="管理 YARP 代理路由、目标集群与限流策略，保存后即时生效" />
 
     <a-tabs v-model:active-key="activeTab" class="gateway-tabs">
       <a-tab-pane key="routes" tab="路由管理">
@@ -31,6 +31,22 @@
           @view-routes="handleViewRoutes"
         />
       </a-tab-pane>
+      <a-tab-pane key="policies" tab="限流策略">
+        <PoliciesTab
+          :policies="policies"
+          :loading="policyLoading"
+          :total="policyTotal"
+          :page="policyPage"
+          :query="policyQuery"
+          :route-options="routeOptions"
+          :can="can"
+          @update:query="policyQuery = $event"
+          @change="handlePolicyTableChange"
+          @create="openPolicyCreate"
+          @edit="openPolicyEdit"
+          @remove="handlePolicyDelete"
+        />
+      </a-tab-pane>
     </a-tabs>
 
     <RouteFormModal
@@ -46,6 +62,15 @@
       :saving="clusterSaving"
       :editing="editingCluster"
       @submit="handleClusterSubmit"
+    />
+
+    <PolicyFormModal
+      v-model:open="policyModalVisible"
+      :saving="policySaving"
+      :editing="editingPolicy"
+      :route-options="routeOptions"
+      :global-policy-exists="globalPolicyExists"
+      @submit="handlePolicySubmit"
     />
   </div>
 </template>
@@ -63,18 +88,27 @@ import {
   createProxyCluster,
   updateProxyCluster,
   deleteProxyCluster,
+  getRateLimitPolicies,
+  createRateLimitPolicy,
+  updateRateLimitPolicy,
+  deleteRateLimitPolicy,
 } from '@/api/modules/gateway'
 import type {
   ProxyRouteItem,
   ProxyRouteFormData,
   ProxyClusterItem,
   ProxyClusterFormData,
+  RateLimitScopeValue,
+  RateLimitPolicyItem,
+  RateLimitPolicyFormData,
 } from '@/api/modules/gateway'
 import { usePagePermissions } from '@/composables/usePagePermissions'
 import RoutesTab from './components/RoutesTab.vue'
 import RouteFormModal from './components/RouteFormModal.vue'
 import ClustersTab from './components/ClustersTab.vue'
 import ClusterFormModal from './components/ClusterFormModal.vue'
+import PoliciesTab from './components/PoliciesTab.vue'
+import PolicyFormModal from './components/PolicyFormModal.vue'
 
 const { can } = usePagePermissions()
 
@@ -144,6 +178,8 @@ const clusterOptions = computed(() =>
 
 // ---- 各集群关联路由计数（删除门禁 + 跳转过滤用） ----
 const routeCounts = ref<Record<string, number>>({})
+/** 全量路由（限流策略 routeId 下拉选项数据源，与计数同一响应顺带赋值） */
+const allRoutes = ref<ProxyRouteItem[]>([])
 
 async function loadRouteCounts(): Promise<void> {
   try {
@@ -153,10 +189,18 @@ async function loadRouteCounts(): Promise<void> {
       counts[r.clusterId] = (counts[r.clusterId] ?? 0) + 1
     }
     routeCounts.value = counts
+    allRoutes.value = res.items
   } catch {
     // 计数失败不阻塞页面；删除门禁退化为后端 ClusterInUse 校验
   }
 }
+
+const routeOptions = computed(() =>
+  allRoutes.value.map((r) => ({
+    value: r.routeId,
+    label: r.isEnabled ? r.routeId : `${r.routeId}（已禁用）`,
+  })),
+)
 
 // ---- 路由弹窗 ----
 const routeModalVisible = ref(false)
@@ -245,6 +289,94 @@ async function handleClusterDelete(record: ProxyClusterItem): Promise<void> {
   }
 }
 
+// ---- 限流策略列表 ----
+const policyPageSize = 15
+const policies = ref<RateLimitPolicyItem[]>([])
+const policyTotal = ref(0)
+const policyPage = ref(1)
+const policyLoading = ref(false)
+const policyQuery = ref<{ keyword?: string, scope?: string, routeId?: string }>({})
+
+async function loadPolicies(): Promise<void> {
+  policyLoading.value = true
+  try {
+    const res = await getRateLimitPolicies({
+      keyword: policyQuery.value.keyword?.trim() || undefined,
+      scope: policyQuery.value.scope === undefined ? undefined : Number(policyQuery.value.scope) as RateLimitScopeValue,
+      routeId: policyQuery.value.routeId || undefined,
+      skipCount: (policyPage.value - 1) * policyPageSize,
+      maxResultCount: policyPageSize,
+    })
+    policies.value = res.items
+    policyTotal.value = res.totalCount
+  } catch {
+    // 错误提示由 request 拦截器统一 toast（后端错误码已中文化）
+  } finally {
+    policyLoading.value = false
+  }
+}
+
+let policyFilterTimer: ReturnType<typeof setTimeout> | undefined
+watch(policyQuery, () => {
+  clearTimeout(policyFilterTimer)
+  policyFilterTimer = setTimeout(() => {
+    policyPage.value = 1
+    void loadPolicies()
+  }, 300)
+}, { deep: true })
+
+function handlePolicyTableChange(paginationInfo: unknown): void {
+  policyPage.value = (paginationInfo as { current?: number } | null)?.current || 1
+  void loadPolicies()
+}
+
+/** 是否已存在全局策略（仅当前页，宽松提示用途；真正约束靠后端） */
+const globalPolicyExists = computed(() => policies.value.some((p) => p.scope === 0))
+
+// ---- 限流策略弹窗 ----
+const policyModalVisible = ref(false)
+const policySaving = ref(false)
+const editingPolicy = ref<RateLimitPolicyItem | null>(null)
+
+function openPolicyCreate(): void {
+  editingPolicy.value = null
+  policyModalVisible.value = true
+}
+
+function openPolicyEdit(record: RateLimitPolicyItem): void {
+  editingPolicy.value = record
+  policyModalVisible.value = true
+}
+
+async function handlePolicySubmit(data: RateLimitPolicyFormData): Promise<void> {
+  policySaving.value = true
+  try {
+    if (editingPolicy.value) {
+      await updateRateLimitPolicy(editingPolicy.value.id, data)
+    } else {
+      await createRateLimitPolicy(data)
+    }
+    message.success('已保存，网关配置即时生效')
+    policyModalVisible.value = false
+    await loadPolicies()
+  } catch {
+    // 弹窗保持打开，错误由拦截器 toast
+  } finally {
+    policySaving.value = false
+  }
+}
+
+async function handlePolicyDelete(record: RateLimitPolicyItem): Promise<void> {
+  try {
+    await deleteRateLimitPolicy(record.id)
+    message.success('已删除，网关配置即时生效')
+    if (policies.value.length === 1 && policyPage.value > 1) policyPage.value -= 1
+    await loadPolicies()
+  } catch {
+    // 错误由拦截器 toast
+  }
+}
+
 // ---- 集群 → 路由跳转过滤 ----
 function handleViewRoutes(clusterId: string): void {
   activeTab.value = 'routes'
@@ -256,6 +388,7 @@ onMounted(() => {
   void loadClusters()
   void loadRoutes()
   void loadRouteCounts()
+  void loadPolicies()
 })
 </script>
 

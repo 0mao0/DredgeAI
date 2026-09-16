@@ -1,4 +1,5 @@
 using DredgeAI.Gateway.Proxying;
+using DredgeAI.Gateway.RateLimiting;
 using Microsoft.Extensions.DependencyInjection;
 using Volo.Abp.Application;
 using Volo.Abp.AutoMapper;
@@ -24,5 +25,6 @@ public class GatewayApplicationModule : AbpModule
 
         context.Services.AddSingleton<DatabaseProxyConfigProvider>();
         context.Services.AddSingleton<IProxyConfigProvider>(sp => sp.GetRequiredService<DatabaseProxyConfigProvider>());
+        context.Services.AddSingleton<RateLimiterManager>();
     }
 }

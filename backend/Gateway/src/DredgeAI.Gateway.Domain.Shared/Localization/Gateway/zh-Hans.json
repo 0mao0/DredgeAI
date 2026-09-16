@@ -14,6 +14,15 @@
     "Gateway:DuplicateClusterId": "集群 ID 已存在",
     "Gateway:ClusterNotFound": "目标集群不存在",
     "Gateway:ClusterInUse": "集群仍被路由引用，无法删除",
-    "Gateway:InvalidDestinationAddress": "目标地址无效：必须是 http/https 绝对地址"
+    "Gateway:InvalidDestinationAddress": "目标地址无效：必须是 http/https 绝对地址",
+    "Permission:Gateway.RateLimitPolicies": "限流策略",
+    "Permission:Gateway.RateLimitPolicies.Create": "新增策略",
+    "Permission:Gateway.RateLimitPolicies.Update": "编辑策略",
+    "Permission:Gateway.RateLimitPolicies.Delete": "删除策略",
+    "Gateway:DuplicateRateLimitPolicyName": "策略名称已存在",
+    "Gateway:GlobalRateLimitPolicyExists": "全局限流策略已存在，仅允许一条",
+    "Gateway:RouteRateLimitPolicyExists": "该路由已存在路由级限流策略，仅允许一条",
+    "Gateway:RouteNotFound": "目标路由不存在",
+    "Gateway:InvalidRateLimitParameters": "限流参数无效：请检查当前算法所需参数（均需为正数，队列上限不可为负）"
   }
 }

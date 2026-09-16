@@ -131,6 +131,8 @@ export const urls = {
   gatewayProxyRoute: '/gateway/proxy-routes/:id',
   gatewayProxyClusters: '/gateway/proxy-clusters',
   gatewayProxyCluster: '/gateway/proxy-clusters/:id',
+  gatewayRateLimitPolicies: '/gateway/rate-limit-policies',
+  gatewayRateLimitPolicy: '/gateway/rate-limit-policies/:id',
   datasources: '/datasources',
   adminProfile: '/base/account/my-profile',
   appConfig: '/base/application-configuration',

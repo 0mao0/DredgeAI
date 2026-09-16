@@ -258,6 +258,9 @@ const ACTION_LABELS: Record<string, string> = {
   createCluster: '新增集群',
   updateCluster: '编辑集群',
   deleteCluster: '删除集群',
+  createPolicy: '新增策略',
+  updatePolicy: '编辑策略',
+  deletePolicy: '删除策略',
 }
 
 /** manifest 递归拍平：route → manifest（查 requiredPermission / actionPermissions） */

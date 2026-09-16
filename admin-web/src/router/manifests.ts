@@ -99,6 +99,9 @@ export const adminAppManifests: AppManifest[] = [
       createCluster: 'Gateway.ProxyClusters.Create',
       updateCluster: 'Gateway.ProxyClusters.Update',
       deleteCluster: 'Gateway.ProxyClusters.Delete',
+      createPolicy: 'Gateway.RateLimitPolicies.Create',
+      updatePolicy: 'Gateway.RateLimitPolicies.Update',
+      deletePolicy: 'Gateway.RateLimitPolicies.Delete',
     },
   },
   // {

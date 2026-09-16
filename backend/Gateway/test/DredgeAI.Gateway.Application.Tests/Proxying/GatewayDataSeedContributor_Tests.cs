@@ -1,4 +1,5 @@
 using System;
+using DredgeAI.Gateway.RateLimiting;
 using System.Collections.Generic;
 using System.Threading.Tasks;
 using Microsoft.Extensions.Configuration;
@@ -20,6 +21,7 @@ public class GatewayDataSeedContributor_Tests : GatewayApplicationTestBase<Gatew
         using var scope = ServiceProvider.CreateScope();
         var routeRepository = scope.ServiceProvider.GetRequiredService<IRepository<ProxyRoute, Guid>>();
         var clusterRepository = scope.ServiceProvider.GetRequiredService<IRepository<ProxyCluster, Guid>>();
+        var policyRepository = scope.ServiceProvider.GetRequiredService<IRepository<RateLimitPolicy, Guid>>();
 
         // 清空两表（含测试种子数据）
         foreach (var route in await routeRepository.GetListAsync())
@@ -46,6 +48,7 @@ public class GatewayDataSeedContributor_Tests : GatewayApplicationTestBase<Gatew
         var contributor = new GatewayDataSeedContributor(
             routeRepository,
             clusterRepository,
+            policyRepository,
             configuration,
             SimpleGuidGenerator.Instance,
             NullLogger<GatewayDataSeedContributor>.Instance);
@@ -63,6 +66,12 @@ public class GatewayDataSeedContributor_Tests : GatewayApplicationTestBase<Gatew
         seededConfig.Match.Path.ShouldBe("/api/seed/{**catch-all}");
         seededConfig.Match.Hosts.ShouldBe(new[] { "seed.example.com" });
         seededConfig.AuthorizationPolicy.ShouldBe("anonymous");
+
+        // 限流种子：表为空时插入全局默认策略（RateLimiting 节缺省取 100/10s）
+        var seededPolicy = await policyRepository.GetAsync(x => x.Name == "global-default");
+        seededPolicy.Scope.ShouldBe(RateLimitScope.Global);
+        seededPolicy.Algorithm.ShouldBe(RateLimitAlgorithm.FixedWindow);
+        seededPolicy.PermitLimit.ShouldBe(100);
 
         // 幂等：再次执行行数不变
         await contributor.SeedAsync(new DataSeedContext());
