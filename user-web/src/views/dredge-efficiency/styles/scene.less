@@ -1,0 +1,457 @@
+/* ==========================================================================
+   疏浚机理 · 立体船场景色板（吉普力式：陶土 + 草木 + 麦穗 + 远海，纸质背景）
+
+   · 这套暖色板只作用于 .dredge-scene 子树，不外溢到 app 其它页面；
+   · 子树内把 app 的语义 token（--color-*）重映射到场景色板，
+     所以下面从原型搬来的场景 CSS 可以原封不动继续用 var(--color-*)；
+   · 底色值继承自 @shared/web/styles/themes.less 的 :root / [data-theme=dark]，
+     这里只额外提供场景需要的土/水/云/面光令牌。
+   —— 本文件是模块内唯一出现裸 hex 的地方（等价于原型的色板块）。
+   ========================================================================== */
+@import '@shared/web/styles/variables.less';
+
+.dredge-scene {
+  /* ---------- 亮色：暖色板 ---------- */
+  --sh-brand: #C4714B;
+  --sh-brand-hover: #B0613D;
+  --sh-brand-gradient: linear-gradient(135deg, #D08A5F 0%, #C4714B 100%);
+  --sh-accent: #7FB89E;
+  --sh-success: #86A96B;
+  --sh-warning: #D9A441;
+  --sh-danger: #C2604A;
+  --sh-info: #5E93B5;
+  --sh-content-bg: #F3EDE1;
+  --sh-card-bg: #FDF8ED;
+  --sh-bg-elevated: #FFFCF3;
+  --sh-surface-hover: #EDE4D3;
+  --sh-text-primary: #4A3D31;
+  --sh-text-secondary: #7C6B58;
+  --sh-text-tertiary: #A6957F;
+  --sh-border: #E4DAC5;
+  --sh-divider: #EDE4D3;
+  --sh-earth-1: #A9AE86;
+  --sh-earth-2: #C2AC79;
+  --sh-earth-3: #DDBD7E;
+  --sh-sky-1: #CDE6EC;
+  --sh-sky-2: #F7EFDC;
+  --sh-water-1: #8FBFCA;
+  --sh-water-2: #4E7F96;
+  --sh-cloud: #FFFDF6;
+  --sh-glow-core: #F2D493;
+  --sh-glow-halo: #F6E3B4;
+  --sh-shadow-sm: 0 1px 2px rgba(74, 61, 49, .07);
+  --sh-shadow-md: 0 4px 14px rgba(74, 61, 49, .10);
+  --sh-shadow-face: 0 3px 7px rgba(74, 61, 49, .20);
+
+  /* 体块面光的亮端/暗端：两个主题里各自给值，明暗方向才不会随主题翻转 */
+  --face-light: #FFFDF6;
+  --face-top: #EFDEC0;
+  --face-shade: #6E5E4A;
+
+  /* ---------- 把 app 语义 token 重映射到场景色板 ---------- */
+  --color-brand: var(--sh-brand);
+  --color-brand-hover: var(--sh-brand-hover);
+  --color-brand-gradient: var(--sh-brand-gradient);
+  --color-accent: var(--sh-accent);
+  --color-success: var(--sh-success);
+  --color-warning: var(--sh-warning);
+  --color-danger: var(--sh-danger);
+  --color-info: var(--sh-info);
+  --color-card-bg: var(--sh-card-bg);
+  --color-bg-elevated: var(--sh-bg-elevated);
+  --color-surface-hover: var(--sh-surface-hover);
+  --color-text-primary: var(--sh-text-primary);
+  --color-text-secondary: var(--sh-text-secondary);
+  --color-text-tertiary: var(--sh-text-tertiary);
+  --color-border: var(--sh-border);
+  --color-divider: var(--sh-divider);
+  --color-earth-1: var(--sh-earth-1);
+  --color-earth-2: var(--sh-earth-2);
+  --color-earth-3: var(--sh-earth-3);
+  --color-sky-1: var(--sh-sky-1);
+  --color-sky-2: var(--sh-sky-2);
+  --color-water-1: var(--sh-water-1);
+  --color-water-2: var(--sh-water-2);
+  --color-cloud: var(--sh-cloud);
+  --color-glow-core: var(--sh-glow-core);
+  --color-glow-halo: var(--sh-glow-halo);
+  --shadow-face: var(--sh-shadow-face);
+
+  /* ---------- 变量板：同一物理量在「输入 → 公式 → 结果」全程同色 ----------
+     色相上刻意分族：切削机理走冷色，冲水机理走暖色，两条机理一眼能分开。 */
+  --v-ucs: var(--color-danger);
+  --v-cut: var(--color-brand);
+  --v-speed: var(--color-success);
+  --v-jetp: var(--color-warning);
+  --v-jflow: color-mix(in srgb, var(--color-warning) 62%, var(--color-accent));
+  --v-pump: var(--color-info);
+  --v-hex: var(--color-brand);
+
+  /* 地层三色（挖到哪层，舱内泥浆就是哪个色） */
+  --soil-1: var(--color-earth-1);
+  --soil-2: var(--color-earth-2);
+  --soil-3: var(--color-earth-3);
+
+  /* 派生面：海床顶面 / 水面 / 管子背光面 */
+  --face-sand: color-mix(in srgb, var(--color-earth-3) 58%, var(--color-card-bg));
+  --face-water: color-mix(in srgb, var(--color-water-1) 50%, var(--color-card-bg));
+  --tube-far: color-mix(in srgb, var(--color-text-tertiary) 78%, var(--color-text-primary));
+}
+
+[data-theme="dark"] .dredge-scene {
+  --sh-brand: #D59A72;
+  --sh-brand-hover: #E2AC88;
+  --sh-brand-gradient: linear-gradient(135deg, #D59A72 0%, #C08B6E 100%);
+  --sh-accent: #8ACFB6;
+  --sh-success: #9CBE7C;
+  --sh-warning: #E3BC63;
+  --sh-danger: #D97C63;
+  --sh-info: #7FB0CE;
+  --sh-content-bg: #1A2130;
+  --sh-card-bg: #222B3A;
+  --sh-bg-elevated: #2A3444;
+  --sh-surface-hover: #2B3545;
+  --sh-text-primary: #EFE7D6;
+  --sh-text-secondary: #B2A48E;
+  --sh-text-tertiary: #7D7D6C;
+  --sh-border: #34414F;
+  --sh-divider: #29323F;
+  --sh-earth-1: #6F7858;
+  --sh-earth-2: #8B7C57;
+  --sh-earth-3: #AB9059;
+  --sh-sky-1: #22303F;
+  --sh-sky-2: #38495C;
+  --sh-water-1: #2E4C5C;
+  --sh-water-2: #16293A;
+  --sh-cloud: #3A4759;
+  --sh-glow-core: #F0EAD6;
+  --sh-glow-halo: #8C9BA8;
+  --sh-shadow-sm: 0 1px 2px rgba(0, 0, 0, .3);
+  --sh-shadow-md: 0 4px 14px rgba(0, 0, 0, .35);
+  --sh-shadow-face: 0 3px 8px rgba(0, 0, 0, .45);
+
+  --face-light: #3D4C63;
+  --face-top: #5A5340;     /* 暗色下顶面要更亮且偏暖，否则和竖直面糊成一片（月光下的木质甲板） */
+  --face-shade: #0E141E;
+
+  /* 暗色下地层压向背景：否则下方三条土比海面还亮，画面重心全掉到底部 */
+  --soil-1: color-mix(in srgb, var(--sh-earth-1) 68%, var(--color-content-bg));
+  --soil-2: color-mix(in srgb, var(--sh-earth-2) 66%, var(--color-content-bg));
+  --soil-3: color-mix(in srgb, var(--sh-earth-3) 62%, var(--color-content-bg));
+}
+
+/* ---------- 船舶视图（吉普力式风景：天光 → 海面 → 地层）---------- */
+/* app 的 variables.less 没有等宽字体变量，这里本地补一个（读数 / 公式用） */
+@mono: ui-monospace, SFMono-Regular, Menlo, Consolas, 'Liberation Mono', monospace;
+
+.ship .sky { fill: url(#shSkyG); }
+.ship .water { fill: url(#shWaterG); }
+.ship .cloud { fill: url(#shCloudG); opacity: .85; }
+/* 世界滚动：水面波 / 水体质点纹 / 海床砂纹
+   整块纹理由 rAF 逐帧平移（连续、无相位跳变），偏移量按「模周期」取整实现无缝循环，方向 = 向后/右 */
+.scrollg { will-change: transform; }
+.ship .wavesurf { fill: url(#shWavePat); opacity: .6; }
+.ship .streaks { fill: url(#shStreakPat); }
+.ship .bedtex { fill: url(#shBedPat); }
+.ship .waveln { fill: none; stroke: var(--color-cloud); stroke-width: 2.2; stroke-linecap: round; }
+.ship .streak line { stroke: color-mix(in srgb, var(--color-cloud) 62%, transparent); stroke-width: 3; stroke-linecap: round; }
+.ship .ripple ellipse { fill: color-mix(in srgb, var(--color-earth-1) 52%, var(--color-text-tertiary)); opacity: .7; }
+.ship .dashline { animation: shdash 3.2s linear infinite; }
+@keyframes shdash { to { stroke-dashoffset: -20; } }
+.ship .glow { fill: url(#shSunG); }
+/* ---------- 立体（斜投影）面：统一深度方向 右后上方 (+42,-26) ----------
+   每个面都不再是一块死平色，而是一条「同方向渐变」：顶面近亮远暗、侧面亮上暗下、
+   舱内上浅下深。这是把 2.5D 从"拼纸片"变成"有体积"的关键（渐变 stops 见 .g-face-* 等）。 */
+.ship .d-top { fill: url(#shTopFaceG); stroke: var(--color-text-secondary); stroke-width: 1.2; stroke-linejoin: round; }
+.ship .d-side { fill: url(#shSideFaceG); stroke: var(--color-text-secondary); stroke-width: 1.2; stroke-linejoin: round; }
+.ship .d-far { fill: url(#shFarFaceG); stroke: var(--color-text-tertiary); stroke-width: 1; stroke-linejoin: round; }
+.ship .d-sand { fill: url(#shSandFaceG); stroke: var(--color-text-tertiary); stroke-width: 1; stroke-linejoin: round; }
+.ship .d-water { fill: url(#shWaterPlaneG); stroke: var(--color-water-1); stroke-width: 1; opacity: .62; }
+.ship .horizon { stroke: var(--color-cloud); stroke-width: 2.4; opacity: .55; }
+/* 开挖槽：槽内是水（越深越浓）+ 槽底落影，才读得出"被挖走的空腔" */
+.ship .d-pit { fill: url(#shPitG); }
+.ship .pit-ao { fill: url(#shAOUpG); }
+/* 水下天光柱 / 水线泡沫 / 耙头羽流 */
+.ship .ray { fill: url(#shRayG); }
+.ship .foam-soft { fill: none; stroke: var(--color-cloud); stroke-width: 7; opacity: .28; stroke-linecap: round; }
+.ship .foam-core { fill: none; stroke: var(--color-cloud); stroke-width: 2.6; opacity: .85; stroke-linecap: round; }
+.ship .plume ellipse { fill: color-mix(in srgb, var(--color-earth-2) 44%, transparent); }
+.ship .plume { animation: shplume 5.6s ease-in-out infinite; }
+@keyframes shplume { 0%, 100% { transform: translate(0, 0); } 50% { transform: translate(16px, -5px); } }
+/* 层理线：给地层一点"沉积"质感（不参与开挖高亮） */
+.ship .bedline line { stroke: color-mix(in srgb, var(--color-text-primary) 16%, transparent); stroke-width: 1.2; }
+.ship .d-sub { fill: var(--color-water-2); opacity: .42; }
+.ship .tube-far { fill: none; stroke: var(--tube-far); stroke-width: 11; stroke-linecap: round; stroke-linejoin: round; opacity: .5; }
+.ship .surface { stroke: color-mix(in srgb, var(--color-text-primary) 24%, transparent); stroke-width: 1; }
+.ship .bulk { fill: none; stroke: var(--color-info); stroke-width: 4; stroke-dasharray: 5 10; animation: shflow 2s linear infinite; }
+.ship.flat .depth { display: none; }
+/* 标注卡片浮在场景之上 */
+.ship .chip, .ship .zone { filter: drop-shadow(var(--shadow-face)); }
+/* ---------- 命中区 + 详情卡（hover / click 才显示细节） ---------- */
+.ship .hit { fill: transparent; pointer-events: all; cursor: pointer; }
+.ship .hit:hover, .ship .hit.on {
+  fill: color-mix(in srgb, var(--color-brand) 9%, transparent);
+  stroke: color-mix(in srgb, var(--color-brand) 60%, transparent); stroke-width: 1.4; stroke-dasharray: 5 4;
+}
+.shipwrap { position: relative; }
+/* 详情抽屉：桌面 = 跟手浮卡（宽 340），手机 = 底部抽屉（见媒体查询） */
+.tip {
+  position: absolute; z-index: 6; left: 0; top: 0;
+  width: min(360px, calc(100% - 20px)); padding: 0;
+  border: 1px solid var(--color-border); border-radius: 14px; background: var(--color-card-bg);
+  box-shadow: 0 12px 32px color-mix(in srgb, var(--color-text-primary) 20%, transparent);
+  font-size: @font-size-sm; color: var(--color-text-secondary); overflow: hidden;
+  border-top: 3px solid var(--tip-c, var(--color-brand));
+}
+.tip[hidden] { display: none; }
+.tip-h {
+  display: flex; align-items: center; gap: 8px; padding: 10px 12px;
+  background: var(--color-surface-hover);
+}
+.tip-h b { color: var(--color-text-primary); font-size: @font-size-sm; font-weight: 600; }
+.tip-x {
+  margin-left: auto; flex: none; width: 24px; height: 24px; border-radius: 999px;
+  appearance: none; border: 0; background: transparent; cursor: pointer;
+  color: var(--color-text-tertiary); font-size: @font-size-xs; line-height: 1;
+}
+.tip-x:hover { background: var(--color-card-bg); color: var(--color-text-primary); }
+#tipBody { padding: 4px 12px 10px; }
+.tip .r {
+  display: flex; align-items: baseline; justify-content: space-between; gap: 14px; padding: 6px 0;
+  border-bottom: 1px dashed var(--color-divider);
+}
+.tip .r:last-child { border-bottom: 0; }
+.tip .r em { font-style: normal; color: var(--color-text-tertiary); }
+.tip .r b {
+  font-family: @mono; font-size: @font-size-base; color: var(--color-text-primary);
+  font-weight: 600; white-space: nowrap; text-align: right;
+}
+.g-sky-top { stop-color: var(--color-sky-1); }
+.g-sky-bot { stop-color: var(--color-sky-2); }
+.g-wat-top { stop-color: var(--color-water-1); }
+.g-wat-mid { stop-color: color-mix(in srgb, var(--color-water-1) 38%, var(--color-water-2)); }
+.g-wat-bot { stop-color: var(--color-water-2); }
+.g-sun-core { stop-color: var(--color-glow-core); }
+.g-sun-halo { stop-color: var(--color-glow-halo); stop-opacity: .5; }
+.g-sun-out  { stop-color: var(--color-glow-halo); stop-opacity: 0; }
+/* ---------- 体块面光 stops（配合 defs 里的 sh*FaceG 渐变） ----------
+   明暗只由「--face-light → --face-shade」一个方向决定：这两个令牌在 light / dark 两套色板里
+   各自给值（暗色主题的亮端要另给，否则一切都贴着黑，渐变看不见；暗端也必须真的是暗色，
+   否则深色主题下"近处反而更暗"——混 text-* 就会翻转，因为深色主题里它们是亮的）。 */
+.g-top-near  { stop-color: var(--face-top); }                                                /* 水平顶面：暖沙 */
+.g-top-far   { stop-color: color-mix(in srgb, var(--face-top) 88%, var(--face-shade)); }
+.g-side-hi   { stop-color: color-mix(in srgb, var(--face-light) 92%, var(--face-shade)); }
+.g-side-lo   { stop-color: color-mix(in srgb, var(--face-light) 76%, var(--face-shade)); }
+.g-far-hi    { stop-color: color-mix(in srgb, var(--color-card-bg) 82%, var(--face-shade)); } /* 舱内远壁 */
+.g-far-lo    { stop-color: color-mix(in srgb, var(--color-card-bg) 58%, var(--face-shade)); }
+.g-sand-near { stop-color: var(--face-sand); }                                                /* 海床顶面 */
+.g-sand-far  { stop-color: color-mix(in srgb, var(--face-sand) 84%, var(--face-shade)); }
+.g-wp-near   { stop-color: var(--face-water); stop-opacity: .82; }                            /* 水面片 */
+.g-wp-far    { stop-color: var(--face-water); stop-opacity: .34; }
+.g-pit-hi    { stop-color: var(--color-water-2); stop-opacity: .34; }                          /* 开挖槽内的水 */
+.g-pit-lo    { stop-color: var(--color-water-2); stop-opacity: .62; }
+.g-hull-hi   { stop-color: var(--face-light); }                                               /* 舷侧：干舷最亮 */
+.g-hull-mid  { stop-color: color-mix(in srgb, var(--face-light) 84%, var(--face-shade)); }
+.g-hull-lo   { stop-color: color-mix(in srgb, var(--face-light) 72%, var(--face-shade)); }
+.g-hull-keel { stop-color: color-mix(in srgb, var(--face-light) 60%, var(--face-shade)); }
+.g-sub-clear { stop-color: var(--color-water-2); stop-opacity: .10; }                          /* 水下加色：越深越浓 */
+.g-sub-deep  { stop-color: var(--color-water-2); stop-opacity: .50; }
+.g-ao-dark   { stop-color: var(--face-shade); stop-opacity: .40; }                             /* 落影：上暗下清 */
+.g-ao-clear  { stop-color: var(--face-shade); stop-opacity: 0; }
+.g-ao-up     { stop-color: var(--face-shade); stop-opacity: 0; }                                /* 落影：下暗上清 */
+.g-ray-hi    { stop-color: var(--color-cloud); stop-opacity: .22; }                            /* 天光柱 */
+.g-ray-out   { stop-color: var(--color-cloud); stop-opacity: 0; }
+.g-house-hi  { stop-color: var(--face-light); }
+.g-house-lo  { stop-color: color-mix(in srgb, var(--face-light) 78%, var(--face-shade)); }
+.g-cloud-hi  { stop-color: var(--color-cloud); }
+.g-cloud-lo  { stop-color: color-mix(in srgb, var(--color-cloud) 84%, var(--face-shade)); }
+.shipwrap { overflow-x: auto; }
+svg.ship { width: 100%; min-width: 1040px; height: auto; display: block; }
+.ship .lbl { font-size: 13px; fill: var(--color-text-tertiary); letter-spacing: .02em; }
+.ship .cap { font-size: 14px; font-weight: 600; fill: var(--color-text-secondary); }
+.ship .val { font-size: 15.5px; font-weight: 600; font-family: @mono; fill: var(--color-text-primary); }
+.ship .adv { font-size: 14px; font-weight: 600; fill: var(--color-text-primary); }
+.ship .svgbtn { cursor: pointer; }
+.ship .svgbtn rect { transition: filter .2s ease; }
+.ship .svgbtn:hover rect { filter: brightness(1.07); }
+.ship .svgbtn:active rect { filter: brightness(.95); }
+.ship .svgbtn:focus-visible rect { stroke: var(--color-text-primary); stroke-width: 2; }
+.ship .svgbtn.off { cursor: not-allowed; }
+.ship .svgbtn.off rect { fill: var(--color-text-tertiary); opacity: .45; }
+.ship .svgbtn .btntxt { font-size: 13px; font-weight: 600; fill: var(--color-card-bg); }
+.ship .valbig { font-size: 24px; font-weight: 700; font-family: @mono; fill: var(--color-text-primary); }
+/* 柔光描边：小字压在海面渐变/地层上也能读清（吉普力式柔边） */
+.ship .lbl, .ship .cap, .ship .val {
+  paint-order: stroke; stroke: color-mix(in srgb, var(--color-card-bg) 82%, transparent); stroke-width: 3px; stroke-linejoin: round;
+}
+/* 舷侧：一条竖直渐变（干舷亮 → 水线 → 水下转水色）+ 三条横向带（舷侧亮带 / 水线漆 / 水下加色） */
+.ship .hull { fill: url(#shHullG); stroke: var(--color-text-secondary); stroke-width: 1.8; stroke-linejoin: round; }
+.ship .hull-strake { fill: color-mix(in srgb, var(--color-cloud) 62%, transparent); }
+.ship .hull-boot { fill: color-mix(in srgb, var(--color-danger) 52%, transparent); }
+.ship .hull-sub { fill: url(#shSubmergeG); }
+.ship .house { fill: url(#shHouseG); stroke: var(--color-text-secondary); stroke-width: 1.3; }
+.ship .inner { fill: none; stroke: var(--color-border); stroke-width: 1.2; }
+.ship .shell { fill: var(--color-bg-elevated); stroke: var(--color-text-secondary); stroke-width: 1.5; }
+.ship .hopper-ao { fill: url(#shAOG); }
+.ship .hopper-deep { fill: url(#shAOUpG); opacity: .75; }
+.ship .chip { fill: color-mix(in srgb, var(--color-card-bg) 92%, transparent); stroke: var(--color-border); stroke-width: 1; }
+.ship .zone {
+  fill: color-mix(in srgb, var(--color-card-bg) 80%, transparent);
+  stroke: color-mix(in srgb, var(--color-brand) 30%, transparent); stroke-width: 1; stroke-dasharray: 3 4;
+}
+.ship .frame { fill: none; stroke: var(--color-border); stroke-width: 1.2; }
+.ship .pipe { fill: none; stroke: var(--color-text-secondary); stroke-width: 11; stroke-linecap: round; stroke-linejoin: round; }
+.ship .pipein { fill: none; stroke: var(--color-bg-elevated); stroke-width: 6; stroke-linecap: round; stroke-linejoin: round; }
+.ship .flow {
+  fill: none; stroke: var(--v-pump); stroke-width: 6; stroke-linecap: round;
+  stroke-dasharray: 12 16; animation: shflow 1.1s linear infinite;
+}
+.ship .flow.ovf { stroke: var(--color-info); stroke-width: 4; stroke-dasharray: 5 10; animation-duration: 2s; }
+.ship .jets { stroke: var(--v-jetp); stroke-width: 2.2; stroke-linecap: round; fill: none; }
+.ship .band { opacity: .95; transition: opacity .5s ease; }
+.ship .band.dim { opacity: .2; }
+.ship .ghost { stroke-dasharray: 6 5; opacity: .8; }
+@keyframes shflow { to { stroke-dashoffset: -56; } }
+.ship-legend {
+  display: flex; flex-wrap: wrap; gap: @spacing-sm @spacing-base;
+  margin-top: @spacing-md; font-size: @font-size-xs; color: var(--color-text-tertiary);
+}
+.ship-legend span { display: inline-flex; align-items: center; gap: 5px; }
+.ship-legend i { width: 9px; height: 9px; border-radius: 2px; display: inline-block; flex: none; }
+.ship-legend i.dash { width: 14px; height: 0; border-top: 2px dashed currentColor; border-radius: 0; }
+
+@media (max-width: 900px) {
+  /* 窄屏：浮层会压住舱载读数，改成图上方整宽 */
+  .panel { position: static; width: auto; margin: 0 0 @spacing-md; }
+}
+@media (max-width: 1180px) {
+  .grid.c3, .grid.c2 { grid-template-columns: 1fr; }
+  .chain { grid-template-columns: 1fr 1fr; }
+  .node + .node::before { display: none; }
+}
+
+/* ---------- 手机端 ---------- */
+.flowline { font-size: @font-size-sm; color: var(--color-text-secondary); margin: 0 0 @spacing-md; letter-spacing: .01em; }
+.mgrid { display: none; }
+.mcell {
+  border: 1px solid var(--color-border); border-radius: 10px; padding: 8px 10px;
+  background: var(--color-bg-elevated);
+}
+.mcell .k { display: block; font-size: @font-size-xs; color: var(--color-text-tertiary); }
+.mcell b { font-family: @mono; font-size: @font-size-base; font-weight: 600; }
+@media (max-width: 860px) {
+  .page { padding: @spacing-base 12px; }
+  .topbar { grid-template-columns: auto 1fr; row-gap: @spacing-sm; }
+  .topbar h1 { grid-area: 1 / 1; font-size: @font-size-xl; }
+  .topbar #btnChain { grid-area: 1 / 2; }
+  .topbar .toolbar { grid-area: 2 / 1 / 3 / 3; width: 100%; justify-self: stretch; justify-content: flex-end; }   /* 窄屏：整行但按钮靠右 */
+  .toolbar .chip { height: 26px; }
+  .chain { grid-template-columns: 1fr; }
+  .card > header { flex-wrap: wrap; row-gap: 4px; }
+  .vnote { display: none; }
+  .seg { width: 100%; }
+  .seg button { flex: 1; }
+  button.btn { height: 34px; padding: 0 14px; }
+  button.btn.icon { width: 34px; }
+  .card .body, .card .body.tight { padding: @spacing-md; }
+  .shipwrap { padding-bottom: 2px; -webkit-overflow-scrolling: touch; overscroll-behavior-x: contain; }
+  svg.ship { min-width: 1180px; }      /* 保持字号可读：横向滑动看整船 */
+  .ship-legend { gap: 6px 12px; }
+  .mgrid { display: grid; grid-template-columns: 1fr 1fr; gap: @spacing-sm; margin-top: @spacing-md; }
+  .panel .crow { grid-template-columns: 52px 1fr auto; gap: 6px; }
+  /* 详情抽屉：手机端改成底部抽屉（触屏无 hover，点按即出） */
+  .tip {
+    position: fixed; left: 10px; right: 10px; bottom: 10px; top: auto;
+    width: auto; max-height: 64vh; overflow-y: auto; z-index: 40; border-radius: 16px;
+    padding-bottom: env(safe-area-inset-bottom, 0px);
+  }
+  .tip-h { position: sticky; top: 0; padding: 12px 14px; }
+  #tipBody { padding: 4px 14px 12px; }
+  .tip .r { padding: 8px 0; }
+  .tip .r em { font-size: @font-size-sm; }
+  .tip .r b { font-size: @font-size-lg; }
+  .tip-x { width: 30px; height: 30px; font-size: @font-size-sm; }
+}
+
+/* ---------- 场景布局：图的定位基准 / 左上角 HUD / 右上角建议面板 ---------- */
+.shipbody { position: relative; }
+.figwrap { position: relative; }   /* 以「图」为定位基准：HUD 与建议面板都相对它 */
+.hud-tl {
+  position: absolute;
+  top: 10px;
+  left: 10px;
+  z-index: 5;
+  display: flex;
+  align-items: center;
+  gap: @spacing-sm;
+  flex-wrap: wrap;
+}
+.dimtoggle {
+  display: inline-flex;
+  gap: 2px;
+  padding: 2px;
+  border: 1px solid var(--color-border);
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--color-card-bg) 88%, transparent);
+  box-shadow: var(--shadow-sm);
+}
+.dimtoggle .dt {
+  appearance: none;
+  border: 0;
+  background: transparent;
+  cursor: pointer;
+  font-family: inherit;
+  font-size: @font-size-xs;
+  line-height: 1;
+  color: var(--color-text-tertiary);
+  padding: 5px 11px;
+  border-radius: 999px;
+  transition: background 0.2s ease, color 0.2s ease;
+}
+.dimtoggle .dt[aria-pressed="true"] {
+  background: var(--color-surface-hover);
+  color: var(--color-text-primary);
+  font-weight: 600;
+}
+.panel {
+  position: absolute;
+  top: 10px;
+  right: 10px;
+  width: 330px;
+  z-index: 5;
+  padding: 10px 12px 12px;
+  border: 1px solid var(--color-border);
+  border-radius: 14px;
+  background: color-mix(in srgb, var(--color-card-bg) 94%, transparent);
+  box-shadow: 0 10px 26px color-mix(in srgb, var(--color-text-primary) 16%, transparent);
+}
+.panel-h { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; }
+.panel-h b { font-size: @font-size-sm; font-weight: 600; color: var(--color-text-primary); }
+.panel .crow { grid-template-columns: 58px 1fr auto; gap: 7px; margin-bottom: 7px; }
+.panel .bar { height: 6px; border-radius: 999px; background: var(--color-surface-hover); overflow: hidden; }
+.panel .bar i { display: block; height: 100%; border-radius: 999px; transition: width 0.6s ease; }
+.panel .bar i.warn { background: var(--color-warning); }
+.panel .bar i.danger { background: var(--color-danger); }
+.panel .crow {
+  display: grid;
+  align-items: center;
+  font-size: @font-size-xs;
+  color: var(--color-text-secondary);
+}
+.panel .crow .cv { text-align: right; font-variant-numeric: tabular-nums; }
+.panel .crow .cv b { color: var(--color-text-primary); font-weight: 600; }
+
+/* ---------- 状态标签（装舱中 / 可行 / 土层名…） ---------- */
+.dredge-scene .tag {
+  display: inline-flex;
+  align-items: center;
+  height: 20px;
+  padding: 0 7px;
+  border-radius: @radius-sm;
+  font-size: @font-size-xs;
+  background: var(--color-surface-hover);
+  color: var(--color-text-secondary);
+}
+.dredge-scene .tag.brand { background: color-mix(in srgb, var(--color-brand) 14%, transparent); color: var(--color-brand); }
+.dredge-scene .tag.ok { background: color-mix(in srgb, var(--color-success) 16%, transparent); color: var(--color-success); }
+.dredge-scene .tag.warn { background: color-mix(in srgb, var(--color-warning) 18%, transparent); color: var(--color-warning); }

@@ -1,0 +1,331 @@
+/* ==========================================================================
+   疏浚机理 · 机理视图（因果链 / 参数 / 机理分解 / 标定 / 5s 建议）
+   —— 从原型 docs/prototypes/dredge-mechanism.html 搬来，改动：
+      · 所有选择器限制在 .dredge-mech 下，不外溢到 app 其它页面
+      · 间距/字号/圆角换成 @shared/web/styles/variables.less 的 LESS 变量
+      · 颜色走 app 主题 token；按钮统一 AppButton（不再自带 .btn 样式）
+   ========================================================================== */
+@import '@shared/web/styles/variables.less';
+/* app 的 variables.less 没有等宽字体变量，这里本地补一个（读数 / 公式用） */
+@mono: ui-monospace, SFMono-Regular, Menlo, Consolas, 'Liberation Mono', monospace;
+
+
+/* 变量板：同一物理量在「输入 → 公式 → 结果」全程同色，这是把链路串起来的主线索。
+   色相刻意分族：切削机理走冷色，冲水机理走暖色，占比条与堆叠图里一眼能分开。
+   （立体船场景 .dredge-scene 会把这一组覆盖成吉普力暖色板） */
+.dredge-mech {
+  --v-ucs: var(--color-danger);
+  --v-cut: var(--color-brand);
+  --v-speed: var(--color-success);
+  --v-jetp: var(--color-warning);
+  --v-jflow: color-mix(in srgb, var(--color-warning) 62%, var(--color-accent));
+  --v-pump: var(--color-info);
+  --v-hex: var(--color-brand);
+}
+
+/* ---------- 视图切换 ---------- */
+.dredge-mech .viewbar {
+  display: flex;
+  align-items: center;
+  gap: @spacing-md;
+  margin-bottom: @spacing-base;
+  flex-wrap: wrap;
+}
+
+/* ---------- 状态标签（装舱中 / 可行 / 土层名…） ---------- */
+.dredge-mech .tag {
+  display: inline-flex;
+  align-items: center;
+  height: 20px;
+  padding: 0 7px;
+  border-radius: @radius-sm;
+  font-size: @font-size-xs;
+  background: var(--color-surface-hover);
+  color: var(--color-text-secondary);
+}
+.dredge-mech .tag.brand { background: color-mix(in srgb, var(--color-brand) 14%, transparent); color: var(--color-brand); }
+.dredge-mech .tag.ok { background: color-mix(in srgb, var(--color-success) 16%, transparent); color: var(--color-success); }
+.dredge-mech .tag.warn { background: color-mix(in srgb, var(--color-warning) 18%, transparent); color: var(--color-warning); }
+
+/* ---------- 因果链：输入 → 机理 → 产量 → 操作 ---------- */
+.dredge-mech .chain {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: @spacing-md;
+  margin-bottom: @spacing-xl;
+}
+.dredge-mech .node {
+  position: relative;
+  padding: @spacing-base @spacing-md;
+  background: var(--color-card-bg);
+  border: 1px solid var(--color-border);
+  border-radius: @radius-lg;
+}
+.dredge-mech .node + .node::before {
+  content: '→';
+  position: absolute;
+  left: -14px;
+  top: 50%;
+  transform: translateY(-50%);
+  color: var(--color-text-tertiary);
+  font-size: @font-size-base;
+}
+.dredge-mech .node .k {
+  font-size: @font-size-xs;
+  color: var(--color-text-secondary);
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.dredge-mech .node .v {
+  font-size: @font-size-2xl;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  margin-top: 2px;
+  color: var(--color-text-primary);
+}
+.dredge-mech .node .v small {
+  font-size: @font-size-xs;
+  font-weight: 400;
+  color: var(--color-text-tertiary);
+  margin-left: 3px;
+}
+.dredge-mech .node .n { font-size: @font-size-xs; color: var(--color-text-tertiary); margin-top: 2px; }
+.dredge-mech .node.hex { background: var(--color-brand-gradient); border-color: transparent; }
+.dredge-mech .node.hex .k,
+.dredge-mech .node.hex .n { color: color-mix(in srgb, #fff 82%, transparent); }
+.dredge-mech .node.hex .v { color: #fff; }
+.dredge-mech .node.hex .v small { color: color-mix(in srgb, #fff 70%, transparent); }
+.dredge-mech .node.pair .pair-b {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: @spacing-md;
+  margin-top: 4px;
+}
+.dredge-mech .node .half { position: relative; min-width: 0; }
+.dredge-mech .node .half + .half { border-left: 1px solid var(--color-divider); padding-left: @spacing-md; }
+.dredge-mech .node .kh { font-size: @font-size-xs; color: var(--color-text-secondary); }
+.dredge-mech .node .half .v { font-size: @font-size-xl; }
+.dredge-mech .swatch { width: 8px; height: 8px; border-radius: 2px; background: var(--color-text-tertiary); flex: none; }
+
+/* ---------- 分栏 ---------- */
+.dredge-mech .grid { display: grid; gap: @spacing-base; margin-bottom: @spacing-xl; align-items: start; }
+.dredge-mech .grid.c3 { grid-template-columns: 3fr 5fr 4fr; }
+.dredge-mech .grid.c2 { grid-template-columns: 5fr 7fr; }
+
+/* ---------- 参数行（输入 / 建议共用） ---------- */
+.dredge-mech .plist { display: flex; flex-direction: column; }
+.dredge-mech .prow {
+  display: grid;
+  grid-template-columns: 1fr auto 62px;
+  gap: @spacing-sm;
+  align-items: center;
+  padding: 5px 0;
+  border-bottom: 1px dashed var(--color-divider);
+}
+.dredge-mech .plist .prow:last-child { border-bottom: 0; }
+.dredge-mech .prow .pl { display: flex; align-items: center; gap: 7px; font-size: @font-size-sm; min-width: 0; }
+.dredge-mech .prow .pl .nm { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.dredge-mech .prow .pl .fu { color: var(--color-text-tertiary); font-size: @font-size-xs; }
+.dredge-mech .prow .pv {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+  font-weight: 500;
+  font-size: @font-size-sm;
+  color: var(--color-text-primary);
+}
+.dredge-mech .prow .spark { width: 62px; height: 18px; }
+
+/* ---------- 公式 ---------- */
+.dredge-mech .formula {
+  font-family: @mono;
+  font-size: @font-size-sm;
+  line-height: 1.9;
+  color: var(--color-text-primary);
+  background: var(--color-surface-hover);
+  border-radius: @radius-base;
+  padding: 8px 12px;
+}
+.dredge-mech .formula .op { color: var(--color-text-tertiary); }
+/* 小号公式行：权重必须高于 .dredge-mech .formula，否则谁生效取决于打包顺序 */
+.dredge-mech .formula.formula-sm { font-size: @font-size-xs; }
+.dredge-mech .subst {
+  font-family: @mono;
+  font-size: @font-size-sm;
+  line-height: 1.9;
+  color: var(--color-text-secondary);
+  margin-top: 6px;
+  word-break: break-word;
+}
+.dredge-mech .subst .res { font-weight: 600; color: var(--v-hex); }
+.dredge-mech .v-ucs { color: var(--v-ucs); }
+.dredge-mech .v-cut { color: var(--v-cut); }
+.dredge-mech .v-speed { color: var(--v-speed); }
+.dredge-mech .v-jetp { color: var(--v-jetp); }
+.dredge-mech .v-jflow { color: var(--v-jflow); }
+.dredge-mech .v-pump { color: var(--v-pump); }
+.dredge-mech .k-note { font-size: @font-size-xs; color: var(--color-text-tertiary); margin-top: 8px; }
+
+/* ---------- 图表文字（SVG）----------
+   SVG 里的 font-size 表现属性最弱（连继承都能顶掉它），这里用类显式给死，
+   并且给 svg 固定 width/height（= viewBox）+ max-width:100%，保证只会缩小、不会被放大 */
+.dredge-mech .chart-num { font-size: 13px; }
+.dredge-mech .chart-axis { font-size: 15px; }
+
+/* ---------- 占比条 ---------- */
+.dredge-mech .share { display: flex; height: 10px; border-radius: 999px; overflow: hidden; margin: 10px 0 6px; }
+.dredge-mech .share i { display: block; height: 100%; transition: width 0.6s ease; }
+.dredge-mech .share .s-cut { background: var(--v-cut); }
+.dredge-mech .share .s-jet { background: var(--v-jflow); }
+.dredge-mech .share-legend {
+  display: flex;
+  gap: @spacing-base;
+  font-size: @font-size-xs;
+  color: var(--color-text-secondary);
+  flex-wrap: wrap;
+}
+.dredge-mech .share-legend b { color: var(--color-text-primary); font-weight: 600; font-variant-numeric: tabular-nums; }
+
+/* ---------- 指标 ---------- */
+.dredge-mech .kpis { display: grid; grid-template-columns: repeat(3, 1fr); gap: @spacing-sm; }
+.dredge-mech .kpi { background: var(--color-surface-hover); border-radius: @radius-base; padding: 8px 10px; }
+.dredge-mech .kpi .k { font-size: @font-size-xs; color: var(--color-text-secondary); }
+.dredge-mech .kpi .v { font-size: @font-size-lg; font-weight: 600; font-variant-numeric: tabular-nums; color: var(--color-text-primary); }
+.dredge-mech .kpi .v small { font-size: @font-size-xs; font-weight: 400; color: var(--color-text-tertiary); }
+
+/* ---------- 约束条 ---------- */
+.dredge-mech .bar { height: 6px; border-radius: 999px; background: var(--color-surface-hover); overflow: hidden; }
+.dredge-mech .bar i { display: block; height: 100%; border-radius: 999px; background: var(--v-pump); transition: width 0.6s ease; }
+.dredge-mech .bar i.warn { background: var(--color-warning); }
+.dredge-mech .bar i.danger { background: var(--color-danger); }
+.dredge-mech .crow {
+  display: grid;
+  grid-template-columns: 96px 1fr 78px;
+  gap: @spacing-sm;
+  align-items: center;
+  margin-bottom: 9px;
+  font-size: @font-size-xs;
+  color: var(--color-text-secondary);
+}
+.dredge-mech .crow .cv { text-align: right; font-variant-numeric: tabular-nums; color: var(--color-text-secondary); }
+.dredge-mech .crow .cv b { color: var(--color-text-primary); font-weight: 600; }
+
+/* ---------- 表格 ---------- */
+.dredge-mech .tblwrap { overflow-x: auto; }
+.dredge-mech .tbl { width: 100%; border-collapse: collapse; font-size: @font-size-xs; }
+.dredge-mech .tbl th,
+.dredge-mech .tbl td {
+  padding: 6px 8px;
+  text-align: left;
+  border-bottom: 1px solid var(--color-divider);
+  white-space: nowrap;
+}
+.dredge-mech .tbl th { color: var(--color-text-tertiary); font-weight: 500; }
+.dredge-mech .tbl td { color: var(--color-text-secondary); font-variant-numeric: tabular-nums; }
+.dredge-mech .tbl td b { color: var(--color-text-primary); font-weight: 600; }
+.dredge-mech .tbl tr.rec td { background: color-mix(in srgb, var(--color-brand) 7%, transparent); }
+.dredge-mech .tbl .num { text-align: right; }
+.dredge-mech .tbl .gain { color: var(--color-success); font-weight: 600; }
+
+/* ---------- 结论条 ---------- */
+.dredge-mech .verdict {
+  font-size: @font-size-xs;
+  line-height: 1.75;
+  color: var(--color-text-secondary);
+  background: var(--color-surface-hover);
+  border-radius: @radius-base;
+  padding: 10px 12px;
+}
+.dredge-mech .verdict b { font-weight: 600; color: var(--color-text-primary); }
+.dredge-mech .verdict .big { font-size: @font-size-lg; font-weight: 600; color: var(--color-brand); font-variant-numeric: tabular-nums; }
+
+/* ---------- 事件流 ---------- */
+.dredge-mech .logline {
+  font-size: @font-size-xs;
+  color: var(--color-text-secondary);
+  display: flex;
+  gap: 6px;
+  align-items: center;
+}
+.dredge-mech .logline time { color: var(--color-text-tertiary); font-variant-numeric: tabular-nums; }
+.dredge-mech .logline .warn { color: var(--color-warning); }
+
+/* ---------- 时域刻度 ---------- */
+.dredge-mech .horizon {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: @font-size-xs;
+  color: var(--color-text-tertiary);
+  margin-top: 8px;
+}
+.dredge-mech .horizon .ticks { display: flex; gap: 2px; }
+.dredge-mech .horizon .ticks i { width: 5px; height: 10px; border-radius: 1px; background: var(--color-border); }
+.dredge-mech .horizon .ticks i.on { background: var(--color-brand); }
+.dredge-mech .horizon .ticks i.now { background: var(--color-text-tertiary); }
+
+/* ---------- 区域 → 参数 → 流向（可折叠） ---------- */
+.dredge-mech .assume {
+  border: 1px solid var(--color-border);
+  border-radius: @radius-lg;
+  background: var(--color-card-bg);
+  overflow: hidden;
+}
+.dredge-mech .assume > summary {
+  cursor: pointer;
+  padding: @spacing-md @spacing-base;
+  font-size: @font-size-sm;
+  color: var(--color-text-secondary);
+  display: flex;
+  align-items: center;
+  gap: @spacing-sm;
+  list-style: none;
+}
+.dredge-mech .assume > summary::-webkit-details-marker { display: none; }
+.dredge-mech .assume[open] > summary { border-bottom: 1px solid var(--color-divider); }
+.dredge-mech .assume .abody { padding: @spacing-base; }
+
+/* ---------- 视图切换分段控件 ---------- */
+.dredge-mech .seg {
+  display: inline-flex;
+  padding: 3px;
+  border: 1px solid var(--color-border);
+  border-radius: @radius-lg;
+  background: var(--color-surface-hover);
+  gap: 2px;
+}
+.dredge-mech .seg button {
+  border: 0;
+  background: transparent;
+  cursor: pointer;
+  font: inherit;
+  font-size: @font-size-sm;
+  color: var(--color-text-secondary);
+  padding: 5px 12px;
+  border-radius: @radius-sm;
+  transition: background 0.2s ease, color 0.2s ease;
+}
+.dredge-mech .seg button:hover { color: var(--color-text-primary); }
+.dredge-mech .seg button[aria-pressed='true'] {
+  background: var(--color-card-bg);
+  color: var(--color-text-primary);
+  font-weight: 600;
+  box-shadow: var(--shadow-sm);
+}
+
+/* ---------- 响应式 ---------- */
+@media (max-width: 1180px) {
+  .dredge-mech .grid.c3,
+  .dredge-mech .grid.c2 { grid-template-columns: 1fr; }
+  .dredge-mech .chain { grid-template-columns: 1fr 1fr; }
+  .dredge-mech .node + .node::before { display: none; }
+}
+@media (max-width: 860px) {
+  .dredge-mech .chain { grid-template-columns: 1fr; }
+  .dredge-mech .share-legend { flex-direction: column; gap: 2px; }
+  .dredge-mech .crow { grid-template-columns: 78px 1fr 66px; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .dredge-mech .share i,
+  .dredge-mech .bar i { transition: none; }
+}
