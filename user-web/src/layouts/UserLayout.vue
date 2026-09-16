@@ -74,20 +74,13 @@
         <a-menu-item key="/profile">
           <UserOutlined />
           <span>个人中心</span>
-          <a-tooltip v-if="!collapsed" :title="isDark ? '切换亮色模式' : '切换暗色模式'" placement="top">
-            <AppButton
-              class="profile-theme-btn"
-              variant="text"
-              shape="circle"
-              size="sm"
-              @click.stop="toggleTheme"
-            >
-              <template #icon>
-                <BulbFilled v-if="isDark" />
-                <BulbOutlined v-else />
-              </template>
-            </AppButton>
-          </a-tooltip>
+        </a-menu-item>
+        <!-- 明暗主题：做成菜单行，展开态有文字标签、收起态与其它菜单图标同一套渲染（对比度一致），
+             不再用浮动圆按钮——收起时那个小图标太容易看不见 -->
+        <a-menu-item key="__theme" @click="toggleTheme">
+          <BulbFilled v-if="isDark" />
+          <BulbOutlined v-else />
+          <span>{{ isDark ? '切换到亮色' : '切换到暗色' }}</span>
         </a-menu-item>
       </a-menu>
     </a-layout-sider>
@@ -105,7 +98,7 @@
 </template>
 
 <script setup lang="ts">
-import { AppButton, resolveAppIcon, ShipAiLogo, SidebarToggleIcon } from '@shared/web'
+import { resolveAppIcon, ShipAiLogo, SidebarToggleIcon } from '@shared/web'
 import { ref, computed, watch, onMounted } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import {
@@ -144,7 +137,16 @@ watch(() => route.path, (p) => {
   selectedKeys.value = [parent]
 })
 
+/** 主题那行（key 以 __ 开头）被点上时不该抢走菜单高亮，点完还给当前页 */
+watch(selectedKeys, (keys) => {
+  if (keys.some((k) => k.startsWith('__'))) {
+    const p = route.path
+    selectedKeys.value = [p.startsWith('/ai-bid/') ? '/ai-bid' : p]
+  }
+})
+
 function handleMenuClick({ key }: { key: string }): void {
+  if (key.startsWith('__')) return // 非路由项（如明暗主题）
   router.push(key)
 }
 
@@ -259,13 +261,6 @@ onMounted(() => {
   background: @border-color;
   margin: 0 16px;
   flex-shrink: 0;
-}
-
-.profile-theme-btn {
-  font-size: 14px;
-  color: @header-text-secondary;
-  margin-left: 8px;
-  &:hover { color: @brand-primary; }
 }
 
 .main-layout { height: 100%; overflow: hidden; }
